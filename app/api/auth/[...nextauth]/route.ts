@@ -7,21 +7,28 @@ import { verifyPassword } from '@/lib/auth';
 
 const prisma = new PrismaClient();
 
+// Only include EmailProvider when email server is configured
+const emailProvider = process.env.EMAIL_SERVER_HOST
+  ? [
+      EmailProvider({
+        server: {
+          host: process.env.EMAIL_SERVER_HOST,
+          port: Number(process.env.EMAIL_SERVER_PORT || 587),
+          auth: {
+            user: process.env.EMAIL_SERVER_USER,
+            pass: process.env.EMAIL_SERVER_PASSWORD,
+          },
+        },
+        from: process.env.EMAIL_FROM || 'noreply@travskole.no',
+      }),
+    ]
+  : [];
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
 
   providers: [
-    EmailProvider({
-      server: {
-        host: process.env.EMAIL_SERVER_HOST,
-        port: Number(process.env.EMAIL_SERVER_PORT || 587),
-        auth: {
-          user: process.env.EMAIL_SERVER_USER,
-          pass: process.env.EMAIL_SERVER_PASSWORD,
-        },
-      },
-      from: process.env.EMAIL_FROM || 'noreply@travskole.no',
-    }),
+    ...emailProvider,
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
