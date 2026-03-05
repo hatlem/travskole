@@ -3,6 +3,17 @@ import { NextResponse } from 'next/server';
 
 export default withAuth(
   function middleware(req) {
+    // SECURITY: Enforce HTTPS in production
+    if (
+      process.env.NODE_ENV === 'production' &&
+      req.headers.get('x-forwarded-proto') !== 'https'
+    ) {
+      return NextResponse.redirect(
+        `https://${req.headers.get('host')}${req.nextUrl.pathname}${req.nextUrl.search}`,
+        301
+      );
+    }
+
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
