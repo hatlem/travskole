@@ -2,59 +2,79 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🌱 Starting database seed...');
+  console.log('Seeding database...');
 
-  // Create admin user
-  const adminUser = await prisma.user.create({
-    data: {
+  // Create admin user (upsert to be idempotent)
+  const adminUser = await prisma.user.upsert({
+    where: { email: 'admin@bjerke.no' },
+    update: {},
+    create: {
       email: 'admin@bjerke.no',
-      passwordHash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7BZ0xLz9km', // "admin123" hashed
+      passwordHash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7BZ0xLz9km', // "admin123"
       role: 'admin',
     },
   });
-  console.log('✅ Admin user created:', adminUser.email);
+  console.log('Admin user:', adminUser.email);
 
-  // Create a parent user
-  const parentUser = await prisma.user.create({
-    data: {
+  // Create parent user
+  const parentUser = await prisma.user.upsert({
+    where: { email: 'mor@eksempel.no' },
+    update: {},
+    create: {
       email: 'mor@eksempel.no',
-      passwordHash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7BZ0xLz9km', // "admin123" hashed
+      passwordHash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7BZ0xLz9km', // "admin123"
       role: 'parent',
-      parent: {
-        create: {
-          name: 'Kari Nordmann',
-          phone: '+47 98765432',
-          address: 'Eksempelveien 42, 0123 Oslo',
-        },
-      },
     },
     include: { parent: true },
   });
-  console.log('✅ Parent user created:', parentUser.email);
 
-  // Create children for parent
-  const child1 = await prisma.child.create({
-    data: {
-      parentId: parentUser.parent.id,
-      name: 'Emma Nordmann',
-      birthdate: new Date('2015-06-15'),
-      allergies: 'Ingen kjente allergier',
-    },
+  // Create parent profile if not exists
+  let parent = parentUser.parent;
+  if (!parent) {
+    parent = await prisma.parent.create({
+      data: {
+        userId: parentUser.id,
+        name: 'Kari Nordmann',
+        phone: '+47 98765432',
+        address: 'Eksempelveien 42, 0123 Oslo',
+      },
+    });
+  }
+  console.log('Parent user:', parentUser.email);
+
+  // Create children (check if exist first)
+  const existingChildren = await prisma.child.findMany({
+    where: { parentId: parent.id },
   });
 
-  const child2 = await prisma.child.create({
-    data: {
-      parentId: parentUser.parent.id,
-      name: 'Ole Nordmann',
-      birthdate: new Date('2018-03-22'),
-      allergies: 'Allergisk mot pollen',
-    },
-  });
-  console.log('✅ Children created:', child1.name, child2.name);
+  let child1, child2;
+  if (existingChildren.length === 0) {
+    child1 = await prisma.child.create({
+      data: {
+        parentId: parent.id,
+        name: 'Emma Nordmann',
+        birthdate: new Date('2015-06-15'),
+        allergies: 'Ingen kjente allergier',
+      },
+    });
+    child2 = await prisma.child.create({
+      data: {
+        parentId: parent.id,
+        name: 'Ole Nordmann',
+        birthdate: new Date('2018-03-22'),
+        allergies: 'Allergisk mot pollen',
+      },
+    });
+    console.log('Children created:', child1.name, child2.name);
+  } else {
+    child1 = existingChildren[0];
+    child2 = existingChildren[1];
+    console.log('Children already exist');
+  }
 
-  // Create courses
-  const course1 = await prisma.course.create({
-    data: {
+  // Create courses (upsert by name)
+  const courses = [
+    {
       name: 'Begynnerkurs - Våren 2026',
       description: 'Perfekt for barn som aldri har prøvd travhest før! Vi lærer grunnleggende ridning, stell og sikkerhet.',
       type: 'kurs',
@@ -66,10 +86,7 @@ async function main() {
       maxParticipants: 12,
       status: 'open',
     },
-  });
-
-  const course2 = await prisma.course.create({
-    data: {
+    {
       name: 'Sommerleir 2026 - Uke 28',
       description: 'Hele uken på travskolen! Mye moro med hester, nye venner og aktiviteter. Inkluderer lunsj.',
       type: 'leir',
@@ -81,10 +98,7 @@ async function main() {
       maxParticipants: 16,
       status: 'open',
     },
-  });
-
-  const course3 = await prisma.course.create({
-    data: {
+    {
       name: 'Videregående - Høsten 2026',
       description: 'For deg som har prøvd travhest før og vil lære mer! Vi jobber med mer avanserte teknikker.',
       type: 'kurs',
@@ -96,35 +110,54 @@ async function main() {
       maxParticipants: 10,
       status: 'open',
     },
-  });
-  console.log('✅ Courses created:', course1.name, course2.name, course3.name);
+  ];
 
-  // Create a sample registration
-  const registration1 = await prisma.registration.create({
-    data: {
-      courseId: course1.id,
-      childId: child1.id,
-      parentId: parentUser.parent.id,
-      consentActivities: true,
-      consentMedia: true,
-      consentRisk: true,
-      status: 'confirmed',
-    },
-  });
-  console.log('✅ Sample registration created for:', child1.name, 'in', course1.name);
+  const createdCourses = [];
+  for (const course of courses) {
+    const existing = await prisma.course.findFirst({
+      where: { name: course.name },
+    });
+    if (!existing) {
+      const created = await prisma.course.create({ data: course });
+      createdCourses.push(created);
+      console.log('Course created:', created.name);
+    } else {
+      createdCourses.push(existing);
+      console.log('Course exists:', existing.name);
+    }
+  }
 
-  console.log('\n✅ Database seed completed successfully!');
-  console.log('\n📊 Summary:');
-  console.log(`   • Users: ${await prisma.user.count()}`);
-  console.log(`   • Parents: ${await prisma.parent.count()}`);
-  console.log(`   • Children: ${await prisma.child.count()}`);
-  console.log(`   • Courses: ${await prisma.course.count()}`);
-  console.log(`   • Registrations: ${await prisma.registration.count()}`);
+  // Create sample registration if none exist
+  const regCount = await prisma.registration.count();
+  if (regCount === 0 && child1 && createdCourses[0]) {
+    await prisma.registration.create({
+      data: {
+        courseId: createdCourses[0].id,
+        childId: child1.id,
+        parentId: parent.id,
+        consentActivities: true,
+        consentMedia: true,
+        consentRisk: true,
+        status: 'confirmed',
+      },
+    });
+    console.log('Sample registration created');
+  }
+
+  console.log('Seed completed!');
+  const counts = {
+    users: await prisma.user.count(),
+    parents: await prisma.parent.count(),
+    children: await prisma.child.count(),
+    courses: await prisma.course.count(),
+    registrations: await prisma.registration.count(),
+  };
+  console.log('Counts:', JSON.stringify(counts));
 }
 
 main()
   .catch((e) => {
-    console.error('❌ Error seeding database:', e);
+    console.error('Seed error:', e);
     process.exit(1);
   })
   .finally(async () => {

@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && prisma db push && node prisma/seed.js && next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -23,10 +23,10 @@
     "react-dom": "19.2.3",
     "react-hook-form": "^7.71.2",
     "winston": "^3.19.0",
+    "@prisma/client": "^5.22.0",
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@prisma/client": "^5.22.0",
     "@tailwindcss/postcss": "^4",
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^24",
