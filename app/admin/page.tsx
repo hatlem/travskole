@@ -2,21 +2,28 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 
 export default async function AdminDashboard() {
-  const [totalCourses, totalRegistrations, totalUsers] = await Promise.all([
+  const [totalCourses, totalRegistrations, totalUsers, newBookings] = await Promise.all([
     prisma.course.count(),
     prisma.registration.count(),
     prisma.user.count(),
+    prisma.bookingRequest.count({ where: { status: 'new' } }),
   ]);
 
-  const recentRegistrations = await prisma.registration.findMany({
-    take: 5,
-    orderBy: { createdAt: 'desc' },
-    include: {
-      course: { select: { name: true } },
-      child: { select: { name: true } },
-      parent: { select: { name: true } },
-    },
-  });
+  const [recentRegistrations, recentBookings] = await Promise.all([
+    prisma.registration.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        course: { select: { name: true } },
+        child: { select: { name: true } },
+        parent: { select: { name: true } },
+      },
+    }),
+    prisma.bookingRequest.findMany({
+      take: 5,
+      orderBy: { createdAt: 'desc' },
+    }),
+  ]);
 
   const stats = [
     {
@@ -26,7 +33,7 @@ export default async function AdminDashboard() {
       icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
     },
     {
-      label: 'Pameldinger',
+      label: 'Påmeldinger',
       value: totalRegistrations,
       href: '/admin/registrations',
       icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
@@ -37,20 +44,32 @@ export default async function AdminDashboard() {
       href: '/admin/users',
       icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
     },
-  ];
+    {
+      label: 'Dobbeltsulky',
+      value: newBookings,
+      href: '/admin/dobbeltsulky',
+      badge: newBookings > 0 ? 'Nye' : undefined,
+      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+    },
+  ] as const;
 
   return (
     <div>
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
 
       {/* Stats cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
         {stats.map((stat) => (
           <Link
             key={stat.label}
             href={stat.href}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow"
+            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow relative"
           >
+            {'badge' in stat && stat.badge && (
+              <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                {stat.badge}
+              </span>
+            )}
             <div className="flex items-center gap-4">
               <div className="bg-[#003B7A]/10 rounded-lg p-3">
                 <svg
@@ -115,6 +134,47 @@ export default async function AdminDashboard() {
           </div>
         )}
       </div>
+      {/* Recent dobbeltsulky bookings */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mt-8">
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-gray-900">Siste dobbeltsulky-forespørsler</h2>
+          <Link href="/admin/dobbeltsulky" className="text-sm text-[#003B7A] hover:underline font-medium">
+            Se alle
+          </Link>
+        </div>
+        {recentBookings.length === 0 ? (
+          <div className="p-6 text-center text-gray-500">
+            Ingen forespørsler ennå.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                <tr>
+                  <th className="px-6 py-3 text-left">Navn</th>
+                  <th className="px-6 py-3 text-left">Deltakere</th>
+                  <th className="px-6 py-3 text-left">Status</th>
+                  <th className="px-6 py-3 text-left">Dato</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {recentBookings.map((b) => (
+                  <tr key={b.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 font-medium text-gray-900">{b.name}</td>
+                    <td className="px-6 py-4 text-gray-600">{b.participants}</td>
+                    <td className="px-6 py-4">
+                      <StatusBadge status={b.status} />
+                    </td>
+                    <td className="px-6 py-4 text-gray-500">
+                      {new Date(b.createdAt).toLocaleDateString('nb-NO')}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -122,13 +182,15 @@ export default async function AdminDashboard() {
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
     pending: 'bg-yellow-100 text-yellow-800',
+    new: 'bg-blue-100 text-blue-800',
     confirmed: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
   };
   const labels: Record<string, string> = {
     pending: 'Venter',
+    new: 'Ny',
     confirmed: 'Bekreftet',
-    cancelled: 'Avlyst',
+    cancelled: 'Avvist',
   };
 
   return (

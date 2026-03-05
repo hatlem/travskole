@@ -62,8 +62,8 @@ export const logRateLimitExceeded = (endpoint: string, ip: string) => {
   logSecurityEvent('RATE_LIMIT_EXCEEDED', { endpoint, ip });
 };
 
-export const logRegistration = (parentEmail: string, courseId: string) => {
-  logger.info('REGISTRATION', { parentEmail, courseId });
+export const logRegistration = (parentEmail: string, courseIdentifier: string) => {
+  logger.info('REGISTRATION', { parentEmail, course: courseIdentifier });
 };
 
 export default logger;

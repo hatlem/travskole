@@ -4,10 +4,12 @@ import DOMPurify from 'isomorphic-dompurify';
 import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
+import { generateSlug } from '@/lib/slug';
 
-// Types
 interface RegistrationData {
-  courseId: string;
+  courseType: string;
+  courseYear: string;
+  courseSlug: string;
   parentName: string;
   parentEmail: string;
   parentPhone: string;
@@ -64,8 +66,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate required fields
-    if (!data.courseId || !data.parentName || !data.parentEmail || !data.parentPhone) {
+    if (!data.courseType || !data.courseYear || !data.courseSlug || !data.parentName || !data.parentEmail || !data.parentPhone) {
       return NextResponse.json(
         { error: 'Manglende påkrevde felter' },
         { status: 400 }
@@ -89,19 +90,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate course exists
-    const courseId = parseInt(data.courseId, 10);
-    if (isNaN(courseId)) {
-      return NextResponse.json(
-        { error: 'Ugyldig kurs-ID' },
-        { status: 400 }
-      );
+    let course = await prisma.course.findFirst({
+      where: { type: data.courseType, slug: data.courseSlug },
+    });
+
+    if (!course) {
+      const allCourses = await prisma.course.findMany({
+        where: { type: data.courseType },
+      });
+      course = allCourses.find((c) => generateSlug(c.name) === data.courseSlug) ?? null;
     }
 
-    const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
       return NextResponse.json(
         { error: 'Kurset finnes ikke' },
+        { status: 404 }
+      );
+    }
+
+    const courseYear = new Date(course.startDate).getFullYear().toString();
+    if (courseYear !== data.courseYear) {
+      return NextResponse.json(
+        { error: 'Kurset finnes ikke for dette året' },
         { status: 404 }
       );
     }
@@ -195,12 +205,12 @@ export async function POST(request: NextRequest) {
     });
 
     // SECURITY: Log registration
-    logRegistration(data.parentEmail, data.courseId);
+    logRegistration(data.parentEmail, course.slug || data.courseSlug);
 
     // Build email-friendly object
     const emailData = {
       id: String(registration.id),
-      courseId: data.courseId,
+      courseId: String(course.id),
       courseName: course.name,
       childName,
       childBirthdate,

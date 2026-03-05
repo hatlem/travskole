@@ -3,6 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production' && !process.env.SEED_SECRET) {
+    return NextResponse.json({ error: 'Seed disabled in production' }, { status: 403 });
+  }
+
   const { secret } = await request.json();
 
   if (secret !== (process.env.SEED_SECRET || 'travskole-seed-2026')) {

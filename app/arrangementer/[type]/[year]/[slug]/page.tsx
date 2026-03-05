@@ -3,8 +3,24 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ type: string; year: string; slug: string }>;
+}): Promise<Metadata> {
+  const { type, year, slug } = await params;
+  const course = await getCourseBySlug(type, year, slug);
+  if (!course) return { title: 'Ikke funnet - Bjerke Travskole' };
+  const typeLabel = course.type === 'kurs' ? 'Kurs' : 'Leir';
+  return {
+    title: `${course.name} - Bjerke Travskole`,
+    description: course.description || `${typeLabel} hos Bjerke Travskole for barn og unge.`,
+  };
+}
 
 async function getCourseBySlug(type: string, year: string, slug: string) {
   if (!['kurs', 'leir'].includes(type)) return undefined;
