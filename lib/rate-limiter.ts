@@ -22,7 +22,7 @@ export async function checkRateLimit(
   try {
     await limiter.consume(key);
     return { allowed: true };
-  } catch (rateLimiterRes) {
+  } catch (rateLimiterRes: any) {
     const retryAfter = Math.round(rateLimiterRes.msBeforeNext / 1000) || 1;
     return {
       allowed: false,
