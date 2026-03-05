@@ -9,9 +9,12 @@ export default function Footer() {
         <div className="grid md:grid-cols-3 gap-8">
           <div>
             <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Bjerke Travskole</h3>
-            <p className="text-sm text-white/70 leading-relaxed">
+            <p className="text-sm text-white/70 leading-relaxed mb-3">
               Vi tilbyr trygg og lærerik travsport for barn og unge i alle aldre.
               Travskolen drives av Bjerke Travbane.
+            </p>
+            <p className="text-sm text-white/70">
+              Instruktør: <strong className="text-white/90">Hege Arverud</strong> (DNT-sertifisert)
             </p>
           </div>
 
@@ -24,7 +27,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link href="/courses" className="text-white/70 hover:text-white transition">
+                <Link href="/arrangementer" className="text-white/70 hover:text-white transition">
                   Kurs & Leirer
                 </Link>
               </li>
@@ -44,9 +47,13 @@ export default function Footer() {
           <div>
             <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Kontakt</h3>
             <ul className="space-y-2 text-sm text-white/70">
-              <li>E-post: travskole@bjerke.no</li>
-              <li>Telefon: +47 12 34 56 78</li>
-              <li>Adresse: Bjerke Travbane, Oslo</li>
+              <li>
+                E-post:{' '}
+                <a href="mailto:travskolen@bjerke.no" className="hover:text-white transition">
+                  travskolen@bjerke.no
+                </a>
+              </li>
+              <li>Adresse: Refstadveien 27, 0589 Oslo</li>
             </ul>
           </div>
         </div>

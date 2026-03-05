@@ -53,16 +53,20 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, description, type, startDate, endDate, ageMin, ageMax, price, maxParticipants, status } = body;
+    const { name, description, type, startDate, endDate, ageMin, ageMax, price, maxParticipants, status, slug, imageUrl } = body;
 
     if (!name || !type || !startDate || !status) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
     }
 
+    const { generateSlug } = await import('@/lib/slug');
+    const courseSlug = slug?.trim() || generateSlug(name);
+
     const course = await prisma.course.update({
       where: { id: Number(id) },
       data: {
         name,
+        slug: courseSlug,
         description: description || null,
         type,
         startDate: new Date(startDate),
@@ -72,6 +76,7 @@ export async function PUT(
         price: price != null ? Number(price) : null,
         maxParticipants: maxParticipants != null ? Number(maxParticipants) : null,
         status,
+        imageUrl: imageUrl || null,
       },
     });
 

@@ -7,32 +7,23 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 
-// Validation schema
 const registrationSchema = z.object({
-  // Parent info
   parentName: z.string().min(2, 'Navn må være minst 2 tegn'),
   parentEmail: z.string().email('Ugyldig e-postadresse'),
   parentPhone: z.string().min(8, 'Ugyldig telefonnummer'),
-  
-  // Child info
   childSelection: z.enum(['existing', 'new']),
   existingChildId: z.string().optional(),
-  
-  // New child (only if childSelection === 'new')
   childName: z.string().optional(),
   childBirthdate: z.string().optional(),
   childAllergies: z.string().optional(),
-  
-  // Consents
   consentActivities: z.boolean().refine(val => val === true, {
-    message: 'Du må samtykke til aktiviteter utenfor Bjerke'
+    message: 'Du må samtykke til aktiviteter utenfor Bjerke for å melde på'
   }),
   consentMedia: z.boolean(),
   consentRisk: z.boolean().refine(val => val === true, {
-    message: 'Du må bekrefte forståelse av risikosport'
+    message: 'Du må bekrefte at du har lest og forstått forsikringsvilkårene'
   })
 }).superRefine((data, ctx) => {
-  // If "new child" is selected, validate child fields
   if (data.childSelection === 'new') {
     if (!data.childName || data.childName.length < 2) {
       ctx.addIssue({
@@ -49,8 +40,6 @@ const registrationSchema = z.object({
       });
     }
   }
-  
-  // If "existing child" is selected, validate selection
   if (data.childSelection === 'existing' && !data.existingChildId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -62,13 +51,16 @@ const registrationSchema = z.object({
 
 type RegistrationFormData = z.infer<typeof registrationSchema>;
 
-// Mock existing children - in production, fetch from parent's account
 const existingChildren = [
   { id: '1', name: 'Emma Hansen', birthdate: '2014-05-12' },
   { id: '2', name: 'Oliver Hansen', birthdate: '2012-08-24' }
 ];
 
-export default function RegisterPage({ params }: { params: Promise<{ id: string }> }) {
+export default function PameldingPage({
+  params,
+}: {
+  params: Promise<{ type: string; year: string; slug: string }>;
+}) {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
@@ -77,7 +69,6 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
     register,
     handleSubmit,
     formState: { errors },
-    watch
   } = useForm<RegistrationFormData>({
     resolver: zodResolver(registrationSchema),
     defaultValues: {
@@ -90,13 +81,15 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
     setIsSubmitting(true);
 
     try {
-      const { id } = await params;
-      
+      const { type, year, slug } = await params;
+
       const response = await fetch('/api/registrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          courseId: id,
+          courseType: type,
+          courseYear: year,
+          courseSlug: slug,
           ...data
         })
       });
@@ -106,7 +99,6 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
         throw new Error(error.message || 'Noe gikk galt');
       }
 
-      // Redirect to dashboard with success message
       router.push('/dashboard?success=registration');
     } catch (error) {
       console.error('Registration error:', error);
@@ -119,11 +111,11 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
   return (
     <div className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-3xl mx-auto px-4">
-        <Link 
-          href={`/courses/${params}`}
+        <Link
+          href="/arrangementer"
           className="text-[#003B7A] hover:underline mb-6 inline-block"
         >
-          ← Tilbake til kursdetaljer
+          &larr; Tilbake til arrangementer
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
@@ -133,7 +125,6 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
           </p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
-            {/* Parent Information */}
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">Foresatt</h2>
               <div className="space-y-4">
@@ -184,17 +175,16 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
               </div>
             </div>
 
-            {/* Child Selection */}
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">Barn</h2>
-              
+
               <div className="mb-4">
                 <label className="flex items-center space-x-3 mb-3">
                   <input
                     {...register('childSelection')}
                     type="radio"
                     value="new"
-                    onChange={(e) => setChildSelection('new')}
+                    onChange={() => setChildSelection('new')}
                     className="w-4 h-4 text-[#003B7A]"
                   />
                   <span className="text-gray-700">Nytt barn</span>
@@ -204,14 +194,13 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
                     {...register('childSelection')}
                     type="radio"
                     value="existing"
-                    onChange={(e) => setChildSelection('existing')}
+                    onChange={() => setChildSelection('existing')}
                     className="w-4 h-4 text-[#003B7A]"
                   />
                   <span className="text-gray-700">Velg fra mine barn</span>
                 </label>
               </div>
 
-              {/* Existing Child Selection */}
               {childSelection === 'existing' && (
                 <div>
                   <label htmlFor="existingChildId" className="block text-sm font-medium text-gray-700 mb-1">
@@ -235,7 +224,6 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
                 </div>
               )}
 
-              {/* New Child Form */}
               {childSelection === 'new' && (
                 <div className="space-y-4">
                   <div>
@@ -284,52 +272,88 @@ export default function RegisterPage({ params }: { params: Promise<{ id: string 
               )}
             </div>
 
-            {/* Consents */}
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">Samtykker</h2>
-              <div className="space-y-4">
-                <label className="flex items-start space-x-3">
-                  <input
-                    {...register('consentActivities')}
-                    type="checkbox"
-                    className="mt-1 w-5 h-5 text-[#003B7A] rounded"
-                  />
-                  <span className="text-gray-700">
-                    Jeg samtykker til at mitt barn kan delta i aktiviteter utenfor Bjerke Travbane under tilsyn av instruktører *
-                  </span>
-                </label>
-                {errors.consentActivities && (
-                  <p className="text-red-600 text-sm ml-8">{errors.consentActivities.message}</p>
-                )}
+              <h2 className="text-2xl font-semibold text-gray-900 mb-2">Samtykke og allergier</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Av sikkerhetsgrunner må samtykket godkjennes per barn. Les hvert punkt nøye og kryss av.
+              </p>
 
-                <label className="flex items-start space-x-3">
-                  <input
-                    {...register('consentMedia')}
-                    type="checkbox"
-                    className="mt-1 w-5 h-5 text-[#003B7A] rounded"
-                  />
-                  <span className="text-gray-700">
-                    Jeg samtykker til at foto/video av mitt barn kan publiseres på Bjerke Travbanes nettsider og sosiale medier
-                  </span>
-                </label>
+              <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 mb-6 space-y-6">
+                {/* 1. Aktiviteter utenfor Bjerke */}
+                <div>
+                  <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
+                    <p className="text-gray-700 text-sm leading-relaxed">
+                      Vi samtykker i at vårt barn blir tatt med utenfor Bjerke sitt område i kurstiden.
+                      Dette er aktiviteter som bading, stå på skøyter, fotball, ridetur, omvisninger osv.
+                    </p>
+                  </div>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      {...register('consentActivities')}
+                      type="checkbox"
+                      className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
+                    />
+                    <span className="text-gray-900 font-medium text-sm">
+                      Ja, jeg samtykker *
+                    </span>
+                  </label>
+                  {errors.consentActivities && (
+                    <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentActivities.message}</p>
+                  )}
+                </div>
 
-                <label className="flex items-start space-x-3">
-                  <input
-                    {...register('consentRisk')}
-                    type="checkbox"
-                    className="mt-1 w-5 h-5 text-[#003B7A] rounded"
-                  />
-                  <span className="text-gray-700">
-                    Jeg forstår at travsport er en risikosport og at Bjerke Travbane ikke kan holdes ansvarlig for eventuelle skader *
-                  </span>
-                </label>
-                {errors.consentRisk && (
-                  <p className="text-red-600 text-sm ml-8">{errors.consentRisk.message}</p>
-                )}
+                {/* 2. Bilder/video */}
+                <div>
+                  <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
+                    <p className="text-gray-700 text-sm leading-relaxed">
+                      Vi samtykker i at det blir tatt videoer/bilder av våre barn i kurstiden,
+                      som kan bli lagt ut på Bjerke Travskoles Facebook-side, Instagram-side og hjemmeside.
+                      Det vil i hovedsak ikke bli publisert fulle navn.
+                    </p>
+                  </div>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      {...register('consentMedia')}
+                      type="checkbox"
+                      className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
+                    />
+                    <span className="text-gray-900 font-medium text-sm">
+                      Ja, jeg samtykker (valgfritt)
+                    </span>
+                  </label>
+                </div>
+
+                {/* 3. Forsikring og risiko */}
+                <div>
+                  <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
+                    <p className="text-gray-700 text-sm leading-relaxed mb-3">
+                      Vi har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje.
+                      Det anbefales derfor å ha en ulykkesforsikring på barnet.
+                    </p>
+                    <p className="text-gray-900 text-sm leading-relaxed font-medium border-t border-gray-200 pt-3">
+                      Alle som deltar på kurs/aktiviteter i travskole/aktivitetsstaller anbefales egen ulykkesforsikring.
+                      Bjerke Travbane AS har ingen forsikring som dekker en eventuell personskade som skulle oppstå på
+                      våre kurs. Ved å melde seg på kurs i regi av travskole eller aktivitetsstall tilknyttet Bjerke
+                      Travbane AS bekrefter man å være kjent med disse forholdene.
+                    </p>
+                  </div>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input
+                      {...register('consentRisk')}
+                      type="checkbox"
+                      className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
+                    />
+                    <span className="text-gray-900 font-medium text-sm">
+                      Ja, jeg har lest og forstått dette *
+                    </span>
+                  </label>
+                  {errors.consentRisk && (
+                    <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentRisk.message}</p>
+                  )}
+                </div>
               </div>
             </div>
 
-            {/* Submit Button */}
             <div className="pt-6 border-t border-gray-200">
               <button
                 type="submit"

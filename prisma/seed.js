@@ -79,6 +79,7 @@ async function main() {
   const courses = [
     {
       name: 'Begynnerkurs - Våren 2026',
+      slug: 'begynnerkurs-varen-2026',
       description: 'Perfekt for barn som aldri har prøvd travhest før! Vi lærer grunnleggende ridning, stell og sikkerhet.',
       type: 'kurs',
       startDate: new Date('2026-04-10'),
@@ -91,6 +92,7 @@ async function main() {
     },
     {
       name: 'Sommerleir 2026 - Uke 28',
+      slug: 'sommerleir-2026-uke-28',
       description: 'Hele uken på travskolen! Mye moro med hester, nye venner og aktiviteter. Inkluderer lunsj.',
       type: 'leir',
       startDate: new Date('2026-07-06'),
@@ -103,6 +105,7 @@ async function main() {
     },
     {
       name: 'Videregående - Høsten 2026',
+      slug: 'videregende-hosten-2026',
       description: 'For deg som har prøvd travhest før og vil lære mer! Vi jobber med mer avanserte teknikker.',
       type: 'kurs',
       startDate: new Date('2026-09-05'),
@@ -146,6 +149,14 @@ async function main() {
     });
     console.log('Sample registration created');
   }
+
+  // Seed default settings
+  await prisma.setting.upsert({
+    where: { key: 'dobbeltsulky_enabled' },
+    update: {},
+    create: { key: 'dobbeltsulky_enabled', value: 'false' },
+  });
+  console.log('Default settings seeded');
 
   console.log('Seed completed!');
   const counts = {

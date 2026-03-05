@@ -2,10 +2,13 @@
 
 import React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
+import { getCourseUrl } from '@/lib/slug';
 
 export interface Course {
   id: string;
   name: string;
+  slug?: string | null;
   description: string;
   type: 'kurs' | 'leir';
   start_date: string;
@@ -15,6 +18,7 @@ export interface Course {
   price: number;
   max_participants: number;
   status: 'open' | 'full' | 'closed';
+  image_url?: string | null;
 }
 
 interface CourseCardProps {
@@ -43,7 +47,18 @@ export default function CourseCard({ course }: CourseCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-4 hover:shadow-md transition">
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-4 hover:shadow-md transition">
+      {course.image_url && (
+        <div className="relative h-48 w-full">
+          <Image
+            src={course.image_url}
+            alt={course.name}
+            fill
+            className="object-cover"
+          />
+        </div>
+      )}
+      <div className="p-6">
       <div className="flex justify-between items-start mb-3">
         <div>
           <h3 className="text-2xl font-semibold text-gray-900 mb-1">
@@ -85,16 +100,17 @@ export default function CourseCard({ course }: CourseCardProps) {
         </div>
       </div>
       
-      <Link 
-        href={`/courses/${course.id}`}
+      <Link
+        href={getCourseUrl({ ...course, startDate: course.start_date })}
         className={`inline-block w-full text-center px-6 py-3 rounded-lg font-semibold transition ${
-          course.status === 'open' 
-            ? 'bg-[#003B7A] hover:bg-[#002855] text-white' 
+          course.status === 'open'
+            ? 'bg-[#003B7A] hover:bg-[#002855] text-white'
             : 'bg-gray-200 text-gray-600 cursor-not-allowed'
         }`}
       >
         {course.status === 'open' ? 'Se detaljer og meld på' : 'Se detaljer'}
       </Link>
+      </div>
     </div>
   );
 }

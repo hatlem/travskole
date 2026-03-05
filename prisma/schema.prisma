@@ -106,6 +106,7 @@ model Child {
 model Course {
   id              Int       @id @default(autoincrement())
   name            String
+  slug            String?
   description     String?
   type            String    // 'kurs' or 'leir'
   startDate       DateTime  @map("start_date")
@@ -115,12 +116,38 @@ model Course {
   price           Float?
   maxParticipants Int?      @map("max_participants")
   status          String    @default("open") // 'open', 'full', 'closed'
+  imageUrl        String?   @map("image_url")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
-  
+
   registrations Registration[]
-  
+
+  @@unique([type, slug])
   @@map("courses")
+}
+
+// Site settings (key-value store)
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// Dobbeltsulky booking requests
+model BookingRequest {
+  id            Int      @id @default(autoincrement())
+  name          String
+  email         String
+  phone         String
+  participants  Int      @default(1)
+  preferredDate DateTime? @map("preferred_date")
+  message       String?
+  status        String   @default("new") // 'new', 'confirmed', 'cancelled'
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("booking_requests")
 }
 
 // Registration model - Påmeldinger (links Course, Child, Parent)

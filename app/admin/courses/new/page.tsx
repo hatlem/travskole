@@ -3,11 +3,13 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ImageUpload from '@/components/ImageUpload';
 
 export default function NewCoursePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState('');
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -17,6 +19,7 @@ export default function NewCoursePage() {
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get('name') as string,
+      slug: (formData.get('slug') as string) || '',
       description: formData.get('description') as string,
       type: formData.get('type') as string,
       startDate: formData.get('startDate') as string,
@@ -26,6 +29,7 @@ export default function NewCoursePage() {
       price: formData.get('price') ? Number(formData.get('price')) : null,
       maxParticipants: formData.get('maxParticipants') ? Number(formData.get('maxParticipants')) : null,
       status: formData.get('status') as string,
+      imageUrl: imageUrl || null,
     };
 
     try {
@@ -77,6 +81,22 @@ export default function NewCoursePage() {
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
           />
         </div>
+
+        <div>
+          <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
+            URL-slug
+          </label>
+          <input
+            type="text"
+            id="slug"
+            name="slug"
+            placeholder="f.eks. sommerleir-2026 (genereres automatisk om tomt)"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">Brukes i URL-en. La stå tom for automatisk generering fra navnet.</p>
+        </div>
+
+        <ImageUpload onUpload={setImageUrl} />
 
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">

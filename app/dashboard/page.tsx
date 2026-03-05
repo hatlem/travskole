@@ -43,7 +43,7 @@ function DashboardContent() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <Link 
-              href="/courses"
+              href="/arrangementer"
               className="block bg-[#003B7A] text-white rounded-lg p-6 hover:bg-[#002855] transition"
             >
               <h3 className="text-xl font-semibold mb-2">Se alle kurs</h3>

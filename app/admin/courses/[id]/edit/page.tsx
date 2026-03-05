@@ -3,10 +3,12 @@
 import { useState, useEffect, use } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ImageUpload from '@/components/ImageUpload';
 
 interface CourseData {
   id: number;
   name: string;
+  slug: string | null;
   description: string | null;
   type: string;
   startDate: string;
@@ -16,6 +18,7 @@ interface CourseData {
   price: number | null;
   maxParticipants: number | null;
   status: string;
+  imageUrl: string | null;
 }
 
 export default function EditCoursePage({ params }: { params: Promise<{ id: string }> }) {
@@ -26,6 +29,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string>('');
 
   useEffect(() => {
     async function fetchCourse() {
@@ -34,6 +38,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         if (!res.ok) throw new Error('Kunne ikke hente kurs');
         const data = await res.json();
         setCourse(data.course);
+        setImageUrl(data.course.imageUrl || '');
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Noe gikk galt');
       } finally {
@@ -51,6 +56,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     const formData = new FormData(e.currentTarget);
     const data = {
       name: formData.get('name') as string,
+      slug: (formData.get('slug') as string) || '',
       description: formData.get('description') as string,
       type: formData.get('type') as string,
       startDate: formData.get('startDate') as string,
@@ -60,6 +66,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       price: formData.get('price') ? Number(formData.get('price')) : null,
       maxParticipants: formData.get('maxParticipants') ? Number(formData.get('maxParticipants')) : null,
       status: formData.get('status') as string,
+      imageUrl: imageUrl || null,
     };
 
     try {
@@ -154,6 +161,23 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
             className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
           />
         </div>
+
+        <div>
+          <label htmlFor="slug" className="block text-sm font-medium text-gray-700 mb-1">
+            URL-slug
+          </label>
+          <input
+            type="text"
+            id="slug"
+            name="slug"
+            defaultValue={course.slug || ''}
+            placeholder="f.eks. sommerleir-2026 (genereres automatisk om tomt)"
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+          />
+          <p className="text-xs text-gray-500 mt-1">Brukes i URL-en. La stå tom for automatisk generering fra navnet.</p>
+        </div>
+
+        <ImageUpload currentUrl={course.imageUrl} onUpload={setImageUrl} />
 
         <div>
           <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
