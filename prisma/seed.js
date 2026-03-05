@@ -1,16 +1,19 @@
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding database...');
 
+  const passwordHash = await bcrypt.hash('admin123', 12);
+
   // Create admin user (upsert to be idempotent)
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@bjerke.no' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'admin@bjerke.no',
-      passwordHash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7BZ0xLz9km', // "admin123"
+      passwordHash,
       role: 'admin',
     },
   });
@@ -19,10 +22,10 @@ async function main() {
   // Create parent user
   const parentUser = await prisma.user.upsert({
     where: { email: 'mor@eksempel.no' },
-    update: {},
+    update: { passwordHash },
     create: {
       email: 'mor@eksempel.no',
-      passwordHash: '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5NU7BZ0xLz9km', // "admin123"
+      passwordHash,
       role: 'parent',
     },
     include: { parent: true },

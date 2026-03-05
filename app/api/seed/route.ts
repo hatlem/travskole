@@ -3,7 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 
 export async function POST(request: NextRequest) {
-  const { secret } = await request.json();
+  const body = await request.json();
+  const { secret, resetAdmin } = body;
 
   if (secret !== (process.env.SEED_SECRET || 'travskole-seed-2026')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -13,6 +14,15 @@ export async function POST(request: NextRequest) {
     // Check if already seeded
     const userCount = await prisma.user.count();
     if (userCount > 0) {
+      // Reset admin password if requested
+      if (resetAdmin) {
+        const newHash = await hashPassword('admin123');
+        await prisma.user.update({
+          where: { email: 'admin@bjerke.no' },
+          data: { passwordHash: newHash },
+        });
+        return NextResponse.json({ message: 'Admin password reset' });
+      }
       const counts = {
         users: userCount,
         courses: await prisma.course.count(),
