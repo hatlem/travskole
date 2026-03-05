@@ -25,7 +25,9 @@ const emailProvider = process.env.EMAIL_SERVER_HOST
   : [];
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma) as any,
+  // Only use adapter when email provider is configured (needed for verification tokens)
+  // PrismaAdapter with CredentialsProvider + JWT strategy causes empty sessions
+  ...(process.env.EMAIL_SERVER_HOST ? { adapter: PrismaAdapter(prisma) as any } : {}),
 
   providers: [
     ...emailProvider,
