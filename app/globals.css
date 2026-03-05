@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  
+  /* Bjerke Travskole Brand Colors */
+  --bjerke-blue: #003B7A;
+  --bjerke-blue-dark: #002855;
+  --bjerke-blue-light: #0052A3;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  
+  /* Bjerke blue color palette */
+  --color-bjerke-blue: var(--bjerke-blue);
+  --color-bjerke-blue-dark: var(--bjerke-blue-dark);
+  --color-bjerke-blue-light: var(--bjerke-blue-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}

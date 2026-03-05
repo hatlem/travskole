@@ -1,0 +1,101 @@
+// Prisma schema for Bjerke Travskole
+// Development: SQLite | Production: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  // provider = "postgresql" // Uncomment for production
+  url      = env("DATABASE_URL")
+}
+
+// User model - Authentication & Role-based access
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         String   @default("parent") // 'parent' or 'admin'
+  createdAt    DateTime @default(now()) @map("created_at")
+  
+  parent Parent?
+  
+  @@map("users")
+}
+
+// Parent model - Foreldre (linked to User)
+model Parent {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique @map("user_id")
+  name      String
+  phone     String
+  address   String?
+  deletedAt DateTime? @map("deleted_at") // GDPR soft delete
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  children      Child[]
+  registrations Registration[]
+  
+  @@map("parents")
+}
+
+// Child model - Barn (linked to Parent)
+model Child {
+  id        Int       @id @default(autoincrement())
+  parentId  Int       @map("parent_id")
+  name      String
+  birthdate DateTime?
+  allergies String?
+  deletedAt DateTime? @map("deleted_at") // GDPR soft delete
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  
+  parent        Parent         @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  registrations Registration[]
+  
+  @@map("children")
+}
+
+// Course model - Kurs & Leirer
+model Course {
+  id              Int       @id @default(autoincrement())
+  name            String
+  description     String?
+  type            String    // 'kurs' or 'leir'
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime? @map("end_date")
+  ageMin          Int?      @map("age_min")
+  ageMax          Int?      @map("age_max")
+  price           Float?
+  maxParticipants Int?      @map("max_participants")
+  status          String    @default("open") // 'open', 'full', 'closed'
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  
+  registrations Registration[]
+  
+  @@map("courses")
+}
+
+// Registration model - Påmeldinger (links Course, Child, Parent)
+model Registration {
+  id                 Int      @id @default(autoincrement())
+  courseId           Int      @map("course_id")
+  childId            Int      @map("child_id")
+  parentId           Int      @map("parent_id")
+  consentActivities  Boolean  @default(false) @map("consent_activities")
+  consentMedia       Boolean  @default(false) @map("consent_media")
+  consentRisk        Boolean  @default(false) @map("consent_risk")
+  status             String   @default("pending") // 'pending', 'confirmed', 'cancelled'
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  child  Child  @relation(fields: [childId], references: [id], onDelete: Cascade)
+  parent Parent @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  
+  @@map("registrations")
+}
