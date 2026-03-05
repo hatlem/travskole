@@ -2,6 +2,8 @@ import { Course } from '@/components/CourseCard';
 import CourseFilter from '@/components/CourseFilter';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 async function getAllCourses(): Promise<Course[]> {
   try {
     const dbCourses = await prisma.course.findMany({

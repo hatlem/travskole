@@ -3,6 +3,8 @@ import CourseCard, { Course } from '@/components/CourseCard';
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 
+export const dynamic = 'force-dynamic';
+
 async function getUpcomingCourses(): Promise<Course[]> {
   try {
     const dbCourses = await prisma.course.findMany({
