@@ -136,7 +136,7 @@ export default function NewCoursePage() {
               required
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
             >
-              <option value="open">Apen</option>
+              <option value="open">Åpen</option>
               <option value="full">Fullt</option>
               <option value="closed">Stengt</option>
             </select>

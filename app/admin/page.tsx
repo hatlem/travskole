@@ -94,14 +94,14 @@ export default async function AdminDashboard() {
       {/* Recent registrations */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Siste pameldinger</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Siste påmeldinger</h2>
           <Link href="/admin/registrations" className="text-sm text-[#003B7A] hover:underline font-medium">
             Se alle
           </Link>
         </div>
         {recentRegistrations.length === 0 ? (
           <div className="p-6 text-center text-gray-500">
-            Ingen pameldinger enna.
+            Ingen påmeldinger ennå.
           </div>
         ) : (
           <div className="overflow-x-auto">

@@ -91,7 +91,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   }
 
   async function handleDelete() {
-    if (!confirm('Er du sikker pa at du vil slette dette kurset? Alle pameldinger vil ogsa bli slettet.')) {
+    if (!confirm('Er du sikker på at du vil slette dette kurset? Alle påmeldinger vil også bli slettet.')) {
       return;
     }
 
@@ -220,7 +220,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               defaultValue={course.status}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
             >
-              <option value="open">Apen</option>
+              <option value="open">Åpen</option>
               <option value="full">Fullt</option>
               <option value="closed">Stengt</option>
             </select>

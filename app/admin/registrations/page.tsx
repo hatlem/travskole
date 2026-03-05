@@ -28,7 +28,7 @@ export default function AdminRegistrationsPage() {
   async function fetchRegistrations() {
     try {
       const res = await fetch('/api/admin/registrations');
-      if (!res.ok) throw new Error('Kunne ikke hente pameldinger');
+      if (!res.ok) throw new Error('Kunne ikke hente påmeldinger');
       const data = await res.json();
       setRegistrations(data.registrations);
     } catch (err) {
@@ -58,11 +58,11 @@ export default function AdminRegistrationsPage() {
   }
 
   async function deleteRegistration(id: number) {
-    if (!confirm('Er du sikker pa at du vil slette denne pameldingen?')) return;
+    if (!confirm('Er du sikker på at du vil slette denne påmeldingen?')) return;
 
     try {
       const res = await fetch(`/api/admin/registrations/${id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Kunne ikke slette pamelding');
+      if (!res.ok) throw new Error('Kunne ikke slette påmelding');
       setRegistrations((prev) => prev.filter((r) => r.id !== id));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
@@ -72,14 +72,14 @@ export default function AdminRegistrationsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-gray-500">Laster pameldinger...</p>
+        <p className="text-gray-500">Laster påmeldinger...</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Pameldinger</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-8">Påmeldinger</h1>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -92,7 +92,7 @@ export default function AdminRegistrationsPage() {
 
       {registrations.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-gray-500">Ingen pameldinger enna.</p>
+          <p className="text-gray-500">Ingen påmeldinger ennå.</p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

@@ -25,12 +25,12 @@ export default async function AdminCoursesPage() {
 
       {courses.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-gray-500 mb-4">Ingen kurs opprettet enna.</p>
+          <p className="text-gray-500 mb-4">Ingen kurs opprettet ennå.</p>
           <Link
             href="/admin/courses/new"
             className="text-[#003B7A] hover:underline font-medium"
           >
-            Opprett det forste kurset
+            Opprett det første kurset
           </Link>
         </div>
       ) : (
@@ -44,7 +44,7 @@ export default async function AdminCoursesPage() {
                   <th className="px-6 py-3 text-left">Startdato</th>
                   <th className="px-6 py-3 text-left">Sluttdato</th>
                   <th className="px-6 py-3 text-left">Pris</th>
-                  <th className="px-6 py-3 text-left">Pameldinger</th>
+                  <th className="px-6 py-3 text-left">Påmeldinger</th>
                   <th className="px-6 py-3 text-left">Status</th>
                   <th className="px-6 py-3 text-left">Handlinger</th>
                 </tr>
@@ -104,7 +104,7 @@ function StatusBadge({ status }: { status: string }) {
     closed: 'bg-red-100 text-red-800',
   };
   const labels: Record<string, string> = {
-    open: 'Apen',
+    open: 'Åpen',
     full: 'Fullt',
     closed: 'Stengt',
   };
