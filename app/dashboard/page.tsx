@@ -2,8 +2,12 @@
 
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { Suspense } from 'react';
 
-export default function DashboardPage() {
+// Force dynamic rendering for search params
+export const dynamic = 'force-dynamic';
+
+function DashboardContent() {
   const searchParams = useSearchParams();
   const success = searchParams.get('success');
 
@@ -64,5 +68,13 @@ export default function DashboardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-gray-50 py-16"><div className="max-w-4xl mx-auto px-4">Loading...</div></div>}>
+      <DashboardContent />
+    </Suspense>
   );
 }
