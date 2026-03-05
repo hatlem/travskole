@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
+import { useSession, signOut } from 'next-auth/react';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const { data: session } = useSession();
 
   return (
     <header className="bg-[#003B7A] text-white sticky top-0 z-50 shadow-lg">
@@ -33,12 +35,34 @@ export default function Header() {
             <Link href="/courses" className="nav-link text-white/90 hover:text-white transition">
               Kurs & Leirer
             </Link>
-            <Link
-              href="/dashboard"
-              className="bg-white text-[#003B7A] px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
-            >
-              Min Side
-            </Link>
+            {session ? (
+              <>
+                {session.user.role === 'admin' && (
+                  <Link href="/admin" className="nav-link text-white/90 hover:text-white transition">
+                    Admin
+                  </Link>
+                )}
+                <Link
+                  href="/dashboard"
+                  className="bg-white text-[#003B7A] px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                >
+                  Min Side
+                </Link>
+                <button
+                  onClick={() => signOut({ callbackUrl: '/' })}
+                  className="text-white/70 hover:text-white text-sm uppercase tracking-wide transition"
+                >
+                  Logg ut
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="bg-white text-[#003B7A] px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+              >
+                Logg inn
+              </Link>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -74,13 +98,40 @@ export default function Header() {
             >
               Kurs & Leirer
             </Link>
-            <Link
-              href="/dashboard"
-              className="block bg-white text-[#003B7A] px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Min Side
-            </Link>
+            {session ? (
+              <>
+                {session.user.role === 'admin' && (
+                  <Link
+                    href="/admin"
+                    className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    Admin
+                  </Link>
+                )}
+                <Link
+                  href="/dashboard"
+                  className="block bg-white text-[#003B7A] px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                  onClick={() => setMobileMenuOpen(false)}
+                >
+                  Min Side
+                </Link>
+                <button
+                  onClick={() => { setMobileMenuOpen(false); signOut({ callbackUrl: '/' }); }}
+                  className="block w-full text-left uppercase text-sm tracking-wide text-white/70 hover:text-white transition"
+                >
+                  Logg ut
+                </button>
+              </>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="block bg-white text-[#003B7A] px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Logg inn
+              </Link>
+            )}
           </div>
         )}
       </nav>
