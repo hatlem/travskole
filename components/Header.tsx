@@ -29,9 +29,6 @@ export default function Header() {
 
           {/* Desktop Navigation — uppercase like bjerke.no */}
           <div className="hidden md:flex items-center gap-8">
-            <Link href="/" className="nav-link text-white/90 hover:text-white transition">
-              Hjem
-            </Link>
             <Link href="/courses" className="nav-link text-white/90 hover:text-white transition">
               Kurs & Leirer
             </Link>
@@ -84,13 +81,6 @@ export default function Header() {
         {/* Mobile Menu */}
         {mobileMenuOpen && (
           <div className="md:hidden mt-4 pb-4 space-y-3 border-t border-white/20 pt-4">
-            <Link
-              href="/"
-              className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
-              onClick={() => setMobileMenuOpen(false)}
-            >
-              Hjem
-            </Link>
             <Link
               href="/courses"
               className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
