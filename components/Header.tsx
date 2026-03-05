@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { useState } from 'react';
 
 export default function Header() {
@@ -10,9 +11,19 @@ export default function Header() {
     <header className="bg-[#003B7A] text-white sticky top-0 z-50">
       <nav className="max-w-6xl mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
-          {/* Logo */}
-          <Link href="/" className="text-2xl font-bold">
-            Bjerke Travskole
+          {/* Logo - Placeholder fra Bjerke.no (inntil travskole får egen logo) */}
+          <Link href="/" className="flex items-center">
+            <Image 
+              src="/bjerkebanen-logo-invertert.png" 
+              alt="Bjerke Travbane" 
+              width={180} 
+              height={50}
+              className="h-12 w-auto"
+              priority
+            />
+            <span className="ml-3 text-lg font-semibold border-l border-white/30 pl-3">
+              Travskole
+            </span>
           </Link>
 
           {/* Desktop Navigation */}
