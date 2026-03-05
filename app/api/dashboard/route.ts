@@ -1,6 +1,58 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+
+export async function PUT(request: NextRequest) {
+  const session = await getServerSession();
+
+  if (!session?.user?.email) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const body = await request.json();
+  const { name, phone, address } = body;
+
+  if (!name || typeof name !== 'string' || name.trim().length < 2) {
+    return NextResponse.json(
+      { error: 'Navn må være minst 2 tegn' },
+      { status: 400 }
+    );
+  }
+
+  if (!phone || typeof phone !== 'string' || phone.trim().length < 8) {
+    return NextResponse.json(
+      { error: 'Telefonnummer må være minst 8 tegn' },
+      { status: 400 }
+    );
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email: session.user.email },
+    include: { parent: true },
+  });
+
+  if (!user || !user.parent) {
+    return NextResponse.json({ error: 'Profil ikke funnet' }, { status: 404 });
+  }
+
+  const updatedParent = await prisma.parent.update({
+    where: { id: user.parent.id },
+    data: {
+      name: name.trim(),
+      phone: phone.trim(),
+      address: address?.trim() || null,
+    },
+  });
+
+  return NextResponse.json({
+    profile: {
+      name: updatedParent.name,
+      email: user.email,
+      phone: updatedParent.phone,
+      address: updatedParent.address,
+    },
+  });
+}
 
 export async function GET() {
   const session = await getServerSession();

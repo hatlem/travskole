@@ -221,6 +221,22 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Auto-set course to "full" when maxParticipants reached
+    if (course.maxParticipants && course.status === 'open') {
+      const activeCount = await prisma.registration.count({
+        where: {
+          courseId: course.id,
+          status: { in: ['pending', 'confirmed'] },
+        },
+      });
+      if (activeCount >= course.maxParticipants) {
+        await prisma.course.update({
+          where: { id: course.id },
+          data: { status: 'full' },
+        });
+      }
+    }
+
     // SECURITY: Log registration
     logRegistration(data.parentEmail, course.slug || data.courseSlug);
 

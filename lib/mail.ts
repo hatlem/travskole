@@ -100,6 +100,28 @@ export async function sendRegistrationAdminNotification(data: RegistrationEmail)
   );
 }
 
+interface WaitlistPromotionEmail {
+  parentName: string;
+  parentEmail: string;
+  childName: string;
+  courseName: string;
+}
+
+export async function sendWaitlistPromotionEmail(data: WaitlistPromotionEmail) {
+  await sendMail(
+    data.parentEmail,
+    `Plass ledig — ${data.courseName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Hei ${data.parentName}!</h2>
+      <p>Gode nyheter! Det har blitt ledig plass på <strong>${data.courseName}</strong>.</p>
+      <p>${data.childName} er nå flyttet fra ventelisten til påmeldingslisten.</p>
+      <p>Vi vil sende deg en bekreftelse så snart påmeldingen er godkjent.</p>
+      <p>Spørsmål? Ta kontakt på <a href="mailto:${ADMIN_EMAIL}">${ADMIN_EMAIL}</a></p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>Bjerke Travskole</p>
+    </div>`,
+  );
+}
+
 interface BookingEmail {
   name: string;
   email: string;

@@ -35,6 +35,7 @@ const statusLabels: Record<string, { label: string; className: string }> = {
   pending: { label: 'Venter', className: 'bg-yellow-100 text-yellow-800' },
   confirmed: { label: 'Bekreftet', className: 'bg-green-100 text-green-800' },
   cancelled: { label: 'Avlyst', className: 'bg-red-100 text-red-800' },
+  waitlist: { label: 'Venteliste', className: 'bg-blue-100 text-blue-800' },
 };
 
 function formatDate(iso: string) {
@@ -51,6 +52,10 @@ function DashboardContent() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', phone: '', address: '' });
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -196,27 +201,135 @@ function DashboardContent() {
 
           {data?.profile && (
             <section>
-              <h2 className="text-xl font-semibold text-gray-900 mb-4">Profil</h2>
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-2">
-                <p className="text-gray-900">
-                  <span className="text-sm text-gray-500">Navn:</span>{' '}
-                  {data.profile.name}
-                </p>
-                <p className="text-gray-900">
-                  <span className="text-sm text-gray-500">E-post:</span>{' '}
-                  {data.profile.email}
-                </p>
-                <p className="text-gray-900">
-                  <span className="text-sm text-gray-500">Telefon:</span>{' '}
-                  {data.profile.phone}
-                </p>
-                {data.profile.address && (
-                  <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">Adresse:</span>{' '}
-                    {data.profile.address}
-                  </p>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold text-gray-900">Profil</h2>
+                {!editing && (
+                  <button
+                    onClick={() => {
+                      setEditForm({
+                        name: data.profile!.name,
+                        phone: data.profile!.phone,
+                        address: data.profile!.address ?? '',
+                      });
+                      setEditError(null);
+                      setEditing(true);
+                    }}
+                    className="text-sm text-[#003B7A] hover:underline font-medium"
+                  >
+                    Rediger
+                  </button>
                 )}
               </div>
+              {editing ? (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-4">
+                  {editError && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                      {editError}
+                    </div>
+                  )}
+                  <div>
+                    <label htmlFor="edit-name" className="block text-sm text-gray-500 mb-1">
+                      Navn
+                    </label>
+                    <input
+                      id="edit-name"
+                      type="text"
+                      required
+                      value={editForm.name}
+                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003B7A]"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-phone" className="block text-sm text-gray-500 mb-1">
+                      Telefon
+                    </label>
+                    <input
+                      id="edit-phone"
+                      type="tel"
+                      required
+                      value={editForm.phone}
+                      onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003B7A]"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="edit-address" className="block text-sm text-gray-500 mb-1">
+                      Adresse
+                    </label>
+                    <input
+                      id="edit-address"
+                      type="text"
+                      value={editForm.address}
+                      onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003B7A]"
+                    />
+                  </div>
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      disabled={saving}
+                      onClick={async () => {
+                        setEditError(null);
+                        setSaving(true);
+                        try {
+                          const res = await fetch('/api/dashboard', {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(editForm),
+                          });
+                          const result = await res.json();
+                          if (!res.ok) {
+                            setEditError(result.error || 'Kunne ikke lagre endringer');
+                            return;
+                          }
+                          setData((prev) =>
+                            prev ? { ...prev, profile: result.profile } : prev
+                          );
+                          setEditing(false);
+                        } catch {
+                          setEditError('Noe gikk galt. Prøv igjen.');
+                        } finally {
+                          setSaving(false);
+                        }
+                      }}
+                      className="bg-[#003B7A] text-white px-5 py-2 rounded-lg hover:bg-[#002855] transition disabled:opacity-50"
+                    >
+                      {saving ? 'Lagrer...' : 'Lagre'}
+                    </button>
+                    <button
+                      disabled={saving}
+                      onClick={() => {
+                        setEditing(false);
+                        setEditError(null);
+                      }}
+                      className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+                    >
+                      Avbryt
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-2">
+                  <p className="text-gray-900">
+                    <span className="text-sm text-gray-500">Navn:</span>{' '}
+                    {data.profile.name}
+                  </p>
+                  <p className="text-gray-900">
+                    <span className="text-sm text-gray-500">E-post:</span>{' '}
+                    {data.profile.email}
+                  </p>
+                  <p className="text-gray-900">
+                    <span className="text-sm text-gray-500">Telefon:</span>{' '}
+                    {data.profile.phone}
+                  </p>
+                  {data.profile.address && (
+                    <p className="text-gray-900">
+                      <span className="text-sm text-gray-500">Adresse:</span>{' '}
+                      {data.profile.address}
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
           )}
 
