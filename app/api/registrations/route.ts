@@ -5,6 +5,7 @@ import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
 
 interface RegistrationData {
   courseType: string;
@@ -207,10 +208,7 @@ export async function POST(request: NextRequest) {
     // SECURITY: Log registration
     logRegistration(data.parentEmail, course.slug || data.courseSlug);
 
-    // Build email-friendly object
     const emailData = {
-      id: String(registration.id),
-      courseId: String(course.id),
       courseName: course.name,
       childName,
       childBirthdate,
@@ -218,18 +216,12 @@ export async function POST(request: NextRequest) {
       parentEmail: data.parentEmail,
       parentPhone: data.parentPhone,
       allergies: childAllergies,
-      consentActivities: data.consentActivities,
-      consentMedia: data.consentMedia,
-      consentRisk: data.consentRisk,
-      status: 'pending' as const,
-      createdAt: registration.createdAt.toISOString(),
     };
 
-    // Send confirmation email to parent
-    await sendParentConfirmationEmail(emailData);
-
-    // Send notification email to admin
-    await sendAdminNotificationEmail(emailData);
+    await Promise.all([
+      sendRegistrationConfirmation(emailData),
+      sendRegistrationAdminNotification(emailData),
+    ]).catch(() => {});
 
     return NextResponse.json({
       success: true,
@@ -315,83 +307,3 @@ export async function GET(request: NextRequest) {
   }
 }
 
-interface EmailRegistration {
-  id: string;
-  courseId: string;
-  courseName: string;
-  childName: string;
-  childBirthdate: string;
-  parentName: string;
-  parentEmail: string;
-  parentPhone: string;
-  allergies?: string;
-  consentActivities: boolean;
-  consentMedia: boolean;
-  consentRisk: boolean;
-  status: 'pending' | 'confirmed' | 'cancelled';
-  createdAt: string;
-}
-
-/**
- * Send confirmation email to parent
- */
-async function sendParentConfirmationEmail(registration: EmailRegistration) {
-  // In production, use actual SMTP service (Nodemailer, SendGrid, etc.)
-  console.log('📧 Sending confirmation email to parent:', registration.parentEmail);
-  console.log('Subject: Påmelding mottatt -', registration.courseName);
-  console.log('Body:');
-  console.log(`
-    Hei ${registration.parentName}!
-    
-    Takk for påmeldingen til ${registration.courseName}.
-    
-    Barn: ${registration.childName}
-    Fødselsdato: ${new Date(registration.childBirthdate).toLocaleDateString('nb-NO')}
-    ${registration.allergies ? `Allergier: ${registration.allergies}` : ''}
-    
-    Vi vil sende deg en bekreftelse så snart vi har behandlet påmeldingen.
-    
-    Spørsmål? Ta kontakt med oss på travskole@bjerke.no
-    
-    Med vennlig hilsen,
-    Bjerke Travskole
-  `);
-
-  // TODO: Implement actual email sending
-  // await sendEmail({
-  //   to: registration.parentEmail,
-  //   subject: `Påmelding mottatt - ${registration.courseName}`,
-  //   html: emailTemplate
-  // });
-}
-
-/**
- * Send notification email to admin
- */
-async function sendAdminNotificationEmail(registration: EmailRegistration) {
-  // In production, use actual SMTP service
-  console.log('📧 Sending notification email to admin');
-  console.log('Subject: Ny påmelding -', registration.courseName);
-  console.log('Body:');
-  console.log(`
-    Ny påmelding mottatt!
-    
-    Kurs: ${registration.courseName}
-    Barn: ${registration.childName} (født ${new Date(registration.childBirthdate).toLocaleDateString('nb-NO')})
-    Forelder: ${registration.parentName}
-    E-post: ${registration.parentEmail}
-    Telefon: ${registration.parentPhone}
-    ${registration.allergies ? `Allergier: ${registration.allergies}` : 'Ingen allergier oppgitt'}
-    
-    Status: Venter på godkjenning
-    
-    Logg inn på admin-panelet for å godkjenne: [ADMIN_URL]
-  `);
-
-  // TODO: Implement actual email sending
-  // await sendEmail({
-  //   to: 'admin@bjerke.no',
-  //   subject: `Ny påmelding - ${registration.courseName}`,
-  //   html: emailTemplate
-  // });
-}

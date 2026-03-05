@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { useSession } from 'next-auth/react';
 
 const registrationSchema = z.object({
   parentName: z.string().min(2, 'Navn må være minst 2 tegn'),
@@ -51,10 +52,11 @@ const registrationSchema = z.object({
 
 type RegistrationFormData = z.infer<typeof registrationSchema>;
 
-const existingChildren = [
-  { id: '1', name: 'Emma Hansen', birthdate: '2014-05-12' },
-  { id: '2', name: 'Oliver Hansen', birthdate: '2012-08-24' }
-];
+interface ChildData {
+  id: string;
+  name: string;
+  birthdate: string;
+}
 
 export default function PameldingPage({
   params,
@@ -62,8 +64,26 @@ export default function PameldingPage({
   params: Promise<{ type: string; year: string; slug: string }>;
 }) {
   const router = useRouter();
+  const { data: session } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
+  const [existingChildren, setExistingChildren] = useState<ChildData[]>([]);
+
+  useEffect(() => {
+    if (!session) return;
+    fetch('/api/dashboard')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data?.children?.length > 0) {
+          setExistingChildren(data.children.map((c: { id: number; name: string; birthdate: string }) => ({
+            id: String(c.id),
+            name: c.name,
+            birthdate: c.birthdate,
+          })));
+        }
+      })
+      .catch(() => {});
+  }, [session]);
 
   const {
     register,
@@ -189,16 +209,18 @@ export default function PameldingPage({
                   />
                   <span className="text-gray-700">Nytt barn</span>
                 </label>
-                <label className="flex items-center space-x-3">
-                  <input
-                    {...register('childSelection')}
-                    type="radio"
-                    value="existing"
-                    onChange={() => setChildSelection('existing')}
-                    className="w-4 h-4 text-[#003B7A]"
-                  />
-                  <span className="text-gray-700">Velg fra mine barn</span>
-                </label>
+                {existingChildren.length > 0 && (
+                  <label className="flex items-center space-x-3">
+                    <input
+                      {...register('childSelection')}
+                      type="radio"
+                      value="existing"
+                      onChange={() => setChildSelection('existing')}
+                      className="w-4 h-4 text-[#003B7A]"
+                    />
+                    <span className="text-gray-700">Velg fra mine barn</span>
+                  </label>
+                )}
               </div>
 
               {childSelection === 'existing' && (

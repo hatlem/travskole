@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { sendBookingConfirmation, sendBookingAdminNotification } from '@/lib/mail';
 
 export async function GET() {
   // Check if dobbeltsulky is enabled
@@ -37,6 +38,12 @@ export async function POST(request: NextRequest) {
         message: message || null,
       },
     });
+
+    const emailData = { name, email, phone, participants: booking.participants, preferredDate, message };
+    await Promise.all([
+      sendBookingConfirmation(emailData),
+      sendBookingAdminNotification(emailData),
+    ]).catch(() => {});
 
     return NextResponse.json({ booking }, { status: 201 });
   } catch (error) {
