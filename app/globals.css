@@ -3,11 +3,13 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  
-  /* Bjerke Travskole Brand Colors */
+
+  /* Bjerke Brand Colors — from bjerke.no */
   --bjerke-blue: #003B7A;
   --bjerke-blue-dark: #002855;
   --bjerke-blue-light: #0052A3;
+  --bjerke-gray: #F5F5F5;
+  --bjerke-dark: #171717;
 }
 
 @theme inline {
@@ -15,22 +17,37 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
-  
-  /* Bjerke blue color palette */
+
   --color-bjerke-blue: var(--bjerke-blue);
   --color-bjerke-blue-dark: var(--bjerke-blue-dark);
   --color-bjerke-blue-light: var(--bjerke-blue-light);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* Match bjerke.no uppercase nav style */
+.nav-link {
+  text-transform: uppercase;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* Hero gradient fallback when image is missing */
+.hero-gradient {
+  background: linear-gradient(135deg, #003B7A 0%, #001a3a 50%, #002855 100%);
+}
+
+/* Smooth page transitions */
+main {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }

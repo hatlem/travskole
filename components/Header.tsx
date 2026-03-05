@@ -8,35 +8,34 @@ export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   return (
-    <header className="bg-[#003B7A] text-white sticky top-0 z-50">
-      <nav className="max-w-6xl mx-auto px-4 py-4">
+    <header className="bg-[#003B7A] text-white sticky top-0 z-50 shadow-lg">
+      <nav className="max-w-7xl mx-auto px-6 py-3">
         <div className="flex justify-between items-center">
-          {/* Logo - Placeholder fra Bjerke.no (inntil travskole får egen logo) */}
           <Link href="/" className="flex items-center gap-3">
             <Image
               src="/bjerkebanen-logo-invertert.png"
               alt="Bjerke Travbane"
-              width={180}
-              height={50}
-              className="h-12 w-auto"
+              width={160}
+              height={45}
+              className="h-10 w-auto"
               priority
             />
-            <span className="text-lg font-bold text-blue-300">
-              Travskole
+            <span className="text-lg font-bold tracking-wide text-blue-200 border-l border-white/20 pl-3">
+              TRAVSKOLE
             </span>
           </Link>
 
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-6">
-            <Link href="/" className="hover:text-blue-200 transition">
+          {/* Desktop Navigation — uppercase like bjerke.no */}
+          <div className="hidden md:flex items-center gap-8">
+            <Link href="/" className="nav-link text-white/90 hover:text-white transition">
               Hjem
             </Link>
-            <Link href="/courses" className="hover:text-blue-200 transition">
+            <Link href="/courses" className="nav-link text-white/90 hover:text-white transition">
               Kurs & Leirer
             </Link>
-            <Link 
-              href="/dashboard" 
-              className="bg-white text-[#003B7A] px-4 py-2 rounded-lg font-semibold hover:bg-gray-100 transition"
+            <Link
+              href="/dashboard"
+              className="bg-white text-[#003B7A] px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
             >
               Min Side
             </Link>
@@ -45,7 +44,7 @@ export default function Header() {
           {/* Mobile Menu Button */}
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden"
+            className="md:hidden p-1"
             aria-label="Toggle menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,24 +59,24 @@ export default function Header() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-4 pb-4 space-y-3">
-            <Link 
-              href="/" 
-              className="block hover:text-blue-200 transition"
+          <div className="md:hidden mt-4 pb-4 space-y-3 border-t border-white/20 pt-4">
+            <Link
+              href="/"
+              className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
               onClick={() => setMobileMenuOpen(false)}
             >
               Hjem
             </Link>
-            <Link 
-              href="/courses" 
-              className="block hover:text-blue-200 transition"
+            <Link
+              href="/courses"
+              className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
               onClick={() => setMobileMenuOpen(false)}
             >
               Kurs & Leirer
             </Link>
-            <Link 
-              href="/dashboard" 
-              className="block bg-white text-[#003B7A] px-4 py-2 rounded-lg font-semibold text-center hover:bg-gray-100 transition"
+            <Link
+              href="/dashboard"
+              className="block bg-white text-[#003B7A] px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
               onClick={() => setMobileMenuOpen(false)}
             >
               Min Side

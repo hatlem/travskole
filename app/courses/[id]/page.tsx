@@ -1,52 +1,28 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { Course } from '@/components/CourseCard';
-
-// Mock data - replace with database query
-const courses: Course[] = [
-  {
-    id: '1',
-    name: 'Påskeleir 2026',
-    description: 'En fantastisk uke med hester, aktiviteter og nye venner. Perfekt for barn som elsker hester!',
-    type: 'leir',
-    start_date: '2026-04-06',
-    end_date: '2026-04-10',
-    age_min: 8,
-    age_max: 14,
-    price: 4500,
-    max_participants: 20,
-    status: 'open'
-  },
-  {
-    id: '2',
-    name: 'Travkurs for nybegynnere',
-    description: 'Lær grunnleggende om travhester, utstyr og sikkerhet. Ingen forkunnskaper nødvendig!',
-    type: 'kurs',
-    start_date: '2026-03-15',
-    age_min: 10,
-    age_max: 16,
-    price: 1200,
-    max_participants: 12,
-    status: 'open'
-  },
-  {
-    id: '3',
-    name: 'Sommerleir 2026',
-    description: 'Sommerens høydepunkt! En uke med ridning, stell og morsomme aktiviteter i strålende sol.',
-    type: 'leir',
-    start_date: '2026-07-01',
-    end_date: '2026-07-05',
-    age_min: 7,
-    age_max: 15,
-    price: 5000,
-    max_participants: 25,
-    status: 'open'
-  }
-];
+import { prisma } from '@/lib/prisma';
 
 async function getCourse(id: string): Promise<Course | undefined> {
-  // In production, fetch from database
-  return courses.find(c => c.id === id);
+  const numId = parseInt(id, 10);
+  if (isNaN(numId)) return undefined;
+
+  const c = await prisma.course.findUnique({ where: { id: numId } });
+  if (!c) return undefined;
+
+  return {
+    id: String(c.id),
+    name: c.name,
+    description: c.description ?? '',
+    type: c.type as 'kurs' | 'leir',
+    start_date: c.startDate.toISOString().split('T')[0],
+    end_date: c.endDate ? c.endDate.toISOString().split('T')[0] : undefined,
+    age_min: c.ageMin ?? undefined,
+    age_max: c.ageMax ?? undefined,
+    price: c.price ?? 0,
+    max_participants: c.maxParticipants ?? 0,
+    status: c.status as 'open' | 'full' | 'closed',
+  };
 }
 
 export default async function CoursePage({ params }: { params: Promise<{ id: string }> }) {

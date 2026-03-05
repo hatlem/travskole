@@ -3,6 +3,7 @@ import { z } from 'zod';
 import DOMPurify from 'isomorphic-dompurify';
 import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logRegistration, logRateLimitExceeded } from '@/lib/logger';
+import { prisma } from '@/lib/prisma';
 
 // Types
 interface RegistrationData {
@@ -19,33 +20,6 @@ interface RegistrationData {
   consentMedia: boolean;
   consentRisk: boolean;
 }
-
-interface Registration {
-  id: string;
-  courseId: string;
-  courseName: string;
-  childName: string;
-  childBirthdate: string;
-  parentName: string;
-  parentEmail: string;
-  parentPhone: string;
-  allergies?: string;
-  consentActivities: boolean;
-  consentMedia: boolean;
-  consentRisk: boolean;
-  status: 'pending' | 'confirmed' | 'cancelled';
-  createdAt: string;
-}
-
-// Mock database - replace with real database
-const registrations: Registration[] = [];
-
-// Mock course data
-const courses: Record<string, { name: string }> = {
-  '1': { name: 'Påskeleir 2026' },
-  '2': { name: 'Travkurs for nybegynnere' },
-  '3': { name: 'Sommerleir 2026' }
-};
 
 /**
  * POST /api/registrations
@@ -115,7 +89,54 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Determine child info
+    // Validate course exists
+    const courseId = parseInt(data.courseId, 10);
+    if (isNaN(courseId)) {
+      return NextResponse.json(
+        { error: 'Ugyldig kurs-ID' },
+        { status: 400 }
+      );
+    }
+
+    const course = await prisma.course.findUnique({ where: { id: courseId } });
+    if (!course) {
+      return NextResponse.json(
+        { error: 'Kurset finnes ikke' },
+        { status: 404 }
+      );
+    }
+
+    if (course.status !== 'open') {
+      return NextResponse.json(
+        { error: 'Kurset er ikke åpent for påmelding' },
+        { status: 400 }
+      );
+    }
+
+    // Find or create user + parent
+    let user = await prisma.user.findUnique({ where: { email: data.parentEmail } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          email: data.parentEmail,
+          role: 'parent',
+        },
+      });
+    }
+
+    let parent = await prisma.parent.findUnique({ where: { userId: user.id } });
+    if (!parent) {
+      parent = await prisma.parent.create({
+        data: {
+          userId: user.id,
+          name: data.parentName,
+          phone: data.parentPhone,
+        },
+      });
+    }
+
+    // Determine child
+    let childId: number;
     let childName: string;
     let childBirthdate: string;
     let childAllergies: string | undefined;
@@ -127,32 +148,60 @@ export async function POST(request: NextRequest) {
           { status: 400 }
         );
       }
-      childName = data.childName;
+      const child = await prisma.child.create({
+        data: {
+          parentId: parent.id,
+          name: data.childName,
+          birthdate: new Date(data.childBirthdate),
+          allergies: data.childAllergies || null,
+        },
+      });
+      childId = child.id;
+      childName = child.name;
       childBirthdate = data.childBirthdate;
       childAllergies = data.childAllergies;
     } else {
-      // Fetch existing child from database
-      // For now, use mock data
       if (!data.existingChildId) {
         return NextResponse.json(
           { error: 'Vennligst velg et barn' },
           { status: 400 }
         );
       }
-      // Mock fetch
-      childName = 'Emma Hansen'; // Would fetch from DB
-      childBirthdate = '2014-05-12';
-      childAllergies = undefined;
+      const existingChildId = parseInt(data.existingChildId, 10);
+      const child = await prisma.child.findUnique({ where: { id: existingChildId } });
+      if (!child || child.parentId !== parent.id) {
+        return NextResponse.json(
+          { error: 'Barnet ble ikke funnet' },
+          { status: 404 }
+        );
+      }
+      childId = child.id;
+      childName = child.name;
+      childBirthdate = child.birthdate ? child.birthdate.toISOString().split('T')[0] : '';
+      childAllergies = child.allergies ?? undefined;
     }
 
-    // Get course name
-    const courseName = courses[data.courseId]?.name || 'Ukjent kurs';
+    // Create registration in database
+    const registration = await prisma.registration.create({
+      data: {
+        courseId: course.id,
+        childId,
+        parentId: parent.id,
+        consentActivities: data.consentActivities,
+        consentMedia: data.consentMedia,
+        consentRisk: data.consentRisk,
+        status: 'pending',
+      },
+    });
 
-    // Create registration
-    const registration: Registration = {
-      id: `reg_${Date.now()}`,
+    // SECURITY: Log registration
+    logRegistration(data.parentEmail, data.courseId);
+
+    // Build email-friendly object
+    const emailData = {
+      id: String(registration.id),
       courseId: data.courseId,
-      courseName,
+      courseName: course.name,
       childName,
       childBirthdate,
       parentName: data.parentName,
@@ -162,27 +211,21 @@ export async function POST(request: NextRequest) {
       consentActivities: data.consentActivities,
       consentMedia: data.consentMedia,
       consentRisk: data.consentRisk,
-      status: 'pending',
-      createdAt: new Date().toISOString()
+      status: 'pending' as const,
+      createdAt: registration.createdAt.toISOString(),
     };
 
-    // Save to mock database
-    registrations.push(registration);
-
-    // SECURITY: Log registration
-    logRegistration(data.parentEmail, data.courseId);
-
     // Send confirmation email to parent
-    await sendParentConfirmationEmail(registration);
+    await sendParentConfirmationEmail(emailData);
 
     // Send notification email to admin
-    await sendAdminNotificationEmail(registration);
+    await sendAdminNotificationEmail(emailData);
 
     return NextResponse.json({
       success: true,
       registration: {
-        id: registration.id,
-        status: registration.status
+        id: String(registration.id),
+        status: registration.status,
       }
     }, { status: 201 });
 
@@ -214,25 +257,43 @@ export async function GET(request: NextRequest) {
     const courseId = searchParams.get('courseId');
     const status = searchParams.get('status');
 
-    // Filter registrations
-    let filtered = [...registrations];
-
+    // Build Prisma where clause
+    const where: Record<string, unknown> = {};
     if (courseId) {
-      filtered = filtered.filter(r => r.courseId === courseId);
+      const numCourseId = parseInt(courseId, 10);
+      if (!isNaN(numCourseId)) where.courseId = numCourseId;
     }
-
     if (status) {
-      filtered = filtered.filter(r => r.status === status);
+      where.status = status;
     }
 
-    // Sort by newest first
-    filtered.sort((a, b) => 
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    const registrations = await prisma.registration.findMany({
+      where,
+      include: {
+        course: true,
+        child: true,
+        parent: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
 
     return NextResponse.json({
-      registrations: filtered,
-      total: filtered.length
+      registrations: registrations.map((r) => ({
+        id: String(r.id),
+        courseId: String(r.courseId),
+        courseName: r.course.name,
+        childName: r.child.name,
+        childBirthdate: r.child.birthdate ? r.child.birthdate.toISOString().split('T')[0] : '',
+        parentName: r.parent.name,
+        parentPhone: r.parent.phone,
+        allergies: r.child.allergies ?? undefined,
+        consentActivities: r.consentActivities,
+        consentMedia: r.consentMedia,
+        consentRisk: r.consentRisk,
+        status: r.status,
+        createdAt: r.createdAt.toISOString(),
+      })),
+      total: registrations.length,
     });
 
   } catch (error) {
@@ -244,10 +305,27 @@ export async function GET(request: NextRequest) {
   }
 }
 
+interface EmailRegistration {
+  id: string;
+  courseId: string;
+  courseName: string;
+  childName: string;
+  childBirthdate: string;
+  parentName: string;
+  parentEmail: string;
+  parentPhone: string;
+  allergies?: string;
+  consentActivities: boolean;
+  consentMedia: boolean;
+  consentRisk: boolean;
+  status: 'pending' | 'confirmed' | 'cancelled';
+  createdAt: string;
+}
+
 /**
  * Send confirmation email to parent
  */
-async function sendParentConfirmationEmail(registration: Registration) {
+async function sendParentConfirmationEmail(registration: EmailRegistration) {
   // In production, use actual SMTP service (Nodemailer, SendGrid, etc.)
   console.log('📧 Sending confirmation email to parent:', registration.parentEmail);
   console.log('Subject: Påmelding mottatt -', registration.courseName);
@@ -280,7 +358,7 @@ async function sendParentConfirmationEmail(registration: Registration) {
 /**
  * Send notification email to admin
  */
-async function sendAdminNotificationEmail(registration: Registration) {
+async function sendAdminNotificationEmail(registration: EmailRegistration) {
   // In production, use actual SMTP service
   console.log('📧 Sending notification email to admin');
   console.log('Subject: Ny påmelding -', registration.courseName);
