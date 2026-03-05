@@ -208,12 +208,24 @@ export default async function CourseDetailPage({
                 >
                   Meld på
                 </Link>
+              ) : course.status === 'full' ? (
+                <div>
+                  <Link
+                    href={`/arrangementer/${course.type}/${courseYear}/${courseSlug}/pamelding?venteliste=true`}
+                    className="block w-full text-center border-2 border-[#003B7A] text-[#003B7A] hover:bg-[#003B7A] hover:text-white px-6 py-4 rounded-lg font-semibold text-lg transition"
+                  >
+                    Sett meg på venteliste
+                  </Link>
+                  <p className="text-sm text-gray-600 text-center mt-3">
+                    Kurset er fullt, men du kan sette deg på venteliste
+                  </p>
+                </div>
               ) : (
                 <button
                   disabled
                   className="block w-full text-center bg-gray-300 text-gray-600 px-6 py-4 rounded-lg font-semibold text-lg cursor-not-allowed"
                 >
-                  {course.status === 'full' ? 'Fullt' : 'Stengt'}
+                  Stengt
                 </button>
               )}
 

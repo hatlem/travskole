@@ -22,6 +22,7 @@ interface RegistrationData {
   consentActivities: boolean;
   consentMedia: boolean;
   consentRisk: boolean;
+  waitlist?: boolean;
 }
 
 /**
@@ -117,7 +118,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (course.status !== 'open') {
+    if (course.status === 'closed') {
+      return NextResponse.json(
+        { error: 'Kurset er stengt for påmelding' },
+        { status: 400 }
+      );
+    }
+
+    if (course.status === 'full' && !data.waitlist) {
+      return NextResponse.json(
+        { error: 'Kurset er fullt. Du kan melde deg på ventelisten.' },
+        { status: 400 }
+      );
+    }
+
+    if (course.status !== 'open' && course.status !== 'full') {
       return NextResponse.json(
         { error: 'Kurset er ikke åpent for påmelding' },
         { status: 400 }
@@ -193,6 +208,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create registration in database
+    const isWaitlistRegistration = data.waitlist && course.status === 'full';
     const registration = await prisma.registration.create({
       data: {
         courseId: course.id,
@@ -201,7 +217,7 @@ export async function POST(request: NextRequest) {
         consentActivities: data.consentActivities,
         consentMedia: data.consentMedia,
         consentRisk: data.consentRisk,
-        status: 'pending',
+        status: isWaitlistRegistration ? 'waitlist' : 'pending',
       },
     });
 
@@ -216,6 +232,7 @@ export async function POST(request: NextRequest) {
       parentEmail: data.parentEmail,
       parentPhone: data.parentPhone,
       allergies: childAllergies,
+      isWaitlist: isWaitlistRegistration,
     };
 
     await Promise.all([

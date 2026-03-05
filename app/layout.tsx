@@ -17,8 +17,25 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Bjerke Travskole - Kurs og leirer for barn",
-  description: "Opplev gleden ved travsporten i trygge og profesjonelle omgivelser. Vi tilbyr kurs og leirer for barn og unge.",
+  title: {
+    default: 'Bjerke Travskole',
+    template: '%s | Bjerke Travskole',
+  },
+  description: 'Kurs og leirer for barn og unge i travsport. Bjerke Travskole tilbyr travkurs, sommerleirer og dobbeltsulky-kjøring i Oslo.',
+  openGraph: {
+    type: 'website',
+    locale: 'nb_NO',
+    siteName: 'Bjerke Travskole',
+    title: 'Bjerke Travskole',
+    description: 'Kurs og leirer for barn og unge i travsport',
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  icons: {
+    icon: '/favicon.ico',
+  },
 };
 
 export default function RootLayout({

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -64,6 +64,8 @@ export default function PameldingPage({
   params: Promise<{ type: string; year: string; slug: string }>;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isWaitlist = searchParams.get('venteliste') === 'true';
   const { data: session } = useSession();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
@@ -110,6 +112,7 @@ export default function PameldingPage({
           courseType: type,
           courseYear: year,
           courseSlug: slug,
+          waitlist: isWaitlist,
           ...data
         })
       });
@@ -139,6 +142,11 @@ export default function PameldingPage({
         </Link>
 
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8">
+          {isWaitlist && (
+            <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-lg px-4 py-3 mb-6">
+              Du melder deg på ventelisten for dette kurset
+            </div>
+          )}
           <h1 className="text-4xl font-bold text-gray-900 mb-2">Påmelding</h1>
           <p className="text-gray-600 mb-8">
             Fyll ut skjemaet nedenfor for å melde på et barn til dette kurset
@@ -386,7 +394,7 @@ export default function PameldingPage({
                     : 'bg-[#003B7A] hover:bg-[#002855] text-white'
                 }`}
               >
-                {isSubmitting ? 'Sender...' : 'Fullfør påmelding'}
+                {isSubmitting ? 'Sender...' : isWaitlist ? 'Sett på venteliste' : 'Fullfør påmelding'}
               </button>
               <p className="text-sm text-gray-500 text-center mt-4">
                 Du vil motta en bekreftelse på e-post etter påmelding

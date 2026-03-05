@@ -259,6 +259,11 @@ export default function LoginForm() {
                     {passwordForm.formState.errors.password.message}
                   </p>
                 )}
+                <div className="mt-1 text-right">
+                  <Link href="/auth/forgot-password" className="text-sm text-[#003B7A] hover:underline">
+                    Glemt passord?
+                  </Link>
+                </div>
               </div>
 
               <button

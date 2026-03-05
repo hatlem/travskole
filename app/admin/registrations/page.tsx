@@ -20,6 +20,7 @@ export default function AdminRegistrationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchRegistrations();
@@ -77,9 +78,28 @@ export default function AdminRegistrationsPage() {
     );
   }
 
+  const filteredRegistrations = registrations.filter((reg) => {
+    if (!searchQuery) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      reg.course.name.toLowerCase().includes(query) ||
+      reg.child.name.toLowerCase().includes(query) ||
+      reg.parent.name.toLowerCase().includes(query) ||
+      reg.parent.user?.email?.toLowerCase().includes(query)
+    );
+  });
+
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Påmeldinger</h1>
+      <div className="flex items-center justify-between mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Påmeldinger</h1>
+        <button
+          onClick={() => window.open('/api/admin/registrations/export')}
+          className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          Eksporter CSV
+        </button>
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -95,7 +115,20 @@ export default function AdminRegistrationsPage() {
           <p className="text-gray-500">Ingen påmeldinger ennå.</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <>
+          <div className="mb-4">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Søk etter kurs, barn, forelder eller e-post..."
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+            />
+            <p className="text-sm text-gray-500 mt-2">
+              Viser {filteredRegistrations.length} av {registrations.length}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -112,7 +145,7 @@ export default function AdminRegistrationsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {registrations.map((reg) => (
+                {filteredRegistrations.map((reg) => (
                   <tr key={reg.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 text-gray-500">#{reg.id}</td>
                     <td className="px-6 py-4 font-medium text-gray-900">
@@ -134,11 +167,14 @@ export default function AdminRegistrationsPage() {
                             ? 'bg-green-100 text-green-800'
                             : reg.status === 'cancelled'
                             ? 'bg-red-100 text-red-800'
+                            : reg.status === 'waitlist'
+                            ? 'bg-blue-100 text-blue-800'
                             : 'bg-yellow-100 text-yellow-800'
                         } ${updatingId === reg.id ? 'opacity-50' : ''}`}
                       >
                         <option value="pending">Venter</option>
                         <option value="confirmed">Bekreftet</option>
+                        <option value="waitlist">Venteliste</option>
                         <option value="cancelled">Avlyst</option>
                       </select>
                     </td>
@@ -159,6 +195,7 @@ export default function AdminRegistrationsPage() {
             </table>
           </div>
         </div>
+        </>
       )}
     </div>
   );
