@@ -12,16 +12,16 @@ export default function Header() {
       <nav className="max-w-6xl mx-auto px-4 py-4">
         <div className="flex justify-between items-center">
           {/* Logo - Placeholder fra Bjerke.no (inntil travskole får egen logo) */}
-          <Link href="/" className="flex items-center">
-            <Image 
-              src="/bjerkebanen-logo-invertert.png" 
-              alt="Bjerke Travbane" 
-              width={180} 
+          <Link href="/" className="flex items-center gap-3">
+            <Image
+              src="/bjerkebanen-logo-invertert.png"
+              alt="Bjerke Travbane"
+              width={180}
               height={50}
               className="h-12 w-auto"
               priority
             />
-            <span className="ml-3 text-lg font-semibold border-l border-white/30 pl-3">
+            <span className="text-lg font-bold text-blue-300">
               Travskole
             </span>
           </Link>

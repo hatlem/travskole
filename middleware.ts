@@ -29,20 +29,12 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const pathname = req.nextUrl.pathname;
 
-        // Allow public routes
-        if (
-          pathname.startsWith('/auth') ||
-          pathname === '/' ||
-          pathname.startsWith('/api/auth')
-        ) {
-          return true;
-        }
-
         // Require authentication for protected routes
         if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
           return !!token;
         }
 
+        // All other matched routes are public
         return true;
       },
     },
@@ -53,14 +45,6 @@ export default withAuth(
 );
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - public folder
-     */
-    '/((?!_next/static|_next/image|favicon.ico|public).*)',
-  ],
+  // Only run middleware on protected routes
+  matcher: ['/dashboard/:path*', '/admin/:path*'],
 };

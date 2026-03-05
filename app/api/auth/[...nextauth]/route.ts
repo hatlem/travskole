@@ -1,5 +1,6 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
+import EmailProvider from 'next-auth/providers/email';
 import { PrismaAdapter } from '@auth/prisma-adapter';
 import { PrismaClient } from '@prisma/client';
 import { verifyPassword } from '@/lib/auth';
@@ -8,8 +9,19 @@ const prisma = new PrismaClient();
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma) as any,
-  
+
   providers: [
+    EmailProvider({
+      server: {
+        host: process.env.EMAIL_SERVER_HOST,
+        port: Number(process.env.EMAIL_SERVER_PORT || 587),
+        auth: {
+          user: process.env.EMAIL_SERVER_USER,
+          pass: process.env.EMAIL_SERVER_PASSWORD,
+        },
+      },
+      from: process.env.EMAIL_FROM || 'noreply@travskole.no',
+    }),
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
@@ -21,17 +33,15 @@ export const authOptions: NextAuthOptions = {
           throw new Error('E-post og passord er påkrevd');
         }
 
-        // Find user by email
         const user = await prisma.user.findUnique({
           where: { email: credentials.email },
           include: { parent: true },
         });
 
-        if (!user) {
+        if (!user || !user.passwordHash) {
           throw new Error('Feil e-post eller passord');
         }
 
-        // Verify password
         const isValid = await verifyPassword(
           credentials.password,
           user.passwordHash
@@ -41,7 +51,6 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Feil e-post eller passord');
         }
 
-        // Return user object (will be stored in JWT)
         return {
           id: user.id.toString(),
           email: user.email,
@@ -60,11 +69,11 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: '/auth/login',
     error: '/auth/login',
+    verifyRequest: '/auth/verify-request',
   },
 
   callbacks: {
     async jwt({ token, user }) {
-      // Add role and user ID to JWT token
       if (user) {
         token.role = user.role;
         token.id = user.id;
@@ -73,7 +82,6 @@ export const authOptions: NextAuthOptions = {
     },
 
     async session({ session, token }) {
-      // Add role and user ID to session object
       if (session.user) {
         session.user.role = token.role as string;
         session.user.id = token.id as string;
