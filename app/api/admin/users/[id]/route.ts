@@ -4,7 +4,7 @@ import { getServerSession } from '@/lib/auth';
 
 async function requireAdmin() {
   const session = await getServerSession();
-  if (!session || session.user.role !== 'admin') {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
     return null;
   }
   return session;
@@ -25,12 +25,21 @@ export async function PUT(
     const body = await request.json();
     const { role } = body;
 
-    if (!role || !['parent', 'admin'].includes(role)) {
+    const validRoles = session.user.role === 'superadmin'
+      ? ['parent', 'admin', 'superadmin']
+      : ['parent', 'admin'];
+
+    if (!role || !validRoles.includes(role)) {
       return NextResponse.json({ error: 'Ugyldig rolle' }, { status: 400 });
     }
 
+    // Only superadmin can assign superadmin role
+    if (role === 'superadmin' && session.user.role !== 'superadmin') {
+      return NextResponse.json({ error: 'Kun superadmin kan tildele superadmin-rolle' }, { status: 403 });
+    }
+
     // Prevent admin from demoting themselves
-    if (Number(id) === Number(session.user.id) && role !== 'admin') {
+    if (Number(id) === Number(session.user.id) && !['admin', 'superadmin'].includes(role)) {
       return NextResponse.json(
         { error: 'Du kan ikke fjerne din egen admin-rolle' },
         { status: 400 }

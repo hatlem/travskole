@@ -212,3 +212,7 @@ export async function sendBookingAdminNotification(data: BookingEmail) {
     </div>`,
   );
 }
+
+export async function sendAdminEmail(to: string, subject: string, htmlBody: string) {
+  await sendMail(to, subject, htmlBody);
+}

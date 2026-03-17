@@ -19,7 +19,7 @@ const emailProvider = process.env.EMAIL_SERVER_HOST
             pass: process.env.EMAIL_SERVER_PASSWORD,
           },
         },
-        from: process.env.EMAIL_FROM || 'noreply@travskole.no',
+        from: process.env.EMAIL_FROM || 'noreply@ponniskolen.no',
       }),
     ]
   : [];

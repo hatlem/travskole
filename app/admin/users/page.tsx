@@ -1,21 +1,69 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useSession } from 'next-auth/react';
 
 interface User {
   id: number;
   email: string;
   role: string;
   createdAt: string;
-  parent: { name: string; phone: string } | null;
+  parent: {
+    id: number;
+    name: string;
+    phone: string;
+    address: string | null;
+    _count: { children: number; registrations: number };
+    children: { id: number; name: string; birthdate: string | null; allergies: string | null }[];
+    registrations: { id: number; status: string; createdAt: string; course: { id: number; name: string }; child: { name: string } }[];
+  } | null;
+}
+
+function getInitials(name: string | undefined): string {
+  if (!name) return '?';
+  return name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+}
+
+function statusLabel(status: string): string {
+  const map: Record<string, string> = {
+    confirmed: 'Bekreftet',
+    pending: 'Venter',
+    cancelled: 'Kansellert',
+    waitlisted: 'Venteliste',
+  };
+  return map[status] || status;
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'confirmed':
+      return 'bg-green-100 text-green-800';
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800';
+    case 'cancelled':
+      return 'bg-red-100 text-red-800';
+    case 'waitlisted':
+      return 'bg-orange-100 text-orange-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
 }
 
 export default function AdminUsersPage() {
+  const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('all');
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const isSuperAdmin = session?.user?.role === 'superadmin';
 
   useEffect(() => {
     fetchUsers();
@@ -53,27 +101,68 @@ export default function AdminUsersPage() {
     }
   }
 
+  function toggleExpanded(id: number) {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((user) => {
+      if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+      if (!searchQuery) return true;
+      const query = searchQuery.toLowerCase();
+      return (
+        user.email.toLowerCase().includes(query) ||
+        (user.parent?.name?.toLowerCase().includes(query) ?? false) ||
+        (user.parent?.phone?.includes(query) ?? false)
+      );
+    });
+  }, [users, searchQuery, roleFilter]);
+
+  const stats = useMemo(() => {
+    const total = users.length;
+    const parents = users.filter((u) => u.role === 'parent').length;
+    const admins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin').length;
+    return { total, parents, admins };
+  }, [users]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-gray-500">Laster brukere...</p>
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#003B7A] border-t-transparent" />
+          <p className="text-gray-500">Laster brukere...</p>
+        </div>
       </div>
     );
   }
 
-  const filteredUsers = users.filter((user) => {
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      user.email.toLowerCase().includes(query) ||
-      (user.parent?.name?.toLowerCase().includes(query) ?? false) ||
-      (user.parent?.phone?.includes(query) ?? false)
-    );
-  });
-
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Brukere</h1>
+      <h1 className="text-3xl font-bold text-gray-900 mb-6">Brukere</h1>
+
+      {/* Stats bar */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-5 py-4">
+          <p className="text-sm text-gray-500">Totalt</p>
+          <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-5 py-4">
+          <p className="text-sm text-gray-500">Foreldre</p>
+          <p className="text-2xl font-bold text-blue-700">{stats.parents}</p>
+        </div>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-5 py-4">
+          <p className="text-sm text-gray-500">Admin</p>
+          <p className="text-2xl font-bold text-purple-700">{stats.admins}</p>
+        </div>
+      </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -90,62 +179,183 @@ export default function AdminUsersPage() {
         </div>
       ) : (
         <>
-          <div className="mb-4">
+          {/* Search and filter bar */}
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Søk etter e-post, navn eller telefon..."
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+              placeholder="Sok etter e-post, navn eller telefon..."
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
             />
-            <p className="text-sm text-gray-500 mt-2">
-              Viser {filteredUsers.length} av {users.length}
-            </p>
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent bg-white"
+            >
+              <option value="all">Alle roller</option>
+              <option value="parent">Forelder</option>
+              <option value="admin">Admin</option>
+              {isSuperAdmin && <option value="superadmin">Superadmin</option>}
+            </select>
           </div>
+          <p className="text-sm text-gray-500 mb-4">
+            Viser {filteredUsers.length} av {users.length} brukere
+          </p>
+
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-                <tr>
-                  <th className="px-6 py-3 text-left">ID</th>
-                  <th className="px-6 py-3 text-left">E-post</th>
-                  <th className="px-6 py-3 text-left">Navn</th>
-                  <th className="px-6 py-3 text-left">Telefon</th>
-                  <th className="px-6 py-3 text-left">Rolle</th>
-                  <th className="px-6 py-3 text-left">Opprettet</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 text-gray-500">#{user.id}</td>
-                    <td className="px-6 py-4 font-medium text-gray-900">{user.email}</td>
-                    <td className="px-6 py-4 text-gray-700">{user.parent?.name || '-'}</td>
-                    <td className="px-6 py-4 text-gray-500">{user.parent?.phone || '-'}</td>
-                    <td className="px-6 py-4">
-                      <select
-                        value={user.role}
-                        onChange={(e) => updateRole(user.id, e.target.value)}
-                        disabled={updatingId === user.id}
-                        className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:ring-2 focus:ring-[#003B7A] ${
-                          user.role === 'admin'
-                            ? 'bg-purple-100 text-purple-800'
-                            : 'bg-blue-100 text-blue-800'
-                        } ${updatingId === user.id ? 'opacity-50' : ''}`}
-                      >
-                        <option value="parent">Forelder</option>
-                        <option value="admin">Admin</option>
-                      </select>
-                    </td>
-                    <td className="px-6 py-4 text-gray-500">
-                      {new Date(user.createdAt).toLocaleDateString('nb-NO')}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
+                  <tr>
+                    <th className="px-6 py-3 text-left">Bruker</th>
+                    <th className="px-6 py-3 text-left">Kontakt</th>
+                    <th className="px-6 py-3 text-left">Barn</th>
+                    <th className="px-6 py-3 text-left">Pam.</th>
+                    <th className="px-6 py-3 text-left">Rolle</th>
+                    <th className="px-6 py-3 text-left">Opprettet</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredUsers.map((user) => {
+                    const isExpanded = expandedIds.has(user.id);
+                    const initials = getInitials(user.parent?.name);
+                    return (
+                      <>
+                        <tr
+                          key={user.id}
+                          onClick={() => toggleExpanded(user.id)}
+                          className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        >
+                          <td className="px-6 py-4">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-[#003B7A] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                                {initials}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="font-medium text-gray-900 truncate">{user.parent?.name || '-'}</p>
+                                <p className="text-gray-500 text-xs truncate">{user.email}</p>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-gray-500">{user.parent?.phone || '-'}</td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
+                              {user.parent?._count?.children ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
+                              {user.parent?._count?.registrations ?? 0}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <select
+                              value={user.role}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                updateRole(user.id, e.target.value);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              disabled={updatingId === user.id}
+                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-[#003B7A] ${
+                                user.role === 'superadmin'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : user.role === 'admin'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              } ${updatingId === user.id ? 'opacity-50' : ''}`}
+                            >
+                              <option value="parent">Forelder</option>
+                              <option value="admin">Admin</option>
+                              {isSuperAdmin && <option value="superadmin">Superadmin</option>}
+                            </select>
+                          </td>
+                          <td className="px-6 py-4 text-gray-500">
+                            {new Date(user.createdAt).toLocaleDateString('nb-NO')}
+                          </td>
+                        </tr>
+
+                        {/* Expanded detail row */}
+                        {isExpanded && (
+                          <tr key={`${user.id}-detail`} className="bg-blue-50/50">
+                            <td colSpan={6} className="px-6 py-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {/* Address */}
+                                {user.parent?.address && (
+                                  <div className="md:col-span-2">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-1">Adresse</p>
+                                    <p className="text-sm text-gray-700">{user.parent.address}</p>
+                                  </div>
+                                )}
+
+                                {/* Children */}
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                    Barn ({user.parent?.children?.length ?? 0})
+                                  </p>
+                                  {user.parent?.children && user.parent.children.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {user.parent.children.map((child) => (
+                                        <div key={child.id} className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+                                          <p className="font-medium text-sm text-gray-900">{child.name}</p>
+                                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500 mt-0.5">
+                                            {child.birthdate && (
+                                              <span>
+                                                Fodt: {new Date(child.birthdate).toLocaleDateString('nb-NO')}
+                                              </span>
+                                            )}
+                                            {child.allergies && (
+                                              <span className="text-orange-600">
+                                                Allergier: {child.allergies}
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-400">Ingen barn registrert</p>
+                                  )}
+                                </div>
+
+                                {/* Recent registrations */}
+                                <div>
+                                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
+                                    Siste pameldinger ({user.parent?._count?.registrations ?? 0} totalt)
+                                  </p>
+                                  {user.parent?.registrations && user.parent.registrations.length > 0 ? (
+                                    <div className="space-y-2">
+                                      {user.parent.registrations.map((reg) => (
+                                        <div key={reg.id} className="bg-white rounded-lg border border-gray-200 px-3 py-2">
+                                          <div className="flex items-center justify-between">
+                                            <p className="font-medium text-sm text-gray-900 truncate">{reg.course.name}</p>
+                                            <span className={`text-xs font-medium rounded-full px-2 py-0.5 shrink-0 ml-2 ${statusColor(reg.status)}`}>
+                                              {statusLabel(reg.status)}
+                                            </span>
+                                          </div>
+                                          <div className="flex gap-x-4 text-xs text-gray-500 mt-0.5">
+                                            <span>{reg.child.name}</span>
+                                            <span>{new Date(reg.createdAt).toLocaleDateString('nb-NO')}</span>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <p className="text-sm text-gray-400">Ingen pameldinger</p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
         </>
       )}
     </div>

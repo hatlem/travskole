@@ -4,7 +4,13 @@ import { getServerSession } from '@/lib/auth';
 
 async function requireAdmin() {
   const session = await getServerSession();
-  if (!session || session.user.role !== 'admin') return null;
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) return null;
+  return session;
+}
+
+async function requireSuperAdmin() {
+  const session = await getServerSession();
+  if (!session || session.user.role !== 'superadmin') return null;
   return session;
 }
 
@@ -24,9 +30,9 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await requireAdmin();
+  const session = await requireSuperAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Kun superadmin kan endre innstillinger' }, { status: 403 });
   }
 
   const body = await request.json();

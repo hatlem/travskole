@@ -4,7 +4,7 @@ import { getServerSession } from '@/lib/auth';
 
 async function requireAdmin() {
   const session = await getServerSession();
-  if (!session || session.user.role !== 'admin') {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
     return null;
   }
   return session;
@@ -26,8 +26,35 @@ export async function GET() {
         createdAt: true,
         parent: {
           select: {
+            id: true,
             name: true,
             phone: true,
+            address: true,
+            _count: {
+              select: {
+                children: true,
+                registrations: true,
+              },
+            },
+            children: {
+              select: {
+                id: true,
+                name: true,
+                birthdate: true,
+                allergies: true,
+              },
+            },
+            registrations: {
+              select: {
+                id: true,
+                status: true,
+                createdAt: true,
+                course: { select: { id: true, name: true } },
+                child: { select: { name: true } },
+              },
+              orderBy: { createdAt: 'desc' },
+              take: 10,
+            },
           },
         },
       },

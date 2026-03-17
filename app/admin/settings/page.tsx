@@ -1,0 +1,247 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+
+interface SettingGroup {
+  title: string;
+  description: string;
+  fields: {
+    key: string;
+    label: string;
+    type: 'text' | 'textarea' | 'email' | 'tel' | 'toggle';
+    placeholder?: string;
+  }[];
+}
+
+const SETTING_GROUPS: SettingGroup[] = [
+  {
+    title: 'Generelt',
+    description: 'Grunnleggende informasjon om skolen',
+    fields: [
+      { key: 'site_name', label: 'Navn på skolen', type: 'text', placeholder: 'Bjerke Ponniskole' },
+      { key: 'site_description', label: 'Beskrivelse (SEO)', type: 'textarea', placeholder: 'Kurs og leirer for barn og unge...' },
+      { key: 'site_short_description', label: 'Kort beskrivelse', type: 'text', placeholder: 'Kurs og leirer for barn og unge' },
+    ],
+  },
+  {
+    title: 'Kontaktinformasjon',
+    description: 'Vises i footer, e-poster og på kontaktsider',
+    fields: [
+      { key: 'contact_email', label: 'E-post', type: 'email', placeholder: 'ponniskolen@bjerke.no' },
+      { key: 'contact_phone', label: 'Telefon', type: 'tel', placeholder: '+47 XX XX XX XX' },
+      { key: 'contact_address', label: 'Adresse', type: 'text', placeholder: 'Refstadveien 27, 0589 Oslo' },
+    ],
+  },
+  {
+    title: 'Instruktør',
+    description: 'Instruktørinformasjon vist på forsiden og i kursdetaljer',
+    fields: [
+      { key: 'instructor_name', label: 'Navn', type: 'text', placeholder: 'Hege Arverud' },
+      { key: 'instructor_certification', label: 'Sertifisering', type: 'text', placeholder: 'DNT-sertifisert' },
+    ],
+  },
+  {
+    title: 'Forside',
+    description: 'Tekster som vises på forsiden',
+    fields: [
+      { key: 'hero_title', label: 'Hovedtittel', type: 'text', placeholder: 'Velkommen til Bjerke Ponniskole' },
+      { key: 'hero_subtitle', label: 'Undertittel', type: 'textarea', placeholder: 'Opplev gleden ved travsporten...' },
+      { key: 'about_heading', label: 'Om oss overskrift', type: 'text', placeholder: 'Om Bjerke Ponniskole' },
+      { key: 'about_text', label: 'Om oss tekst', type: 'textarea', placeholder: 'Bjerke Ponniskole drives av...' },
+      { key: 'footer_text', label: 'Footer beskrivelse', type: 'textarea', placeholder: 'Vi tilbyr trygg og lærerik travsport...' },
+    ],
+  },
+  {
+    title: 'Samtykketekster',
+    description: 'Tekster som vises i påmeldingsskjemaet. Endringer påvirker fremtidige påmeldinger.',
+    fields: [
+      { key: 'consent_activities_text', label: 'Samtykke: Aktiviteter utenfor Bjerke', type: 'textarea' },
+      { key: 'consent_media_text', label: 'Samtykke: Bilder og video', type: 'textarea' },
+      { key: 'consent_risk_text', label: 'Samtykke: Risiko (kort)', type: 'textarea' },
+      { key: 'consent_risk_detail', label: 'Samtykke: Risiko (detaljer)', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Dobbeltsulky',
+    description: 'Innstillinger for dobbeltsulky-booking',
+    fields: [
+      { key: 'dobbeltsulky_enabled', label: 'Aktiver dobbeltsulky-booking', type: 'toggle' },
+      { key: 'dobbeltsulky_description', label: 'Beskrivelse', type: 'textarea' },
+    ],
+  },
+];
+
+export default function AdminSettingsPage() {
+  const { data: session } = useSession();
+  const router = useRouter();
+  const [settings, setSettings] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session && session.user.role !== 'superadmin') {
+      router.push('/admin');
+      return;
+    }
+    fetchSettings();
+  }, [session, router]);
+
+  async function fetchSettings() {
+    try {
+      const res = await fetch('/api/admin/settings');
+      if (!res.ok) throw new Error('Kunne ikke hente innstillinger');
+      const data = await res.json();
+      setSettings(data.settings);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    setSaved(false);
+    setError(null);
+
+    try {
+      const entries = Object.entries(settings);
+      for (const [key, value] of entries) {
+        const res = await fetch('/api/admin/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key, value }),
+        });
+        if (!res.ok) throw new Error(`Kunne ikke lagre ${key}`);
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateSetting(key: string, value: string) {
+    setSettings(prev => ({ ...prev, [key]: value }));
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <p className="text-gray-500">Laster innstillinger...</p>
+      </div>
+    );
+  }
+
+  if (session?.user.role !== 'superadmin') {
+    return null;
+  }
+
+  return (
+    <div className="max-w-4xl">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Innstillinger</h1>
+          <p className="text-gray-500 mt-1">Konfigurer nettstedet. Kun tilgjengelig for superadmins.</p>
+        </div>
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
+            saving
+              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+              : 'bg-[#003B7A] hover:bg-[#002855] text-white'
+          }`}
+        >
+          {saving ? 'Lagrer...' : 'Lagre alle endringer'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2 font-medium underline">Lukk</button>
+        </div>
+      )}
+
+      {saved && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
+          Innstillingene ble lagret. Endringer kan ta noen sekunder å vises.
+        </div>
+      )}
+
+      <div className="space-y-8">
+        {SETTING_GROUPS.map((group) => (
+          <div key={group.title} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-1">{group.title}</h2>
+            <p className="text-sm text-gray-500 mb-6">{group.description}</p>
+
+            <div className="space-y-5">
+              {group.fields.map((field) => (
+                <div key={field.key}>
+                  <label htmlFor={field.key} className="block text-sm font-medium text-gray-700 mb-1">
+                    {field.label}
+                  </label>
+                  {field.type === 'toggle' ? (
+                    <button
+                      type="button"
+                      onClick={() => updateSetting(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+                        settings[field.key] === 'true' ? 'bg-[#003B7A]' : 'bg-gray-300'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                          settings[field.key] === 'true' ? 'translate-x-6' : 'translate-x-1'
+                        }`}
+                      />
+                    </button>
+                  ) : field.type === 'textarea' ? (
+                    <textarea
+                      id={field.key}
+                      value={settings[field.key] || ''}
+                      onChange={(e) => updateSetting(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                    />
+                  ) : (
+                    <input
+                      id={field.key}
+                      type={field.type}
+                      value={settings[field.key] || ''}
+                      onChange={(e) => updateSetting(field.key, e.target.value)}
+                      placeholder={field.placeholder}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                    />
+                  )}
+                  <p className="text-xs text-gray-400 mt-1">Nøkkel: {field.key}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-8 flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
+            saving
+              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+              : 'bg-[#003B7A] hover:bg-[#002855] text-white'
+          }`}
+        >
+          {saving ? 'Lagrer...' : 'Lagre alle endringer'}
+        </button>
+      </div>
+    </div>
+  );
+}

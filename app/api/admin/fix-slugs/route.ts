@@ -5,7 +5,7 @@ import { generateSlug } from '@/lib/slug';
 
 async function requireAdmin() {
   const session = await getServerSession();
-  if (!session || session.user.role !== 'admin') {
+  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
     return null;
   }
   return session;
