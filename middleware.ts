@@ -18,7 +18,7 @@ export default withAuth(
     const pathname = req.nextUrl.pathname;
 
     // Admin routes require admin role
-    if (pathname.startsWith('/admin') && token?.role !== 'admin') {
+    if (pathname.startsWith('/admin') && token?.role !== 'admin' && token?.role !== 'superadmin') {
       return NextResponse.redirect(new URL('/dashboard', req.url));
     }
 

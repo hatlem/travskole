@@ -5,7 +5,8 @@ import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
-import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
+import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
+import { getSetting } from '@/lib/settings';
 
 interface RegistrationData {
   courseType: string;
@@ -251,10 +252,52 @@ export async function POST(request: NextRequest) {
       isWaitlist: isWaitlistRegistration,
     };
 
-    await Promise.all([
-      sendRegistrationConfirmation(emailData),
-      sendRegistrationAdminNotification(emailData),
-    ]).catch(() => {});
+    // Check for template-based registration_confirmed trigger
+    const trigger = await prisma.emailTrigger.findFirst({
+      where: {
+        courseId: course.id,
+        triggerType: 'registration_confirmed',
+        enabled: true,
+        templateId: { not: null },
+      },
+      include: { template: true },
+    });
+
+    if (trigger?.template) {
+      const startDate = course.startDate ? new Date(course.startDate).toLocaleDateString('nb-NO') : '';
+      const endDate = course.endDate ? new Date(course.endDate).toLocaleDateString('nb-NO') : '';
+      const contactEmail = await getSetting('contact_email');
+      await Promise.all([
+        sendTemplatedEmail(
+          { subject: trigger.template.subject, body: trigger.template.body },
+          {
+            forelder_navn: data.parentName,
+            barnets_navn: childName,
+            kurs_navn: course.name,
+            kurs_startdato: startDate,
+            kurs_sluttdato: endDate,
+            allergier: childAllergies || 'Ingen',
+            kontakt_epost: contactEmail,
+          },
+          data.parentEmail,
+        ),
+        sendRegistrationAdminNotification(emailData),
+        prisma.emailLog.create({
+          data: {
+            triggerId: trigger.id,
+            registrationId: registration.id,
+            recipientEmail: data.parentEmail,
+            status: 'sent',
+          },
+        }),
+      ]).catch(() => {});
+    } else {
+      // Fallback to hardcoded templates
+      await Promise.all([
+        sendRegistrationConfirmation(emailData),
+        sendRegistrationAdminNotification(emailData),
+      ]).catch(() => {});
+    }
 
     return NextResponse.json({
       success: true,

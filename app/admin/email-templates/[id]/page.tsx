@@ -47,9 +47,10 @@ export default function EmailTemplateEditorPage({
         const res = await fetch(`/api/admin/email-templates/${id}`);
         if (!res.ok) throw new Error('Kunne ikke hente mal');
         const data = await res.json();
-        setName(data.name);
-        setSubject(data.subject);
-        setBody(data.body);
+        const t = data.template || data;
+        setName(t.name);
+        setSubject(t.subject);
+        setBody(t.body);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Ukjent feil');
       } finally {
