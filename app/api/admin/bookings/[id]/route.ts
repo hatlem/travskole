@@ -26,6 +26,8 @@ export async function PUT(
     data: { status: body.status },
   });
 
+  logActivity({ action: 'status_change', entity: 'booking', entityId: Number(id), details: JSON.stringify({ status: body.status }), userEmail: session.user.email }).catch(() => {});
+
   return NextResponse.json({ booking });
 }
 
@@ -43,6 +45,8 @@ export async function DELETE(
   await prisma.bookingRequest.delete({
     where: { id: Number(id) },
   });
+
+  logActivity({ action: 'delete', entity: 'booking', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
 
   return NextResponse.json({ success: true });
 }

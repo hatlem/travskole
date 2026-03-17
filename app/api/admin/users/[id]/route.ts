@@ -57,6 +57,8 @@ export async function PUT(
       },
     });
 
+    logActivity({ action: 'status_change', entity: 'user', entityId: Number(id), details: JSON.stringify({ role }), userEmail: session.user.email }).catch(() => {});
+
     return NextResponse.json({ user });
   } catch (error) {
     console.error('Error updating user:', error);

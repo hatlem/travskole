@@ -3,6 +3,9 @@
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { CalendarView } from '@/components/admin/CalendarView';
+import { StatCardsSkeleton, TableSkeleton } from '@/components/admin/Skeleton';
+import { useToast } from '@/components/admin/Toast';
+import { Pagination } from '@/components/admin/Pagination';
 
 type ViewMode = 'liste' | 'kalender';
 type SortField = 'name' | 'type' | 'startDate' | 'endDate' | 'price' | 'capacity' | 'status';
@@ -140,6 +143,9 @@ export default function AdminCoursesPage() {
   const [viewMode, setViewMode] = useState<ViewMode>('liste');
   const [sortField, setSortField] = useState<SortField>('startDate');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const { toast } = useToast();
+  const [page, setPage] = useState(1);
+  const perPage = 25;
 
   const fetchCourses = async () => {
     try {
@@ -203,6 +209,11 @@ export default function AdminCoursesPage() {
     return list;
   }, [courses, search, typeFilter, statusFilter, sortField, sortDir]);
 
+  // Reset page when filters change
+  useEffect(() => setPage(1), [search, typeFilter, statusFilter]);
+
+  const paginatedCourses = filtered.slice((page - 1) * perPage, page * perPage);
+
   const handleDuplicate = async (course: Course) => {
     if (duplicating) return;
     setDuplicating(course.id);
@@ -228,8 +239,9 @@ export default function AdminCoursesPage() {
       });
       if (!res.ok) throw new Error('Kunne ikke duplisere kurs');
       await fetchCourses();
+      toast('Kurs duplisert', 'success');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Kunne ikke duplisere kurs');
+      toast(err instanceof Error ? err.message : 'Kunne ikke duplisere kurs', 'error');
     } finally {
       setDuplicating(null);
     }
@@ -237,8 +249,12 @@ export default function AdminCoursesPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-[#003B7A] border-t-transparent rounded-full" />
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Kurs</h1>
+        <StatCardsSkeleton count={3} />
+        <div className="mt-6">
+          <TableSkeleton />
+        </div>
       </div>
     );
   }
@@ -265,12 +281,20 @@ export default function AdminCoursesPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Kurs</h1>
-        <Link
-          href="/admin/courses/new"
-          className="bg-[#003B7A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors"
-        >
-          + Nytt kurs
-        </Link>
+        <div className="flex gap-3">
+          <Link
+            href="/admin/courses/new"
+            className="bg-[#003B7A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors"
+          >
+            + Nytt kurs
+          </Link>
+          <button
+            onClick={() => window.open('/api/admin/courses/export')}
+            className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+          >
+            Eksporter CSV
+          </button>
+        </div>
       </div>
 
       {/* Search & Filters */}
@@ -403,7 +427,7 @@ export default function AdminCoursesPage() {
         <>
           {/* Mobile cards */}
           <div className="md:hidden space-y-4">
-            {filtered.map((course) => (
+            {paginatedCourses.map((course) => (
               <div
                 key={course.id}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
@@ -500,7 +524,7 @@ export default function AdminCoursesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filtered.map((course) => (
+                  {paginatedCourses.map((course) => (
                     <tr key={course.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 font-medium text-gray-900">
                         {course.name}
@@ -550,6 +574,7 @@ export default function AdminCoursesPage() {
               </table>
             </div>
           </div>
+          <Pagination total={filtered.length} page={page} perPage={perPage} onChange={setPage} />
         </>
       )}
     </div>

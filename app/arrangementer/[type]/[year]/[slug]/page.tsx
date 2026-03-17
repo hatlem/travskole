@@ -65,7 +65,10 @@ export default async function CourseDetailPage({
   params: Promise<{ type: string; year: string; slug: string }>;
 }) {
   const { type, year, slug } = await params;
-  const course = await getCourseBySlug(type, year, slug);
+  const [course, settings] = await Promise.all([
+    getCourseBySlug(type, year, slug),
+    getSettings(),
+  ]);
 
   if (!course) {
     notFound();
@@ -81,6 +84,9 @@ export default async function CourseDetailPage({
 
   const courseSlug = course.slug || generateSlug(course.name);
   const courseYear = course.startDate.getFullYear();
+
+  const learningPoints = (settings.course_learning_points || '').split('\n').filter(Boolean);
+  const packingList = (settings.course_packing_list || '').split('\n').filter(Boolean);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -120,44 +126,48 @@ export default async function CourseDetailPage({
                 {course.description}
               </p>
 
-              <h3 className="text-2xl font-semibold text-gray-900 mb-4">Hva du lærer</h3>
-              <ul className="space-y-3 text-gray-700 mb-6">
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-2 mt-1">&#10003;</span>
-                  Grunnleggende om travhester og deres behov
-                </li>
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-2 mt-1">&#10003;</span>
-                  Sikkerhet rundt hester og på banen
-                </li>
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-2 mt-1">&#10003;</span>
-                  Praktisk erfaring med stell og håndtering
-                </li>
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-2 mt-1">&#10003;</span>
-                  Moro og vennskap med andre hesteglade barn
-                </li>
-              </ul>
+              {learningPoints.length > 0 && (
+                <>
+                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">Hva du lærer</h3>
+                  <ul className="space-y-3 text-gray-700 mb-6">
+                    {learningPoints.map((point, i) => (
+                      <li key={i} className="flex items-start">
+                        <span className="text-[#003B7A] mr-2 mt-1">&#10003;</span>
+                        {point}
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
 
-              <h3 className="text-2xl font-semibold text-gray-900 mb-4">Praktisk informasjon</h3>
-              <div className="bg-gray-50 rounded-lg p-6 space-y-3 text-gray-700">
-                <p><strong>Hva du skal ha med:</strong></p>
-                <ul className="list-disc list-inside ml-4 space-y-1">
-                  <li>Varme klær som tåler skitt</li>
-                  <li>Ridehjelm (kan lånes hvis ikke)</li>
-                  <li>Støvler eller gode sko</li>
-                  <li>Matpakke og drikkeflaske</li>
-                </ul>
-              </div>
+              {packingList.length > 0 && (
+                <>
+                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">Praktisk informasjon</h3>
+                  <div className="bg-gray-50 rounded-lg p-6 space-y-3 text-gray-700">
+                    <p><strong>Hva du skal ha med:</strong></p>
+                    <ul className="list-disc list-inside ml-4 space-y-1">
+                      {packingList.map((item, i) => (
+                        <li key={i}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
+              )}
 
-              <div className="mt-8 bg-blue-50 rounded-lg p-6">
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">Instruktør</h3>
-                <p className="text-gray-700">
-                  <strong>Hege Arverud</strong> — Sertifisert instruktør (DNT). Lang erfaring med
-                  barn og ungdom i travsport.
-                </p>
-              </div>
+              {settings.instructor_name && (
+                <div className="mt-8 bg-blue-50 rounded-lg p-6">
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Instruktør</h3>
+                  <p className="text-gray-700">
+                    <strong>{settings.instructor_name}</strong>
+                    {settings.instructor_certification && (
+                      <> — {settings.instructor_certification} instruktør</>
+                    )}
+                    {settings.instructor_description && (
+                      <>. {settings.instructor_description}</>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -197,10 +207,12 @@ export default async function CourseDetailPage({
                       : 'Alle aldre'}
                   </p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">Maks deltakere</p>
-                  <p className="font-semibold text-gray-900">{course.maxParticipants}</p>
-                </div>
+                {course.maxParticipants && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">Maks deltakere</p>
+                    <p className="font-semibold text-gray-900">{course.maxParticipants}</p>
+                  </div>
+                )}
               </div>
 
               {course.status === 'open' ? (

@@ -82,6 +82,8 @@ export async function PUT(
       },
     });
 
+    logActivity({ action: 'update', entity: 'course', entityId: Number(id), details: name, userEmail: session.user.email }).catch(() => {});
+
     return NextResponse.json({ course });
   } catch (error) {
     console.error('Error updating course:', error);
@@ -104,6 +106,8 @@ export async function DELETE(
     await prisma.course.delete({
       where: { id: Number(id) },
     });
+
+    logActivity({ action: 'delete', entity: 'course', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {

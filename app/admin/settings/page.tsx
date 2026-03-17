@@ -54,6 +54,15 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: 'Kursdetaljer',
+    description: 'Standardinnhold som vises på alle kursdetalj-sider. Bruk linjeskift for å skille punkter.',
+    fields: [
+      { key: 'course_learning_points', label: 'Hva du lærer (ett punkt per linje)', type: 'textarea' },
+      { key: 'course_packing_list', label: 'Pakkeliste (ett punkt per linje)', type: 'textarea' },
+      { key: 'instructor_description', label: 'Instruktørbeskrivelse', type: 'textarea' },
+    ],
+  },
+  {
     title: 'Samtykketekster',
     description: 'Tekster som vises i påmeldingsskjemaet. Endringer påvirker fremtidige påmeldinger.',
     fields: [

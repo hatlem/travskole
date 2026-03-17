@@ -15,6 +15,9 @@ const PUBLIC_KEYS = [
   'consent_media_text',
   'consent_risk_text',
   'consent_risk_detail',
+  'course_learning_points',
+  'course_packing_list',
+  'instructor_description',
 ];
 
 export async function GET() {

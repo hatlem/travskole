@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
+import { TableSkeleton } from '@/components/admin/Skeleton';
+import { useToast } from '@/components/admin/Toast';
+import { Pagination } from '@/components/admin/Pagination';
 
 interface User {
   id: number;
@@ -58,8 +61,10 @@ export default function AdminUsersPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const { toast } = useToast();
+  const [page, setPage] = useState(1);
+  const perPage = 25;
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
@@ -76,7 +81,7 @@ export default function AdminUsersPage() {
       const data = await res.json();
       setUsers(data.users);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setLoading(false);
     }
@@ -94,8 +99,9 @@ export default function AdminUsersPage() {
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, role } : u))
       );
+      toast('Rolle oppdatert', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -126,6 +132,11 @@ export default function AdminUsersPage() {
     });
   }, [users, searchQuery, roleFilter]);
 
+  // Reset page when filters change
+  useEffect(() => setPage(1), [searchQuery, roleFilter]);
+
+  const paginatedUsers = filteredUsers.slice((page - 1) * perPage, page * perPage);
+
   const stats = useMemo(() => {
     const total = users.length;
     const parents = users.filter((u) => u.role === 'parent').length;
@@ -135,18 +146,24 @@ export default function AdminUsersPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#003B7A] border-t-transparent" />
-          <p className="text-gray-500">Laster brukere...</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Brukere</h1>
+        <TableSkeleton />
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-gray-900 mb-6">Brukere</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Brukere</h1>
+        <button
+          onClick={() => window.open('/api/admin/users/export')}
+          className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          Eksporter CSV
+        </button>
+      </div>
 
       {/* Stats bar */}
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -163,15 +180,6 @@ export default function AdminUsersPage() {
           <p className="text-2xl font-bold text-purple-700">{stats.admins}</p>
         </div>
       </div>
-
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-          {error}
-          <button onClick={() => setError(null)} className="ml-2 font-medium underline">
-            Lukk
-          </button>
-        </div>
-      )}
 
       {users.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -217,7 +225,7 @@ export default function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {filteredUsers.map((user) => {
+                  {paginatedUsers.map((user) => {
                     const isExpanded = expandedIds.has(user.id);
                     const initials = getInitials(user.parent?.name);
                     return (
@@ -356,6 +364,7 @@ export default function AdminUsersPage() {
               </table>
             </div>
           </div>
+          <Pagination total={filteredUsers.length} page={page} perPage={perPage} onChange={setPage} />
         </>
       )}
     </div>

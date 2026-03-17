@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { TableSkeleton } from '@/components/admin/Skeleton';
 
 function slugify(text: string): string {
   return text
@@ -115,6 +117,9 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [newTriggerOffset, setNewTriggerOffset] = useState('0');
   const [addingTrigger, setAddingTrigger] = useState(false);
   const defaultsCreatedRef = useRef(false);
+  const [showDeleteCourseModal, setShowDeleteCourseModal] = useState(false);
+  const [showDeleteTriggerModal, setShowDeleteTriggerModal] = useState(false);
+  const [deleteTriggerTargetId, setDeleteTriggerTargetId] = useState<number | null>(null);
 
   // Validation
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -245,15 +250,23 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     }
   }
 
-  async function handleDeleteTrigger(triggerId: number) {
-    if (!confirm('Er du sikker på at du vil slette denne triggeren?')) return;
+  function requestDeleteTrigger(triggerId: number) {
+    setDeleteTriggerTargetId(triggerId);
+    setShowDeleteTriggerModal(true);
+  }
+
+  async function confirmDeleteTrigger() {
+    if (!deleteTriggerTargetId) return;
     try {
-      const res = await fetch(`/api/admin/email-triggers/${triggerId}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/email-triggers/${deleteTriggerTargetId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Kunne ikke slette');
-      setTriggers((prev) => prev.filter((t) => t.id !== triggerId));
+      setTriggers((prev) => prev.filter((t) => t.id !== deleteTriggerTargetId));
     } catch {
       setTriggersError('Kunne ikke slette trigger');
       setTimeout(() => setTriggersError(null), 3000);
+    } finally {
+      setShowDeleteTriggerModal(false);
+      setDeleteTriggerTargetId(null);
     }
   }
 
@@ -333,10 +346,11 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   }
 
   async function handleDelete() {
-    if (!confirm('Er du sikker på at du vil slette dette kurset? Alle påmeldinger vil også bli slettet.')) {
-      return;
-    }
+    setShowDeleteCourseModal(true);
+  }
 
+  async function confirmDeleteCourse() {
+    setShowDeleteCourseModal(false);
     setDeleting(true);
     try {
       const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
@@ -363,8 +377,9 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <p className="text-gray-500">Laster kurs...</p>
+      <div className="max-w-6xl">
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Rediger kurs</h1>
+        <TableSkeleton rows={6} cols={2} />
       </div>
     );
   }
@@ -898,7 +913,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     {!isFixedTrigger(trigger.triggerType) && (
                       <button
                         type="button"
-                        onClick={() => handleDeleteTrigger(trigger.id)}
+                        onClick={() => requestDeleteTrigger(trigger.id)}
                         className="flex-shrink-0 text-sm text-red-600 hover:text-red-800 font-medium p-1.5 rounded-lg hover:bg-red-50 transition-colors"
                         title="Slett trigger"
                       >
@@ -999,6 +1014,28 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
           </div>
         </div>
       )}
+      {/* Delete course confirmation modal */}
+      <ConfirmModal
+        open={showDeleteCourseModal}
+        title="Slett kurs"
+        message="Er du sikker på at du vil slette dette kurset? Alle påmeldinger vil også bli slettet. Denne handlingen kan ikke angres."
+        confirmLabel="Slett kurs"
+        variant="danger"
+        loading={deleting}
+        onConfirm={confirmDeleteCourse}
+        onCancel={() => setShowDeleteCourseModal(false)}
+      />
+
+      {/* Delete trigger confirmation modal */}
+      <ConfirmModal
+        open={showDeleteTriggerModal}
+        title="Slett trigger"
+        message="Er du sikker på at du vil slette denne triggeren?"
+        confirmLabel="Slett"
+        variant="danger"
+        onConfirm={confirmDeleteTrigger}
+        onCancel={() => { setShowDeleteTriggerModal(false); setDeleteTriggerTargetId(null); }}
+      />
     </div>
   );
 }

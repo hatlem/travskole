@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/components/admin/Toast';
 
 interface ActivityLog {
   id: number;
@@ -72,6 +73,7 @@ export default function AdminActivityPage() {
   const [entityFilter, setEntityFilter] = useState('');
   const [search, setSearch] = useState('');
   const [searchDebounced, setSearchDebounced] = useState('');
+  const { toast } = useToast();
 
   // Debounce search
   useEffect(() => {
@@ -81,19 +83,25 @@ export default function AdminActivityPage() {
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
-    const params = new URLSearchParams();
-    params.set('page', String(page));
-    params.set('perPage', String(PER_PAGE));
-    if (actionFilter) params.set('action', actionFilter);
-    if (entityFilter) params.set('entity', entityFilter);
-    if (searchDebounced) params.set('search', searchDebounced);
+    try {
+      const params = new URLSearchParams();
+      params.set('page', String(page));
+      params.set('perPage', String(PER_PAGE));
+      if (actionFilter) params.set('action', actionFilter);
+      if (entityFilter) params.set('entity', entityFilter);
+      if (searchDebounced) params.set('search', searchDebounced);
 
-    const res = await fetch(`/api/admin/activity?${params.toString()}`);
-    const data = await res.json();
-    setLogs(data.logs || []);
-    setTotal(data.total || 0);
-    setLoading(false);
-  }, [page, actionFilter, entityFilter, searchDebounced]);
+      const res = await fetch(`/api/admin/activity?${params.toString()}`);
+      if (!res.ok) throw new Error('Kunne ikke hente aktivitetslogg');
+      const data = await res.json();
+      setLogs(data.logs || []);
+      setTotal(data.total || 0);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, [page, actionFilter, entityFilter, searchDebounced, toast]);
 
   useEffect(() => {
     fetchLogs();

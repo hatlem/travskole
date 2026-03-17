@@ -74,7 +74,24 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     parentName: r.parent.name,
     parentPhone: r.parent.phone,
     parentEmail: r.parent.user.email,
+    consentActivities: r.consentActivities,
+    consentMedia: r.consentMedia,
+    consentRisk: r.consentRisk,
   }));
+
+  // Allergy data
+  const childrenWithAllergies = course.registrations
+    .filter((r) => r.child.allergies && r.status !== 'cancelled')
+    .map((r) => ({ name: r.child.name, allergies: r.child.allergies! }));
+
+  // Consent stats (exclude cancelled)
+  const activeRegs = course.registrations.filter((r) => r.status !== 'cancelled');
+  const consentStats = {
+    total: activeRegs.length,
+    activities: activeRegs.filter((r) => r.consentActivities).length,
+    media: activeRegs.filter((r) => r.consentMedia).length,
+    risk: activeRegs.filter((r) => r.consentRisk).length,
+  };
 
   return (
     <div>
@@ -171,6 +188,103 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
           </div>
         </div>
       )}
+
+      {/* Allergy overview */}
+      {childrenWithAllergies.length > 0 && (
+        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mb-6 print:hidden">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="text-sm font-semibold text-amber-800">Allergier og hensyn</h3>
+          </div>
+          <ul className="space-y-1">
+            {childrenWithAllergies.map((c, i) => (
+              <li key={i} className="text-sm text-amber-900">
+                <span className="font-medium">{c.name}</span> &mdash; {c.allergies}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Consent summary */}
+      {consentStats.total > 0 && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 print:hidden">
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Samtykkeoversikt</h3>
+          <div className="space-y-2">
+            {[
+              { label: 'Samtykke aktiviteter', count: consentStats.activities },
+              { label: 'Samtykke media', count: consentStats.media },
+              { label: 'Samtykke risiko', count: consentStats.risk },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center gap-2 text-sm">
+                {item.count === consentStats.total ? (
+                  <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                )}
+                <span className="text-gray-700">
+                  {item.label}: {item.count} av {consentStats.total}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Print button - rendered by CourseActions (client component) */}
+
+      {/* Printable participant list (hidden on screen, visible when printing) */}
+      <div className="hidden print:block">
+        <style dangerouslySetInnerHTML={{ __html: `
+          @media print {
+            nav, aside, header, .print\\:hidden, [data-sidebar], [data-breadcrumbs] { display: none !important; }
+            body { background: white !important; }
+            main { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+          }
+        `}} />
+        <h1 className="text-xl font-bold mb-1">{course.name}</h1>
+        <p className="text-sm text-gray-600 mb-4">
+          {formatDate(course.startDate)}{course.endDate ? ` — ${formatDate(course.endDate)}` : ''}
+        </p>
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b-2 border-gray-300">
+              <th className="text-left py-2 pr-3">Barn</th>
+              <th className="text-left py-2 pr-3">Alder</th>
+              <th className="text-left py-2 pr-3">Allergier</th>
+              <th className="text-left py-2 pr-3">Forelder</th>
+              <th className="text-left py-2">Telefon</th>
+            </tr>
+          </thead>
+          <tbody>
+            {course.registrations
+              .filter((r) => r.status !== 'cancelled')
+              .map((r) => {
+                const age = r.child.birthdate
+                  ? Math.floor((Date.now() - new Date(r.child.birthdate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+                  : null;
+                return (
+                  <tr key={r.id} className="border-b border-gray-200">
+                    <td className="py-1.5 pr-3">{r.child.name}</td>
+                    <td className="py-1.5 pr-3">{age !== null ? `${age} år` : '-'}</td>
+                    <td className="py-1.5 pr-3">{r.child.allergies || '-'}</td>
+                    <td className="py-1.5 pr-3">{r.parent.name}</td>
+                    <td className="py-1.5">{r.parent.phone}</td>
+                  </tr>
+                );
+              })}
+          </tbody>
+        </table>
+        <p className="text-xs text-gray-400 mt-6">
+          Utskrift: {new Date().toLocaleDateString('nb-NO')}
+        </p>
+      </div>
 
       {/* Client component: email form, status dropdowns, registrations table */}
       <CourseActions

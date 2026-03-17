@@ -52,7 +52,9 @@ export async function POST(request: NextRequest) {
     await Promise.all([
       sendBookingConfirmation(emailData),
       sendBookingAdminNotification(emailData),
-    ]).catch(() => {});
+    ]).catch((err) => {
+      console.error('Dobbeltsulky email error (booking saved):', err);
+    });
 
     return NextResponse.json({ booking }, { status: 201 });
   } catch (error) {

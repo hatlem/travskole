@@ -30,10 +30,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
     }
 
+    const oldRegistration = await prisma.registration.findUnique({ where: { id: Number(id) } });
+    const oldStatus = oldRegistration?.status;
+
     const registration = await prisma.registration.update({
       where: { id: Number(id) },
       data: { status },
     });
+
+    logActivity({ action: 'status_change', entity: 'registration', entityId: Number(id), details: JSON.stringify({ from: oldStatus, to: status }), userEmail: session.user.email }).catch(() => {});
 
     // If a registration was cancelled, check for waitlist entries
     if (status === 'cancelled') {
@@ -114,6 +119,8 @@ export async function DELETE(
     await prisma.registration.delete({
       where: { id: Number(id) },
     });
+
+    logActivity({ action: 'delete', entity: 'registration', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -133,7 +133,7 @@ export function CourseActions({
       )}
 
       {/* Email form toggle */}
-      <div className="mb-6">
+      <div className="mb-6 flex flex-wrap gap-3 print:hidden">
         <button
           onClick={() => setShowEmailForm(!showEmailForm)}
           className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -142,6 +142,15 @@ export function CourseActions({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
           </svg>
           {showEmailForm ? 'Skjul e-postskjema' : 'Send e-post'}
+        </button>
+        <button
+          onClick={() => window.print()}
+          className="inline-flex items-center gap-2 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2-2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+          </svg>
+          Skriv ut deltakerliste
         </button>
       </div>
 

@@ -68,6 +68,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    logActivity({ action: 'create', entity: 'course', entityId: course.id, details: course.name, userEmail: session.user.email }).catch(() => {});
+
     return NextResponse.json({ course }, { status: 201 });
   } catch (error) {
     console.error('Error creating course:', error);

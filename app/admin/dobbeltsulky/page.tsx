@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { TableSkeleton, StatCardsSkeleton } from '@/components/admin/Skeleton';
+import { useToast } from '@/components/admin/Toast';
 
 interface Booking {
   id: number;
@@ -27,6 +29,7 @@ export default function AdminDobbeltsulkyPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     async function load() {
@@ -72,66 +75,85 @@ export default function AdminDobbeltsulkyPage() {
 
   async function toggleEnabled() {
     setToggling(true);
-    const newValue = !enabled;
-    await fetch('/api/admin/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ key: 'dobbeltsulky_enabled', value: String(newValue) }),
-    });
-    setEnabled(newValue);
-    setToggling(false);
+    try {
+      const newValue = !enabled;
+      const res = await fetch('/api/admin/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'dobbeltsulky_enabled', value: String(newValue) }),
+      });
+      if (!res.ok) throw new Error('Kunne ikke oppdatere innstilling');
+      setEnabled(newValue);
+      toast(newValue ? 'Dobbeltsulky aktivert' : 'Dobbeltsulky deaktivert', 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setToggling(false);
+    }
   }
 
   async function updateStatus(id: number, status: string) {
-    await fetch(`/api/admin/bookings/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
-    });
-    const now = new Date().toISOString();
-    setBookings(bookings.map(b =>
-      b.id === id
-        ? {
-            ...b,
-            status,
-            ...(status === 'confirmed' ? { confirmedAt: now } : {}),
-            ...(status === 'cancelled' ? { cancelledAt: now } : {}),
-          }
-        : b
-    ));
-    setSelected(prev => {
-      const next = new Set(prev);
-      next.delete(id);
-      return next;
-    });
+    try {
+      const res = await fetch(`/api/admin/bookings/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status }),
+      });
+      if (!res.ok) throw new Error('Kunne ikke oppdatere status');
+      const now = new Date().toISOString();
+      setBookings(bookings.map(b =>
+        b.id === id
+          ? {
+              ...b,
+              status,
+              ...(status === 'confirmed' ? { confirmedAt: now } : {}),
+              ...(status === 'cancelled' ? { cancelledAt: now } : {}),
+            }
+          : b
+      ));
+      setSelected(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast(status === 'confirmed' ? 'Booking bekreftet' : 'Booking avvist', 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    }
   }
 
   async function bulkUpdateStatus(status: string) {
     if (selected.size === 0) return;
     setBulkProcessing(true);
-    const ids = Array.from(selected);
-    await Promise.all(
-      ids.map(id =>
-        fetch(`/api/admin/bookings/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        })
-      )
-    );
-    const now = new Date().toISOString();
-    setBookings(bookings.map(b =>
-      ids.includes(b.id)
-        ? {
-            ...b,
-            status,
-            ...(status === 'confirmed' ? { confirmedAt: now } : {}),
-            ...(status === 'cancelled' ? { cancelledAt: now } : {}),
-          }
-        : b
-    ));
-    setSelected(new Set());
-    setBulkProcessing(false);
+    try {
+      const ids = Array.from(selected);
+      await Promise.all(
+        ids.map(id =>
+          fetch(`/api/admin/bookings/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+          })
+        )
+      );
+      const now = new Date().toISOString();
+      setBookings(bookings.map(b =>
+        ids.includes(b.id)
+          ? {
+              ...b,
+              status,
+              ...(status === 'confirmed' ? { confirmedAt: now } : {}),
+              ...(status === 'cancelled' ? { cancelledAt: now } : {}),
+            }
+          : b
+      ));
+      toast(`${ids.length} booking(er) oppdatert`, 'success');
+      setSelected(new Set());
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setBulkProcessing(false);
+    }
   }
 
   function toggleSelect(id: number) {
@@ -160,7 +182,15 @@ export default function AdminDobbeltsulkyPage() {
   }
 
   if (loading) {
-    return <div className="py-20 text-center text-gray-500">Laster...</div>;
+    return (
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Dobbeltsulky</h1>
+        <StatCardsSkeleton count={4} />
+        <div className="mt-6">
+          <TableSkeleton />
+        </div>
+      </div>
+    );
   }
 
   return (

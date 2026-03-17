@@ -28,6 +28,11 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   consent_risk_text: 'Vi har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje. Det anbefales derfor å ha en ulykkesforsikring på barnet.',
   consent_risk_detail: 'Alle som deltar på kurs/aktiviteter i travskole/aktivitetsstaller anbefales egen ulykkesforsikring. Bjerke Travbane AS har ingen forsikring som dekker en eventuell personskade som skulle oppstå på våre kurs. Ved å melde seg på kurs i regi av travskole eller aktivitetsstall tilknyttet Bjerke Travbane AS bekrefter man å være kjent med disse forholdene.',
 
+  // Kursdetaljer
+  course_learning_points: 'Grunnleggende om travhester og deres behov\nSikkerhet rundt hester og på banen\nPraktisk erfaring med stell og håndtering\nMoro og vennskap med andre hesteglade barn',
+  course_packing_list: 'Varme klær som tåler skitt\nRidehjelm (kan lånes hvis ikke)\nStøvler eller gode sko\nMatpakke og drikkeflaske',
+  instructor_description: 'Lang erfaring med barn og ungdom i travsport.',
+
   // Dobbeltsulky
   dobbeltsulky_enabled: 'false',
   dobbeltsulky_description: 'Dobbeltsulky er en sulky med plass til to personer. Du sitter sammen med instruktøren og får oppleve farten og spenningen ved travsport helt tett på. Passer for alle aldre og krever ingen forkunnskaper.',

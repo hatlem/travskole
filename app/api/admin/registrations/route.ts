@@ -106,6 +106,7 @@ export async function POST(request: NextRequest) {
           },
         },
       });
+      logActivity({ action: 'create', entity: 'registration', entityId: registration.id, details: JSON.stringify({ course: registration.course.name, child: registration.child.name }), userEmail: session.user.email }).catch(() => {});
       registrations.push(registration);
     }
 

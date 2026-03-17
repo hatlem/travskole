@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { useToast } from '@/components/admin/Toast';
+import { Pagination } from '@/components/admin/Pagination';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { TableSkeleton } from '@/components/admin/Skeleton';
 
 interface Registration {
   id: number;
@@ -53,7 +57,6 @@ const STATUS_COLORS: Record<string, string> = {
 export default function AdminRegistrationsPage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -68,7 +71,15 @@ export default function AdminRegistrationsPage() {
   const [parentForm, setParentForm] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [children, setChildren] = useState<ChildForm[]>([{ ...emptyChild }]);
   const [submitting, setSubmitting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [deletingReg, setDeletingReg] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkTargetStatus, setBulkTargetStatus] = useState<string>("");
   const courseDropdownRef = useRef<HTMLDivElement>(null);
+  const { toast } = useToast();
+  const [page, setPage] = useState(1);
+  const perPage = 25;
 
   useEffect(() => {
     fetchRegistrations();
@@ -92,7 +103,7 @@ export default function AdminRegistrationsPage() {
       const data = await res.json();
       setRegistrations(data.registrations);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setLoading(false);
     }
@@ -155,8 +166,9 @@ export default function AdminRegistrationsPage() {
       const newRegs = data.registrations ?? [data.registration];
       setRegistrations((prev) => [...newRegs, ...prev]);
       setShowAddForm(false);
+      toast('Påmelding opprettet', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -174,34 +186,52 @@ export default function AdminRegistrationsPage() {
       setRegistrations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status } : r))
       );
+      toast('Status oppdatert', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setUpdatingId(null);
     }
   }
 
-  async function deleteRegistration(id: number) {
-    if (!confirm('Er du sikker på at du vil slette denne påmeldingen?')) return;
+  function requestDeleteRegistration(id: number) {
+    setDeleteTargetId(id);
+    setShowDeleteModal(true);
+  }
+
+  async function confirmDeleteRegistration() {
+    if (!deleteTargetId) return;
+    setDeletingReg(true);
     try {
-      const res = await fetch(`/api/admin/registrations/${id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/admin/registrations/${deleteTargetId}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Kunne ikke slette påmelding');
-      setRegistrations((prev) => prev.filter((r) => r.id !== id));
+      setRegistrations((prev) => prev.filter((r) => r.id !== deleteTargetId));
       setSelectedIds((prev) => {
         const next = new Set(prev);
-        next.delete(id);
+        next.delete(deleteTargetId);
         return next;
       });
+      toast('Påmelding slettet', 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setDeletingReg(false);
+      setShowDeleteModal(false);
+      setDeleteTargetId(null);
     }
   }
 
   async function bulkUpdateStatus(status: string) {
     if (selectedIds.size === 0) return;
-    const label = status === 'confirmed' ? 'bekrefte' : 'avvise';
-    if (!confirm(`Er du sikker på at du vil ${label} ${selectedIds.size} påmelding(er)?`)) return;
+    setBulkTargetStatus(status);
+    setShowBulkModal(true);
+    return;
+  }
 
+  async function confirmBulkUpdate() {
+    const status = bulkTargetStatus;
+    if (!status) return;
+    setShowBulkModal(false);
     setBulkUpdating(true);
     try {
       const promises = Array.from(selectedIds).map((id) =>
@@ -216,8 +246,9 @@ export default function AdminRegistrationsPage() {
         prev.map((r) => (selectedIds.has(r.id) ? { ...r, status } : r))
       );
       setSelectedIds(new Set());
+      toast(`${selectedIds.size} påmelding(er) oppdatert`, 'success');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt ved masseoppdatering');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt ved masseoppdatering', 'error');
     } finally {
       setBulkUpdating(false);
     }
@@ -262,6 +293,11 @@ export default function AdminRegistrationsPage() {
     });
   }, [registrations, statusFilter, courseFilter, searchQuery]);
 
+  // Reset page when filters change
+  useEffect(() => setPage(1), [searchQuery, statusFilter, courseFilter]);
+
+  const paginatedRegistrations = filteredRegistrations.slice((page - 1) * perPage, page * perPage);
+
   const filteredIds = useMemo(() => new Set(filteredRegistrations.map((r) => r.id)), [filteredRegistrations]);
   const allVisibleSelected = filteredRegistrations.length > 0 && filteredRegistrations.every((r) => selectedIds.has(r.id));
 
@@ -292,11 +328,9 @@ export default function AdminRegistrationsPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center">
-          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-[#003B7A] border-r-transparent mb-3" />
-          <p className="text-gray-500">Laster påmeldinger...</p>
-        </div>
+      <div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Påmeldinger</h1>
+        <TableSkeleton rows={8} cols={9} />
       </div>
     );
   }
@@ -326,16 +360,6 @@ export default function AdminRegistrationsPage() {
           </button>
         </div>
       </div>
-
-      {/* Error banner */}
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6 flex items-center justify-between">
-          <span>{error}</span>
-          <button onClick={() => setError(null)} className="ml-4 font-medium text-red-800 hover:underline text-sm">
-            Lukk
-          </button>
-        </div>
-      )}
 
       {/* Inline add form */}
       {showAddForm && (
@@ -669,7 +693,7 @@ export default function AdminRegistrationsPage() {
                 </tr>
               </thead>
               <tbody>
-                {filteredRegistrations.map((reg, idx) => (
+                {paginatedRegistrations.map((reg, idx) => (
                   <tr
                     key={reg.id}
                     className={`border-b border-gray-100 hover:bg-blue-50/50 transition-colors ${
@@ -717,7 +741,7 @@ export default function AdminRegistrationsPage() {
                     </td>
                     <td className="px-4 py-3.5">
                       <button
-                        onClick={() => deleteRegistration(reg.id)}
+                        onClick={() => requestDeleteRegistration(reg.id)}
                         className="text-red-500 hover:text-red-700 text-xs font-medium transition-colors"
                       >
                         Slett
@@ -725,7 +749,7 @@ export default function AdminRegistrationsPage() {
                     </td>
                   </tr>
                 ))}
-                {filteredRegistrations.length === 0 && (
+                {paginatedRegistrations.length === 0 && (
                   <tr>
                     <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
                       Ingen påmeldinger matcher filteret.
@@ -735,8 +759,32 @@ export default function AdminRegistrationsPage() {
               </tbody>
             </table>
           </div>
+          <Pagination total={filteredRegistrations.length} page={page} perPage={perPage} onChange={setPage} />
         </div>
       )}
+      {/* Delete confirmation modal */}
+      <ConfirmModal
+        open={showDeleteModal}
+        title="Slett påmelding"
+        message="Er du sikker på at du vil slette denne påmeldingen?"
+        confirmLabel="Slett"
+        variant="danger"
+        loading={deletingReg}
+        onConfirm={confirmDeleteRegistration}
+        onCancel={() => { setShowDeleteModal(false); setDeleteTargetId(null); }}
+      />
+
+      {/* Bulk update confirmation modal */}
+      <ConfirmModal
+        open={showBulkModal}
+        title={bulkTargetStatus === 'confirmed' ? 'Bekreft påmeldinger' : 'Avvis påmeldinger'}
+        message={`Er du sikker på at du vil ${bulkTargetStatus === 'confirmed' ? 'bekrefte' : 'avvise'} ${selectedIds.size} påmelding(er)?`}
+        confirmLabel={bulkTargetStatus === 'confirmed' ? 'Bekreft alle' : 'Avvis alle'}
+        variant={bulkTargetStatus === 'confirmed' ? 'info' : 'danger'}
+        loading={bulkUpdating}
+        onConfirm={confirmBulkUpdate}
+        onCancel={() => setShowBulkModal(false)}
+      />
     </div>
   );
 }
