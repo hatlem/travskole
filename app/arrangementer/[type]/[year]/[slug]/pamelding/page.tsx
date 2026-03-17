@@ -7,14 +7,17 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSession } from 'next-auth/react';
+import { useSettings } from '@/components/SettingsProvider';
 
 const registrationSchema = z.object({
-  parentName: z.string().min(2, 'Navn må være minst 2 tegn'),
+  parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
+  parentLastName: z.string().min(2, 'Etternavn må være minst 2 tegn'),
   parentEmail: z.string().email('Ugyldig e-postadresse'),
   parentPhone: z.string().min(8, 'Ugyldig telefonnummer'),
   childSelection: z.enum(['existing', 'new']),
   existingChildId: z.string().optional(),
-  childName: z.string().optional(),
+  childFirstName: z.string().optional(),
+  childLastName: z.string().optional(),
   childBirthdate: z.string().optional(),
   childAllergies: z.string().optional(),
   consentActivities: z.boolean().refine(val => val === true, {
@@ -26,11 +29,18 @@ const registrationSchema = z.object({
   })
 }).superRefine((data, ctx) => {
   if (data.childSelection === 'new') {
-    if (!data.childName || data.childName.length < 2) {
+    if (!data.childFirstName || data.childFirstName.length < 2) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'Barnets navn er påkrevd',
-        path: ['childName']
+        message: 'Barnets fornavn er påkrevd',
+        path: ['childFirstName']
+      });
+    }
+    if (!data.childLastName || data.childLastName.length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Barnets etternavn er påkrevd',
+        path: ['childLastName']
       });
     }
     if (!data.childBirthdate) {
@@ -67,9 +77,16 @@ export default function PameldingPage({
   const searchParams = useSearchParams();
   const isWaitlist = searchParams.get('venteliste') === 'true';
   const { data: session } = useSession();
+  const settings = useSettings();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
   const [existingChildren, setExistingChildren] = useState<ChildData[]>([]);
+  const [consentOpen, setConsentOpen] = useState(false);
+
+  const consentActivitiesText = settings.consent_activities_text || 'Vi samtykker i at vårt barn blir tatt med utenfor Bjerke sitt område i kurstiden. Dette er aktiviteter som bading, stå på skøyter, fotball, ridetur, omvisninger osv.';
+  const consentMediaText = settings.consent_media_text || '';
+  const consentRiskText = settings.consent_risk_text || '';
+  const consentRiskDetail = settings.consent_risk_detail || '';
 
   useEffect(() => {
     if (!session) return;
@@ -99,12 +116,17 @@ export default function PameldingPage({
     }
   });
 
+  const onInvalid = () => {
+    setConsentOpen(true);
+  };
+
   const onSubmit = async (data: RegistrationFormData) => {
     setIsSubmitting(true);
 
     try {
       const { type, year, slug } = await params;
 
+      const { parentFirstName, parentLastName, childFirstName, childLastName, ...rest } = data;
       const response = await fetch('/api/registrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -113,7 +135,9 @@ export default function PameldingPage({
           courseYear: year,
           courseSlug: slug,
           waitlist: isWaitlist,
-          ...data
+          parentName: `${parentFirstName} ${parentLastName}`,
+          childName: childFirstName && childLastName ? `${childFirstName} ${childLastName}` : undefined,
+          ...rest
         })
       });
 
@@ -152,23 +176,39 @@ export default function PameldingPage({
             Fyll ut skjemaet nedenfor for å melde på et barn til dette kurset
           </p>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+          <form onSubmit={handleSubmit(onSubmit, onInvalid)} className="space-y-8">
             <div>
               <h2 className="text-2xl font-semibold text-gray-900 mb-4">Foresatt</h2>
               <div className="space-y-4">
-                <div>
-                  <label htmlFor="parentName" className="block text-sm font-medium text-gray-700 mb-1">
-                    Ditt navn *
-                  </label>
-                  <input
-                    {...register('parentName')}
-                    type="text"
-                    id="parentName"
-                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
-                  />
-                  {errors.parentName && (
-                    <p className="text-red-600 text-sm mt-1">{errors.parentName.message}</p>
-                  )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="parentFirstName" className="block text-sm font-medium text-gray-700 mb-1">
+                      Fornavn *
+                    </label>
+                    <input
+                      {...register('parentFirstName')}
+                      type="text"
+                      id="parentFirstName"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                    />
+                    {errors.parentFirstName && (
+                      <p className="text-red-600 text-sm mt-1">{errors.parentFirstName.message}</p>
+                    )}
+                  </div>
+                  <div>
+                    <label htmlFor="parentLastName" className="block text-sm font-medium text-gray-700 mb-1">
+                      Etternavn *
+                    </label>
+                    <input
+                      {...register('parentLastName')}
+                      type="text"
+                      id="parentLastName"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                    />
+                    {errors.parentLastName && (
+                      <p className="text-red-600 text-sm mt-1">{errors.parentLastName.message}</p>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -256,19 +296,35 @@ export default function PameldingPage({
 
               {childSelection === 'new' && (
                 <div className="space-y-4">
-                  <div>
-                    <label htmlFor="childName" className="block text-sm font-medium text-gray-700 mb-1">
-                      Barnets navn *
-                    </label>
-                    <input
-                      {...register('childName')}
-                      type="text"
-                      id="childName"
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
-                    />
-                    {errors.childName && (
-                      <p className="text-red-600 text-sm mt-1">{errors.childName.message}</p>
-                    )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label htmlFor="childFirstName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Barnets fornavn *
+                      </label>
+                      <input
+                        {...register('childFirstName')}
+                        type="text"
+                        id="childFirstName"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                      />
+                      {errors.childFirstName && (
+                        <p className="text-red-600 text-sm mt-1">{errors.childFirstName.message}</p>
+                      )}
+                    </div>
+                    <div>
+                      <label htmlFor="childLastName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Barnets etternavn *
+                      </label>
+                      <input
+                        {...register('childLastName')}
+                        type="text"
+                        id="childLastName"
+                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                      />
+                      {errors.childLastName && (
+                        <p className="text-red-600 text-sm mt-1">{errors.childLastName.message}</p>
+                      )}
+                    </div>
                   </div>
 
                   <div>
@@ -303,85 +359,101 @@ export default function PameldingPage({
             </div>
 
             <div>
-              <h2 className="text-2xl font-semibold text-gray-900 mb-2">Samtykke og allergier</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Av sikkerhetsgrunner må samtykket godkjennes per barn. Les hvert punkt nøye og kryss av.
-              </p>
-
-              <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 mb-6 space-y-6">
-                {/* 1. Aktiviteter utenfor Bjerke */}
+              <button
+                type="button"
+                onClick={() => setConsentOpen(!consentOpen)}
+                className="w-full flex items-center justify-between text-left"
+              >
                 <div>
-                  <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
-                    <p className="text-gray-700 text-sm leading-relaxed">
-                      Vi samtykker i at vårt barn blir tatt med utenfor Bjerke sitt område i kurstiden.
-                      Dette er aktiviteter som bading, stå på skøyter, fotball, ridetur, omvisninger osv.
-                    </p>
-                  </div>
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      {...register('consentActivities')}
-                      type="checkbox"
-                      className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
-                    />
-                    <span className="text-gray-900 font-medium text-sm">
-                      Ja, jeg samtykker *
-                    </span>
-                  </label>
-                  {errors.consentActivities && (
-                    <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentActivities.message}</p>
-                  )}
+                  <h2 className="text-2xl font-semibold text-gray-900 mb-1">Samtykke og allergier</h2>
+                  <p className="text-sm text-gray-500">
+                    Av sikkerhetsgrunner må samtykket godkjennes per barn
+                  </p>
                 </div>
+                <svg
+                  className={`w-6 h-6 text-gray-500 transition-transform ${consentOpen ? 'rotate-180' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  strokeWidth={2}
+                  stroke="currentColor"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                </svg>
+              </button>
 
-                {/* 2. Bilder/video */}
-                <div>
-                  <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
-                    <p className="text-gray-700 text-sm leading-relaxed">
-                      Vi samtykker i at det blir tatt videoer/bilder av våre barn i kurstiden,
-                      som kan bli lagt ut på Bjerke Travskoles Facebook-side, Instagram-side og hjemmeside.
-                      Det vil i hovedsak ikke bli publisert fulle navn.
-                    </p>
-                  </div>
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      {...register('consentMedia')}
-                      type="checkbox"
-                      className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
-                    />
-                    <span className="text-gray-900 font-medium text-sm">
-                      Ja, jeg samtykker (valgfritt)
-                    </span>
-                  </label>
-                </div>
+              {(errors.consentActivities || errors.consentRisk) && !consentOpen && (
+                <p className="text-red-600 text-sm mt-2">Vennligst åpne og fyll ut påkrevde samtykker</p>
+              )}
 
-                {/* 3. Forsikring og risiko */}
-                <div>
-                  <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
-                    <p className="text-gray-700 text-sm leading-relaxed mb-3">
-                      Vi har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje.
-                      Det anbefales derfor å ha en ulykkesforsikring på barnet.
-                    </p>
-                    <p className="text-gray-900 text-sm leading-relaxed font-medium border-t border-gray-200 pt-3">
-                      Alle som deltar på kurs/aktiviteter i travskole/aktivitetsstaller anbefales egen ulykkesforsikring.
-                      Bjerke Travbane AS har ingen forsikring som dekker en eventuell personskade som skulle oppstå på
-                      våre kurs. Ved å melde seg på kurs i regi av travskole eller aktivitetsstall tilknyttet Bjerke
-                      Travbane AS bekrefter man å være kjent med disse forholdene.
-                    </p>
+              {consentOpen && (
+                <div className="bg-gray-50 rounded-lg border border-gray-200 p-6 mt-4 space-y-6">
+                  {/* 1. Aktiviteter utenfor Bjerke */}
+                  <div>
+                    <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
+                      <p className="text-gray-700 text-sm leading-relaxed">
+                        {consentActivitiesText}
+                      </p>
+                    </div>
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        {...register('consentActivities')}
+                        type="checkbox"
+                        className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
+                      />
+                      <span className="text-gray-900 font-medium text-sm">
+                        Ja, jeg samtykker *
+                      </span>
+                    </label>
+                    {errors.consentActivities && (
+                      <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentActivities.message}</p>
+                    )}
                   </div>
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input
-                      {...register('consentRisk')}
-                      type="checkbox"
-                      className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
-                    />
-                    <span className="text-gray-900 font-medium text-sm">
-                      Ja, jeg har lest og forstått dette *
-                    </span>
-                  </label>
-                  {errors.consentRisk && (
-                    <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentRisk.message}</p>
-                  )}
+
+                  {/* 2. Bilder/video */}
+                  <div>
+                    <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
+                      <p className="text-gray-700 text-sm leading-relaxed">
+                        {consentMediaText}
+                      </p>
+                    </div>
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        {...register('consentMedia')}
+                        type="checkbox"
+                        className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
+                      />
+                      <span className="text-gray-900 font-medium text-sm">
+                        Ja, jeg samtykker (valgfritt)
+                      </span>
+                    </label>
+                  </div>
+
+                  {/* 3. Forsikring og risiko */}
+                  <div>
+                    <div className="bg-white rounded-md border border-gray-200 p-4 mb-3">
+                      <p className="text-gray-700 text-sm leading-relaxed mb-3">
+                        {consentRiskText}
+                      </p>
+                      <p className="text-gray-900 text-sm leading-relaxed font-medium border-t border-gray-200 pt-3">
+                        {consentRiskDetail}
+                      </p>
+                    </div>
+                    <label className="flex items-center space-x-3 cursor-pointer">
+                      <input
+                        {...register('consentRisk')}
+                        type="checkbox"
+                        className="w-5 h-5 text-[#003B7A] rounded border-gray-300"
+                      />
+                      <span className="text-gray-900 font-medium text-sm">
+                        Ja, jeg har lest og forstått dette *
+                      </span>
+                    </label>
+                    {errors.consentRisk && (
+                      <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentRisk.message}</p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
 
             <div className="pt-6 border-t border-gray-200">

@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { getSettings } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -31,19 +32,21 @@ async function getUpcomingCourses(): Promise<Course[]> {
       image_url: c.imageUrl ?? null,
     }));
   } catch {
-    // Fallback to empty if DB not available
     return [];
   }
 }
 
 export default async function Home() {
-  const upcomingCourses = await getUpcomingCourses();
+  const [upcomingCourses, settings] = await Promise.all([
+    getUpcomingCourses(),
+    getSettings(),
+  ]);
 
   return (
     <div className="min-h-screen">
       <Hero
-        title="Velkommen til Bjerke Travskole"
-        subtitle="Opplev gleden ved travsporten i trygge og profesjonelle omgivelser. Vi tilbyr kurs og leirer for barn og unge."
+        title={settings.hero_title}
+        subtitle={settings.hero_subtitle}
         ctaText="Se alle kurs"
         ctaLink="/arrangementer"
         imageUrl="/images/sulky-trening-bane.jpg"
@@ -77,20 +80,18 @@ export default async function Home() {
       {/* Om Oss Section */}
       <section className="bg-white py-20">
         <div className="max-w-7xl mx-auto px-6">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">Om Bjerke Travskole</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">{settings.about_heading}</h2>
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
               <h3 className="text-xl font-bold text-gray-900 mb-3">Vår visjon</h3>
               <p className="text-gray-600 leading-relaxed mb-6">
-                Bjerke Travskole drives av Bjerke Travbane og er en trygg og engasjerende arena for
-                barn og unge som ønsker å lære mer om travhester og travsport. Vi legger vekt på sikkerhet,
-                dyrevelferd og gode opplevelser.
+                {settings.about_text}
               </p>
               <h3 className="text-xl font-bold text-gray-900 mb-3">Hva vi tilbyr</h3>
               <ul className="space-y-3 text-gray-600">
                 <li className="flex items-start">
                   <span className="text-[#003B7A] mr-3 font-bold">&#10003;</span>
-                  DNT-sertifisert instruktør Hege Arverud
+                  {settings.instructor_certification} instruktør {settings.instructor_name}
                 </li>
                 <li className="flex items-start">
                   <span className="text-[#003B7A] mr-3 font-bold">&#10003;</span>
@@ -109,7 +110,7 @@ export default async function Home() {
             <div className="relative h-80 md:h-96 rounded-lg overflow-hidden">
               <Image
                 src="/images/stall-barn-hest.jpg"
-                alt="Barn med hest i stallen på Bjerke Travskole"
+                alt={`Barn med hest i stallen på ${settings.site_name}`}
                 fill
                 className="object-cover"
               />

@@ -20,7 +20,7 @@ const defaultLinks: NavLink[] = [
 ];
 
 export const Navbar: React.FC<NavbarProps> = ({
-  logoText = 'Bjerke Travskole',
+  logoText = 'Bjerke Ponniskole',
   links = defaultLinks,
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);

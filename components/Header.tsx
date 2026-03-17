@@ -4,10 +4,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
+import { useSettings } from '@/components/SettingsProvider';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { data: session } = useSession();
+  const settings = useSettings();
+
+  const headerLabel = settings.site_name?.replace(/^Bjerke\s+/i, '').toUpperCase() || 'PONNISKOLE';
 
   return (
     <header className="bg-[#003B7A] text-white sticky top-0 z-50 shadow-lg">
@@ -23,18 +27,18 @@ export default function Header() {
               priority
             />
             <span className="text-lg font-bold tracking-wide text-blue-200 border-l border-white/20 pl-3">
-              TRAVSKOLE
+              {headerLabel}
             </span>
           </Link>
 
-          {/* Desktop Navigation — uppercase like bjerke.no */}
+          {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             <Link href="/arrangementer" className="nav-link text-white/90 hover:text-white transition">
               Kurs & Leirer
             </Link>
             {session ? (
               <>
-                {session.user.role === 'admin' && (
+                {(session.user.role === 'admin' || session.user.role === 'superadmin') && (
                   <Link href="/admin" className="nav-link text-white/90 hover:text-white transition">
                     Admin
                   </Link>
@@ -90,7 +94,7 @@ export default function Header() {
             </Link>
             {session ? (
               <>
-                {session.user.role === 'admin' && (
+                {(session.user.role === 'admin' || session.user.role === 'superadmin') && (
                   <Link
                     href="/admin"
                     className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"

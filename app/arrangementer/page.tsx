@@ -3,12 +3,16 @@ import { Course } from '@/components/CourseCard';
 import CourseFilter from '@/components/CourseFilter';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { getSettings } from '@/lib/settings';
 import type { Metadata } from 'next';
 
-export const metadata: Metadata = {
-  title: 'Kurs og leirer - Bjerke Travskole',
-  description: 'Se alle kurs og leirer hos Bjerke Travskole. Travkurs, sommerleirer og dobbeltsulky for barn og unge i Oslo.',
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const s = await getSettings();
+  return {
+    title: `Kurs og leirer - ${s.site_name}`,
+    description: `Se alle kurs og leirer hos ${s.site_name}. Kurs, sommerleirer og dobbeltsulky for barn og unge i Oslo.`,
+  };
+}
 
 export const dynamic = 'force-dynamic';
 

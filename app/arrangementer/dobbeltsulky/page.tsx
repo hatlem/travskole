@@ -3,11 +3,15 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { useSettings } from '@/components/SettingsProvider';
 
 export default function DobbeltsulkyPage() {
   const [submitted, setSubmitted] = useState(false);
   const [sending, setSending] = useState(false);
   const [enabled, setEnabled] = useState<boolean | null>(null);
+  const settings = useSettings();
+  const contactEmail = settings.contact_email || 'ponniskolen@bjerke.no';
+  const description = settings.dobbeltsulky_description || 'Dobbeltsulky er en sulky med plass til to personer. Du sitter sammen med instruktøren og får oppleve farten og spenningen ved travsport helt tett på. Passer for alle aldre og krever ingen forkunnskaper.';
 
   useEffect(() => {
     fetch('/api/dobbeltsulky')
@@ -32,7 +36,7 @@ export default function DobbeltsulkyPage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-3">Ikke tilgjengelig</h1>
             <p className="text-gray-600 mb-8">
               Dobbeltsulky-booking er ikke tilgjengelig for øyeblikket.
-              Ta kontakt på <a href="mailto:travskolen@bjerke.no" className="text-[#003B7A] hover:underline">travskolen@bjerke.no</a> for mer informasjon.
+              Ta kontakt på <a href={`mailto:${contactEmail}`} className="text-[#003B7A] hover:underline">{contactEmail}</a> for mer informasjon.
             </p>
             <Link
               href="/arrangementer"
@@ -70,7 +74,7 @@ export default function DobbeltsulkyPage() {
       if (!res.ok) throw new Error();
       setSubmitted(true);
     } catch {
-      alert('Noe gikk galt. Prøv igjen eller send e-post til travskolen@bjerke.no');
+      alert(`Noe gikk galt. Prøv igjen eller send e-post til ${contactEmail}`);
     } finally {
       setSending(false);
     }
@@ -129,9 +133,7 @@ export default function DobbeltsulkyPage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
               <h3 className="text-xl font-bold text-gray-900 mb-3">Om dobbeltsulky</h3>
               <p className="text-gray-600 mb-4">
-                Dobbeltsulky er en sulky med plass til to personer. Du sitter sammen med instruktøren
-                og får oppleve farten og spenningen ved travsport helt tett på. Passer for alle aldre
-                og krever ingen forkunnskaper.
+                {description}
               </p>
               <ul className="space-y-2 text-gray-600 text-sm">
                 <li className="flex items-start">

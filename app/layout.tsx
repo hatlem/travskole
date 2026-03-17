@@ -5,6 +5,8 @@ import "./globals.css";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Providers from "@/components/Providers";
+import { SettingsProvider } from "@/components/SettingsProvider";
+import { getSettings } from "@/lib/settings";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,33 +18,38 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
-  title: {
-    default: 'Bjerke Travskole',
-    template: '%s | Bjerke Travskole',
-  },
-  description: 'Kurs og leirer for barn og unge i travsport. Bjerke Travskole tilbyr travkurs, sommerleirer og dobbeltsulky-kjøring i Oslo.',
-  openGraph: {
-    type: 'website',
-    locale: 'nb_NO',
-    siteName: 'Bjerke Travskole',
-    title: 'Bjerke Travskole',
-    description: 'Kurs og leirer for barn og unge i travsport',
-  },
-  robots: {
-    index: true,
-    follow: true,
-  },
-  icons: {
-    icon: '/favicon.svg',
-  },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const s = await getSettings();
+  return {
+    title: {
+      default: s.site_name,
+      template: `%s | ${s.site_name}`,
+    },
+    description: s.site_description,
+    openGraph: {
+      type: 'website',
+      locale: 'nb_NO',
+      siteName: s.site_name,
+      title: s.site_name,
+      description: s.site_short_description,
+    },
+    robots: {
+      index: true,
+      follow: true,
+    },
+    icons: {
+      icon: '/favicon.svg',
+    },
+  };
+}
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const settings = await getSettings();
+
   return (
     <html lang="nb">
       <head>
@@ -61,18 +68,20 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
       >
         {/* Google Tag Manager (noscript) */}
         <noscript>
-          <iframe 
+          <iframe
             src="https://www.googletagmanager.com/ns.html?id=GTM-P4Q6HWFR"
-            height="0" 
-            width="0" 
+            height="0"
+            width="0"
             style={{display:'none',visibility:'hidden'}}
           />
         </noscript>
         {/* End Google Tag Manager (noscript) */}
         <Providers>
-          <Header />
-          {children}
-          <Footer />
+          <SettingsProvider settings={settings}>
+            <Header />
+            {children}
+            <Footer />
+          </SettingsProvider>
         </Providers>
       </body>
     </html>

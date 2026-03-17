@@ -3,6 +3,7 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { getSettings } from '@/lib/settings';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
@@ -13,12 +14,15 @@ export async function generateMetadata({
   params: Promise<{ type: string; year: string; slug: string }>;
 }): Promise<Metadata> {
   const { type, year, slug } = await params;
-  const course = await getCourseBySlug(type, year, slug);
-  if (!course) return { title: 'Ikke funnet - Bjerke Travskole' };
+  const [course, settings] = await Promise.all([
+    getCourseBySlug(type, year, slug),
+    getSettings(),
+  ]);
+  if (!course) return { title: `Ikke funnet - ${settings.site_name}` };
   const typeLabel = course.type === 'kurs' ? 'Kurs' : 'Leir';
   return {
-    title: `${course.name} - Bjerke Travskole`,
-    description: course.description || `${typeLabel} hos Bjerke Travskole for barn og unge.`,
+    title: `${course.name} - ${settings.site_name}`,
+    description: course.description || `${typeLabel} hos ${settings.site_name} for barn og unge.`,
   };
 }
 
@@ -28,7 +32,6 @@ async function getCourseBySlug(type: string, year: string, slug: string) {
   const yearNum = parseInt(year, 10);
   if (isNaN(yearNum)) return undefined;
 
-  // Try exact slug match first
   let course = await prisma.course.findFirst({
     where: {
       type,
@@ -40,7 +43,6 @@ async function getCourseBySlug(type: string, year: string, slug: string) {
     },
   });
 
-  // Fallback: match by generated slug from name
   if (!course) {
     const courses = await prisma.course.findMany({
       where: {

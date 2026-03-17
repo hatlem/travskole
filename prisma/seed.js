@@ -14,10 +14,10 @@ async function main() {
     create: {
       email: 'admin@bjerke.no',
       passwordHash,
-      role: 'admin',
+      role: 'superadmin',
     },
   });
-  console.log('Admin user:', adminUser.email);
+  console.log('Superadmin user:', adminUser.email);
 
   // Create parent user
   const parentUser = await prisma.user.upsert({
@@ -93,7 +93,7 @@ async function main() {
     {
       name: 'Sommerleir 2026 - Uke 28',
       slug: 'sommerleir-2026-uke-28',
-      description: 'Hele uken på travskolen! Mye moro med hester, nye venner og aktiviteter. Inkluderer lunsj.',
+      description: 'Hele uken på ponniskolen! Mye moro med hester, nye venner og aktiviteter. Inkluderer lunsj.',
       type: 'leir',
       startDate: new Date('2026-07-06'),
       endDate: new Date('2026-07-10'),
