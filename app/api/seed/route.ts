@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
+import crypto from 'crypto';
 
 export async function POST(request: NextRequest) {
-  if (process.env.NODE_ENV === 'production' && !process.env.SEED_SECRET) {
-    return NextResponse.json({ error: 'Seed disabled in production' }, { status: 403 });
+  if (!process.env.SEED_SECRET) {
+    return NextResponse.json({ error: 'Seed not configured' }, { status: 403 });
   }
 
   const { secret } = await request.json();
 
-  if (secret !== (process.env.SEED_SECRET || 'travskole-seed-2026')) {
+  if (secret !== process.env.SEED_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -25,11 +26,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ message: 'Already seeded', counts });
     }
 
-    const passwordHash = await hashPassword('admin123');
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(16).toString('hex');
+    const passwordHash = await hashPassword(adminPassword);
 
     // Create admin user
     const adminUser = await prisma.user.create({
-      data: { email: 'admin@bjerke.no', passwordHash, role: 'admin' },
+      data: { email: 'admin@bjerke.no', passwordHash, role: 'superadmin' },
     });
 
     // Create parent user with profile
@@ -123,9 +125,14 @@ export async function POST(request: NextRequest) {
       registrations: await prisma.registration.count(),
     };
 
-    return NextResponse.json({ message: 'Seeded successfully', counts });
+    return NextResponse.json({
+      message: 'Seeded successfully',
+      counts,
+      adminEmail: 'admin@bjerke.no',
+      adminPassword: process.env.SEED_ADMIN_PASSWORD ? '(from env)' : adminPassword,
+    });
   } catch (error) {
     console.error('Seed error:', error);
-    return NextResponse.json({ error: 'Seed failed', details: String(error) }, { status: 500 });
+    return NextResponse.json({ error: 'Seed failed' }, { status: 500 });
   }
 }
