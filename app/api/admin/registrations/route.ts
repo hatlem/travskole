@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 
 async function requireAdmin() {
   const session = await getServerSession();
@@ -8,6 +9,13 @@ async function requireAdmin() {
     return null;
   }
   return session;
+}
+
+interface ChildInput {
+  firstName: string;
+  lastName?: string;
+  birthdate?: string;
+  allergies?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -18,10 +26,23 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { courseId, childFirstName, childLastName, childBirthdate, childAllergies, parentFirstName, parentLastName, parentEmail, parentPhone } = body;
 
-    if (!courseId || !childFirstName || !childLastName || !parentFirstName || !parentLastName || !parentEmail || !parentPhone) {
-      return NextResponse.json({ error: 'Manglende påkrevde felter' }, { status: 400 });
+    // Support both old format (single child) and new format (children array)
+    const children: ChildInput[] = body.children ?? [{
+      firstName: body.childFirstName,
+      lastName: body.childLastName,
+      birthdate: body.childBirthdate,
+      allergies: body.childAllergies,
+    }];
+
+    const { courseId, parentFirstName, parentLastName, parentEmail, parentPhone } = body;
+
+    if (!courseId || !parentFirstName || !parentEmail) {
+      return NextResponse.json({ error: 'Kurs, fornavn og e-post er påkrevd' }, { status: 400 });
+    }
+
+    if (children.length === 0 || !children[0].firstName) {
+      return NextResponse.json({ error: 'Minst ett barn med fornavn er påkrevd' }, { status: 400 });
     }
 
     const course = await prisma.course.findUnique({ where: { id: Number(courseId) } });
@@ -29,8 +50,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Kurset finnes ikke' }, { status: 404 });
     }
 
-    const parentName = `${parentFirstName} ${parentLastName}`;
-    const childName = `${childFirstName} ${childLastName}`;
+    const parentName = [parentFirstName, parentLastName].filter(Boolean).join(' ');
 
     // Find or create user + parent
     let user = await prisma.user.findUnique({ where: { email: parentEmail } });
@@ -43,46 +63,57 @@ export async function POST(request: NextRequest) {
     let parent = await prisma.parent.findUnique({ where: { userId: user.id } });
     if (!parent) {
       parent = await prisma.parent.create({
-        data: { userId: user.id, name: parentName, phone: parentPhone },
+        data: { userId: user.id, name: parentName, phone: parentPhone || '' },
       });
     }
 
-    // Create child
-    const child = await prisma.child.create({
-      data: {
-        parentId: parent.id,
-        name: childName,
-        birthdate: childBirthdate ? new Date(childBirthdate) : null,
-        allergies: childAllergies || null,
-      },
-    });
+    // Create registrations for each child
+    const registrations = [];
+    for (const childInput of children) {
+      if (!childInput.firstName) continue;
 
-    // Create registration as confirmed (admin-created)
-    const registration = await prisma.registration.create({
-      data: {
-        courseId: course.id,
-        childId: child.id,
-        parentId: parent.id,
-        consentActivities: true,
-        consentMedia: false,
-        consentRisk: true,
-        status: 'confirmed',
-      },
-      include: {
-        course: { select: { id: true, name: true } },
-        child: { select: { id: true, name: true } },
-        parent: {
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            user: { select: { email: true } },
+      const childName = [childInput.firstName, childInput.lastName].filter(Boolean).join(' ');
+
+      const child = await prisma.child.create({
+        data: {
+          parentId: parent.id,
+          name: childName,
+          birthdate: childInput.birthdate ? new Date(childInput.birthdate) : null,
+          allergies: childInput.allergies || null,
+        },
+      });
+
+      const registration = await prisma.registration.create({
+        data: {
+          courseId: course.id,
+          childId: child.id,
+          parentId: parent.id,
+          consentActivities: true,
+          consentMedia: false,
+          consentRisk: true,
+          status: 'confirmed',
+        },
+        include: {
+          course: { select: { id: true, name: true } },
+          child: { select: { id: true, name: true } },
+          parent: {
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              user: { select: { email: true } },
+            },
           },
         },
-      },
-    });
+      });
+      registrations.push(registration);
+    }
 
-    return NextResponse.json({ registration }, { status: 201 });
+    // Return single or multiple
+    if (registrations.length === 1) {
+      return NextResponse.json({ registration: registrations[0] }, { status: 201 });
+    }
+    return NextResponse.json({ registrations }, { status: 201 });
   } catch (error) {
     console.error('Error creating registration:', error);
     return NextResponse.json({ error: 'Kunne ikke opprette påmelding' }, { status: 500 });

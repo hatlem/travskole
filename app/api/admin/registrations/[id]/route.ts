@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 
 async function requireAdmin() {
   const session = await getServerSession();

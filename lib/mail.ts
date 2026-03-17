@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { getSetting } from '@/lib/settings';
+import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 
 function escapeHtml(str: string): string {
   return str
@@ -215,4 +216,15 @@ export async function sendBookingAdminNotification(data: BookingEmail) {
 
 export async function sendAdminEmail(to: string, subject: string, htmlBody: string) {
   await sendMail(to, subject, htmlBody);
+}
+
+export async function sendTemplatedEmail(
+  template: { subject: string; body: string },
+  data: MergeTagData,
+  recipientEmail: string,
+) {
+  const siteName = await getSiteName();
+  const subject = replaceMergeTags(template.subject, data);
+  const body = wrapEmailHtml(replaceMergeTags(template.body, data), siteName);
+  await sendMail(recipientEmail, subject, body);
 }

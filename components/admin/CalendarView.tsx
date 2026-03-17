@@ -228,7 +228,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
             {monthCourses.map((course) => {
               const startDate = new Date(course.startDate);
               const dayNum = startDate.getDate();
-              const todayItem = isToday(startDate);
+              const todayItem = isSameDay(startDate, today);
 
               return (
                 <button

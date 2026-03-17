@@ -12,6 +12,9 @@ interface Registration {
   parentName: string;
   parentPhone: string;
   parentEmail: string;
+  consentActivities: boolean;
+  consentMedia: boolean;
+  consentRisk: boolean;
 }
 
 const STATUS_LABELS: Record<string, string> = {

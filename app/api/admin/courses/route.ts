@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 
 async function requireAdmin() {
   const session = await getServerSession();
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, type, startDate, endDate, ageMin, ageMax, price, maxParticipants, status, slug, imageUrl } = body;
+    const { name, description, type, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl } = body;
 
     if (!name || !type || !startDate || !status) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
@@ -60,6 +61,7 @@ export async function POST(request: NextRequest) {
         ageMin: ageMin != null ? Number(ageMin) : null,
         ageMax: ageMax != null ? Number(ageMax) : null,
         price: price != null ? Number(price) : null,
+        minParticipants: minParticipants != null ? Number(minParticipants) : null,
         maxParticipants: maxParticipants != null ? Number(maxParticipants) : null,
         status,
         imageUrl: imageUrl || null,

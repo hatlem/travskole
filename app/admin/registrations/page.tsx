@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Link from 'next/link';
 
 interface Registration {
@@ -19,18 +19,21 @@ interface Course {
   id: number;
   name: string;
   status: string;
+  startDate?: string;
 }
 
-const emptyForm = {
-  courseId: '',
-  childFirstName: '',
-  childLastName: '',
-  childBirthdate: '',
-  childAllergies: '',
-  parentFirstName: '',
-  parentLastName: '',
-  parentEmail: '',
-  parentPhone: '',
+interface ChildForm {
+  firstName: string;
+  lastName: string;
+  birthdate: string;
+  allergies: string;
+}
+
+const emptyChild: ChildForm = {
+  firstName: '',
+  lastName: '',
+  birthdate: '',
+  allergies: '',
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -59,11 +62,27 @@ export default function AdminRegistrationsPage() {
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
   const [courses, setCourses] = useState<Course[]>([]);
-  const [form, setForm] = useState(emptyForm);
+  const [courseSearch, setCourseSearch] = useState('');
+  const [courseDropdownOpen, setCourseDropdownOpen] = useState(false);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [parentForm, setParentForm] = useState({ firstName: '', lastName: '', email: '', phone: '' });
+  const [children, setChildren] = useState<ChildForm[]>([{ ...emptyChild }]);
   const [submitting, setSubmitting] = useState(false);
+  const courseDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     fetchRegistrations();
+  }, []);
+
+  // Close course dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (courseDropdownRef.current && !courseDropdownRef.current.contains(e.target as Node)) {
+        setCourseDropdownOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
   async function fetchRegistrations() {
@@ -91,9 +110,24 @@ export default function AdminRegistrationsPage() {
   }
 
   function openAddForm() {
-    setForm(emptyForm);
+    setParentForm({ firstName: '', lastName: '', email: '', phone: '' });
+    setChildren([{ ...emptyChild }]);
+    setSelectedCourseId('');
+    setCourseSearch('');
     fetchCourses();
     setShowAddForm(true);
+  }
+
+  function addChild() {
+    setChildren((prev) => [...prev, { ...emptyChild }]);
+  }
+
+  function removeChild(index: number) {
+    setChildren((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function updateChild(index: number, field: keyof ChildForm, value: string) {
+    setChildren((prev) => prev.map((c, i) => (i === index ? { ...c, [field]: value } : c)));
   }
 
   async function handleAdd(e: React.FormEvent) {
@@ -103,16 +137,24 @@ export default function AdminRegistrationsPage() {
       const res = await fetch('/api/admin/registrations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({
+          courseId: selectedCourseId,
+          parentFirstName: parentForm.firstName,
+          parentLastName: parentForm.lastName,
+          parentEmail: parentForm.email,
+          parentPhone: parentForm.phone,
+          children: children.filter((c) => c.firstName.trim()),
+        }),
       });
       if (!res.ok) {
         const data = await res.json();
         throw new Error(data.error || 'Kunne ikke opprette påmelding');
       }
       const data = await res.json();
-      setRegistrations((prev) => [data.registration, ...prev]);
+      // API returns either { registration } or { registrations }
+      const newRegs = data.registrations ?? [data.registration];
+      setRegistrations((prev) => [...newRegs, ...prev]);
       setShowAddForm(false);
-      setForm(emptyForm);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
     } finally {
@@ -181,6 +223,19 @@ export default function AdminRegistrationsPage() {
     }
   }
 
+  // Course dropdown: sorted by startDate descending (newest first), filtered by search
+  const filteredCourses = useMemo(() => {
+    const sorted = [...courses].sort((a, b) => {
+      if (a.startDate && b.startDate) return new Date(b.startDate).getTime() - new Date(a.startDate).getTime();
+      return 0;
+    });
+    if (!courseSearch.trim()) return sorted;
+    const q = courseSearch.toLowerCase();
+    return sorted.filter((c) => c.name.toLowerCase().includes(q));
+  }, [courses, courseSearch]);
+
+  const selectedCourseName = courses.find((c) => String(c.id) === selectedCourseId)?.name || '';
+
   // Derived data
   const uniqueCourses = useMemo(() => {
     const map = new Map<number, string>();
@@ -206,14 +261,6 @@ export default function AdminRegistrationsPage() {
       return true;
     });
   }, [registrations, statusFilter, courseFilter, searchQuery]);
-
-  const stats = useMemo(() => {
-    const s = { total: registrations.length, pending: 0, confirmed: 0, waitlist: 0, cancelled: 0 };
-    for (const r of registrations) {
-      if (r.status in s) (s as Record<string, number>)[r.status]++;
-    }
-    return s;
-  }, [registrations]);
 
   const filteredIds = useMemo(() => new Set(filteredRegistrations.map((r) => r.id)), [filteredRegistrations]);
   const allVisibleSelected = filteredRegistrations.length > 0 && filteredRegistrations.every((r) => selectedIds.has(r.id));
@@ -294,129 +341,214 @@ export default function AdminRegistrationsPage() {
       {showAddForm && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6 overflow-hidden">
           <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Legg til ny deltaker</h2>
+            <h2 className="text-lg font-semibold text-gray-900">Legg til ny påmelding</h2>
           </div>
           <form onSubmit={handleAdd} className="p-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* Course */}
-              <div className="md:col-span-3">
+            <div className="space-y-6">
+              {/* Course picker with search */}
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Kurs *</label>
-                <select
-                  required
-                  value={form.courseId}
-                  onChange={(e) => setForm({ ...form, courseId: e.target.value })}
-                  className={inputClass}
-                >
-                  <option value="">Velg kurs...</option>
-                  {courses.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative" ref={courseDropdownRef}>
+                  <input
+                    type="text"
+                    placeholder="Søk etter kurs..."
+                    value={courseDropdownOpen ? courseSearch : selectedCourseName}
+                    onChange={(e) => {
+                      setCourseSearch(e.target.value);
+                      if (!courseDropdownOpen) setCourseDropdownOpen(true);
+                    }}
+                    onFocus={() => {
+                      setCourseDropdownOpen(true);
+                      setCourseSearch('');
+                    }}
+                    className={inputClass}
+                  />
+                  {selectedCourseId && !courseDropdownOpen && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedCourseId('');
+                        setCourseSearch('');
+                        setCourseDropdownOpen(true);
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                  {courseDropdownOpen && (
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                      {filteredCourses.length === 0 ? (
+                        <div className="px-4 py-3 text-sm text-gray-400">Ingen kurs funnet</div>
+                      ) : (
+                        filteredCourses.map((c) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCourseId(String(c.id));
+                              setCourseDropdownOpen(false);
+                              setCourseSearch('');
+                            }}
+                            className={`w-full text-left px-4 py-2.5 text-sm hover:bg-blue-50 flex items-center justify-between ${
+                              String(c.id) === selectedCourseId ? 'bg-blue-50 font-medium' : ''
+                            }`}
+                          >
+                            <span>{c.name}</span>
+                            <span className="text-xs text-gray-400 ml-2">
+                              {c.startDate ? new Date(c.startDate).toLocaleDateString('nb-NO') : ''}
+                              {c.status !== 'open' && (
+                                <span className={`ml-2 ${c.status === 'full' ? 'text-red-500' : 'text-gray-500'}`}>
+                                  ({c.status === 'full' ? 'Fullt' : c.status === 'closed' ? 'Stengt' : c.status})
+                                </span>
+                              )}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+                {/* Hidden required input for form validation */}
+                <input type="hidden" required value={selectedCourseId} />
               </div>
 
               {/* Parent section */}
-              <div className="md:col-span-3">
+              <div>
                 <h3 className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2">Foresatt</h3>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Fornavn *</label>
-                <input
-                  required
-                  type="text"
-                  value={form.parentFirstName}
-                  onChange={(e) => setForm({ ...form, parentFirstName: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Etternavn *</label>
-                <input
-                  required
-                  type="text"
-                  value={form.parentLastName}
-                  onChange={(e) => setForm({ ...form, parentLastName: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">E-post *</label>
-                <input
-                  required
-                  type="email"
-                  value={form.parentEmail}
-                  onChange={(e) => setForm({ ...form, parentEmail: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Telefon *</label>
-                <input
-                  required
-                  type="tel"
-                  value={form.parentPhone}
-                  onChange={(e) => setForm({ ...form, parentPhone: e.target.value })}
-                  className={inputClass}
-                />
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Fornavn *</label>
+                    <input
+                      required
+                      type="text"
+                      value={parentForm.firstName}
+                      onChange={(e) => setParentForm({ ...parentForm, firstName: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Etternavn</label>
+                    <input
+                      type="text"
+                      value={parentForm.lastName}
+                      onChange={(e) => setParentForm({ ...parentForm, lastName: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">E-post *</label>
+                    <input
+                      required
+                      type="email"
+                      value={parentForm.email}
+                      onChange={(e) => setParentForm({ ...parentForm, email: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Telefon</label>
+                    <input
+                      type="tel"
+                      value={parentForm.phone}
+                      onChange={(e) => setParentForm({ ...parentForm, phone: e.target.value })}
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
               </div>
 
-              {/* Child section */}
-              <div className="md:col-span-3">
-                <h3 className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2">Barn</h3>
-              </div>
+              {/* Children section */}
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Fornavn *</label>
-                <input
-                  required
-                  type="text"
-                  value={form.childFirstName}
-                  onChange={(e) => setForm({ ...form, childFirstName: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Etternavn *</label>
-                <input
-                  required
-                  type="text"
-                  value={form.childLastName}
-                  onChange={(e) => setForm({ ...form, childLastName: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Fødselsdato</label>
-                <input
-                  type="date"
-                  value={form.childBirthdate}
-                  onChange={(e) => setForm({ ...form, childBirthdate: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Allergier</label>
-                <input
-                  type="text"
-                  value={form.childAllergies}
-                  onChange={(e) => setForm({ ...form, childAllergies: e.target.value })}
-                  className={inputClass}
-                  placeholder="Valgfritt"
-                />
+                <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
+                  <h3 className="text-sm font-semibold text-gray-900">
+                    Barn ({children.length})
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={addChild}
+                    className="text-sm text-[#003B7A] hover:text-[#002855] font-medium"
+                  >
+                    + Legg til barn
+                  </button>
+                </div>
+                <div className="space-y-4">
+                  {children.map((child, idx) => (
+                    <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">
+                          Fornavn {idx === 0 ? '*' : ''}
+                        </label>
+                        <input
+                          required={idx === 0}
+                          type="text"
+                          value={child.firstName}
+                          onChange={(e) => updateChild(idx, 'firstName', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Etternavn</label>
+                        <input
+                          type="text"
+                          value={child.lastName}
+                          onChange={(e) => updateChild(idx, 'lastName', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Fødselsdato</label>
+                        <input
+                          type="date"
+                          value={child.birthdate}
+                          onChange={(e) => updateChild(idx, 'birthdate', e.target.value)}
+                          className={inputClass}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-600 mb-1">Allergier</label>
+                        <input
+                          type="text"
+                          value={child.allergies}
+                          onChange={(e) => updateChild(idx, 'allergies', e.target.value)}
+                          className={inputClass}
+                          placeholder="Valgfritt"
+                        />
+                      </div>
+                      <div>
+                        {children.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeChild(idx)}
+                            className="text-red-500 hover:text-red-700 text-xs font-medium py-2"
+                          >
+                            Fjern
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-100">
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !selectedCourseId}
                 className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  submitting
+                  submitting || !selectedCourseId
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
                     : 'bg-[#003B7A] hover:bg-[#002855] text-white'
                 }`}
               >
-                {submitting ? 'Legger til...' : 'Legg til deltaker'}
+                {submitting
+                  ? 'Legger til...'
+                  : children.length > 1
+                  ? `Legg til ${children.filter((c) => c.firstName.trim()).length} deltakere`
+                  : 'Legg til deltaker'}
               </button>
               <button
                 type="button"
@@ -429,35 +561,6 @@ export default function AdminRegistrationsPage() {
           </form>
         </div>
       )}
-
-      {/* Stats bar */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 px-6 py-4 mb-6">
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <span className="font-semibold text-gray-900">
-            Totalt: {stats.total}
-          </span>
-          <span className="text-gray-300">|</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
-            Bekreftet: {stats.confirmed}
-          </span>
-          <span className="text-gray-300">|</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
-            Venter: {stats.pending}
-          </span>
-          <span className="text-gray-300">|</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-            Venteliste: {stats.waitlist}
-          </span>
-          <span className="text-gray-300">|</span>
-          <span className="inline-flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-full bg-red-500" />
-            Avlyst: {stats.cancelled}
-          </span>
-        </div>
-      </div>
 
       {/* Filters row */}
       <div className="flex flex-col sm:flex-row gap-3 mb-4">

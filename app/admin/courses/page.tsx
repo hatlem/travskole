@@ -2,7 +2,11 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { CalendarView } from '@/components/admin/CalendarView';
+
+type ViewMode = 'liste' | 'kalender';
+type SortField = 'name' | 'type' | 'startDate' | 'endDate' | 'price' | 'capacity' | 'status';
+type SortDir = 'asc' | 'desc';
 
 interface Course {
   id: number;
@@ -12,6 +16,7 @@ interface Course {
   startDate: string;
   endDate: string | null;
   price: number | null;
+  minParticipants: number | null;
   maxParticipants: number | null;
   status: string;
   imageUrl: string | null;
@@ -46,26 +51,41 @@ function formatDate(date: string | null) {
   return new Date(date).toLocaleDateString('nb-NO');
 }
 
-function CapacityBar({ count, max }: { count: number; max: number | null }) {
-  if (max == null) {
+function CapacityBar({ count, min, max }: { count: number; min: number | null; max: number | null }) {
+  if (max == null && min == null) {
     return <span className="text-gray-600">{count}</span>;
   }
 
-  const pct = max > 0 ? (count / max) * 100 : 0;
-  const color =
-    pct > 80 ? 'bg-red-500' : pct >= 60 ? 'bg-yellow-500' : 'bg-green-500';
+  const pct = max && max > 0 ? (count / max) * 100 : 0;
+  const belowMin = min != null && count < min;
+  const color = belowMin
+    ? 'bg-orange-500'
+    : pct > 80
+    ? 'bg-red-500'
+    : pct >= 60
+    ? 'bg-yellow-500'
+    : 'bg-green-500';
 
   return (
-    <div className="flex items-center gap-2 min-w-[100px]">
-      <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full transition-all ${color}`}
-          style={{ width: `${Math.min(pct, 100)}%` }}
-        />
+    <div className="min-w-[120px]">
+      <div className="flex items-center gap-2">
+        {max != null && (
+          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all ${color}`}
+              style={{ width: `${Math.min(pct, 100)}%` }}
+            />
+          </div>
+        )}
+        <span className="text-xs text-gray-600 whitespace-nowrap">
+          {count}{max != null ? ` / ${max}` : ''}
+        </span>
       </div>
-      <span className="text-xs text-gray-600 whitespace-nowrap">
-        {count} / {max}
-      </span>
+      {min != null && (
+        <span className={`text-xs ${belowMin ? 'text-orange-600 font-medium' : 'text-gray-400'}`}>
+          Min: {min}
+        </span>
+      )}
     </div>
   );
 }
@@ -90,8 +110,26 @@ function TypeBadge({ type }: { type: string }) {
   );
 }
 
+function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
+  if (field !== sortField) {
+    return (
+      <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+      </svg>
+    );
+  }
+  return sortDir === 'asc' ? (
+    <svg className="w-3 h-3 ml-1 text-[#003B7A] inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+    </svg>
+  ) : (
+    <svg className="w-3 h-3 ml-1 text-[#003B7A] inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+    </svg>
+  );
+}
+
 export default function AdminCoursesPage() {
-  const router = useRouter();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +137,9 @@ export default function AdminCoursesPage() {
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('alle');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('alle');
   const [duplicating, setDuplicating] = useState<number | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('liste');
+  const [sortField, setSortField] = useState<SortField>('startDate');
+  const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const fetchCourses = async () => {
     try {
@@ -117,14 +158,50 @@ export default function AdminCoursesPage() {
     fetchCourses();
   }, []);
 
+  function toggleSort(field: SortField) {
+    if (sortField === field) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDir(field === 'name' ? 'asc' : 'desc');
+    }
+  }
+
   const filtered = useMemo(() => {
-    return courses.filter((c) => {
+    const list = courses.filter((c) => {
       if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
       if (typeFilter !== 'alle' && c.type !== typeFilter) return false;
       if (statusFilter !== 'alle' && c.status !== statusFilter) return false;
       return true;
     });
-  }, [courses, search, typeFilter, statusFilter]);
+
+    list.sort((a, b) => {
+      const dir = sortDir === 'asc' ? 1 : -1;
+      switch (sortField) {
+        case 'name':
+          return dir * a.name.localeCompare(b.name);
+        case 'type':
+          return dir * a.type.localeCompare(b.type);
+        case 'startDate':
+          return dir * (new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+        case 'endDate': {
+          const aEnd = a.endDate ? new Date(a.endDate).getTime() : 0;
+          const bEnd = b.endDate ? new Date(b.endDate).getTime() : 0;
+          return dir * (aEnd - bEnd);
+        }
+        case 'price':
+          return dir * ((a.price ?? 0) - (b.price ?? 0));
+        case 'capacity':
+          return dir * (a._count.registrations - b._count.registrations);
+        case 'status':
+          return dir * a.status.localeCompare(b.status);
+        default:
+          return 0;
+      }
+    });
+
+    return list;
+  }, [courses, search, typeFilter, statusFilter, sortField, sortDir]);
 
   const handleDuplicate = async (course: Course) => {
     if (duplicating) return;
@@ -143,6 +220,7 @@ export default function AdminCoursesPage() {
           ageMin: course.ageMin,
           ageMax: course.ageMax,
           price: course.price,
+          minParticipants: course.minParticipants,
           maxParticipants: course.maxParticipants,
           status: 'closed',
           imageUrl: course.imageUrl,
@@ -179,6 +257,8 @@ export default function AdminCoursesPage() {
       </div>
     );
   }
+
+  const thClass = 'px-6 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors select-none';
 
   return (
     <div>
@@ -236,17 +316,46 @@ export default function AdminCoursesPage() {
           <option value="full">Fullt</option>
           <option value="closed">Stengt</option>
         </select>
+        <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+          <button
+            onClick={() => setViewMode('liste')}
+            className={`px-3 py-2.5 text-sm font-medium transition-colors ${
+              viewMode === 'liste'
+                ? 'bg-[#003B7A] text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setViewMode('kalender')}
+            className={`px-3 py-2.5 text-sm font-medium transition-colors border-l border-gray-300 ${
+              viewMode === 'kalender'
+                ? 'bg-[#003B7A] text-white'
+                : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Results count */}
-      {courses.length > 0 && (
+      {courses.length > 0 && viewMode === 'liste' && (
         <p className="text-sm text-gray-500 mb-4">
           Viser {filtered.length} av {courses.length} kurs
         </p>
       )}
 
-      {/* Empty state */}
-      {courses.length === 0 ? (
+      {/* Calendar view */}
+      {viewMode === 'kalender' && courses.length > 0 ? (
+        <CalendarView courses={filtered} />
+      ) : /* Empty state */
+      courses.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <svg
             className="mx-auto h-12 w-12 text-gray-300 mb-4"
@@ -333,14 +442,13 @@ export default function AdminCoursesPage() {
                   </div>
                 </div>
 
-                {course.maxParticipants && (
-                  <div className="mb-3">
-                    <CapacityBar
-                      count={course._count.registrations}
-                      max={course.maxParticipants}
-                    />
-                  </div>
-                )}
+                <div className="mb-3">
+                  <CapacityBar
+                    count={course._count.registrations}
+                    min={course.minParticipants}
+                    max={course.maxParticipants}
+                  />
+                </div>
 
                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                   <Link
@@ -367,13 +475,27 @@ export default function AdminCoursesPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                   <tr>
-                    <th className="px-6 py-3 text-left">Navn</th>
-                    <th className="px-6 py-3 text-left">Type</th>
-                    <th className="px-6 py-3 text-left">Startdato</th>
-                    <th className="px-6 py-3 text-left">Sluttdato</th>
-                    <th className="px-6 py-3 text-left">Pris</th>
-                    <th className="px-6 py-3 text-left">Kapasitet</th>
-                    <th className="px-6 py-3 text-left">Status</th>
+                    <th className={thClass} onClick={() => toggleSort('name')}>
+                      Navn <SortIcon field="name" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className={thClass} onClick={() => toggleSort('type')}>
+                      Type <SortIcon field="type" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className={thClass} onClick={() => toggleSort('startDate')}>
+                      Startdato <SortIcon field="startDate" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className={thClass} onClick={() => toggleSort('endDate')}>
+                      Sluttdato <SortIcon field="endDate" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className={thClass} onClick={() => toggleSort('price')}>
+                      Pris <SortIcon field="price" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className={thClass} onClick={() => toggleSort('capacity')}>
+                      Kapasitet <SortIcon field="capacity" sortField={sortField} sortDir={sortDir} />
+                    </th>
+                    <th className={thClass} onClick={() => toggleSort('status')}>
+                      Status <SortIcon field="status" sortField={sortField} sortDir={sortDir} />
+                    </th>
                     <th className="px-6 py-3 text-left">Handlinger</th>
                   </tr>
                 </thead>
@@ -398,6 +520,7 @@ export default function AdminCoursesPage() {
                       <td className="px-6 py-4">
                         <CapacityBar
                           count={course._count.registrations}
+                          min={course.minParticipants}
                           max={course.maxParticipants}
                         />
                       </td>

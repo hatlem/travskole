@@ -39,6 +39,7 @@ export default function NewCoursePage() {
   const [ageMin, setAgeMin] = useState('');
   const [ageMax, setAgeMax] = useState('');
   const [price, setPrice] = useState('');
+  const [minParticipants, setMinParticipants] = useState('');
   const [maxParticipants, setMaxParticipants] = useState('');
 
   // Validation
@@ -74,6 +75,7 @@ export default function NewCoursePage() {
       ageMin: ageMin ? Number(ageMin) : null,
       ageMax: ageMax ? Number(ageMax) : null,
       price: price ? Number(price) : null,
+      minParticipants: minParticipants ? Number(minParticipants) : null,
       maxParticipants: maxParticipants ? Number(maxParticipants) : null,
       status,
       imageUrl: imageUrl || null,
@@ -251,7 +253,7 @@ export default function NewCoursePage() {
                   onChange={(e) => setStatus(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="open">Apen</option>
+                  <option value="open">Åpen</option>
                   <option value="full">Fullt</option>
                   <option value="closed">Stengt</option>
                 </select>
@@ -355,6 +357,23 @@ export default function NewCoursePage() {
                 </div>
               </div>
 
+              {/* Min participants */}
+              <div>
+                <label htmlFor="minParticipants" className={labelClass}>
+                  Min deltakere
+                </label>
+                <input
+                  type="number"
+                  id="minParticipants"
+                  name="minParticipants"
+                  min={1}
+                  value={minParticipants}
+                  onChange={(e) => setMinParticipants(e.target.value)}
+                  className={inputClass}
+                  placeholder="Minimum for gjennomføring"
+                />
+              </div>
+
               {/* Max participants */}
               <div>
                 <label htmlFor="maxParticipants" className={labelClass}>
@@ -394,7 +413,7 @@ export default function NewCoursePage() {
         {/* Course Preview Card */}
         {name && (
           <div className="mt-8">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Forhandsvisning</h2>
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Forhåndsvisning</h2>
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden max-w-sm">
               {imageUrl ? (
                 <div className="relative w-full h-48">
@@ -411,7 +430,7 @@ export default function NewCoursePage() {
                     {type === 'leir' ? 'Leir' : 'Kurs'}
                   </span>
                   {status === 'open' && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Apen</span>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Åpen</span>
                   )}
                   {status === 'full' && (
                     <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Fullt</span>
@@ -431,10 +450,10 @@ export default function NewCoursePage() {
                   {(ageMin || ageMax) && (
                     <span className="text-xs text-gray-500">
                       {ageMin && ageMax
-                        ? `${ageMin}-${ageMax} ar`
+                        ? `${ageMin}-${ageMax} år`
                         : ageMin
-                          ? `Fra ${ageMin} ar`
-                          : `Opp til ${ageMax} ar`}
+                          ? `Fra ${ageMin} år`
+                          : `Opp til ${ageMax} år`}
                     </span>
                   )}
                   {price && (
