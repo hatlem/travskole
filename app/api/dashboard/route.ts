@@ -91,12 +91,14 @@ export async function GET() {
       profile: null,
       children: [],
       registrations: [],
+      role: user.role,
     });
   }
 
   const { parent } = user;
 
   return NextResponse.json({
+    role: user.role,
     profile: {
       name: parent.name,
       email: user.email,

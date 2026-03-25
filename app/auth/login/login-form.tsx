@@ -58,7 +58,11 @@ export default function LoginForm() {
       if (result?.error) {
         setError('Feil e-post eller passord');
       } else if (result?.ok) {
-        router.push('/dashboard');
+        // Check if user is admin and redirect accordingly
+        const sessionRes = await fetch('/api/auth/session');
+        const session = await sessionRes.json();
+        const isAdmin = session?.user?.role === 'admin' || session?.user?.role === 'superadmin';
+        router.push(isAdmin ? '/admin' : '/dashboard');
         router.refresh();
       }
     } catch {

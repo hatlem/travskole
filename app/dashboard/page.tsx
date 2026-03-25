@@ -7,6 +7,7 @@ import { Suspense, useEffect, useState } from 'react';
 export const dynamic = 'force-dynamic';
 
 interface DashboardData {
+  role?: string;
   profile: {
     name: string;
     email: string;
@@ -95,6 +96,7 @@ function DashboardContent() {
   }
 
   const noProfile = !data?.profile;
+  const isAdmin = data?.role === 'admin' || data?.role === 'superadmin';
 
   return (
     <div className="min-h-screen bg-gray-50 py-16">
@@ -121,7 +123,22 @@ function DashboardContent() {
 
         <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
 
-        {noProfile && (
+        {noProfile && isAdmin && (
+          <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6 mb-8">
+            <h2 className="text-lg font-semibold text-indigo-800 mb-2">Administrator</h2>
+            <p className="text-indigo-700">
+              Du er logget inn som administrator. Gå til admin-panelet for å administrere kurs, påmeldinger og brukere.
+            </p>
+            <Link
+              href="/admin"
+              className="inline-block mt-4 bg-[#003B7A] text-white px-5 py-2 rounded-lg hover:bg-[#002855] transition"
+            >
+              Gå til admin
+            </Link>
+          </div>
+        )}
+
+        {noProfile && !isAdmin && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
             <h2 className="text-lg font-semibold text-blue-800 mb-2">Profil ikke funnet</h2>
             <p className="text-blue-700">
