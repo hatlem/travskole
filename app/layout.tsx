@@ -9,6 +9,8 @@ import { SettingsProvider } from "@/components/SettingsProvider";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { getSettings } from "@/lib/settings";
 
+export const dynamic = 'force-dynamic';
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],

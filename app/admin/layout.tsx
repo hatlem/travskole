@@ -3,6 +3,8 @@ import { getServerSession } from '@/lib/auth';
 import { isAdmin } from '@/lib/settings';
 import { AdminShell } from './AdminShell';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'Admin',
 };
