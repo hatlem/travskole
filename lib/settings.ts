@@ -41,17 +41,25 @@ export const SETTING_DEFAULTS: Record<string, string> = {
 export type SiteSettings = Record<string, string>;
 
 export async function getSettings(): Promise<SiteSettings> {
-  const dbSettings = await prisma.setting.findMany();
-  const settings = { ...SETTING_DEFAULTS };
-  for (const s of dbSettings) {
-    settings[s.key] = s.value;
+  try {
+    const dbSettings = await prisma.setting.findMany();
+    const settings = { ...SETTING_DEFAULTS };
+    for (const s of dbSettings) {
+      settings[s.key] = s.value;
+    }
+    return settings;
+  } catch {
+    return { ...SETTING_DEFAULTS };
   }
-  return settings;
 }
 
 export async function getSetting(key: string): Promise<string> {
-  const dbSetting = await prisma.setting.findUnique({ where: { key } });
-  return dbSetting?.value ?? SETTING_DEFAULTS[key] ?? '';
+  try {
+    const dbSetting = await prisma.setting.findUnique({ where: { key } });
+    return dbSetting?.value ?? SETTING_DEFAULTS[key] ?? '';
+  } catch {
+    return SETTING_DEFAULTS[key] ?? '';
+  }
 }
 
 export function isAdmin(role: string | undefined): boolean {
