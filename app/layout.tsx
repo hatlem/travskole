@@ -6,6 +6,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Providers from "@/components/Providers";
 import { SettingsProvider } from "@/components/SettingsProvider";
+import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { getSettings } from "@/lib/settings";
 
 const geistSans = Geist({
@@ -81,6 +82,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             <Header />
             {children}
             <Footer />
+            <FeedbackWidget />
           </SettingsProvider>
         </Providers>
       </body>
