@@ -15,9 +15,9 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "isomorphic-dompurify": "^3.0.0",
-    "next": "16.2.4",
+    "next": "16.2.7",
     "next-auth": "^4.24.13",
-    "nodemailer": "^7.0.13",
+    "nodemailer": "^8.0.5",
     "rate-limiter-flexible": "^9.1.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -38,6 +38,16 @@
     "eslint-config-next": "^16.2.4",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "nodemailer": "^8.0.5",
+    "uuid": "^11.1.1",
+    "postcss": "^8.5.10",
+    "dompurify": "^3.4.0",
+    "undici": "^7.24.0",
+    "picomatch": "^4.0.4",
+    "flatted": "^3.4.2",
+    "cookie": "^0.7.0"
   },
   "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
   "main": "index.js",
