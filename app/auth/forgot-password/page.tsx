@@ -2,8 +2,10 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useStrings } from '@/components/SettingsProvider';
 
 export default function ForgotPasswordPage() {
+  const t = useStrings();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
@@ -62,7 +64,7 @@ export default function ForgotPasswordPage() {
               </p>
               <Link
                 href="/auth/login"
-                className="mt-6 inline-block text-sm text-[#003B7A] hover:underline"
+                className="mt-6 inline-block text-sm text-bjerke-blue hover:underline"
               >
                 Tilbake til innlogging
               </Link>
@@ -85,7 +87,7 @@ export default function ForgotPasswordPage() {
                   autoComplete="email"
                   className="
                     w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm
-                    focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                    focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   "
                   placeholder="din@epost.no"
                 />
@@ -95,20 +97,20 @@ export default function ForgotPasswordPage() {
                 type="submit"
                 disabled={isLoading}
                 className="
-                  w-full bg-[#003B7A] hover:bg-[#002855]
+                  w-full bg-bjerke-blue hover:bg-bjerke-blue-dark
                   text-white font-semibold py-3 px-4 rounded-lg
                   transition duration-200
                   disabled:opacity-50 disabled:cursor-not-allowed
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-offset-2
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-offset-2
                 "
               >
-                {isLoading ? 'Sender...' : 'Send tilbakestillingslenke'}
+                {isLoading ? t('auth.sending') : t('auth.send_reset_link')}
               </button>
 
               <div className="text-center">
                 <Link
                   href="/auth/login"
-                  className="text-sm text-[#003B7A] hover:underline"
+                  className="text-sm text-bjerke-blue hover:underline"
                 >
                   Tilbake til innlogging
                 </Link>

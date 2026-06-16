@@ -1,6 +1,10 @@
 import nodemailer from 'nodemailer';
-import { getSetting } from '@/lib/settings';
+import { getSetting, getSettings } from '@/lib/settings';
+import { makeT } from '@/lib/strings';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import logger from '@/lib/logger';
+import { getBaseUrl } from '@/lib/site';
+import { BRAND } from '@/lib/brand';
 
 function escapeHtml(str: string): string {
   return str
@@ -37,13 +41,22 @@ function getTransporter() {
 async function sendMail(to: string, subject: string, html: string) {
   const transporter = getTransporter();
   if (!transporter) {
-    console.log(`[mail] SMTP not configured — skipping email to ${to}: ${subject}`);
+    logger.warn('SMTP not configured — skipping email', { to, subject });
     return;
   }
   const adminEmail = await getAdminEmail();
   const siteName = await getSiteName();
+  // SMTP_FROM can be a bare address or already include a display name.
+  const fromAddress = process.env.SMTP_FROM;
+  const from = !fromAddress
+    ? `${siteName} <${adminEmail}>`
+    : fromAddress.includes('<')
+      ? fromAddress
+      : `${siteName} <${fromAddress}>`;
   await transporter.sendMail({
-    from: process.env.SMTP_FROM || `${siteName} <${adminEmail}>`,
+    from,
+    // Replies should reach the school, regardless of sender address
+    replyTo: adminEmail,
     to,
     subject,
     html,
@@ -52,8 +65,9 @@ async function sendMail(to: string, subject: string, html: string) {
 
 interface RegistrationEmail {
   courseName: string;
-  childName: string;
-  childBirthdate: string;
+  /** Utelatt for voksen-arrangementer — deltakeren er forelderen selv */
+  childName?: string;
+  childBirthdate?: string;
   parentName: string;
   parentEmail: string;
   parentPhone: string;
@@ -62,38 +76,40 @@ interface RegistrationEmail {
 }
 
 export async function sendRegistrationConfirmation(data: RegistrationEmail) {
-  const [adminEmail, siteName] = await Promise.all([getAdminEmail(), getSiteName()]);
-  const birthdate = new Date(data.childBirthdate).toLocaleDateString('nb-NO');
-  const subject = data.isWaitlist
-    ? `Venteliste — ${data.courseName}`
-    : `Påmelding mottatt — ${data.courseName}`;
-  const intro = data.isWaitlist
-    ? `<p>Du er nå satt på ventelisten for <strong>${escapeHtml(data.courseName)}</strong>. Kurset er for øyeblikket fullt, men vi kontakter deg dersom det blir ledig plass.</p>`
-    : `<p>Takk for påmeldingen til <strong>${escapeHtml(data.courseName)}</strong>.</p>`;
-  const followUp = data.isWaitlist
-    ? `<p>Vi vil kontakte deg dersom det blir en ledig plass.</p>`
-    : `<p>Vi vil sende deg en bekreftelse så snart vi har behandlet påmeldingen.</p>`;
+  const settings = await getSettings();
+  const t = makeT(settings);
+  const adminEmail = settings.contact_email;
+  const siteName = settings.site_name;
+  const birthdate = data.childBirthdate
+    ? new Date(data.childBirthdate).toLocaleDateString('nb-NO')
+    : '';
+  const kurs = escapeHtml(data.courseName);
+  const subject = t(data.isWaitlist ? 'email.confirm_subject_waitlist' : 'email.confirm_subject', { kurs: data.courseName });
+  const intro = `<p>${escapeHtml(t(data.isWaitlist ? 'email.confirm_intro_waitlist' : 'email.confirm_intro', { kurs: '\u0000' })).replace('\u0000', `<strong>${kurs}</strong>`)}</p>`;
+  const followUp = `<p>${escapeHtml(t(data.isWaitlist ? 'email.confirm_followup_waitlist' : 'email.confirm_followup'))}</p>`;
   await sendMail(
     data.parentEmail,
     subject,
     `<div style="font-family:sans-serif;max-width:600px">
-      <h2>Hei ${escapeHtml(data.parentName)}!</h2>
+      <h2>${escapeHtml(t('email.confirm_greeting', { navn: data.parentName }))}</h2>
       ${intro}
       <table style="border-collapse:collapse;margin:16px 0">
-        <tr><td style="padding:4px 12px 4px 0;color:#666">Barn:</td><td>${escapeHtml(data.childName)}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#666">Fødselsdato:</td><td>${escapeHtml(birthdate)}</td></tr>
+        ${data.childName ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Barn:</td><td>${escapeHtml(data.childName)}</td></tr>` : `<tr><td style="padding:4px 12px 4px 0;color:#666">Deltaker:</td><td>${escapeHtml(data.parentName)}</td></tr>`}
+        ${birthdate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Fødselsdato:</td><td>${escapeHtml(birthdate)}</td></tr>` : ''}
         ${data.allergies ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Allergier:</td><td>${escapeHtml(data.allergies)}</td></tr>` : ''}
       </table>
       ${followUp}
-      <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
-      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+      <p>${escapeHtml(t('email.questions'))} <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
+      <p style="color:#666;margin-top:24px">${escapeHtml(t('email.signoff'))}<br>${escapeHtml(siteName)}</p>
     </div>`,
   );
 }
 
 export async function sendRegistrationAdminNotification(data: RegistrationEmail) {
   const adminEmail = await getAdminEmail();
-  const birthdate = new Date(data.childBirthdate).toLocaleDateString('nb-NO');
+  const birthdate = data.childBirthdate
+    ? new Date(data.childBirthdate).toLocaleDateString('nb-NO')
+    : '';
   const subject = data.isWaitlist
     ? `Ny venteliste-påmelding — ${data.courseName}`
     : `Ny påmelding — ${data.courseName}`;
@@ -110,7 +126,7 @@ export async function sendRegistrationAdminNotification(data: RegistrationEmail)
       <h2>${heading}</h2>
       <table style="border-collapse:collapse;margin:16px 0">
         <tr><td style="padding:4px 12px 4px 0;color:#666">Kurs:</td><td><strong>${escapeHtml(data.courseName)}</strong></td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#666">Barn:</td><td>${escapeHtml(data.childName)} (født ${escapeHtml(birthdate)})</td></tr>
+        ${data.childName ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Barn:</td><td>${escapeHtml(data.childName)}${birthdate ? ` (født ${escapeHtml(birthdate)})` : ''}</td></tr>` : `<tr><td style="padding:4px 12px 4px 0;color:#666">Deltaker:</td><td>${escapeHtml(data.parentName)} (voksen)</td></tr>`}
         <tr><td style="padding:4px 12px 4px 0;color:#666">Forelder:</td><td>${escapeHtml(data.parentName)}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">E-post:</td><td><a href="mailto:${escapeHtml(data.parentEmail)}">${escapeHtml(data.parentEmail)}</a></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">Telefon:</td><td><a href="tel:${escapeHtml(data.parentPhone)}">${escapeHtml(data.parentPhone)}</a></td></tr>
@@ -129,17 +145,20 @@ interface WaitlistPromotionEmail {
 }
 
 export async function sendWaitlistPromotionEmail(data: WaitlistPromotionEmail) {
-  const [adminEmail, siteName] = await Promise.all([getAdminEmail(), getSiteName()]);
+  const settings = await getSettings();
+  const t = makeT(settings);
+  const adminEmail = settings.contact_email;
+  const siteName = settings.site_name;
   await sendMail(
     data.parentEmail,
-    `Plass ledig — ${data.courseName}`,
+    t('email.waitlist_promo_subject', { kurs: data.courseName }),
     `<div style="font-family:sans-serif;max-width:600px">
-      <h2>Hei ${escapeHtml(data.parentName)}!</h2>
-      <p>Gode nyheter! Det har blitt ledig plass på <strong>${escapeHtml(data.courseName)}</strong>.</p>
-      <p>${escapeHtml(data.childName)} er nå flyttet fra ventelisten til påmeldingslisten.</p>
-      <p>Vi vil sende deg en bekreftelse så snart påmeldingen er godkjent.</p>
-      <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
-      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+      <h2>${escapeHtml(t('email.confirm_greeting', { navn: data.parentName }))}</h2>
+      <p>${escapeHtml(t('email.waitlist_promo_intro', { kurs: data.courseName }))}</p>
+      <p>${escapeHtml(t('email.waitlist_promo_moved', { deltaker: data.childName }))}</p>
+      <p>${escapeHtml(t('email.confirm_followup'))}</p>
+      <p>${escapeHtml(t('email.questions'))} <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
+      <p style="color:#666;margin-top:24px">${escapeHtml(t('email.signoff'))}<br>${escapeHtml(siteName)}</p>
     </div>`,
   );
 }
@@ -154,13 +173,16 @@ interface BookingEmail {
 }
 
 export async function sendBookingConfirmation(data: BookingEmail) {
-  const [adminEmail, siteName] = await Promise.all([getAdminEmail(), getSiteName()]);
+  const settings = await getSettings();
+  const t = makeT(settings);
+  const adminEmail = settings.contact_email;
+  const siteName = settings.site_name;
   await sendMail(
     data.email,
-    `Dobbeltsulky-forespørsel mottatt — ${siteName}`,
+    t('email.booking_subject', { side: siteName }),
     `<div style="font-family:sans-serif;max-width:600px">
-      <h2>Hei ${escapeHtml(data.name)}!</h2>
-      <p>Takk for din forespørsel om dobbeltsulky-kjøring. Vi tar kontakt for å avtale tid.</p>
+      <h2>${escapeHtml(t('email.confirm_greeting', { navn: data.name }))}</h2>
+      <p>${escapeHtml(t('email.booking_intro'))}</p>
       <table style="border-collapse:collapse;margin:16px 0">
         <tr><td style="padding:4px 12px 4px 0;color:#666">Deltakere:</td><td>${data.participants}</td></tr>
         ${data.preferredDate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Ønsket dato:</td><td>${escapeHtml(new Date(data.preferredDate).toLocaleDateString('nb-NO'))}</td></tr>` : ''}
@@ -174,7 +196,7 @@ export async function sendBookingConfirmation(data: BookingEmail) {
 
 export async function sendPasswordResetEmail(email: string, token: string) {
   const siteName = await getSiteName();
-  const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3001';
+  const baseUrl = getBaseUrl();
   const resetUrl = `${baseUrl}/auth/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
   await sendMail(
     email,
@@ -184,7 +206,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
       <p>Vi mottok en forespørsel om å tilbakestille passordet ditt.</p>
       <p>Klikk på knappen under for å velge et nytt passord:</p>
       <p style="margin:24px 0">
-        <a href="${resetUrl}" style="background:#003B7A;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
+        <a href="${resetUrl}" style="background:${BRAND.blue};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
           Tilbakestill passord
         </a>
       </p>

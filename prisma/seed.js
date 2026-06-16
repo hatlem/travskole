@@ -3,6 +3,17 @@ const bcrypt = require('bcryptjs');
 const prisma = new PrismaClient();
 
 async function main() {
+  // SECURITY: dev-seed med hardkodet passord skal ALDRI kjøre mot produksjon —
+  // upserten ville overskrevet superadmin-passordet. Prod seedes via /api/seed
+  // (gated bak SEED_SECRET, tilfeldig passord).
+  const dbUrl = process.env.DATABASE_URL || '';
+  const isLocalDb = /localhost|127\.0\.0\.1|file:/.test(dbUrl);
+  if (process.env.NODE_ENV === 'production' || !isLocalDb) {
+    console.error('Avbrutt: prisma/seed.js kjører kun mot lokal database (localhost/SQLite).');
+    console.error('Bruk POST /api/seed med SEED_SECRET for produksjon.');
+    process.exit(1);
+  }
+
   console.log('Seeding database...');
 
   const passwordHash = await bcrypt.hash('admin123', 12);

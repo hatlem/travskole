@@ -1,19 +1,21 @@
 'use client';
 
 import Link from 'next/link';
-import { useSettings } from '@/components/SettingsProvider';
+import { useSettings, useStrings } from '@/components/SettingsProvider';
+import { LEGAL_PAGES } from '@/lib/legal-defaults';
 
 export default function Footer() {
   const settings = useSettings();
-  const siteName = settings.site_name || 'Bjerke Ponniskole';
-  const contactEmail = settings.contact_email || 'ponniskolen@bjerke.no';
-  const contactAddress = settings.contact_address || 'Refstadveien 27, 0589 Oslo';
+  const t = useStrings();
+  const siteName = settings.site_name || 'Bjerke';
+  const contactEmail = settings.contact_email || '';
+  const contactAddress = settings.contact_address || '';
   const footerText = settings.footer_text || '';
-  const instructorName = settings.instructor_name || 'Hege Arverud';
-  const instructorCert = settings.instructor_certification || 'DNT-sertifisert';
+  const instructorName = settings.instructor_name || '';
+  const instructorCert = settings.instructor_certification || '';
 
   return (
-    <footer className="bg-[#003B7A] text-white py-12">
+    <footer className="bg-bjerke-blue text-white py-12">
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid md:grid-cols-3 gap-8">
           <div>
@@ -23,22 +25,25 @@ export default function Footer() {
                 {footerText}
               </p>
             )}
-            <p className="text-sm text-white/70">
-              Instruktør: <strong className="text-white/90">{instructorName}</strong> ({instructorCert})
-            </p>
+            {instructorName && (
+              <p className="text-sm text-white/70">
+                {t('footer.instructor_label')} <strong className="text-white/90">{instructorName}</strong>
+                {instructorCert ? ` (${instructorCert})` : ''}
+              </p>
+            )}
           </div>
 
           <div>
-            <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Lenker</h3>
+            <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">{t('footer.links_heading')}</h3>
             <ul className="space-y-2 text-sm">
               <li>
                 <Link href="/" className="text-white/70 hover:text-white transition">
-                  Hjem
+                  {t('footer.home')}
                 </Link>
               </li>
               <li>
                 <Link href="/arrangementer" className="text-white/70 hover:text-white transition">
-                  Kurs & Leirer
+                  {settings.nav_courses_label || 'Kurs & Leirer'}
                 </Link>
               </li>
               <li>
@@ -48,36 +53,43 @@ export default function Footer() {
               </li>
               <li>
                 <a href="https://bjerke.no" target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-white transition">
-                  Bjerke Travbane
+                  {t('footer.parent_site')}
                 </a>
               </li>
+              {LEGAL_PAGES.map((page) => (
+                <li key={page.slug}>
+                  <Link href={`/${page.slug}`} className="text-white/70 hover:text-white transition">
+                    {page.navLabel}
+                  </Link>
+                </li>
+              ))}
             </ul>
           </div>
 
           <div>
-            <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">Kontakt</h3>
+            <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">{t('footer.contact_heading')}</h3>
             <ul className="space-y-2 text-sm text-white/70">
               <li>
-                E-post:{' '}
+                {t('footer.email_label')}{' '}
                 <a href={`mailto:${contactEmail}`} className="hover:text-white transition">
                   {contactEmail}
                 </a>
               </li>
               {settings.contact_phone && (
                 <li>
-                  Telefon:{' '}
+                  {t('footer.phone_label')}{' '}
                   <a href={`tel:${settings.contact_phone}`} className="hover:text-white transition">
                     {settings.contact_phone}
                   </a>
                 </li>
               )}
-              <li>Adresse: {contactAddress}</li>
+              <li>{t('footer.address_label')} {contactAddress}</li>
             </ul>
           </div>
         </div>
 
         <div className="border-t border-white/20 mt-10 pt-8 text-sm text-center text-white/50">
-          <p>&copy; {new Date().getFullYear()} {siteName}. Alle rettigheter reservert.</p>
+          <p>&copy; {new Date().getFullYear()} {siteName}. {t('footer.copyright')}</p>
         </div>
       </div>
     </footer>

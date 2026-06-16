@@ -7,10 +7,11 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import { useStrings } from '@/components/SettingsProvider';
 
 const loginSchema = z.object({
   email: z.string().email('Ugyldig e-postadresse'),
-  password: z.string().min(6, 'Passordet må være minst 6 tegn'),
+  password: z.string().min(1, 'Passord er påkrevd'),
 });
 
 const magicLinkSchema = z.object({
@@ -28,6 +29,7 @@ const errorMessages: Record<string, string> = {
 };
 
 export default function LoginForm() {
+  const t = useStrings();
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
@@ -100,13 +102,13 @@ export default function LoginForm() {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="text-center text-3xl font-bold text-gray-900">
-          Logg inn
+          {t('auth.login_button')}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Eller{' '}
           <Link
             href="/auth/register"
-            className="font-medium text-[#003B7A] hover:underline"
+            className="font-medium text-bjerke-blue hover:underline"
           >
             opprett en ny konto
           </Link>
@@ -128,7 +130,7 @@ export default function LoginForm() {
               onClick={() => setActiveTab('magic')}
               className={`flex-1 pb-3 text-sm font-medium border-b-2 transition ${
                 activeTab === 'magic'
-                  ? 'border-[#003B7A] text-[#003B7A]'
+                  ? 'border-bjerke-blue text-bjerke-blue'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -139,7 +141,7 @@ export default function LoginForm() {
               onClick={() => setActiveTab('password')}
               className={`flex-1 pb-3 text-sm font-medium border-b-2 transition ${
                 activeTab === 'password'
-                  ? 'border-[#003B7A] text-[#003B7A]'
+                  ? 'border-bjerke-blue text-bjerke-blue'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -160,7 +162,7 @@ export default function LoginForm() {
                 <button
                   type="button"
                   onClick={() => setMagicLinkSent(false)}
-                  className="mt-4 text-sm text-[#003B7A] hover:underline"
+                  className="mt-4 text-sm text-bjerke-blue hover:underline"
                 >
                   Send på nytt
                 </button>
@@ -181,7 +183,7 @@ export default function LoginForm() {
                     autoComplete="email"
                     className={`
                       w-full px-3 py-2 border rounded-lg shadow-sm
-                      focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                      focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                       ${magicForm.formState.errors.email ? 'border-red-300' : 'border-gray-300'}
                     `}
                     placeholder="din@epost.no"
@@ -197,14 +199,14 @@ export default function LoginForm() {
                   type="submit"
                   disabled={isLoading}
                   className="
-                    w-full bg-[#003B7A] hover:bg-[#002855]
+                    w-full bg-bjerke-blue hover:bg-bjerke-blue-dark
                     text-white font-semibold py-3 px-4 rounded-lg
                     transition duration-200
                     disabled:opacity-50 disabled:cursor-not-allowed
-                    focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-offset-2
+                    focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-offset-2
                   "
                 >
-                  {isLoading ? 'Sender...' : 'Send innloggingslenke'}
+                  {isLoading ? t('auth.sending') : t('auth.send_magic_link')}
                 </button>
               </form>
             )
@@ -227,7 +229,7 @@ export default function LoginForm() {
                   autoComplete="email"
                   className={`
                     w-full px-3 py-2 border rounded-lg shadow-sm
-                    focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                    focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                     ${passwordForm.formState.errors.email ? 'border-red-300' : 'border-gray-300'}
                   `}
                   placeholder="din@epost.no"
@@ -253,10 +255,10 @@ export default function LoginForm() {
                   autoComplete="current-password"
                   className={`
                     w-full px-3 py-2 border rounded-lg shadow-sm
-                    focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                    focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                     ${passwordForm.formState.errors.password ? 'border-red-300' : 'border-gray-300'}
                   `}
-                  placeholder="Minst 6 tegn"
+                  placeholder="Ditt passord"
                 />
                 {passwordForm.formState.errors.password && (
                   <p className="mt-1 text-sm text-red-600">
@@ -264,7 +266,7 @@ export default function LoginForm() {
                   </p>
                 )}
                 <div className="mt-1 text-right">
-                  <Link href="/auth/forgot-password" className="text-sm text-[#003B7A] hover:underline">
+                  <Link href="/auth/forgot-password" className="text-sm text-bjerke-blue hover:underline">
                     Glemt passord?
                   </Link>
                 </div>
@@ -274,14 +276,14 @@ export default function LoginForm() {
                 type="submit"
                 disabled={isLoading}
                 className="
-                  w-full bg-[#003B7A] hover:bg-[#002855]
+                  w-full bg-bjerke-blue hover:bg-bjerke-blue-dark
                   text-white font-semibold py-3 px-4 rounded-lg
                   transition duration-200
                   disabled:opacity-50 disabled:cursor-not-allowed
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-offset-2
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-offset-2
                 "
               >
-                {isLoading ? 'Logger inn...' : 'Logg inn'}
+                {isLoading ? t('auth.logging_in') : t('auth.login_button')}
               </button>
             </form>
           )}

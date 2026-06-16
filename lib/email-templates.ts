@@ -18,15 +18,27 @@ export interface MergeTagData {
   kontakt_epost: string;
 }
 
+function escapeHtmlValue(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function replaceMergeTags(template: string, data: MergeTagData): string {
+  // SECURITY: verdiene er data (navn, allergier) — escape dem så et navn som
+  // «<img onerror=...>» aldri blir levende HTML i e-posten. Selve malen er
+  // bevisst rå HTML skrevet av superadmin.
   return template
-    .replace(/\{\{forelder_navn\}\}/g, data.forelder_navn)
-    .replace(/\{\{barnets_navn\}\}/g, data.barnets_navn)
-    .replace(/\{\{kurs_navn\}\}/g, data.kurs_navn)
-    .replace(/\{\{kurs_startdato\}\}/g, data.kurs_startdato)
-    .replace(/\{\{kurs_sluttdato\}\}/g, data.kurs_sluttdato)
-    .replace(/\{\{allergier\}\}/g, data.allergier)
-    .replace(/\{\{kontakt_epost\}\}/g, data.kontakt_epost);
+    .replace(/\{\{forelder_navn\}\}/g, escapeHtmlValue(data.forelder_navn))
+    .replace(/\{\{barnets_navn\}\}/g, escapeHtmlValue(data.barnets_navn))
+    .replace(/\{\{kurs_navn\}\}/g, escapeHtmlValue(data.kurs_navn))
+    .replace(/\{\{kurs_startdato\}\}/g, escapeHtmlValue(data.kurs_startdato))
+    .replace(/\{\{kurs_sluttdato\}\}/g, escapeHtmlValue(data.kurs_sluttdato))
+    .replace(/\{\{allergier\}\}/g, escapeHtmlValue(data.allergier))
+    .replace(/\{\{kontakt_epost\}\}/g, escapeHtmlValue(data.kontakt_epost));
 }
 
 const SAMPLE_DATA: MergeTagData = {
@@ -36,7 +48,7 @@ const SAMPLE_DATA: MergeTagData = {
   kurs_startdato: '15.03.2026',
   kurs_sluttdato: '15.06.2026',
   allergier: 'Ingen',
-  kontakt_epost: 'ponniskolen@bjerke.no',
+  kontakt_epost: 'registrering@bjerke.no',
 };
 
 export function renderPreview(subject: string, body: string): { subject: string; body: string } {
@@ -74,7 +86,7 @@ export function wrapEmailHtml(body: string, siteName: string): string {
   <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#ffffff">
     ${body}
     <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e0e0e0;color:#666;font-size:13px;text-align:center">
-      <p style="margin:0">Med vennlig hilsen,<br><strong style="color:#003B7A">${siteName}</strong></p>
+      <p style="margin:0">Med vennlig hilsen,<br><strong style="color:#003B7A">${escapeHtmlValue(siteName)}</strong></p>
     </div>
   </div>
 </body>

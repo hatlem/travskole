@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireSuperAdmin } from '@/lib/auth';
 import { sendTemplatedEmail } from '@/lib/mail';
 import { getSetting } from '@/lib/settings';
 import type { MergeTagData } from '@/lib/email-templates';
-
-async function requireSuperAdmin() {
-  const session = await getServerSession();
-  if (!session || session.user.role !== 'superadmin') return null;
-  return session;
-}
+import logger from '@/lib/logger';
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('nb-NO', {
@@ -79,13 +74,13 @@ export async function POST(
 
       const data: MergeTagData = {
         forelder_navn: reg.parent.name,
-        barnets_navn: reg.child.name,
+        barnets_navn: reg.child?.name ?? reg.parent.name,
         kurs_navn: trigger.course.name,
         kurs_startdato: formatDate(trigger.course.startDate),
         kurs_sluttdato: trigger.course.endDate
           ? formatDate(trigger.course.endDate)
           : '',
-        allergier: reg.child.allergies || 'Ingen',
+        allergier: reg.child?.allergies || 'Ingen',
         kontakt_epost: contactEmail,
       };
 
@@ -107,14 +102,14 @@ export async function POST(
 
         sent++;
       } catch (error) {
-        console.error(`Error sending email to ${reg.parent.user.email}:`, error);
+        logger.error(`Error sending email to ${reg.parent.user.email}`, { error });
         skipped++;
       }
     }
 
     return NextResponse.json({ sent, skipped });
   } catch (error) {
-    console.error('Error sending trigger emails:', error);
+    logger.error('Error sending trigger emails', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }

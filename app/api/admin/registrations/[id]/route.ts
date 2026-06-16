@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import logger from '@/lib/logger';
 
 export async function PUT(
   request: NextRequest,
@@ -81,7 +74,7 @@ export async function PUT(
             await sendWaitlistPromotionEmail({
               parentName: firstWaitlist.parent.name,
               parentEmail: firstWaitlist.parent.user.email,
-              childName: firstWaitlist.child.name,
+              childName: firstWaitlist.child?.name ?? firstWaitlist.parent.name,
               courseName: firstWaitlist.course.name,
             }).catch(() => {});
           }
@@ -99,7 +92,7 @@ export async function PUT(
 
     return NextResponse.json({ registration });
   } catch (error) {
-    console.error('Error updating registration:', error);
+    logger.error('Error updating registration', { error });
     return NextResponse.json({ error: 'Kunne ikke oppdatere påmelding' }, { status: 500 });
   }
 }
@@ -124,7 +117,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting registration:', error);
+    logger.error('Error deleting registration', { error });
     return NextResponse.json({ error: 'Kunne ikke slette påmelding' }, { status: 500 });
   }
 }

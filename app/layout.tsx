@@ -52,33 +52,38 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const settings = await getSettings();
+  // SECURITY: kun gyldige container-ID-er injiseres i inline-script
+  // (JSON.stringify alene escaper ikke '</script>')
+  const gtmId = /^GTM-[A-Z0-9]+$/.test(settings.gtm_id) ? settings.gtm_id : '';
 
   return (
     <html lang="nb">
       <head>
-        {/* Google Tag Manager */}
-        <Script id="gtm-head" strategy="afterInteractive">
-          {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+        {/* Google Tag Manager — configured via admin settings (gtm_id) */}
+        {gtmId && (
+          <Script id="gtm-head" strategy="afterInteractive">
+            {`(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
 new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
 j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer','GTM-P4Q6HWFR');`}
-        </Script>
-        {/* End Google Tag Manager */}
+})(window,document,'script','dataLayer',${JSON.stringify(gtmId)});`}
+          </Script>
+        )}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         {/* Google Tag Manager (noscript) */}
-        <noscript>
-          <iframe
-            src="https://www.googletagmanager.com/ns.html?id=GTM-P4Q6HWFR"
-            height="0"
-            width="0"
-            style={{display:'none',visibility:'hidden'}}
-          />
-        </noscript>
-        {/* End Google Tag Manager (noscript) */}
+        {gtmId && (
+          <noscript>
+            <iframe
+              src={`https://www.googletagmanager.com/ns.html?id=${encodeURIComponent(gtmId)}`}
+              height="0"
+              width="0"
+              style={{display:'none',visibility:'hidden'}}
+            />
+          </noscript>
+        )}
         <Providers>
           <SettingsProvider settings={settings}>
             <Header />

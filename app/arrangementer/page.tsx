@@ -4,6 +4,7 @@ import CourseFilter from '@/components/CourseFilter';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 import { getSettings } from '@/lib/settings';
+import { makeT } from '@/lib/strings';
 import type { Metadata } from 'next';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -38,7 +39,7 @@ async function getAllCourses(): Promise<Course[]> {
       name: c.name,
       slug: c.slug || generateSlug(c.name),
       description: c.description ?? '',
-      type: c.type as 'kurs' | 'leir',
+      type: c.type,
       start_date: c.startDate.toISOString().split('T')[0],
       end_date: c.endDate ? c.endDate.toISOString().split('T')[0] : undefined,
       age_min: c.ageMin ?? undefined,
@@ -54,18 +55,20 @@ async function getAllCourses(): Promise<Course[]> {
 }
 
 export default async function ArrangementerPage() {
-  const [courses, dobbeltsulkyEnabled] = await Promise.all([
+  const [courses, dobbeltsulkyEnabled, settings] = await Promise.all([
     getAllCourses(),
     isDobbeltsulkyEnabled(),
+    getSettings(),
   ]);
+  const t = makeT(settings);
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-[#003B7A] text-white py-16">
+      <div className="bg-bjerke-blue text-white py-16">
         <div className="max-w-7xl mx-auto px-6">
-          <h1 className="text-4xl md:text-5xl font-bold mb-3">Kurs og leirer</h1>
+          <h1 className="text-4xl md:text-5xl font-bold mb-3">{settings.arrangementer_heading}</h1>
           <p className="text-lg text-white/80">
-            Utforsk vårt utvalg av kurs og leirer for alle aldre og nivåer
+            {settings.arrangementer_subtitle}
           </p>
         </div>
       </div>
@@ -77,17 +80,16 @@ export default async function ArrangementerPage() {
         <div className="max-w-7xl mx-auto px-6 pb-16">
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 flex flex-col md:flex-row items-center gap-6">
             <div className="flex-1">
-              <h3 className="text-2xl font-bold text-gray-900 mb-2">Dobbeltsulky-kjøring</h3>
+              <h3 className="text-2xl font-bold text-gray-900 mb-2">{t('sulky.cta_heading')}</h3>
               <p className="text-gray-600">
-                Vil du prøve dobbeltsulky? Ta kontakt for å avtale tid.
-                Passer for alle aldre og krever ingen forkunnskaper.
+                {t('sulky.cta_text')}
               </p>
             </div>
             <Link
               href="/arrangementer/dobbeltsulky"
-              className="shrink-0 bg-[#003B7A] hover:bg-[#002855] text-white px-8 py-4 rounded-lg font-semibold text-lg transition"
+              className="shrink-0 bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-8 py-4 rounded-lg font-semibold text-lg transition"
             >
-              Book dobbeltsulky
+              {t('sulky.cta_button')}
             </Link>
           </div>
         </div>

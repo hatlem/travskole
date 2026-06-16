@@ -4,7 +4,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
-import { getSettings } from '@/lib/settings';
+import { getSettings, settingToList } from '@/lib/settings';
+import { makeT } from '@/lib/strings';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,7 +22,7 @@ async function getUpcomingCourses(): Promise<Course[]> {
       name: c.name,
       slug: c.slug || generateSlug(c.name),
       description: c.description ?? '',
-      type: c.type as 'kurs' | 'leir',
+      type: c.type,
       start_date: c.startDate.toISOString().split('T')[0],
       end_date: c.endDate ? c.endDate.toISOString().split('T')[0] : undefined,
       age_min: c.ageMin ?? undefined,
@@ -41,13 +42,14 @@ export default async function Home() {
     getUpcomingCourses(),
     getSettings(),
   ]);
+  const t = makeT(settings);
 
   return (
     <div className="min-h-screen">
       <Hero
         title={settings.hero_title}
         subtitle={settings.hero_subtitle}
-        ctaText="Se alle kurs"
+        ctaText={settings.hero_cta_text}
         ctaLink="/arrangementer"
         imageUrl="/images/sulky-trening-bane.jpg"
       />
@@ -55,12 +57,12 @@ export default async function Home() {
       {/* Kommende Kurs Section */}
       <section className="max-w-7xl mx-auto px-6 py-20">
         <div className="flex justify-between items-center mb-10">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">Kommende kurs og leirer</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">{settings.home_courses_heading}</h2>
           <Link
             href="/arrangementer"
-            className="text-[#003B7A] hover:underline font-semibold text-sm uppercase tracking-wide"
+            className="text-bjerke-blue hover:underline font-semibold text-sm uppercase tracking-wide"
           >
-            Se alle &rarr;
+            {t('home.see_all')} &rarr;
           </Link>
         </div>
 
@@ -72,7 +74,7 @@ export default async function Home() {
           </div>
         ) : (
           <p className="text-gray-500 text-center py-12">
-            Ingen kurs tilgjengelig for øyeblikket. Sjekk tilbake snart!
+            {settings.home_courses_empty_text}
           </p>
         )}
       </section>
@@ -83,28 +85,24 @@ export default async function Home() {
           <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-8">{settings.about_heading}</h2>
           <div className="grid md:grid-cols-2 gap-12 items-center">
             <div>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Vår visjon</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">{t('home.vision_heading')}</h3>
               <p className="text-gray-600 leading-relaxed mb-6">
                 {settings.about_text}
               </p>
-              <h3 className="text-xl font-bold text-gray-900 mb-3">Hva vi tilbyr</h3>
+              <h3 className="text-xl font-bold text-gray-900 mb-3">{t('home.offers_heading')}</h3>
               <ul className="space-y-3 text-gray-600">
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-3 font-bold">&#10003;</span>
-                  {settings.instructor_certification} instruktør {settings.instructor_name}
-                </li>
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-3 font-bold">&#10003;</span>
-                  Trygge og vennlige travhester
-                </li>
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-3 font-bold">&#10003;</span>
-                  Moderne fasiliteter og utstyr
-                </li>
-                <li className="flex items-start">
-                  <span className="text-[#003B7A] mr-3 font-bold">&#10003;</span>
-                  Fokus på læring, sikkerhet og moro
-                </li>
+                {settings.instructor_name && (
+                  <li className="flex items-start">
+                    <span className="text-bjerke-blue mr-3 font-bold">&#10003;</span>
+                    {[settings.instructor_certification, 'instruktør', settings.instructor_name].filter(Boolean).join(' ')}
+                  </li>
+                )}
+                {settingToList(settings.home_feature_points).map((point) => (
+                  <li key={point} className="flex items-start">
+                    <span className="text-bjerke-blue mr-3 font-bold">&#10003;</span>
+                    {point}
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="relative h-80 md:h-96 rounded-lg overflow-hidden">
@@ -148,17 +146,17 @@ export default async function Home() {
       </section>
 
       {/* CTA Section */}
-      <section className="bg-[#003B7A] py-20">
+      <section className="bg-bjerke-blue py-20">
         <div className="max-w-4xl mx-auto px-6 text-center">
-          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">Klar for å bli med?</h2>
+          <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">{settings.home_cta_heading}</h2>
           <p className="text-lg text-blue-100 mb-10">
-            Meld deg på et kurs eller en leir i dag, og opplev magien med travhester!
+            {settings.home_cta_text}
           </p>
           <Link
             href="/arrangementer"
-            className="inline-block bg-white text-[#003B7A] px-8 py-4 rounded-md font-bold text-base uppercase tracking-wide hover:bg-gray-100 transition shadow-lg"
+            className="inline-block bg-white text-bjerke-blue px-8 py-4 rounded-md font-bold text-base uppercase tracking-wide hover:bg-gray-100 transition shadow-lg"
           >
-            Se våre kurs
+            {settings.home_cta_button}
           </Link>
         </div>
       </section>

@@ -1,6 +1,8 @@
 'use client';
 
 import { useState, useMemo } from 'react';
+import { useSettings } from '@/components/SettingsProvider';
+import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 import { useRouter } from 'next/navigation';
 
 interface CalendarCourse {
@@ -53,6 +55,8 @@ function isSameDay(d1: Date, d2: Date): boolean {
 }
 
 export function CalendarView({ courses }: CalendarViewProps) {
+  const settings = useSettings();
+  const courseTypes = parseCourseTypes(settings.course_types);
   const router = useRouter();
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -146,7 +150,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
         </div>
         <button
           onClick={goToToday}
-          className="text-sm font-medium text-[#003B7A] hover:underline"
+          className="text-sm font-medium text-bjerke-blue hover:underline"
         >
           I dag
         </button>
@@ -184,7 +188,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
                     <div
                       className={`text-xs font-medium mb-1 w-6 h-6 flex items-center justify-center rounded-full ${
                         todayCell
-                          ? 'bg-[#003B7A] text-white'
+                          ? 'bg-bjerke-blue text-white'
                           : 'text-gray-700'
                       }`}
                     >
@@ -239,7 +243,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
                   <div
                     className={`w-10 h-10 rounded-lg flex flex-col items-center justify-center text-xs font-semibold flex-shrink-0 ${
                       todayItem
-                        ? 'bg-[#003B7A] text-white'
+                        ? 'bg-bjerke-blue text-white'
                         : 'bg-gray-100 text-gray-700'
                     }`}
                   >
@@ -263,7 +267,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
                           course.type === 'leir' ? 'text-purple-700' : 'text-blue-700'
                         }`}
                       >
-                        {course.type === 'leir' ? 'Leir' : 'Kurs'}
+                        {courseTypeLabel(courseTypes, course.type)}
                       </span>
                     </div>
                   </div>

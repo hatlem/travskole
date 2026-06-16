@@ -79,7 +79,7 @@ export default function ImageUpload({ currentUrl, onUpload }: ImageUploadProps) 
         accept="image/jpeg,image/png,image/webp"
         onChange={handleChange}
         disabled={uploading}
-        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#003B7A] file:text-white hover:file:bg-[#002855] file:cursor-pointer disabled:opacity-50"
+        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-bjerke-blue file:text-white hover:file:bg-bjerke-blue-dark file:cursor-pointer disabled:opacity-50"
       />
       <p className="text-xs text-gray-500 mt-1">JPG, PNG eller WebP. Maks 5 MB.</p>
 

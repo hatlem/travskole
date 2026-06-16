@@ -4,6 +4,8 @@ import { getSettings } from '@/lib/settings';
 // Public settings endpoint — only exposes non-sensitive settings
 const PUBLIC_KEYS = [
   'site_name',
+  'nav_courses_label',
+  'course_types',
   'contact_email',
   'contact_address',
   'contact_phone',
@@ -11,10 +13,13 @@ const PUBLIC_KEYS = [
   'instructor_certification',
   'dobbeltsulky_enabled',
   'dobbeltsulky_description',
+  'dobbeltsulky_points',
   'consent_activities_text',
   'consent_media_text',
   'consent_risk_text',
   'consent_risk_detail',
+  'consent_media_text_adult',
+  'consent_risk_text_adult',
   'course_learning_points',
   'course_packing_list',
   'instructor_description',

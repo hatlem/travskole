@@ -3,6 +3,10 @@
 
 generator client {
   provider = "prisma-client-js"
+  // Azure App Service kjører Linux/amd64. Bundle Linux-query-engines for både
+  // Bullseye (openssl 1.1) og Bookworm (openssl 3.0) så bygget fungerer uansett
+  // hvilket Debian-image Azure bruker. "native" beholder lokal dev (macOS).
+  binaryTargets = ["native", "debian-openssl-1.1.x", "debian-openssl-3.0.x"]
 }
 
 datasource db {
@@ -28,6 +32,7 @@ model Account {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
+  @@index([userId])
   @@map("accounts")
 }
 
@@ -39,6 +44,7 @@ model Session {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("sessions")
 }
 
@@ -98,7 +104,8 @@ model Child {
   
   parent        Parent         @relation(fields: [parentId], references: [id], onDelete: Cascade)
   registrations Registration[]
-  
+
+  @@index([parentId])
   @@map("children")
 }
 
@@ -108,7 +115,8 @@ model Course {
   name            String
   slug            String?
   description     String?
-  type            String    // 'kurs' or 'leir'
+  type            String    // course type value, configured in settings (course_types)
+  audience        String    @default("barn") // 'barn' (foresatt melder på barn) | 'voksen' (deltaker melder på seg selv)
   startDate       DateTime  @map("start_date")
   endDate         DateTime? @map("end_date")
   ageMin          Int?      @map("age_min")
@@ -125,6 +133,7 @@ model Course {
   emailTriggers EmailTrigger[]
 
   @@unique([type, slug])
+  @@index([status, startDate])
   @@map("courses")
 }
 
@@ -149,6 +158,7 @@ model BookingRequest {
   status        String   @default("new") // 'new', 'confirmed', 'cancelled'
   createdAt     DateTime @default(now()) @map("created_at")
 
+  @@index([status])
   @@map("booking_requests")
 }
 
@@ -162,6 +172,7 @@ model ActivityLog {
   userEmail String   @map("user_email")
   createdAt DateTime @default(now()) @map("created_at")
 
+  @@index([createdAt])
   @@map("activity_logs")
 }
 
@@ -169,7 +180,7 @@ model ActivityLog {
 model Registration {
   id                 Int      @id @default(autoincrement())
   courseId           Int      @map("course_id")
-  childId            Int      @map("child_id")
+  childId            Int?     @map("child_id") // null for voksen-arrangementer (deltaker = parent)
   parentId           Int      @map("parent_id")
   consentActivities  Boolean  @default(false) @map("consent_activities")
   consentMedia       Boolean  @default(false) @map("consent_media")
@@ -179,10 +190,13 @@ model Registration {
   updatedAt          DateTime @updatedAt @map("updated_at")
   
   course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  child     Child      @relation(fields: [childId], references: [id], onDelete: Cascade)
+  child     Child?     @relation(fields: [childId], references: [id], onDelete: Cascade)
   parent    Parent     @relation(fields: [parentId], references: [id], onDelete: Cascade)
   emailLogs EmailLog[]
 
+  @@index([courseId, status])
+  @@index([childId])
+  @@index([parentId])
   @@map("registrations")
 }
 
@@ -214,6 +228,8 @@ model EmailTrigger {
   template EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
   logs     EmailLog[]
 
+  @@index([courseId])
+  @@index([templateId])
   @@map("email_triggers")
 }
 
@@ -229,5 +245,6 @@ model EmailLog {
   registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@unique([triggerId, registrationId])
+  @@index([registrationId])
   @@map("email_logs")
 }

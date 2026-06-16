@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import { requireAdmin } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 function escapeCsvField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+  // SECURITY: nøytraliser formelinjeksjon i Excel/Sheets (=, +, -, @, tab, CR)
+  let v = value;
+  if (/^[=+\-@\t\r]/.test(v)) {
+    v = `'${v}`;
   }
-  return value;
+  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+    return `"${v.replace(/"/g, '""')}"`;
+  }
+  return v;
 }
 
 export async function GET() {
@@ -58,14 +56,14 @@ export async function GET() {
     const rows = registrations.map((reg) => [
       String(reg.id),
       escapeCsvField(reg.course.name),
-      escapeCsvField(reg.child.name),
-      reg.child.birthdate
+      escapeCsvField(reg.child?.name ?? `${reg.parent.name} (voksen)`),
+      reg.child?.birthdate
         ? new Date(reg.child.birthdate).toLocaleDateString('nb-NO')
         : '',
       escapeCsvField(reg.parent.name),
       reg.parent.user.email,
       reg.parent.phone,
-      reg.child.allergies ? escapeCsvField(reg.child.allergies) : '',
+      reg.child?.allergies ? escapeCsvField(reg.child.allergies) : '',
       reg.status,
       reg.consentActivities ? 'Ja' : 'Nei',
       reg.consentMedia ? 'Ja' : 'Nei',
@@ -88,7 +86,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('Error exporting registrations:', error);
+    logger.error('Error exporting registrations', { error });
     return NextResponse.json(
       { error: 'Kunne ikke eksportere påmeldinger' },
       { status: 500 }

@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) return null;
-  return session;
-}
+import { requireAdmin } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();

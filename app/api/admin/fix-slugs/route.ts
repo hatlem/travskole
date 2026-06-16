@@ -1,15 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { generateSlug } from '@/lib/slug';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import logger from '@/lib/logger';
 
 export async function POST() {
   const session = await requireAdmin();
@@ -30,7 +23,7 @@ export async function POST() {
     const updatedCourses: { id: number; name: string; slug: string }[] = [];
 
     for (const course of coursesWithoutSlug) {
-      let baseSlug = generateSlug(course.name);
+      const baseSlug = generateSlug(course.name);
       let slug = baseSlug;
       let suffix = 1;
 
@@ -57,7 +50,7 @@ export async function POST() {
       courses: updatedCourses,
     });
   } catch (error) {
-    console.error('Error fixing slugs:', error);
+    logger.error('Error fixing slugs', { error });
     return NextResponse.json({ error: 'Kunne ikke oppdatere slugs' }, { status: 500 });
   }
 }

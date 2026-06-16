@@ -4,17 +4,18 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useState } from 'react';
 import { useSession, signOut } from 'next-auth/react';
-import { useSettings } from '@/components/SettingsProvider';
+import { useSettings, useStrings } from '@/components/SettingsProvider';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { data: session } = useSession();
   const settings = useSettings();
+  const t = useStrings();
 
-  const headerLabel = settings.site_name?.replace(/^Bjerke\s+/i, '').toUpperCase() || 'PONNISKOLE';
+  const headerLabel = settings.site_name?.replace(/^Bjerke\s+/i, '').toUpperCase() || 'REGISTRERING';
 
   return (
-    <header className="bg-[#003B7A] text-white sticky top-0 z-50 shadow-lg">
+    <header className="bg-bjerke-blue text-white sticky top-0 z-50 shadow-lg">
       <nav className="max-w-7xl mx-auto px-6 py-3">
         <div className="flex justify-between items-center">
           <Link href="/" className="flex items-center gap-3">
@@ -34,34 +35,34 @@ export default function Header() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-8">
             <Link href="/arrangementer" className="nav-link text-white/90 hover:text-white transition">
-              Kurs & Leirer
+              {settings.nav_courses_label}
             </Link>
             {session ? (
               <>
                 {(session.user.role === 'admin' || session.user.role === 'superadmin') && (
                   <Link href="/admin" className="nav-link text-white/90 hover:text-white transition">
-                    Admin
+                    {t('nav.admin')}
                   </Link>
                 )}
                 <Link
                   href="/dashboard"
-                  className="bg-white text-[#003B7A] px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                  className="bg-white text-bjerke-blue px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
                 >
-                  Min Side
+                  {t('nav.my_page')}
                 </Link>
                 <button
                   onClick={() => signOut({ callbackUrl: '/' })}
                   className="text-white/70 hover:text-white text-sm uppercase tracking-wide transition"
                 >
-                  Logg ut
+                  {t('nav.logout')}
                 </button>
               </>
             ) : (
               <Link
                 href="/auth/login"
-                className="bg-white text-[#003B7A] px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                className="bg-white text-bjerke-blue px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
               >
-                Logg inn
+                {t('nav.login')}
               </Link>
             )}
           </div>
@@ -90,7 +91,7 @@ export default function Header() {
               className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
               onClick={() => setMobileMenuOpen(false)}
             >
-              Kurs & Leirer
+              {settings.nav_courses_label}
             </Link>
             {session ? (
               <>
@@ -100,30 +101,30 @@ export default function Header() {
                     className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"
                     onClick={() => setMobileMenuOpen(false)}
                   >
-                    Admin
+                    {t('nav.admin')}
                   </Link>
                 )}
                 <Link
                   href="/dashboard"
-                  className="block bg-white text-[#003B7A] px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                  className="block bg-white text-bjerke-blue px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
                   onClick={() => setMobileMenuOpen(false)}
                 >
-                  Min Side
+                  {t('nav.my_page')}
                 </Link>
                 <button
                   onClick={() => { setMobileMenuOpen(false); signOut({ callbackUrl: '/' }); }}
                   className="block w-full text-left uppercase text-sm tracking-wide text-white/70 hover:text-white transition"
                 >
-                  Logg ut
+                  {t('nav.logout')}
                 </button>
               </>
             ) : (
               <Link
                 href="/auth/login"
-                className="block bg-white text-[#003B7A] px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
+                className="block bg-white text-bjerke-blue px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Logg inn
+                {t('nav.login')}
               </Link>
             )}
           </div>

@@ -1,32 +1,51 @@
 import { prisma } from '@/lib/prisma';
+import type { SiteSettings } from '@/lib/settings-shared';
+import { VILKAR_DEFAULT, PERSONVERN_DEFAULT } from '@/lib/legal-defaults';
 
 export const SETTING_DEFAULTS: Record<string, string> = {
   // Generelt
-  site_name: 'Bjerke Ponniskole',
-  site_description: 'Kurs og leirer for barn og unge med ponni og hest. Bjerke Ponniskole tilbyr kurs, sommerleirer og dobbeltsulky-kjøring i Oslo.',
-  site_short_description: 'Kurs og leirer for barn og unge med ponni og hest',
+  site_name: 'Bjerke Registrering',
+  site_description: 'Påmelding til kurs, leirer og arrangementer på Bjerke Travbane — blant annet ponniskolen, sommerleirer og dobbeltsulky-kjøring i Oslo.',
+  site_short_description: 'Påmelding til kurs, leirer og arrangementer på Bjerke',
 
   // Kontakt
-  contact_email: 'ponniskolen@bjerke.no',
+  contact_email: 'registrering@bjerke.no',
   contact_address: 'Refstadveien 27, 0589 Oslo',
   contact_phone: '',
 
-  // Instruktør
-  instructor_name: 'Hege Arverud',
-  instructor_certification: 'DNT-sertifisert',
+  // Instruktør (valgfritt — vises kun når navn er satt)
+  instructor_name: '',
+  instructor_certification: '',
 
   // Forsiden
-  hero_title: 'Velkommen til Bjerke Ponniskole',
-  hero_subtitle: 'Opplev gleden ved travsporten i trygge og profesjonelle omgivelser. Vi tilbyr kurs og leirer for barn og unge.',
-  about_heading: 'Om Bjerke Ponniskole',
-  about_text: 'Bjerke Ponniskole drives av Bjerke Travbane og er en trygg og engasjerende arena for barn og unge som ønsker å lære mer om travhester og travsport. Vi legger vekt på sikkerhet, dyrevelferd og gode opplevelser.',
-  footer_text: 'Vi tilbyr trygg og lærerik travsport for barn og unge i alle aldre. Ponniskolen drives av Bjerke Travbane.',
+  hero_title: 'Velkommen til Bjerke',
+  hero_subtitle: 'Opplev travsporten i trygge og profesjonelle omgivelser. Vi tilbyr kurs, leirer og arrangementer for barn og voksne.',
+  hero_cta_text: 'Se alle arrangementer',
+  home_courses_heading: 'Kommende arrangementer',
+  home_courses_empty_text: 'Ingen arrangementer tilgjengelig for øyeblikket. Sjekk tilbake snart!',
+  about_heading: 'Om tilbudet på Bjerke',
+  about_text: 'Bjerke Travbane er en trygg og engasjerende arena for alle som vil oppleve travsporten — fra ponniskole og sommerleirer for barn og unge til kurs og arrangementer for voksne. Vi legger vekt på sikkerhet, dyrevelferd og gode opplevelser.',
+  home_feature_points: 'Ponniskole og leirer for barn og unge\nKurs og arrangementer for voksne\nTrygge og vennlige travhester\nFokus på læring, sikkerhet og moro',
+  home_cta_heading: 'Klar for å bli med?',
+  home_cta_text: 'Meld deg på et kurs eller arrangement i dag, og opplev magien med travhester!',
+  home_cta_button: 'Se alle arrangementer',
+  footer_text: 'Påmelding til kurs, leirer og arrangementer på Bjerke Travbane — for barn, unge og voksne.',
+
+  // Arrangementer
+  arrangementer_heading: 'Kurs og arrangementer',
+  arrangementer_subtitle: 'Utforsk vårt utvalg av kurs, leirer og arrangementer for alle aldre og nivåer',
+  nav_courses_label: 'Arrangementer',
+  // Én type per linje: verdi|Visningsnavn|flertall. Verdien inngår i URL-er.
+  course_types: 'kurs|Kurs|kurs\nleir|Leir|leirer\narrangement|Arrangement|arrangementer',
 
   // Samtykketekster
   consent_activities_text: 'Vi samtykker i at vårt barn blir tatt med utenfor Bjerke sitt område i kurstiden. Dette er aktiviteter som bading, stå på skøyter, fotball, ridetur, omvisninger osv.',
-  consent_media_text: 'Vi samtykker i at det blir tatt videoer/bilder av våre barn i kurstiden, som kan bli lagt ut på Bjerke Ponniskoles Facebook-side, Instagram-side og hjemmeside. Det vil i hovedsak ikke bli publisert fulle navn.',
+  consent_media_text: 'Vi samtykker i at det blir tatt videoer/bilder av våre barn i kurstiden, som kan bli lagt ut på Bjerkes Facebook-side, Instagram-side og hjemmeside. Det vil i hovedsak ikke bli publisert fulle navn.',
   consent_risk_text: 'Vi har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje. Det anbefales derfor å ha en ulykkesforsikring på barnet.',
   consent_risk_detail: 'Alle som deltar på kurs/aktiviteter i travskole/aktivitetsstaller anbefales egen ulykkesforsikring. Bjerke Travbane AS har ingen forsikring som dekker en eventuell personskade som skulle oppstå på våre kurs. Ved å melde seg på kurs i regi av travskole eller aktivitetsstall tilknyttet Bjerke Travbane AS bekrefter man å være kjent med disse forholdene.',
+  // Voksen-varianter (vises når arrangementets målgruppe er «voksen»)
+  consent_media_text_adult: 'Jeg samtykker i at det blir tatt videoer/bilder av meg under arrangementet, som kan bli publisert på Bjerkes Facebook-side, Instagram-side og hjemmeside.',
+  consent_risk_text_adult: 'Jeg har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje. Det anbefales derfor å ha en egen ulykkesforsikring.',
 
   // Kursdetaljer
   course_learning_points: 'Grunnleggende om travhester og deres behov\nSikkerhet rundt hester og på banen\nPraktisk erfaring med stell og håndtering\nMoro og vennskap med andre hesteglade barn',
@@ -36,9 +55,28 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Dobbeltsulky
   dobbeltsulky_enabled: 'false',
   dobbeltsulky_description: 'Dobbeltsulky er en sulky med plass til to personer. Du sitter sammen med instruktøren og får oppleve farten og spenningen ved travsport helt tett på. Passer for alle aldre og krever ingen forkunnskaper.',
+  dobbeltsulky_points: 'Ingen forkunnskaper nødvendig\nErfaren instruktør kjører med deg\nHjelm og sikkerhetsutstyr inkludert\nTid avtales individuelt',
+
+  // Sporing og deling
+  gtm_id: 'GTM-P4Q6HWFR',
+  og_tags: 'Kurs\nLeirer\nArrangementer',
+
+  // Juridiske sider (HTML, redigeres under /admin/sider, vises på /vilkar og /personvern)
+  vilkar_content: VILKAR_DEFAULT,
+  personvern_content: PERSONVERN_DEFAULT,
 };
 
-export type SiteSettings = Record<string, string>;
+// Client-safe helpers live in settings-shared.ts; re-exported here so server
+// code can keep importing everything from '@/lib/settings'.
+export {
+  settingToList,
+  parseCourseTypes,
+  courseTypeLabel,
+  isAdmin,
+  isSuperAdmin,
+  type SiteSettings,
+  type CourseType,
+} from '@/lib/settings-shared';
 
 export async function getSettings(): Promise<SiteSettings> {
   try {
@@ -60,12 +98,4 @@ export async function getSetting(key: string): Promise<string> {
   } catch {
     return SETTING_DEFAULTS[key] ?? '';
   }
-}
-
-export function isAdmin(role: string | undefined): boolean {
-  return role === 'admin' || role === 'superadmin';
-}
-
-export function isSuperAdmin(role: string | undefined): boolean {
-  return role === 'superadmin';
 }

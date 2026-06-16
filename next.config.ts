@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Self-contained build for Azure App Service (deployed via scripts/deploy-app.sh)
+  output: 'standalone',
+  // Force-include every Prisma query-engine (incl. the extra Linux binaryTargets)
+  // in the standalone bundle. Next's file tracer otherwise only keeps the engine
+  // it loads at build time, which would drop the other Linux engines.
+  outputFileTracingIncludes: {
+    '/**/*': [
+      './node_modules/.prisma/client/*.node',
+      './node_modules/.pnpm/@prisma+client*/node_modules/.prisma/client/*.node',
+    ],
+  },
   async redirects() {
     return [
       {
@@ -44,6 +55,10 @@ const nextConfig: NextConfig = {
                 https://api.vipps.no;
               frame-src https://js.stripe.com https://checkout.vipps.no;
             `.replace(/\s+/g, ' ').trim()
+          },
+          {
+            key: 'Strict-Transport-Security',
+            value: 'max-age=63072000; includeSubDomains'
           },
           {
             key: 'X-Frame-Options',

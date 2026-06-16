@@ -1,9 +1,10 @@
 import type { MetadataRoute } from 'next';
+import { getBaseUrl } from '@/lib/site';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXTAUTH_URL || 'https://ponniskolen.bjerke.no';
+  const baseUrl = getBaseUrl();
 
   const staticPages: MetadataRoute.Sitemap = [
     {

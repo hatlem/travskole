@@ -6,6 +6,8 @@ import { CalendarView } from '@/components/admin/CalendarView';
 import { StatCardsSkeleton, TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
+import { useSettings } from '@/components/SettingsProvider';
+import { parseCourseTypes, courseTypeLabel, type CourseType } from '@/lib/settings-shared';
 
 type ViewMode = 'liste' | 'kalender';
 type SortField = 'name' | 'type' | 'startDate' | 'endDate' | 'price' | 'capacity' | 'status';
@@ -29,7 +31,7 @@ interface Course {
   _count: { registrations: number };
 }
 
-type TypeFilter = 'alle' | 'kurs' | 'leir';
+type TypeFilter = string;
 type StatusFilter = 'alle' | 'open' | 'full' | 'closed';
 
 const statusLabels: Record<string, string> = {
@@ -103,12 +105,12 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-function TypeBadge({ type }: { type: string }) {
+function TypeBadge({ type, courseTypes }: { type: string; courseTypes: CourseType[] }) {
   return (
     <span
       className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyles[type] || 'bg-gray-100 text-gray-800'}`}
     >
-      {type === 'leir' ? 'Leir' : 'Kurs'}
+      {courseTypeLabel(courseTypes, type)}
     </span>
   );
 }
@@ -122,17 +124,19 @@ function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: 
     );
   }
   return sortDir === 'asc' ? (
-    <svg className="w-3 h-3 ml-1 text-[#003B7A] inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-3 h-3 ml-1 text-bjerke-blue inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
     </svg>
   ) : (
-    <svg className="w-3 h-3 ml-1 text-[#003B7A] inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <svg className="w-3 h-3 ml-1 text-bjerke-blue inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
     </svg>
   );
 }
 
 export default function AdminCoursesPage() {
+  const settings = useSettings();
+  const courseTypes = parseCourseTypes(settings.course_types);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -266,7 +270,7 @@ export default function AdminCoursesPage() {
         <p className="text-red-600 text-sm">{error}</p>
         <button
           onClick={() => { setError(null); setLoading(true); fetchCourses(); }}
-          className="mt-4 text-sm text-[#003B7A] hover:underline font-medium"
+          className="mt-4 text-sm text-bjerke-blue hover:underline font-medium"
         >
           Prøv igjen
         </button>
@@ -284,7 +288,7 @@ export default function AdminCoursesPage() {
         <div className="flex gap-3">
           <Link
             href="/admin/courses/new"
-            className="bg-[#003B7A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors"
+            className="bg-bjerke-blue text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
           >
             + Nytt kurs
           </Link>
@@ -318,22 +322,23 @@ export default function AdminCoursesPage() {
             placeholder="Søk etter kurs..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
           />
         </div>
         <select
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
         >
           <option value="alle">Alle typer</option>
-          <option value="kurs">Kurs</option>
-          <option value="leir">Leir</option>
+          {courseTypes.map((t) => (
+            <option key={t.value} value={t.value}>{t.label}</option>
+          ))}
         </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
         >
           <option value="alle">Alle statuser</option>
           <option value="open">Åpen</option>
@@ -345,7 +350,7 @@ export default function AdminCoursesPage() {
             onClick={() => setViewMode('liste')}
             className={`px-3 py-2.5 text-sm font-medium transition-colors ${
               viewMode === 'liste'
-                ? 'bg-[#003B7A] text-white'
+                ? 'bg-bjerke-blue text-white'
                 : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
@@ -357,7 +362,7 @@ export default function AdminCoursesPage() {
             onClick={() => setViewMode('kalender')}
             className={`px-3 py-2.5 text-sm font-medium transition-colors border-l border-gray-300 ${
               viewMode === 'kalender'
-                ? 'bg-[#003B7A] text-white'
+                ? 'bg-bjerke-blue text-white'
                 : 'bg-white text-gray-600 hover:bg-gray-50'
             }`}
           >
@@ -398,7 +403,7 @@ export default function AdminCoursesPage() {
           <p className="text-gray-500 mb-6">Kom i gang ved å opprette ditt første kurs.</p>
           <Link
             href="/admin/courses/new"
-            className="inline-flex items-center bg-[#003B7A] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors"
+            className="inline-flex items-center bg-bjerke-blue text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
           >
             + Opprett kurs
           </Link>
@@ -436,7 +441,7 @@ export default function AdminCoursesPage() {
                   <div>
                     <h3 className="font-semibold text-gray-900">{course.name}</h3>
                     <div className="flex items-center gap-2 mt-1">
-                      <TypeBadge type={course.type} />
+                      <TypeBadge type={course.type} courseTypes={courseTypes} />
                       <StatusBadge status={course.status} />
                     </div>
                   </div>
@@ -477,14 +482,14 @@ export default function AdminCoursesPage() {
                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                   <Link
                     href={`/admin/courses/${course.id}/edit`}
-                    className="text-[#003B7A] hover:underline font-medium text-sm"
+                    className="text-bjerke-blue hover:underline font-medium text-sm"
                   >
                     Rediger
                   </Link>
                   <button
                     onClick={() => handleDuplicate(course)}
                     disabled={duplicating === course.id}
-                    className="text-gray-600 hover:text-[#003B7A] hover:underline font-medium text-sm disabled:opacity-50"
+                    className="text-gray-600 hover:text-bjerke-blue hover:underline font-medium text-sm disabled:opacity-50"
                   >
                     {duplicating === course.id ? 'Dupliserer...' : 'Dupliser'}
                   </button>
@@ -530,7 +535,7 @@ export default function AdminCoursesPage() {
                         {course.name}
                       </td>
                       <td className="px-6 py-4">
-                        <TypeBadge type={course.type} />
+                        <TypeBadge type={course.type} courseTypes={courseTypes} />
                       </td>
                       <td className="px-6 py-4 text-gray-600">
                         {formatDate(course.startDate)}
@@ -555,14 +560,14 @@ export default function AdminCoursesPage() {
                         <div className="flex items-center gap-3">
                           <Link
                             href={`/admin/courses/${course.id}/edit`}
-                            className="text-[#003B7A] hover:underline font-medium text-xs"
+                            className="text-bjerke-blue hover:underline font-medium text-xs"
                           >
                             Rediger
                           </Link>
                           <button
                             onClick={() => handleDuplicate(course)}
                             disabled={duplicating === course.id}
-                            className="text-gray-600 hover:text-[#003B7A] hover:underline font-medium text-xs disabled:opacity-50"
+                            className="text-gray-600 hover:text-bjerke-blue hover:underline font-medium text-xs disabled:opacity-50"
                           >
                             {duplicating === course.id ? 'Dupliserer...' : 'Dupliser'}
                           </button>

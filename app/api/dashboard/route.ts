@@ -19,9 +19,16 @@ export async function PUT(request: NextRequest) {
     );
   }
 
-  if (!phone || typeof phone !== 'string' || phone.trim().length < 8) {
+  if (!phone || typeof phone !== 'string' || phone.trim().length < 8 || phone.length > 20) {
     return NextResponse.json(
       { error: 'Telefonnummer må være minst 8 tegn' },
+      { status: 400 }
+    );
+  }
+
+  if (name.length > 100 || (typeof address === 'string' && address.length > 200)) {
+    return NextResponse.json(
+      { error: 'Feltet er for langt' },
       { status: 400 }
     );
   }
@@ -119,7 +126,7 @@ export async function GET() {
       courseType: r.course.type,
       courseStartDate: r.course.startDate.toISOString(),
       courseEndDate: r.course.endDate?.toISOString() ?? null,
-      childName: r.child.name,
+      childName: r.child?.name ?? null,
     })),
   });
 }

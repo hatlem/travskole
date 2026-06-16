@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireSuperAdmin() {
-  const session = await getServerSession();
-  if (!session || session.user.role !== 'superadmin') {
-    return null;
-  }
-  return session;
-}
+import { requireSuperAdmin } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 export async function GET(
   _request: NextRequest,
@@ -32,7 +25,7 @@ export async function GET(
 
     return NextResponse.json({ template });
   } catch (error) {
-    console.error('Error fetching email template:', error);
+    logger.error('Error fetching email template', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }
@@ -67,7 +60,7 @@ export async function PUT(
 
     return NextResponse.json({ template });
   } catch (error) {
-    console.error('Error updating email template:', error);
+    logger.error('Error updating email template', { error });
     return NextResponse.json({ error: 'Kunne ikke oppdatere e-postmal' }, { status: 500 });
   }
 }
@@ -90,7 +83,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting email template:', error);
+    logger.error('Error deleting email template', { error });
     return NextResponse.json({ error: 'Kunne ikke slette e-postmal' }, { status: 500 });
   }
 }

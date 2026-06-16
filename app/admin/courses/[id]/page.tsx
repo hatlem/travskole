@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
+import { getSettings, parseCourseTypes, courseTypeLabel } from '@/lib/settings';
+import { ageFromBirthdate } from '@/lib/dates';
 import { CourseActions } from './CourseActions';
 
 const statusLabels: Record<string, string> = {
@@ -20,12 +22,6 @@ const typeStyles: Record<string, string> = {
   kurs: 'bg-blue-100 text-blue-800',
 };
 
-const regStatusLabels: Record<string, string> = {
-  pending: 'Venter',
-  confirmed: 'Bekreftet',
-  waitlist: 'Venteliste',
-  cancelled: 'Avlyst',
-};
 
 function formatDate(date: Date | string | null) {
   if (!date) return '-';
@@ -34,6 +30,7 @@ function formatDate(date: Date | string | null) {
 
 export default async function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const settings = await getSettings();
 
   const course = await prisma.course.findUnique({
     where: { id: Number(id) },
@@ -68,9 +65,9 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     id: r.id,
     status: r.status,
     createdAt: r.createdAt.toISOString(),
-    childName: r.child.name,
-    childBirthdate: r.child.birthdate?.toISOString() ?? null,
-    childAllergies: r.child.allergies,
+    childName: r.child?.name ?? `${r.parent.name} (voksen)`,
+    childBirthdate: r.child?.birthdate?.toISOString() ?? null,
+    childAllergies: r.child?.allergies ?? null,
     parentName: r.parent.name,
     parentPhone: r.parent.phone,
     parentEmail: r.parent.user.email,
@@ -81,8 +78,8 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   // Allergy data
   const childrenWithAllergies = course.registrations
-    .filter((r) => r.child.allergies && r.status !== 'cancelled')
-    .map((r) => ({ name: r.child.name, allergies: r.child.allergies! }));
+    .filter((r) => r.child?.allergies && r.status !== 'cancelled')
+    .map((r) => ({ name: r.child!.name, allergies: r.child!.allergies! }));
 
   // Consent stats (exclude cancelled)
   const activeRegs = course.registrations.filter((r) => r.status !== 'cancelled');
@@ -98,7 +95,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
       {/* Back link */}
       <Link
         href="/admin/courses"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-[#003B7A] mb-6 transition-colors"
+        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-bjerke-blue mb-6 transition-colors"
       >
         <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -115,7 +112,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyles[course.type] || 'bg-gray-100 text-gray-800'}`}
               >
-                {course.type === 'leir' ? 'Leir' : 'Kurs'}
+                {courseTypeLabel(parseCourseTypes(settings.course_types), course.type)}
               </span>
               <span
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[course.status] || 'bg-gray-100 text-gray-800'}`}
@@ -139,7 +136,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
           <div className="flex items-center gap-3">
             <Link
               href={`/admin/courses/${course.id}/edit`}
-              className="bg-[#003B7A] hover:bg-[#002855] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
               Rediger
             </Link>
@@ -266,14 +263,12 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
             {course.registrations
               .filter((r) => r.status !== 'cancelled')
               .map((r) => {
-                const age = r.child.birthdate
-                  ? Math.floor((Date.now() - new Date(r.child.birthdate).getTime()) / (365.25 * 24 * 60 * 60 * 1000))
-                  : null;
+                const age = r.child?.birthdate ? ageFromBirthdate(r.child.birthdate) : null;
                 return (
                   <tr key={r.id} className="border-b border-gray-200">
-                    <td className="py-1.5 pr-3">{r.child.name}</td>
+                    <td className="py-1.5 pr-3">{r.child?.name ?? `${r.parent.name} (voksen)`}</td>
                     <td className="py-1.5 pr-3">{age !== null ? `${age} år` : '-'}</td>
-                    <td className="py-1.5 pr-3">{r.child.allergies || '-'}</td>
+                    <td className="py-1.5 pr-3">{r.child?.allergies || '-'}</td>
                     <td className="py-1.5 pr-3">{r.parent.name}</td>
                     <td className="py-1.5">{r.parent.phone}</td>
                   </tr>

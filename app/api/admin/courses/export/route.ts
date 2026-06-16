@@ -1,20 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import { requireAdmin } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 function escapeCsvField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+  // SECURITY: nøytraliser formelinjeksjon i Excel/Sheets (=, +, -, @, tab, CR)
+  let v = value;
+  if (/^[=+\-@\t\r]/.test(v)) {
+    v = `'${v}`;
   }
-  return value;
+  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
+    return `"${v.replace(/"/g, '""')}"`;
+  }
+  return v;
 }
 
 export async function GET() {
@@ -91,7 +89,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('Error exporting courses:', error);
+    logger.error('Error exporting courses', { error });
     return NextResponse.json(
       { error: 'Kunne ikke eksportere kurs' },
       { status: 500 }

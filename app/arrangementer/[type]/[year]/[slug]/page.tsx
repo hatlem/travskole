@@ -3,7 +3,8 @@ import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
-import { getSettings } from '@/lib/settings';
+import { getSettings, parseCourseTypes, courseTypeLabel } from '@/lib/settings';
+import { makeT } from '@/lib/strings';
 import type { Metadata } from 'next';
 
 export const dynamic = 'force-dynamic';
@@ -19,7 +20,7 @@ export async function generateMetadata({
     getSettings(),
   ]);
   if (!course) return { title: `Ikke funnet - ${settings.site_name}` };
-  const typeLabel = course.type === 'kurs' ? 'Kurs' : 'Leir';
+  const typeLabel = courseTypeLabel(parseCourseTypes(settings.course_types), course.type);
   return {
     title: `${course.name} - ${settings.site_name}`,
     description: course.description || `${typeLabel} hos ${settings.site_name} for barn og unge.`,
@@ -27,7 +28,7 @@ export async function generateMetadata({
 }
 
 async function getCourseBySlug(type: string, year: string, slug: string) {
-  if (!['kurs', 'leir'].includes(type)) return undefined;
+  if (!/^[a-z0-9-]+$/.test(type)) return undefined;
 
   const yearNum = parseInt(year, 10);
   if (isNaN(yearNum)) return undefined;
@@ -74,6 +75,8 @@ export default async function CourseDetailPage({
     notFound();
   }
 
+  const t = makeT(settings);
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString('nb-NO', {
       day: 'numeric',
@@ -90,17 +93,17 @@ export default async function CourseDetailPage({
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="bg-[#003B7A] text-white py-12">
+      <div className="bg-bjerke-blue text-white py-12">
         <div className="max-w-4xl mx-auto px-4">
           <Link
             href="/arrangementer"
             className="text-blue-200 hover:text-white mb-4 inline-block"
           >
-            &larr; Tilbake til alle arrangementer
+            &larr; {t('course.back_to_all')}
           </Link>
           <h1 className="text-5xl font-bold mb-2">{course.name}</h1>
           <span className="inline-block px-4 py-2 text-sm font-medium bg-blue-600 rounded-full">
-            {course.type === 'kurs' ? 'Kurs' : 'Leir'}
+            {courseTypeLabel(parseCourseTypes(settings.course_types), course.type)}
           </span>
         </div>
       </div>
@@ -121,18 +124,18 @@ export default async function CourseDetailPage({
         <div className="grid md:grid-cols-3 gap-8">
           <div className="md:col-span-2">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 mb-6">
-              <h2 className="text-3xl font-bold text-gray-900 mb-4">Om kurset</h2>
+              <h2 className="text-3xl font-bold text-gray-900 mb-4">{t('course.about_heading')}</h2>
               <p className="text-gray-700 text-lg leading-relaxed mb-6">
                 {course.description}
               </p>
 
               {learningPoints.length > 0 && (
                 <>
-                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">Hva du lærer</h3>
+                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">{t('course.learning_heading')}</h3>
                   <ul className="space-y-3 text-gray-700 mb-6">
                     {learningPoints.map((point, i) => (
                       <li key={i} className="flex items-start">
-                        <span className="text-[#003B7A] mr-2 mt-1">&#10003;</span>
+                        <span className="text-bjerke-blue mr-2 mt-1">&#10003;</span>
                         {point}
                       </li>
                     ))}
@@ -142,9 +145,9 @@ export default async function CourseDetailPage({
 
               {packingList.length > 0 && (
                 <>
-                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">Praktisk informasjon</h3>
+                  <h3 className="text-2xl font-semibold text-gray-900 mb-4">{t('course.practical_heading')}</h3>
                   <div className="bg-gray-50 rounded-lg p-6 space-y-3 text-gray-700">
-                    <p><strong>Hva du skal ha med:</strong></p>
+                    <p><strong>{t('course.packing_intro')}</strong></p>
                     <ul className="list-disc list-inside ml-4 space-y-1">
                       {packingList.map((item, i) => (
                         <li key={i}>{item}</li>
@@ -156,7 +159,7 @@ export default async function CourseDetailPage({
 
               {settings.instructor_name && (
                 <div className="mt-8 bg-blue-50 rounded-lg p-6">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-2">Instruktør</h3>
+                  <h3 className="text-xl font-semibold text-gray-900 mb-2">{t('course.instructor_heading')}</h3>
                   <p className="text-gray-700">
                     <strong>{settings.instructor_name}</strong>
                     {settings.instructor_certification && (
@@ -174,42 +177,50 @@ export default async function CourseDetailPage({
           <div className="md:col-span-1">
             <div className="bg-white rounded-lg shadow-md border border-gray-200 p-6 sticky top-4">
               <div className="mb-6">
-                <div className="text-4xl font-bold text-[#003B7A] mb-2">
-                  {course.price === 0 || !course.price ? 'Gratis' : `${course.price} kr`}
+                <div className="text-4xl font-bold text-bjerke-blue mb-2">
+                  {course.price === 0 || !course.price ? t('course.free') : `${course.price} ${t('course.currency_suffix')}`}
                 </div>
                 {course.status === 'open' && (
-                  <p className="text-green-600 font-medium">Ledige plasser</p>
+                  <p className="text-green-600 font-medium">{t('course.status_open')}</p>
                 )}
                 {course.status === 'full' && (
-                  <p className="text-red-600 font-medium">Fullt booket</p>
+                  <p className="text-red-600 font-medium">{t('course.status_full_long')}</p>
                 )}
                 {course.status === 'closed' && (
-                  <p className="text-gray-600 font-medium">Påmelding stengt</p>
+                  <p className="text-gray-600 font-medium">{t('course.status_closed_long')}</p>
                 )}
               </div>
 
               <div className="space-y-4 mb-6 border-t border-b border-gray-200 py-4">
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">Start</p>
+                  <p className="text-sm text-gray-500 mb-1">{t('course.start')}</p>
                   <p className="font-semibold text-gray-900">{formatDate(course.startDate)}</p>
                 </div>
                 {course.endDate && (
                   <div>
-                    <p className="text-sm text-gray-500 mb-1">Slutt</p>
+                    <p className="text-sm text-gray-500 mb-1">{t('course.end')}</p>
                     <p className="font-semibold text-gray-900">{formatDate(course.endDate)}</p>
                   </div>
                 )}
                 <div>
-                  <p className="text-sm text-gray-500 mb-1">Aldersgruppe</p>
+                  <p className="text-sm text-gray-500 mb-1">{t('course.age_group')}</p>
                   <p className="font-semibold text-gray-900">
                     {course.ageMin && course.ageMax
-                      ? `${course.ageMin}-${course.ageMax} år`
-                      : 'Alle aldre'}
+                      ? t('course.age_range', { min: course.ageMin, max: course.ageMax })
+                      : course.audience === 'voksen' ? t('course.adults') : t('course.all_ages')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500 mb-1">{t('course.registration_label')}</p>
+                  <p className="font-semibold text-gray-900">
+                    {course.audience === 'voksen'
+                      ? t('course.registration_adult')
+                      : t('course.registration_child')}
                   </p>
                 </div>
                 {course.maxParticipants && (
                   <div>
-                    <p className="text-sm text-gray-500 mb-1">Maks deltakere</p>
+                    <p className="text-sm text-gray-500 mb-1">{t('course.max_participants')}</p>
                     <p className="font-semibold text-gray-900">{course.maxParticipants}</p>
                   </div>
                 )}
@@ -218,20 +229,20 @@ export default async function CourseDetailPage({
               {course.status === 'open' ? (
                 <Link
                   href={`/arrangementer/${course.type}/${courseYear}/${courseSlug}/pamelding`}
-                  className="block w-full text-center bg-[#003B7A] hover:bg-[#002855] text-white px-6 py-4 rounded-lg font-semibold text-lg transition"
+                  className="block w-full text-center bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-6 py-4 rounded-lg font-semibold text-lg transition"
                 >
-                  Meld på
+                  {t('course.register_button')}
                 </Link>
               ) : course.status === 'full' ? (
                 <div>
                   <Link
                     href={`/arrangementer/${course.type}/${courseYear}/${courseSlug}/pamelding?venteliste=true`}
-                    className="block w-full text-center border-2 border-[#003B7A] text-[#003B7A] hover:bg-[#003B7A] hover:text-white px-6 py-4 rounded-lg font-semibold text-lg transition"
+                    className="block w-full text-center border-2 border-bjerke-blue text-bjerke-blue hover:bg-bjerke-blue hover:text-white px-6 py-4 rounded-lg font-semibold text-lg transition"
                   >
-                    Sett meg på venteliste
+                    {t('course.waitlist_button')}
                   </Link>
                   <p className="text-sm text-gray-600 text-center mt-3">
-                    Kurset er fullt, men du kan sette deg på venteliste
+                    {t('course.waitlist_note')}
                   </p>
                 </div>
               ) : (
@@ -239,12 +250,12 @@ export default async function CourseDetailPage({
                   disabled
                   className="block w-full text-center bg-gray-300 text-gray-600 px-6 py-4 rounded-lg font-semibold text-lg cursor-not-allowed"
                 >
-                  Stengt
+                  {t('course.closed_button')}
                 </button>
               )}
 
               <p className="text-xs text-gray-500 text-center mt-4">
-                Du vil motta en bekreftelse på e-post etter påmelding
+                {t('course.email_confirmation_note')}
               </p>
             </div>
           </div>

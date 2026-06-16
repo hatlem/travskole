@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
+import { useSettings } from '@/components/SettingsProvider';
+import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 
 function slugify(text: string): string {
   return text
@@ -17,11 +19,13 @@ function slugify(text: string): string {
 }
 
 const inputClass =
-  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent';
+  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 const errorClass = 'text-xs text-red-600 mt-1';
 
 export default function NewCoursePage() {
+  const settings = useSettings();
+  const courseTypes = parseCourseTypes(settings.course_types);
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +36,8 @@ export default function NewCoursePage() {
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState('kurs');
+  const [type, setType] = useState(courseTypes[0]?.value ?? 'kurs');
+  const [audience, setAudience] = useState('barn');
   const [status, setStatus] = useState('open');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -70,6 +75,7 @@ export default function NewCoursePage() {
       slug: slug || '',
       description,
       type,
+      audience,
       startDate,
       endDate: endDate || null,
       ageMin: ageMin ? Number(ageMin) : null,
@@ -117,7 +123,7 @@ export default function NewCoursePage() {
   return (
     <div className="max-w-6xl">
       <div className="mb-8">
-        <Link href="/admin/courses" className="text-sm text-[#003B7A] hover:underline font-medium">
+        <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
           &larr; Tilbake til kurs
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mt-2">Nytt kurs</h1>
@@ -184,7 +190,7 @@ export default function NewCoursePage() {
                   className={inputClass}
                 />
                 {(name || slug) && (
-                  <p className="text-xs text-[#003B7A] mt-1.5 font-mono bg-blue-50 px-2 py-1 rounded">
+                  <p className="text-xs text-bjerke-blue mt-1.5 font-mono bg-blue-50 px-2 py-1 rounded">
                     /arrangementer/{type}/{currentYear}/{effectiveSlug || '...'}
                   </p>
                 )}
@@ -235,8 +241,27 @@ export default function NewCoursePage() {
                   onChange={(e) => setType(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="kurs">Kurs</option>
-                  <option value="leir">Leir</option>
+                  {courseTypes.map((t) => (
+                    <option key={t.value} value={t.value}>{t.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Målgruppe */}
+              <div>
+                <label htmlFor="audience" className={labelClass}>
+                  Hvem er arrangementet for? *
+                </label>
+                <select
+                  id="audience"
+                  name="audience"
+                  required
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="barn">Barn — foresatt melder på barnet</option>
+                  <option value="voksen">Voksne — deltaker melder på seg selv</option>
                 </select>
               </div>
 
@@ -396,7 +421,7 @@ export default function NewCoursePage() {
               <button
                 type="submit"
                 disabled={loading || Object.keys(validationErrors).length > 0}
-                className="w-full bg-[#003B7A] text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors disabled:opacity-50"
+                className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
               >
                 {loading ? 'Oppretter...' : 'Opprett kurs'}
               </button>
@@ -426,8 +451,8 @@ export default function NewCoursePage() {
               )}
               <div className="p-4">
                 <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-medium uppercase tracking-wide text-[#003B7A]">
-                    {type === 'leir' ? 'Leir' : 'Kurs'}
+                  <span className="text-xs font-medium uppercase tracking-wide text-bjerke-blue">
+                    {courseTypeLabel(courseTypes, type)}
                   </span>
                   {status === 'open' && (
                     <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Åpen</span>
@@ -457,7 +482,7 @@ export default function NewCoursePage() {
                     </span>
                   )}
                   {price && (
-                    <span className="text-sm font-semibold text-[#003B7A]">{Number(price).toLocaleString('nb-NO')} kr</span>
+                    <span className="text-sm font-semibold text-bjerke-blue">{Number(price).toLocaleString('nb-NO')} kr</span>
                   )}
                 </div>
               </div>

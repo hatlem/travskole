@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { sendAdminEmail } from '@/lib/mail';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
@@ -85,7 +78,7 @@ export async function POST(request: NextRequest) {
         await sendAdminEmail(recipient.email, subject, htmlBody);
         sentCount++;
       } catch (err) {
-        console.error(`Failed to send email to ${recipient.email}:`, err);
+        logger.error(`Failed to send email to ${recipient.email}`, { error: err });
       }
     }
 
@@ -107,7 +100,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ sentCount, totalRecipients: recipients.length });
   } catch (error) {
-    console.error('Error sending admin email:', error);
+    logger.error('Error sending admin email', { error });
     return NextResponse.json({ error: 'Kunne ikke sende e-post' }, { status: 500 });
   }
 }

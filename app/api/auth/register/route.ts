@@ -1,21 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { z } from 'zod';
+import DOMPurify from 'isomorphic-dompurify';
+import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
+import logger, { logRateLimitExceeded } from '@/lib/logger';
+import { signupLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 
-const prisma = new PrismaClient();
+const registerSchema = z.object({
+  name: z.string().min(2, 'Navnet må være minst 2 tegn').max(100),
+  email: z.string().email('Ugyldig e-postadresse'),
+  phone: z.string().min(8, 'Ugyldig telefonnummer').max(20),
+  password: z.string().min(8, 'Passordet må være minst 8 tegn').max(200),
+  address: z.string().max(200).optional().nullable(),
+});
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { name, email, phone, password, address } = body;
+    // SECURITY: rate limiting — 5 kontoer per time per IP
+    const ip = getClientIp(request.headers);
+    const rateLimit = await checkRateLimit(signupLimiter, ip);
+    if (!rateLimit.allowed) {
+      logRateLimitExceeded('/api/auth/register', ip);
+      return NextResponse.json({ error: rateLimit.error }, { status: 429 });
+    }
 
-    // Validate required fields
-    if (!name || !email || !phone || !password) {
+    const body = await request.json();
+
+    // SECURITY: server-side validering (klientens zod kan omgås)
+    const parsed = registerSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Alle påkrevde felt må fylles ut' },
+        { error: parsed.error.issues[0]?.message ?? 'Ugyldige felter' },
         { status: 400 }
       );
     }
+    const { email, phone, password } = parsed.data;
+    const name = DOMPurify.sanitize(parsed.data.name);
+    const address = parsed.data.address ? DOMPurify.sanitize(parsed.data.address) : null;
 
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
@@ -49,7 +70,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           name,
           phone,
-          address: address || null,
+          address,
         },
       });
 
@@ -64,7 +85,7 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error', { error });
     return NextResponse.json(
       { error: 'Noe gikk galt under registrering' },
       { status: 500 }

@@ -17,12 +17,6 @@ interface Registration {
   consentRisk: boolean;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Venter',
-  confirmed: 'Bekreftet',
-  waitlist: 'Venteliste',
-  cancelled: 'Avlyst',
-};
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -174,7 +168,7 @@ export function CourseActions({
                       value={filter}
                       checked={recipientFilter === filter}
                       onChange={() => setRecipientFilter(filter)}
-                      className="text-[#003B7A] focus:ring-[#003B7A]"
+                      className="text-bjerke-blue focus:ring-bjerke-blue"
                     />
                     <span className="text-sm text-gray-700">{recipientLabels[filter]}</span>
                   </label>
@@ -189,7 +183,7 @@ export function CourseActions({
                 value={emailSubject}
                 onChange={(e) => setEmailSubject(e.target.value)}
                 placeholder={`Informasjon om ${courseName}`}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent outline-none"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent outline-none"
               />
             </div>
             <div>
@@ -200,7 +194,7 @@ export function CourseActions({
                 value={emailMessage}
                 onChange={(e) => setEmailMessage(e.target.value)}
                 placeholder="Skriv meldingen her..."
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent outline-none resize-y"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent outline-none resize-y"
               />
             </div>
             <div className="flex gap-3 pt-2">
@@ -210,7 +204,7 @@ export function CourseActions({
                 className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   sendingEmail
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-[#003B7A] hover:bg-[#002855] text-white'
+                    : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
                 }`}
               >
                 {sendingEmail ? 'Sender...' : 'Send e-post'}
@@ -251,7 +245,7 @@ export function CourseActions({
                       value={reg.status}
                       onChange={(e) => updateStatus(reg.id, e.target.value)}
                       disabled={updatingId === reg.id}
-                      className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-[#003B7A] ${
+                      className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-bjerke-blue ${
                         STATUS_COLORS[reg.status] || 'bg-gray-100 text-gray-800'
                       } ${updatingId === reg.id ? 'opacity-50 cursor-wait' : ''}`}
                     >
@@ -309,7 +303,7 @@ export function CourseActions({
                           value={reg.status}
                           onChange={(e) => updateStatus(reg.id, e.target.value)}
                           disabled={updatingId === reg.id}
-                          className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-[#003B7A] ${
+                          className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-bjerke-blue ${
                             STATUS_COLORS[reg.status] || 'bg-gray-100 text-gray-800'
                           } ${updatingId === reg.id ? 'opacity-50 cursor-wait' : ''}`}
                         >
