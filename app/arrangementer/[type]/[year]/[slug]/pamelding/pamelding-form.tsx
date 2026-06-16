@@ -121,7 +121,11 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
     resolver: zodResolver(buildRegistrationSchema(isAdult)),
     defaultValues: {
       childSelection: 'new',
-      consentMedia: false
+      // Samtykker starter som false (ikke undefined) så validering viser pene
+      // norske meldinger, ikke Zods rå «expected boolean, received undefined».
+      consentActivities: false,
+      consentMedia: false,
+      consentRisk: false
     }
   });
 

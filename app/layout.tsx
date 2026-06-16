@@ -24,6 +24,8 @@ const geistMono = Geist_Mono({
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings();
   return {
+    // Uten denne resolver Next OG-/Twitter-bilde-URL-er til http://localhost:8080.
+    metadataBase: new URL(process.env.NEXTAUTH_URL || 'https://registrering.bjerke.no'),
     title: {
       default: s.site_name,
       template: `%s | ${s.site_name}`,
@@ -40,9 +42,7 @@ export async function generateMetadata(): Promise<Metadata> {
       index: true,
       follow: true,
     },
-    icons: {
-      icon: '/favicon.svg',
-    },
+    // Ikon genereres av app/icon.tsx — ingen eksplisitt /favicon.svg (fantes ikke → 404).
   };
 }
 

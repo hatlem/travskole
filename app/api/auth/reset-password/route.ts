@@ -79,13 +79,12 @@ export async function POST(request: Request) {
       data: { passwordHash },
     });
 
-    // Delete the used token
-    await prisma.verificationToken.delete({
+    // Delete the used token. Tokens lagres som sha256-hash, så slett på tokenHash
+    // (ikke rå token). deleteMany unngår P2025 dersom raden allerede er borte.
+    await prisma.verificationToken.deleteMany({
       where: {
-        identifier_token: {
-          identifier: normalizedEmail,
-          token,
-        },
+        identifier: normalizedEmail,
+        token: tokenHash,
       },
     });
 
