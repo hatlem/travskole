@@ -96,8 +96,29 @@ export const authOptions: NextAuthOptions = {
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
+        // Initial sign-in
         token.role = user.role;
         token.id = user.id;
+        return token;
+      }
+      // Re-valider mot DB ved hver påfølgende forespørsel slik at rolleendringer,
+      // degradering og kontosletting trer i kraft umiddelbart — ikke en opptil
+      // 30 dager gammel JWT-snapshot. Forsvar mot stjålne/foreldede sesjoner.
+      if (token.id != null) {
+        try {
+          const dbUser = await prisma.user.findUnique({
+            where: { id: Number(token.id) },
+            select: { role: true },
+          });
+          if (!dbUser) {
+            // Bruker slettet → tom rolle (ikke admin/superadmin) = de-privilegert
+            token.role = '';
+            return token;
+          }
+          token.role = dbUser.role;
+        } catch {
+          // DB midlertidig utilgjengelig: behold token (fail-open for tilgjengelighet)
+        }
       }
       return token;
     },

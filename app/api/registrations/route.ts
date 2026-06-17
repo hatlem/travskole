@@ -3,7 +3,7 @@ import { z } from 'zod';
 import DOMPurify from 'isomorphic-dompurify';
 import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import logger, { logRegistration, logRateLimitExceeded } from '@/lib/logger';
-import { requireAdmin } from '@/lib/auth';
+import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
@@ -154,6 +154,23 @@ export async function POST(request: NextRequest) {
         { error: 'Du må godta alle påkrevde samtykker' },
         { status: 400 }
       );
+    }
+
+    // SECURITY: hvis e-posten allerede har en passordbeskyttet konto, ikke fest en
+    // anonym påmelding til den — krev innlogging som den brukeren. Hindrer påmelding
+    // på vegne av andre / datapollusjon mot eksisterende kontoer.
+    const existingUser = await prisma.user.findUnique({
+      where: { email: data.parentEmail },
+      select: { passwordHash: true },
+    });
+    if (existingUser?.passwordHash) {
+      const session = await getServerSession();
+      if ((session?.user?.email ?? '').toLowerCase() !== data.parentEmail.toLowerCase()) {
+        return NextResponse.json(
+          { error: 'Denne e-posten har allerede en konto. Logg inn for å melde på.' },
+          { status: 409 }
+        );
+      }
     }
 
     // Find or create user + parent
@@ -370,6 +387,9 @@ export async function GET(request: NextRequest) {
         parent: true,
       },
       orderBy: { createdAt: 'desc' },
+      // Defensiv øvre grense mot ubegrenset minnebruk. Langt over realistisk
+      // volum; ekte paginering/streaming er et senere tiltak hvis det nærmer seg.
+      take: 5000,
     });
 
     return NextResponse.json({
