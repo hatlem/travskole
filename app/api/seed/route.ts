@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
-import crypto from 'crypto';
 import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -28,7 +27,14 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const adminPassword = process.env.SEED_ADMIN_PASSWORD || crypto.randomBytes(16).toString('hex');
+    // Krev at passordet settes via env — aldri generer og returner klartekst i HTTP-svaret.
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    if (!adminPassword || adminPassword.length < 12) {
+      return NextResponse.json(
+        { error: 'SEED_ADMIN_PASSWORD må være satt (min 12 tegn) før seeding' },
+        { status: 400 },
+      );
+    }
     const passwordHash = await hashPassword(adminPassword);
 
     await prisma.user.create({
@@ -38,7 +44,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       message: 'Seeded successfully',
       adminEmail: 'bjerke@bjerke.no',
-      adminPassword: process.env.SEED_ADMIN_PASSWORD ? '(from env)' : adminPassword,
     });
   } catch (error) {
     logger.error('Seed error', { error });

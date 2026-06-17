@@ -33,6 +33,11 @@ echo "==> Bygger (standalone)"
 # Kall binærene direkte (unngår pnpm/corepack-wrapper-gotchas). binaryTargets i
 # prisma/schema.prisma sørger for at Linux-query-engines lastes ned også på macOS,
 # og outputFileTracingIncludes (next.config.ts) bunter dem inn i standalone.
+# VIKTIG: ren build hver gang. Slett forrige artefakt OG .next FØR bygget — ellers
+# (a) tracer Next forrige deploy/ inn i standalone (nestet deploy/deploy/...), og
+# (b) beholder .next/standalone stale source-.tsx fra tidligere bygg (Next rydder
+# ikke standalone). Begge ville sendt kildekode/rapporter til prod-serveren.
+rm -rf deploy app.zip .next
 ./node_modules/.bin/prisma generate
 ./node_modules/.bin/next build
 
@@ -47,6 +52,10 @@ cp -RL .next/standalone/. deploy/
 # SIKKERHET: Next standalone kopierer .env-filer inn i builden — de skal ALDRI
 # deployes (ville overstyrt Azure App Settings i runtime). Prod leser env fra Azure.
 find deploy -name '.env' -o -name '.env.*' | xargs -r rm -f
+# Next tracer kopierer enkelte kilde-.tsx (metadata-image-ruter, client-grenser) inn
+# i standalone. De trengs ALDRI ved runtime (appen kjører kompilert .js fra .next),
+# og skal ikke ligge som kildekode på prod-serveren. Strip dem (ikke i node_modules).
+find deploy -name '*.tsx' -not -path '*/node_modules/*' -delete
 mkdir -p deploy/.next/static
 cp -R .next/static/. deploy/.next/static/
 cp -R public deploy/public
@@ -63,6 +72,14 @@ if [[ -n "$(find deploy -type l)" ]]; then
 fi
 if [[ -z "$(find deploy -name 'libquery_engine-debian*')" ]]; then
   echo "FEIL: Linux Prisma-query-engine mangler i artefakt — avbryter"; exit 1
+fi
+# Ikke-runtime-filer skal ALDRI på prod-serveren (kildekode, interne sikkerhets-/
+# testrapporter, deploy-skript, eller en nestet deploy/-katalog).
+if [[ -n "$(find deploy \( -name 'sec-review*.md' -o -name 'testit*.md' -o -name 'deploy-*.sh' \) )" || -d deploy/deploy ]]; then
+  echo "FEIL: artefakt inneholder rapporter/skript/nestet deploy — avbryter"; exit 1
+fi
+if [[ -n "$(find deploy -name '*.tsx' -not -path '*/node_modules/*')" ]]; then
+  echo "FEIL: artefakt inneholder kilde-.tsx (utenfor node_modules) — avbryter"; exit 1
 fi
 (cd deploy && zip -qr ../app.zip .)
 

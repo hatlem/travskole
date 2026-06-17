@@ -15,6 +15,11 @@ export async function PUT(
   const { id } = await params;
   const body = await request.json();
 
+  const VALID_STATUSES = ['pending', 'confirmed', 'cancelled'];
+  if (!VALID_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
+  }
+
   const booking = await prisma.bookingRequest.update({
     where: { id: Number(id) },
     data: { status: body.status },
