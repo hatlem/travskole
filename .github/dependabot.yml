@@ -1,0 +1,24 @@
+version: 2
+updates:
+  # npm/pnpm-avhengigheter
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      # Saml ikke-kritiske patch/minor-bumps i én PR for å redusere støy
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+
+  # GitHub Actions (hvis/når workflows legges til)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
