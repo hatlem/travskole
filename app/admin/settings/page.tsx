@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 
 interface SettingGroup {
   title: string;
   description: string;
+  adminEditable?: boolean; // synlig/redigerbar for vanlige admins (ikke bare superadmin)
   fields: {
     key: string;
     label: string;
@@ -82,6 +82,7 @@ const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Samtykketekster',
     description: 'Tekster som vises i påmeldingsskjemaet. Endringer påvirker fremtidige påmeldinger.',
+    adminEditable: true,
     fields: [
       { key: 'consent_activities_text', label: 'Samtykke: Aktiviteter utenfor Bjerke', type: 'textarea' },
       { key: 'consent_media_text', label: 'Samtykke: Bilder og video', type: 'textarea' },
@@ -95,6 +96,7 @@ const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Påmeldingsskjema',
     description: 'Styr hvilke felt som er obligatoriske i påmeldingsskjemaet.',
+    adminEditable: true,
     fields: [
       { key: 'registration_address_required', label: 'Krev adresse', type: 'toggle' },
       { key: 'registration_terms_required', label: 'Krev at vilkårene godtas', type: 'toggle' },
@@ -121,7 +123,6 @@ const SETTING_GROUPS: SettingGroup[] = [
 
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
-  const router = useRouter();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -129,12 +130,8 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session && session.user.role !== 'superadmin') {
-      router.push('/admin');
-      return;
-    }
     fetchSettings();
-  }, [session, router]);
+  }, []);
 
   async function fetchSettings() {
     try {
@@ -155,8 +152,14 @@ export default function AdminSettingsPage() {
     setError(null);
 
     try {
-      const entries = Object.entries(settings);
-      for (const [key, value] of entries) {
+      // Lagre kun nøkler den innloggede rollen faktisk kan endre (unngår 403 for admins)
+      const superadmin = session?.user.role === 'superadmin';
+      const allowedKeys = new Set(
+        (superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable))
+          .flatMap(g => g.fields.map(f => f.key))
+      );
+      for (const [key, value] of Object.entries(settings)) {
+        if (!allowedKeys.has(key)) continue;
         const res = await fetch('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -185,16 +188,19 @@ export default function AdminSettingsPage() {
     );
   }
 
-  if (session?.user.role !== 'superadmin') {
-    return null;
-  }
+  const superadmin = session?.user.role === 'superadmin';
+  const visibleGroups = superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable);
 
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Innstillinger</h1>
-          <p className="text-gray-500 mt-1">Konfigurer nettstedet. Kun tilgjengelig for superadmins.</p>
+          <p className="text-gray-500 mt-1">
+            {superadmin
+              ? 'Konfigurer nettstedet.'
+              : 'Rediger samtykketekster og påmeldingsinnstillinger. Øvrig konfigurasjon krever superadmin.'}
+          </p>
         </div>
         <button
           onClick={handleSave}
@@ -223,7 +229,7 @@ export default function AdminSettingsPage() {
       )}
 
       <div className="space-y-8">
-        {SETTING_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.title} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-1">{group.title}</h2>
             <p className="text-sm text-gray-500 mb-6">{group.description}</p>

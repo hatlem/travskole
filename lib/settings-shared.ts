@@ -58,3 +58,19 @@ export function isAdmin(role: string | undefined): boolean {
 export function isSuperAdmin(role: string | undefined): boolean {
   return role === 'superadmin';
 }
+
+/**
+ * Innstillinger som vanlige admins kan endre (samtykketekster + påmeldingsskjema).
+ * Alle andre innstillinger (sporing, GTM, generell konfig) er kun for superadmin.
+ */
+export const ADMIN_EDITABLE_SETTINGS: readonly string[] = [
+  'consent_activities_text',
+  'consent_media_text',
+  'consent_risk_text',
+  'consent_risk_detail',
+  'consent_media_text_adult',
+  'consent_risk_text_adult',
+  'consent_terms_text',
+  'registration_address_required',
+  'registration_terms_required',
+];
