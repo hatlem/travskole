@@ -9,11 +9,12 @@ import { z } from 'zod';
 import { useSession } from 'next-auth/react';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 
-const buildRegistrationSchema = (isAdult: boolean) => z.object({
+const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requireTerms: boolean) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
   parentLastName: z.string().min(2, 'Etternavn må være minst 2 tegn'),
   parentEmail: z.string().email('Ugyldig e-postadresse'),
   parentPhone: z.string().min(8, 'Ugyldig telefonnummer'),
+  parentAddress: z.string().optional(),
   childSelection: z.enum(['existing', 'new']),
   existingChildId: z.string().optional(),
   childFirstName: z.string().optional(),
@@ -22,10 +23,25 @@ const buildRegistrationSchema = (isAdult: boolean) => z.object({
   childAllergies: z.string().optional(),
   consentActivities: z.boolean(),
   consentMedia: z.boolean(),
+  consentTerms: z.boolean(),
   consentRisk: z.boolean().refine(val => val === true, {
     message: 'Du må bekrefte at du har lest og forstått forsikringsvilkårene'
   })
 }).superRefine((data, ctx) => {
+  if (requireAddress && (!data.parentAddress || data.parentAddress.trim().length < 5)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Adresse er påkrevd',
+      path: ['parentAddress']
+    });
+  }
+  if (requireTerms && data.consentTerms !== true) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Du må godta vilkårene for å melde på',
+      path: ['consentTerms']
+    });
+  }
   if (!isAdult && !data.consentActivities) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -96,6 +112,10 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
   const consentMediaText = (isAdult ? settings.consent_media_text_adult : settings.consent_media_text) || '';
   const consentRiskText = (isAdult ? settings.consent_risk_text_adult : settings.consent_risk_text) || '';
   const consentRiskDetail = settings.consent_risk_detail || '';
+  const consentTermsText = settings.consent_terms_text || '';
+  // Admin styrer obligatorisk-status; default obligatorisk (kun 'false' slår av)
+  const requireAddress = settings.registration_address_required !== 'false';
+  const requireTerms = settings.registration_terms_required !== 'false';
 
   useEffect(() => {
     if (!session || isAdult) return;
@@ -118,13 +138,15 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
     handleSubmit,
     formState: { errors },
   } = useForm<RegistrationFormData>({
-    resolver: zodResolver(buildRegistrationSchema(isAdult)),
+    resolver: zodResolver(buildRegistrationSchema(isAdult, requireAddress, requireTerms)),
     defaultValues: {
       childSelection: 'new',
+      parentAddress: '',
       // Samtykker starter som false (ikke undefined) så validering viser pene
       // norske meldinger, ikke Zods rå «expected boolean, received undefined».
       consentActivities: false,
       consentMedia: false,
+      consentTerms: false,
       consentRisk: false
     }
   });
@@ -252,6 +274,22 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                   />
                   {errors.parentPhone && (
                     <p className="text-red-600 text-sm mt-1">{errors.parentPhone.message}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label htmlFor="parentAddress" className="block text-sm font-medium text-gray-700 mb-1">
+                    Adresse{requireAddress ? ' *' : ''}
+                  </label>
+                  <input
+                    {...register('parentAddress')}
+                    type="text"
+                    id="parentAddress"
+                    autoComplete="street-address"
+                    className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
+                  />
+                  {errors.parentAddress && (
+                    <p className="text-red-600 text-sm mt-1">{errors.parentAddress.message}</p>
                   )}
                 </div>
               </div>
@@ -475,6 +513,27 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                 </div>
               )}
             </div>
+
+            {consentTermsText && (
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-5">
+                <p className="text-gray-800 text-sm leading-relaxed mb-3">{consentTermsText}</p>
+                <label className="flex items-start space-x-3 cursor-pointer">
+                  <input
+                    {...register('consentTerms')}
+                    type="checkbox"
+                    className="w-5 h-5 mt-0.5 text-bjerke-blue rounded border-gray-300 flex-shrink-0"
+                  />
+                  <span className="text-gray-900 font-medium text-sm">
+                    Jeg har lest og godtar{' '}
+                    <Link href="/vilkar" target="_blank" className="text-bjerke-blue underline">vilkårene</Link>
+                    {requireTerms ? ' *' : ''}
+                  </span>
+                </label>
+                {errors.consentTerms && (
+                  <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentTerms.message}</p>
+                )}
+              </div>
+            )}
 
             <div className="pt-6 border-t border-gray-200">
               <button

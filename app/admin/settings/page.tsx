@@ -89,6 +89,15 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'consent_risk_detail', label: 'Samtykke: Risiko (detaljer)', type: 'textarea' },
       { key: 'consent_media_text_adult', label: 'Samtykke voksne: Bilder og video', type: 'textarea' },
       { key: 'consent_risk_text_adult', label: 'Samtykke voksne: Risiko', type: 'textarea' },
+      { key: 'consent_terms_text', label: 'Vilkårsaksept ved påmelding (bindende / tapte dager / eget ansvar)', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Påmeldingsskjema',
+    description: 'Styr hvilke felt som er obligatoriske i påmeldingsskjemaet.',
+    fields: [
+      { key: 'registration_address_required', label: 'Krev adresse', type: 'toggle' },
+      { key: 'registration_terms_required', label: 'Krev at vilkårene godtas', type: 'toggle' },
     ],
   },
   {

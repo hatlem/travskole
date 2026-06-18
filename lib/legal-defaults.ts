@@ -28,13 +28,14 @@ export const VILKAR_DEFAULT = `
 <p>For å melde på må du opprette en konto med korrekte og oppdaterte opplysninger. Du er ansvarlig for å holde påloggingsinformasjonen din hemmelig og for aktivitet som skjer på kontoen din. Kontoen er personlig. Foresatte oppretter konto på vegne av seg selv og melder på sine egne barn.</p>
 
 <h2>3. Påmelding og bekreftelse</h2>
-<p>En påmelding er bindende når den er registrert i tjenesten og bekreftet av oss. Antall plasser kan være begrenset, og påmeldinger behandles fortløpende. Vi tar forbehold om at et arrangement kan bli fulltegnet.</p>
+<p>En påmelding er <strong>bindende</strong> når den er registrert i tjenesten og bekreftet av oss. Antall plasser kan være begrenset, og påmeldinger behandles fortløpende. Får du ikke plass, gir vi beskjed om plass på venteliste. Vi tar forbehold om at et arrangement kan bli fulltegnet.</p>
 
 <h2>4. Priser og betaling</h2>
-<p>Prisen for hvert arrangement fremgår ved påmelding. Med mindre annet er oppgitt, skal betaling skje innen fristen som angis i bekreftelsen. Manglende betaling innen fristen kan medføre at plassen tilbys andre.</p>
+<p>Prisen for hvert arrangement fremgår ved påmelding. Påmeldingen er bindende og <strong>forhåndsbetales</strong>: betaling skjer via tilsendt faktura, som må være betalt innen forfall og senest før oppstart. Manglende betaling innen fristen kan medføre at plassen tilbys andre.</p>
 
-<h2>5. Avbestilling og refusjon</h2>
-<p>Ønsker du å avbestille, ber vi deg gi beskjed så snart som mulig til registrering@bjerke.no. Ved avbestilling i god tid før oppstart refunderes innbetalt beløp, eventuelt med fradrag for et administrasjons- eller påmeldingsgebyr. Ved avbestilling tett opp mot oppstart, eller ved manglende oppmøte, kan hele eller deler av beløpet bortfalle. Dersom et arrangement avlyses av oss, refunderes hele beløpet.</p>
+<h2>5. Avbestilling, refusjon og tapte kursdager</h2>
+<p><strong>Tapte/mistede kursdager kan ikke tas igjen eller refunderes</strong> – dette gjelder også ved sykdom eller annet fravær.</p>
+<p>Ønsker du å avbestille, gi beskjed så snart som mulig til registrering@bjerke.no. Ved <strong>avbestilling senere enn 3 dager før oppstart påløper et avbestillingsgebyr på kr 500,–</strong>. Ved avbestilling i god tid før oppstart refunderes innbetalt beløp, eventuelt med fradrag for et administrasjons-/påmeldingsgebyr. Dersom et arrangement avlyses av oss, refunderes hele det innbetalte beløpet.</p>
 
 <h2>6. Sikkerhet, ansvar og forsikring</h2>
 <p>Hestesport regnes som risikosport, og ulykker kan skje. Bjerke Travbane AS har ingen forsikring som dekker personskade som måtte oppstå under våre kurs eller aktiviteter. Vi anbefaler derfor at alle deltakere har egen ulykkesforsikring. Deltakere og foresatte plikter å følge instruksjoner fra instruktører og gjeldende sikkerhetsregler på området. Ved å melde seg på bekrefter man å være kjent med disse forholdene.</p>

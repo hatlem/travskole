@@ -47,6 +47,12 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   consent_media_text_adult: 'Jeg samtykker i at det blir tatt videoer/bilder av meg under arrangementet, som kan bli publisert på Bjerkes Facebook-side, Instagram-side og hjemmeside.',
   consent_risk_text_adult: 'Jeg har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje. Det anbefales derfor å ha en egen ulykkesforsikring.',
 
+  // Vilkårsaksept ved påmelding (bindende/forskudd/tapte dager/eget ansvar) — vises for alle påmeldinger
+  consent_terms_text: 'Jeg bekrefter at påmeldingen er bindende og at betaling skjer på forskudd via faktura. Tapte kursdager kan ikke tas igjen eller refunderes. Ved avbestilling senere enn 3 dager før oppstart påløper et avbestillingsgebyr på kr 500,–. All ridning/kjøring skjer på eget ansvar.',
+  // Påmeldingsskjema — admin styrer hvilke felt som er obligatoriske ('true'/'false')
+  registration_address_required: 'true',
+  registration_terms_required: 'true',
+
   // Kursdetaljer
   course_learning_points: 'Grunnleggende om travhester og deres behov\nSikkerhet rundt hester og på banen\nPraktisk erfaring med stell og håndtering\nMoro og vennskap med andre hesteglade barn',
   course_packing_list: 'Varme klær som tåler skitt\nRidehjelm (kan lånes hvis ikke)\nStøvler eller gode sko\nMatpakke og drikkeflaske',

@@ -16,6 +16,7 @@ interface RegistrationData {
   parentName: string;
   parentEmail: string;
   parentPhone: string;
+  parentAddress?: string;
   childSelection: 'existing' | 'new';
   existingChildId?: string;
   childName?: string;
@@ -24,6 +25,7 @@ interface RegistrationData {
   consentActivities: boolean;
   consentMedia: boolean;
   consentRisk: boolean;
+  consentTerms?: boolean;
   waitlist?: boolean;
 }
 
@@ -98,6 +100,23 @@ export async function POST(request: NextRequest) {
     }
     if (data.childAllergies) {
       data.childAllergies = DOMPurify.sanitize(data.childAllergies);
+    }
+
+    // Admin-styrte obligatoriske felt: vilkårsaksept + adresse (default obligatorisk)
+    const termsRequired = (await getSetting('registration_terms_required')) !== 'false';
+    if (termsRequired && data.consentTerms !== true) {
+      return NextResponse.json(
+        { error: 'Du må godta vilkårene for å melde på' },
+        { status: 400 }
+      );
+    }
+    const addressRequired = (await getSetting('registration_address_required')) !== 'false';
+    const parentAddress = data.parentAddress ? DOMPurify.sanitize(data.parentAddress).trim() : '';
+    if (addressRequired && parentAddress.length < 5) {
+      return NextResponse.json(
+        { error: 'Adresse er påkrevd' },
+        { status: 400 }
+      );
     }
 
     let course = await prisma.course.findFirst({
@@ -191,7 +210,14 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           name: data.parentName,
           phone: data.parentPhone,
+          address: parentAddress || null,
         },
+      });
+    } else if (parentAddress && parentAddress !== parent.address) {
+      // Hold adressen à jour hvis en ny er oppgitt
+      parent = await prisma.parent.update({
+        where: { id: parent.id },
+        data: { address: parentAddress },
       });
     }
 
