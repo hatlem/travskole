@@ -256,13 +256,13 @@ export default function AdminDobbeltsulkyPage() {
             placeholder="Sok etter navn, e-post eller telefon..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A]/20 focus:border-[#003B7A]"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
           />
         </div>
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value as StatusFilter)}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003B7A]/20 focus:border-[#003B7A]"
+          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="all">Alle statuser</option>
           <option value="new">Ny</option>
@@ -279,7 +279,7 @@ export default function AdminDobbeltsulkyPage() {
               type="checkbox"
               checked={newFilteredIds.length > 0 && newFilteredIds.every(id => selected.has(id))}
               onChange={toggleSelectAll}
-              className="rounded border-gray-300 text-[#003B7A] focus:ring-[#003B7A]"
+              className="rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue"
             />
             Velg alle nye ({newFilteredIds.length})
           </label>
@@ -356,7 +356,7 @@ function BookingCard({
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border p-5 transition ${
-      isSelected ? 'border-[#003B7A] ring-1 ring-[#003B7A]/20' : 'border-gray-200'
+      isSelected ? 'border-bjerke-blue ring-1 ring-bjerke-blue/20' : 'border-gray-200'
     }`}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-start gap-3">
@@ -365,7 +365,7 @@ function BookingCard({
               type="checkbox"
               checked={isSelected}
               onChange={() => onToggleSelect(booking.id)}
-              className="mt-1 rounded border-gray-300 text-[#003B7A] focus:ring-[#003B7A]"
+              className="mt-1 rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue"
             />
           )}
           <div>
@@ -386,11 +386,11 @@ function BookingCard({
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
         <div>
           <p className="text-gray-500">E-post</p>
-          <a href={`mailto:${booking.email}`} className="text-[#003B7A] hover:underline">{booking.email}</a>
+          <a href={`mailto:${booking.email}`} className="text-bjerke-blue hover:underline">{booking.email}</a>
         </div>
         <div>
           <p className="text-gray-500">Telefon</p>
-          <a href={`tel:${booking.phone}`} className="text-[#003B7A] hover:underline">{booking.phone}</a>
+          <a href={`tel:${booking.phone}`} className="text-bjerke-blue hover:underline">{booking.phone}</a>
         </div>
         <div>
           <p className="text-gray-500">Deltakere</p>

@@ -1,31 +1,35 @@
 'use client';
 
+import Link from 'next/link';
+import { useStrings } from '@/components/SettingsProvider';
+
 export default function Error({
   reset,
 }: {
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const t = useStrings();
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
       <div className="text-center">
-        <h1 className="text-4xl font-bold text-gray-900 mb-4">Noe gikk galt</h1>
+        <h1 className="text-4xl font-bold text-gray-900 mb-4">{t('error.generic_heading')}</h1>
         <p className="text-gray-600 mb-8">
-          En uventet feil oppstod. Prøv igjen eller gå tilbake til forsiden.
+          {t('error.generic_text')}
         </p>
         <div className="flex gap-4 justify-center">
           <button
             onClick={reset}
-            className="bg-[#003B7A] hover:bg-[#002855] text-white px-6 py-3 rounded-lg font-semibold transition"
+            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-6 py-3 rounded-lg font-semibold transition"
           >
-            Prøv igjen
+            {t('error.retry')}
           </button>
-          <a
+          <Link
             href="/"
             className="bg-gray-200 hover:bg-gray-300 text-gray-900 px-6 py-3 rounded-lg font-semibold transition"
           >
-            Til forsiden
-          </a>
+            {t('error.to_front')}
+          </Link>
         </div>
       </div>
     </div>

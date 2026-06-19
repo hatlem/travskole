@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireSuperAdmin() {
-  const session = await getServerSession();
-  if (!session || session.user.role !== 'superadmin') return null;
-  return session;
-}
+import { requireSuperAdmin } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 export async function PUT(
   request: NextRequest,
@@ -35,7 +30,7 @@ export async function PUT(
 
     return NextResponse.json({ trigger });
   } catch (error) {
-    console.error('Error updating email trigger:', error);
+    logger.error('Error updating email trigger', { error });
     return NextResponse.json({ error: 'Kunne ikke oppdatere trigger' }, { status: 500 });
   }
 }
@@ -58,7 +53,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting email trigger:', error);
+    logger.error('Error deleting email trigger', { error });
     return NextResponse.json({ error: 'Kunne ikke slette trigger' }, { status: 500 });
   }
 }

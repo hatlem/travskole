@@ -3,6 +3,7 @@
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
+import { useStrings } from '@/components/SettingsProvider';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,15 +29,15 @@ interface DashboardData {
     courseType: string;
     courseStartDate: string;
     courseEndDate: string | null;
-    childName: string;
+    childName: string | null;
   }[];
 }
 
-const statusLabels: Record<string, { label: string; className: string }> = {
-  pending: { label: 'Venter', className: 'bg-yellow-100 text-yellow-800' },
-  confirmed: { label: 'Bekreftet', className: 'bg-green-100 text-green-800' },
-  cancelled: { label: 'Avlyst', className: 'bg-red-100 text-red-800' },
-  waitlist: { label: 'Venteliste', className: 'bg-blue-100 text-blue-800' },
+const statusStyles: Record<string, string> = {
+  pending: 'bg-yellow-100 text-yellow-800',
+  confirmed: 'bg-green-100 text-green-800',
+  cancelled: 'bg-red-100 text-red-800',
+  waitlist: 'bg-blue-100 text-blue-800',
 };
 
 function formatDate(iso: string) {
@@ -48,6 +49,7 @@ function formatDate(iso: string) {
 }
 
 function DashboardContent() {
+  const t = useStrings();
   const searchParams = useSearchParams();
   const success = searchParams.get('success');
   const [data, setData] = useState<DashboardData | null>(null);
@@ -111,17 +113,17 @@ function DashboardContent() {
               </div>
               <div className="ml-3">
                 <h3 className="text-lg font-semibold text-green-800">
-                  Påmelding vellykket!
+                  {t('dash.success_heading')}
                 </h3>
                 <p className="mt-2 text-green-700">
-                  Takk for påmeldingen! Du vil motta en bekreftelse på e-post snart.
+                  {t('dash.success_text')}
                 </p>
               </div>
             </div>
           </div>
         )}
 
-        <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-8">{t('dash.heading')}</h1>
 
         {noProfile && isAdmin && (
           <div className="bg-indigo-50 border border-indigo-200 rounded-lg p-6 mb-8">
@@ -131,7 +133,7 @@ function DashboardContent() {
             </p>
             <Link
               href="/admin"
-              className="inline-block mt-4 bg-[#003B7A] text-white px-5 py-2 rounded-lg hover:bg-[#002855] transition"
+              className="inline-block mt-4 bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition"
             >
               Gå til admin
             </Link>
@@ -140,13 +142,13 @@ function DashboardContent() {
 
         {noProfile && !isAdmin && (
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-            <h2 className="text-lg font-semibold text-blue-800 mb-2">Profil ikke funnet</h2>
+            <h2 className="text-lg font-semibold text-blue-800 mb-2">{t('dash.no_profile_heading')}</h2>
             <p className="text-blue-700">
-              Det ser ut som du ikke har fullført en påmelding ennå. Meld deg på et kurs for å opprette profilen din.
+              {t('dash.no_profile_text')}
             </p>
             <Link
               href="/arrangementer"
-              className="inline-block mt-4 bg-[#003B7A] text-white px-5 py-2 rounded-lg hover:bg-[#002855] transition"
+              className="inline-block mt-4 bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition"
             >
               Se alle kurs
             </Link>
@@ -155,11 +157,12 @@ function DashboardContent() {
 
         <div className="space-y-8">
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Mine påmeldinger</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('dash.registrations_heading')}</h2>
             {data && data.registrations.length > 0 ? (
               <div className="space-y-3">
                 {data.registrations.map((r) => {
-                  const badge = statusLabels[r.status] ?? statusLabels.pending;
+                  const badgeStyle = statusStyles[r.status] ?? statusStyles.pending;
+                  const badgeLabel = t(`dash.status_${r.status in statusStyles ? r.status : 'pending'}`);
                   return (
                     <div
                       key={r.id}
@@ -168,12 +171,12 @@ function DashboardContent() {
                       <div>
                         <p className="font-medium text-gray-900">{r.courseName}</p>
                         <p className="text-sm text-gray-500">
-                          {r.childName} &middot; {formatDate(r.courseStartDate)}
+                          {r.childName ? `${r.childName} \u00b7 ` : ''}{formatDate(r.courseStartDate)}
                           {r.courseEndDate && ` – ${formatDate(r.courseEndDate)}`}
                         </p>
                       </div>
-                      <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${badge.className}`}>
-                        {badge.label}
+                      <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${badgeStyle}`}>
+                        {badgeLabel}
                       </span>
                     </div>
                   );
@@ -181,13 +184,13 @@ function DashboardContent() {
               </div>
             ) : (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 text-gray-500">
-                Ingen påmeldinger ennå.
+                {t('dash.no_registrations')}
               </div>
             )}
           </section>
 
           <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">Mine barn</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('dash.children_heading')}</h2>
             {data && data.children.length > 0 ? (
               <div className="grid sm:grid-cols-2 gap-4">
                 {data.children.map((c) => (
@@ -198,12 +201,12 @@ function DashboardContent() {
                     <p className="font-medium text-gray-900">{c.name}</p>
                     {c.birthdate && (
                       <p className="text-sm text-gray-500 mt-1">
-                        Født {formatDate(c.birthdate)}
+                        {t('dash.born')} {formatDate(c.birthdate)}
                       </p>
                     )}
                     {c.allergies && (
                       <p className="text-sm text-gray-500 mt-1">
-                        Allergier: {c.allergies}
+                        {t('dash.allergies_label')} {c.allergies}
                       </p>
                     )}
                   </div>
@@ -211,7 +214,7 @@ function DashboardContent() {
               </div>
             ) : (
               <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 text-gray-500">
-                Ingen barn registrert ennå.
+                {t('dash.no_children')}
               </div>
             )}
           </section>
@@ -219,7 +222,7 @@ function DashboardContent() {
           {data?.profile && (
             <section>
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">Profil</h2>
+                <h2 className="text-xl font-semibold text-gray-900">{t('dash.profile_heading')}</h2>
                 {!editing && (
                   <button
                     onClick={() => {
@@ -231,9 +234,9 @@ function DashboardContent() {
                       setEditError(null);
                       setEditing(true);
                     }}
-                    className="text-sm text-[#003B7A] hover:underline font-medium"
+                    className="text-sm text-bjerke-blue hover:underline font-medium"
                   >
-                    Rediger
+                    {t('dash.edit')}
                   </button>
                 )}
               </div>
@@ -246,7 +249,7 @@ function DashboardContent() {
                   )}
                   <div>
                     <label htmlFor="edit-name" className="block text-sm text-gray-500 mb-1">
-                      Navn
+                      {t('dash.name_label')}
                     </label>
                     <input
                       id="edit-name"
@@ -254,12 +257,12 @@ function DashboardContent() {
                       required
                       value={editForm.name}
                       onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003B7A]"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
                     />
                   </div>
                   <div>
                     <label htmlFor="edit-phone" className="block text-sm text-gray-500 mb-1">
-                      Telefon
+                      {t('dash.phone_label')}
                     </label>
                     <input
                       id="edit-phone"
@@ -267,19 +270,19 @@ function DashboardContent() {
                       required
                       value={editForm.phone}
                       onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003B7A]"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
                     />
                   </div>
                   <div>
                     <label htmlFor="edit-address" className="block text-sm text-gray-500 mb-1">
-                      Adresse
+                      {t('dash.address_label')}
                     </label>
                     <input
                       id="edit-address"
                       type="text"
                       value={editForm.address}
                       onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#003B7A]"
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
                     />
                   </div>
                   <div className="flex gap-3 pt-2">
@@ -309,9 +312,9 @@ function DashboardContent() {
                           setSaving(false);
                         }
                       }}
-                      className="bg-[#003B7A] text-white px-5 py-2 rounded-lg hover:bg-[#002855] transition disabled:opacity-50"
+                      className="bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
                     >
-                      {saving ? 'Lagrer...' : 'Lagre'}
+                      {saving ? t('dash.saving') : t('dash.save')}
                     </button>
                     <button
                       disabled={saving}
@@ -321,27 +324,27 @@ function DashboardContent() {
                       }}
                       className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
                     >
-                      Avbryt
+                      {t('dash.cancel')}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-2">
                   <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">Navn:</span>{' '}
+                    <span className="text-sm text-gray-500">{t('dash.name_label')}:</span>{' '}
                     {data.profile.name}
                   </p>
                   <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">E-post:</span>{' '}
+                    <span className="text-sm text-gray-500">{t('dash.email_label')}:</span>{' '}
                     {data.profile.email}
                   </p>
                   <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">Telefon:</span>{' '}
+                    <span className="text-sm text-gray-500">{t('dash.phone_label')}:</span>{' '}
                     {data.profile.phone}
                   </p>
                   {data.profile.address && (
                     <p className="text-gray-900">
-                      <span className="text-sm text-gray-500">Adresse:</span>{' '}
+                      <span className="text-sm text-gray-500">{t('dash.address_label')}:</span>{' '}
                       {data.profile.address}
                     </p>
                   )}
@@ -352,10 +355,10 @@ function DashboardContent() {
 
           <Link
             href="/arrangementer"
-            className="block bg-[#003B7A] text-white rounded-lg p-6 hover:bg-[#002855] transition"
+            className="block bg-bjerke-blue text-white rounded-lg p-6 hover:bg-bjerke-blue-dark transition"
           >
-            <h3 className="text-xl font-semibold mb-2">Se alle kurs</h3>
-            <p className="text-blue-100">Utforsk våre kurs og leirer</p>
+            <h3 className="text-xl font-semibold mb-2">{t('dash.see_all_courses')}</h3>
+            <p className="text-blue-100">{t('dash.see_all_courses_sub')}</p>
           </Link>
         </div>
       </div>

@@ -40,7 +40,7 @@ export default function AdminEmailTemplatesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-[#003B7A] border-t-transparent rounded-full" />
+        <div className="animate-spin h-8 w-8 border-4 border-bjerke-blue border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -61,7 +61,7 @@ export default function AdminEmailTemplatesPage() {
         <h1 className="text-3xl font-bold text-gray-900">E-postmaler</h1>
         <Link
           href="/admin/email-templates/new"
-          className="bg-[#003B7A] text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors"
+          className="bg-bjerke-blue text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
         >
           + Opprett ny mal
         </Link>
@@ -86,7 +86,7 @@ export default function AdminEmailTemplatesPage() {
           <p className="text-gray-500 mb-6">Kom i gang ved a opprette din forste mal.</p>
           <Link
             href="/admin/email-templates/new"
-            className="inline-flex items-center bg-[#003B7A] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors"
+            className="inline-flex items-center bg-bjerke-blue text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
           >
             + Opprett din forste mal
           </Link>
@@ -117,7 +117,7 @@ export default function AdminEmailTemplatesPage() {
                 <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
                   <Link
                     href={`/admin/email-templates/${template.id}`}
-                    className="text-[#003B7A] hover:underline font-medium text-sm"
+                    className="text-bjerke-blue hover:underline font-medium text-sm"
                   >
                     Rediger
                   </Link>
@@ -157,7 +157,7 @@ export default function AdminEmailTemplatesPage() {
                       <td className="px-6 py-4">
                         <Link
                           href={`/admin/email-templates/${template.id}`}
-                          className="text-[#003B7A] hover:underline font-medium text-xs"
+                          className="text-bjerke-blue hover:underline font-medium text-xs"
                         >
                           Rediger
                         </Link>

@@ -1,14 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from '@/lib/auth';
+import { requireSuperAdmin } from '@/lib/auth';
 import { renderPreview } from '@/lib/email-templates';
-
-async function requireSuperAdmin() {
-  const session = await getServerSession();
-  if (!session || session.user.role !== 'superadmin') {
-    return null;
-  }
-  return session;
-}
+import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
   const session = await requireSuperAdmin();
@@ -31,7 +24,7 @@ export async function POST(request: NextRequest) {
       body: rendered.body,
     });
   } catch (error) {
-    console.error('Error previewing email template:', error);
+    logger.error('Error previewing email template', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }

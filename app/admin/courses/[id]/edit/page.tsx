@@ -7,6 +7,8 @@ import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { TableSkeleton } from '@/components/admin/Skeleton';
+import { useSettings } from '@/components/SettingsProvider';
+import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 
 function slugify(text: string): string {
   return text
@@ -24,6 +26,7 @@ interface CourseData {
   slug: string | null;
   description: string | null;
   type: string;
+  audience?: string;
   startDate: string;
   endDate: string | null;
   ageMin: number | null;
@@ -74,11 +77,13 @@ function getTriggerLabel(triggerType: string): string {
 }
 
 const inputClass =
-  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent';
+  'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent';
 const labelClass = 'block text-sm font-medium text-gray-700 mb-1';
 const errorMsgClass = 'text-xs text-red-600 mt-1';
 
 export default function EditCoursePage({ params }: { params: Promise<{ id: string }> }) {
+  const settings = useSettings();
+  const courseTypes = parseCourseTypes(settings.course_types);
   const { id } = use(params);
   const router = useRouter();
   const [course, setCourse] = useState<CourseData | null>(null);
@@ -95,6 +100,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState('kurs');
+  const [audience, setAudience] = useState('barn');
   const [status, setStatus] = useState('open');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -151,6 +157,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         setSlug(c.slug || '');
         setDescription(c.description || '');
         setType(c.type);
+        setAudience(c.audience || 'barn');
         setStatus(c.status);
         setStartDate(c.startDate ? new Date(c.startDate).toISOString().split('T')[0] : '');
         setEndDate(c.endDate ? new Date(c.endDate).toISOString().split('T')[0] : '');
@@ -310,6 +317,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       slug: slug || '',
       description,
       type,
+      audience,
       startDate,
       endDate: endDate || null,
       ageMin: ageMin ? Number(ageMin) : null,
@@ -388,7 +396,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     return (
       <div className="text-center py-20">
         <p className="text-gray-500 mb-4">Kurset ble ikke funnet.</p>
-        <Link href="/admin/courses" className="text-[#003B7A] hover:underline font-medium">
+        <Link href="/admin/courses" className="text-bjerke-blue hover:underline font-medium">
           Tilbake til kurs
         </Link>
       </div>
@@ -403,7 +411,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     <div className="max-w-6xl">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <Link href="/admin/courses" className="text-sm text-[#003B7A] hover:underline font-medium">
+          <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
             &larr; Tilbake til kurs
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mt-2">Rediger kurs</h1>
@@ -412,7 +420,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
           href={publicUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-[#003B7A] hover:text-[#002855] font-medium border border-[#003B7A] px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors mt-2"
+          className="inline-flex items-center gap-1.5 text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium border border-bjerke-blue px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors mt-2"
         >
           Se kurs
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -448,7 +456,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
             onClick={() => setActiveTab('details')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'details'
-                ? 'border-[#003B7A] text-[#003B7A] font-semibold'
+                ? 'border-bjerke-blue text-bjerke-blue font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -459,7 +467,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
             onClick={() => setActiveTab('emails')}
             className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
               activeTab === 'emails'
-                ? 'border-[#003B7A] text-[#003B7A] font-semibold'
+                ? 'border-bjerke-blue text-bjerke-blue font-semibold'
                 : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
             }`}
           >
@@ -512,7 +520,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     className={inputClass}
                   />
                   {(name || slug) && (
-                    <p className="text-xs text-[#003B7A] mt-1.5 font-mono bg-blue-50 px-2 py-1 rounded">
+                    <p className="text-xs text-bjerke-blue mt-1.5 font-mono bg-blue-50 px-2 py-1 rounded">
                       /arrangementer/{type}/{currentYear}/{effectiveSlug || '...'}
                     </p>
                   )}
@@ -563,8 +571,27 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     onChange={(e) => setType(e.target.value)}
                     className={inputClass}
                   >
-                    <option value="kurs">Kurs</option>
-                    <option value="leir">Leir</option>
+                    {courseTypes.map((t) => (
+                      <option key={t.value} value={t.value}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Målgruppe */}
+                <div>
+                  <label htmlFor="audience" className={labelClass}>
+                    Hvem er arrangementet for? *
+                  </label>
+                  <select
+                    id="audience"
+                    name="audience"
+                    required
+                    value={audience}
+                    onChange={(e) => setAudience(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="barn">Barn — foresatt melder på barnet</option>
+                    <option value="voksen">Voksne — deltaker melder på seg selv</option>
                   </select>
                 </div>
 
@@ -724,7 +751,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                 <button
                   type="submit"
                   disabled={saving || Object.keys(validationErrors).length > 0}
-                  className="w-full bg-[#003B7A] text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors disabled:opacity-50"
+                  className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
                 >
                   {saving ? 'Lagrer...' : 'Lagre endringer'}
                 </button>
@@ -754,8 +781,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                 )}
                 <div className="p-4">
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs font-medium uppercase tracking-wide text-[#003B7A]">
-                      {type === 'leir' ? 'Leir' : 'Kurs'}
+                    <span className="text-xs font-medium uppercase tracking-wide text-bjerke-blue">
+                      {courseTypeLabel(courseTypes, type)}
                     </span>
                     {status === 'open' && (
                       <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Åpen</span>
@@ -785,7 +812,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                       </span>
                     )}
                     {price && (
-                      <span className="text-sm font-semibold text-[#003B7A]">{Number(price).toLocaleString('nb-NO')} kr</span>
+                      <span className="text-sm font-semibold text-bjerke-blue">{Number(price).toLocaleString('nb-NO')} kr</span>
                     )}
                   </div>
                 </div>
@@ -888,7 +915,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                         aria-checked={trigger.enabled}
                         onClick={() => updateTrigger(trigger.id, { enabled: !trigger.enabled })}
                         className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          trigger.enabled ? 'bg-[#003B7A]' : 'bg-gray-300'
+                          trigger.enabled ? 'bg-bjerke-blue' : 'bg-gray-300'
                         }`}
                       >
                         <span
@@ -904,7 +931,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                       type="button"
                       onClick={() => handleSendTrigger(trigger.id)}
                       disabled={sendingTriggerId === trigger.id}
-                      className="flex-shrink-0 text-sm text-[#003B7A] hover:text-[#002855] font-medium border border-[#003B7A] px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
+                      className="flex-shrink-0 text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium border border-bjerke-blue px-3 py-1.5 rounded-lg hover:bg-blue-50 transition-colors disabled:opacity-50"
                     >
                       {sendingTriggerId === trigger.id ? 'Sender...' : 'Send nå'}
                     </button>
@@ -944,7 +971,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                 <button
                   type="button"
                   onClick={() => setShowAddForm(true)}
-                  className="inline-flex items-center gap-1.5 text-sm text-[#003B7A] hover:text-[#002855] font-medium"
+                  className="inline-flex items-center gap-1.5 text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -996,7 +1023,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                       type="button"
                       onClick={handleAddTrigger}
                       disabled={addingTrigger || !newTriggerType.startsWith('custom_')}
-                      className="bg-[#003B7A] text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors disabled:opacity-50"
+                      className="bg-bjerke-blue text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
                     >
                       {addingTrigger ? 'Legger til...' : 'Legg til'}
                     </button>

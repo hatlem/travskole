@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import DOMPurify from 'isomorphic-dompurify';
 import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
-import { logRegistration, logRateLimitExceeded } from '@/lib/logger';
+import logger, { logRegistration, logRateLimitExceeded } from '@/lib/logger';
+import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
@@ -15,6 +16,7 @@ interface RegistrationData {
   parentName: string;
   parentEmail: string;
   parentPhone: string;
+  parentAddress?: string;
   childSelection: 'existing' | 'new';
   existingChildId?: string;
   childName?: string;
@@ -23,6 +25,7 @@ interface RegistrationData {
   consentActivities: boolean;
   consentMedia: boolean;
   consentRisk: boolean;
+  consentTerms?: boolean;
   waitlist?: boolean;
 }
 
@@ -69,6 +72,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate names
+    if (!nameSchema.safeParse(data.parentName).success) {
+      return NextResponse.json(
+        { error: 'Ugyldig navn' },
+        { status: 400 }
+      );
+    }
+    if (data.childName && !nameSchema.safeParse(data.childName).success) {
+      return NextResponse.json(
+        { error: 'Ugyldig navn på barn' },
+        { status: 400 }
+      );
+    }
+
     if (!data.courseType || !data.courseYear || !data.courseSlug || !data.parentName || !data.parentEmail || !data.parentPhone) {
       return NextResponse.json(
         { error: 'Manglende påkrevde felter' },
@@ -85,10 +102,19 @@ export async function POST(request: NextRequest) {
       data.childAllergies = DOMPurify.sanitize(data.childAllergies);
     }
 
-    // Validate consents
-    if (!data.consentActivities || !data.consentRisk) {
+    // Admin-styrte obligatoriske felt: vilkårsaksept + adresse (default obligatorisk)
+    const termsRequired = (await getSetting('registration_terms_required')) !== 'false';
+    if (termsRequired && data.consentTerms !== true) {
       return NextResponse.json(
-        { error: 'Du må godta alle påkrevde samtykker' },
+        { error: 'Du må godta vilkårene for å melde på' },
+        { status: 400 }
+      );
+    }
+    const addressRequired = (await getSetting('registration_address_required')) !== 'false';
+    const parentAddress = data.parentAddress ? DOMPurify.sanitize(data.parentAddress).trim() : '';
+    if (addressRequired && parentAddress.length < 5) {
+      return NextResponse.json(
+        { error: 'Adresse er påkrevd' },
         { status: 400 }
       );
     }
@@ -140,6 +166,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate consents — aktivitetssamtykke gjelder kun barnearrangementer
+    const isAdultCourse = course.audience === 'voksen';
+    if (!data.consentRisk || (!isAdultCourse && !data.consentActivities)) {
+      return NextResponse.json(
+        { error: 'Du må godta alle påkrevde samtykker' },
+        { status: 400 }
+      );
+    }
+
+    // SECURITY: hvis e-posten allerede har en passordbeskyttet konto, ikke fest en
+    // anonym påmelding til den — krev innlogging som den brukeren. Hindrer påmelding
+    // på vegne av andre / datapollusjon mot eksisterende kontoer.
+    const existingUser = await prisma.user.findUnique({
+      where: { email: data.parentEmail },
+      select: { passwordHash: true },
+    });
+    if (existingUser?.passwordHash) {
+      const session = await getServerSession();
+      if ((session?.user?.email ?? '').toLowerCase() !== data.parentEmail.toLowerCase()) {
+        return NextResponse.json(
+          { error: 'Denne e-posten har allerede en konto. Logg inn for å melde på.' },
+          { status: 409 }
+        );
+      }
+    }
+
     // Find or create user + parent
     let user = await prisma.user.findUnique({ where: { email: data.parentEmail } });
     if (!user) {
@@ -158,17 +210,26 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           name: data.parentName,
           phone: data.parentPhone,
+          address: parentAddress || null,
         },
+      });
+    } else if (parentAddress && parentAddress !== parent.address) {
+      // Hold adressen à jour hvis en ny er oppgitt
+      parent = await prisma.parent.update({
+        where: { id: parent.id },
+        data: { address: parentAddress },
       });
     }
 
-    // Determine child
-    let childId: number;
-    let childName: string;
-    let childBirthdate: string;
+    // Determine participant — voksen-arrangementer har ingen barnerad
+    let childId: number | null = null;
+    let childName: string | undefined;
+    let childBirthdate: string | undefined;
     let childAllergies: string | undefined;
 
-    if (data.childSelection === 'new') {
+    if (isAdultCourse) {
+      // Deltakeren er den voksne selv; ingen Child-rad opprettes
+    } else if (data.childSelection === 'new') {
       if (!data.childName || !data.childBirthdate) {
         return NextResponse.json(
           { error: 'Barnets navn og fødselsdato er påkrevd' },
@@ -272,7 +333,7 @@ export async function POST(request: NextRequest) {
           { subject: trigger.template.subject, body: trigger.template.body },
           {
             forelder_navn: data.parentName,
-            barnets_navn: childName,
+            barnets_navn: childName ?? data.parentName,
             kurs_navn: course.name,
             kurs_startdato: startDate,
             kurs_sluttdato: endDate,
@@ -308,7 +369,7 @@ export async function POST(request: NextRequest) {
     }, { status: 201 });
 
   } catch (error) {
-    console.error('Registration error:', error);
+    logger.error('Registration error', { error });
     return NextResponse.json(
       { error: 'En intern feil oppstod. Vennligst prøv igjen senere.' },
       { status: 500 }
@@ -322,11 +383,10 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // SECURITY: Admin authentication required
-    const { getServerSession } = await import('@/lib/auth');
-    const session = await getServerSession();
-    
-    if (!session || session.user.role !== 'admin') {
+    // SECURITY: Admin authentication required (admin + superadmin)
+    const session = await requireAdmin();
+
+    if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -353,6 +413,9 @@ export async function GET(request: NextRequest) {
         parent: true,
       },
       orderBy: { createdAt: 'desc' },
+      // Defensiv øvre grense mot ubegrenset minnebruk. Langt over realistisk
+      // volum; ekte paginering/streaming er et senere tiltak hvis det nærmer seg.
+      take: 5000,
     });
 
     return NextResponse.json({
@@ -360,11 +423,11 @@ export async function GET(request: NextRequest) {
         id: String(r.id),
         courseId: String(r.courseId),
         courseName: r.course.name,
-        childName: r.child.name,
-        childBirthdate: r.child.birthdate ? r.child.birthdate.toISOString().split('T')[0] : '',
+        childName: r.child?.name ?? r.parent.name,
+        childBirthdate: r.child?.birthdate ? r.child.birthdate.toISOString().split('T')[0] : '',
         parentName: r.parent.name,
         parentPhone: r.parent.phone,
-        allergies: r.child.allergies ?? undefined,
+        allergies: r.child?.allergies ?? undefined,
         consentActivities: r.consentActivities,
         consentMedia: r.consentMedia,
         consentRisk: r.consentRisk,
@@ -375,7 +438,7 @@ export async function GET(request: NextRequest) {
     });
 
   } catch (error) {
-    console.error('Get registrations error:', error);
+    logger.error('Get registrations error', { error });
     return NextResponse.json(
       { error: 'En intern feil oppstod' },
       { status: 500 }

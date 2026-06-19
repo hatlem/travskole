@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { sendBookingConfirmation, sendBookingAdminNotification } from '@/lib/mail';
+import logger from '@/lib/logger';
 
 const bookingSchema = z.object({
   name: z.string().min(1, 'Navn er påkrevd').max(200),
@@ -53,12 +54,12 @@ export async function POST(request: NextRequest) {
       sendBookingConfirmation(emailData),
       sendBookingAdminNotification(emailData),
     ]).catch((err) => {
-      console.error('Dobbeltsulky email error (booking saved):', err);
+      logger.error('Dobbeltsulky email error (booking saved)', { error: err });
     });
 
     return NextResponse.json({ booking }, { status: 201 });
   } catch (error) {
-    console.error('Dobbeltsulky booking error:', error);
+    logger.error('Dobbeltsulky booking error', { error });
     return NextResponse.json({ error: 'Noe gikk galt' }, { status: 500 });
   }
 }

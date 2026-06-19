@@ -7,7 +7,7 @@ interface PaginationProps {
   onChange: (page: number) => void;
 }
 
-const ACTIVE_COLOR = '#003B7A';
+const ACTIVE_COLOR = 'var(--bjerke-blue)';
 
 const getPageNumbers = (current: number, total: number): (number | 'ellipsis')[] => {
   if (total <= 7) {

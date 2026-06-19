@@ -2,11 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 
 interface SettingGroup {
   title: string;
   description: string;
+  adminEditable?: boolean; // synlig/redigerbar for vanlige admins (ikke bare superadmin)
   fields: {
     key: string;
     label: string;
@@ -18,25 +18,25 @@ interface SettingGroup {
 const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Generelt',
-    description: 'Grunnleggende informasjon om skolen',
+    description: 'Grunnleggende informasjon om nettstedet',
     fields: [
-      { key: 'site_name', label: 'Navn på skolen', type: 'text', placeholder: 'Bjerke Ponniskole' },
-      { key: 'site_description', label: 'Beskrivelse (SEO)', type: 'textarea', placeholder: 'Kurs og leirer for barn og unge...' },
-      { key: 'site_short_description', label: 'Kort beskrivelse', type: 'text', placeholder: 'Kurs og leirer for barn og unge' },
+      { key: 'site_name', label: 'Navn på nettstedet', type: 'text', placeholder: 'Bjerke Registrering' },
+      { key: 'site_description', label: 'Beskrivelse (SEO)', type: 'textarea', placeholder: 'Påmelding til kurs og arrangementer...' },
+      { key: 'site_short_description', label: 'Kort beskrivelse', type: 'text', placeholder: 'Påmelding til kurs og arrangementer på Bjerke' },
     ],
   },
   {
     title: 'Kontaktinformasjon',
     description: 'Vises i footer, e-poster og på kontaktsider',
     fields: [
-      { key: 'contact_email', label: 'E-post', type: 'email', placeholder: 'ponniskolen@bjerke.no' },
+      { key: 'contact_email', label: 'E-post', type: 'email', placeholder: 'registrering@bjerke.no' },
       { key: 'contact_phone', label: 'Telefon', type: 'tel', placeholder: '+47 XX XX XX XX' },
       { key: 'contact_address', label: 'Adresse', type: 'text', placeholder: 'Refstadveien 27, 0589 Oslo' },
     ],
   },
   {
     title: 'Instruktør',
-    description: 'Instruktørinformasjon vist på forsiden og i kursdetaljer',
+    description: 'Valgfritt — vises på forsiden og i kursdetaljer kun når navn er fylt ut',
     fields: [
       { key: 'instructor_name', label: 'Navn', type: 'text', placeholder: 'Hege Arverud' },
       { key: 'instructor_certification', label: 'Sertifisering', type: 'text', placeholder: 'DNT-sertifisert' },
@@ -46,11 +46,28 @@ const SETTING_GROUPS: SettingGroup[] = [
     title: 'Forside',
     description: 'Tekster som vises på forsiden',
     fields: [
-      { key: 'hero_title', label: 'Hovedtittel', type: 'text', placeholder: 'Velkommen til Bjerke Ponniskole' },
+      { key: 'hero_title', label: 'Hovedtittel', type: 'text', placeholder: 'Velkommen til Bjerke' },
       { key: 'hero_subtitle', label: 'Undertittel', type: 'textarea', placeholder: 'Opplev gleden ved travsporten...' },
-      { key: 'about_heading', label: 'Om oss overskrift', type: 'text', placeholder: 'Om Bjerke Ponniskole' },
-      { key: 'about_text', label: 'Om oss tekst', type: 'textarea', placeholder: 'Bjerke Ponniskole drives av...' },
+      { key: 'hero_cta_text', label: 'Hero-knapp', type: 'text', placeholder: 'Se alle arrangementer' },
+      { key: 'home_courses_heading', label: 'Overskrift: kommende kurs', type: 'text', placeholder: 'Kommende arrangementer' },
+      { key: 'home_courses_empty_text', label: 'Tekst når ingen kurs', type: 'text', placeholder: 'Ingen kurs tilgjengelig...' },
+      { key: 'about_heading', label: 'Om oss overskrift', type: 'text', placeholder: 'Om tilbudet på Bjerke' },
+      { key: 'about_text', label: 'Om oss tekst', type: 'textarea', placeholder: 'Bjerke Travbane er en trygg arena...' },
+      { key: 'home_feature_points', label: 'Hva vi tilbyr (ett punkt per linje)', type: 'textarea' },
+      { key: 'home_cta_heading', label: 'CTA-overskrift nederst', type: 'text', placeholder: 'Klar for å bli med?' },
+      { key: 'home_cta_text', label: 'CTA-tekst nederst', type: 'textarea', placeholder: 'Meld deg på et kurs...' },
+      { key: 'home_cta_button', label: 'CTA-knapp nederst', type: 'text', placeholder: 'Se alle arrangementer' },
       { key: 'footer_text', label: 'Footer beskrivelse', type: 'textarea', placeholder: 'Vi tilbyr trygg og lærerik travsport...' },
+    ],
+  },
+  {
+    title: 'Arrangementer',
+    description: 'Tekster og arrangementstyper. Typer: én per linje på formatet verdi|Visningsnavn|flertall (f.eks. «kurs|Kurs|kurs»). Verdien inngår i nettadresser — bruk små bokstaver uten mellomrom, og ikke endre verdier som er i bruk.',
+    fields: [
+      { key: 'arrangementer_heading', label: 'Overskrift', type: 'text', placeholder: 'Kurs og arrangementer' },
+      { key: 'arrangementer_subtitle', label: 'Undertittel', type: 'text', placeholder: 'Utforsk vårt utvalg...' },
+      { key: 'nav_courses_label', label: 'Menytekst', type: 'text', placeholder: 'Arrangementer' },
+      { key: 'course_types', label: 'Arrangementstyper (én per linje: verdi|Navn|flertall)', type: 'textarea', placeholder: 'kurs|Kurs|kurs\nleir|Leir|leirer\narrangement|Arrangement|arrangementer' },
     ],
   },
   {
@@ -65,11 +82,24 @@ const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Samtykketekster',
     description: 'Tekster som vises i påmeldingsskjemaet. Endringer påvirker fremtidige påmeldinger.',
+    adminEditable: true,
     fields: [
       { key: 'consent_activities_text', label: 'Samtykke: Aktiviteter utenfor Bjerke', type: 'textarea' },
       { key: 'consent_media_text', label: 'Samtykke: Bilder og video', type: 'textarea' },
       { key: 'consent_risk_text', label: 'Samtykke: Risiko (kort)', type: 'textarea' },
       { key: 'consent_risk_detail', label: 'Samtykke: Risiko (detaljer)', type: 'textarea' },
+      { key: 'consent_media_text_adult', label: 'Samtykke voksne: Bilder og video', type: 'textarea' },
+      { key: 'consent_risk_text_adult', label: 'Samtykke voksne: Risiko', type: 'textarea' },
+      { key: 'consent_terms_text', label: 'Vilkårsaksept ved påmelding (bindende / tapte dager / eget ansvar)', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Påmeldingsskjema',
+    description: 'Styr hvilke felt som er obligatoriske i påmeldingsskjemaet.',
+    adminEditable: true,
+    fields: [
+      { key: 'registration_address_required', label: 'Krev adresse', type: 'toggle' },
+      { key: 'registration_terms_required', label: 'Krev at vilkårene godtas', type: 'toggle' },
     ],
   },
   {
@@ -78,13 +108,21 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'dobbeltsulky_enabled', label: 'Aktiver dobbeltsulky-booking', type: 'toggle' },
       { key: 'dobbeltsulky_description', label: 'Beskrivelse', type: 'textarea' },
+      { key: 'dobbeltsulky_points', label: 'Punkter (ett per linje)', type: 'textarea' },
+    ],
+  },
+  {
+    title: 'Sporing og deling',
+    description: 'Google Tag Manager og tekst på delingsbildet (Open Graph)',
+    fields: [
+      { key: 'gtm_id', label: 'Google Tag Manager ID (tomt = av)', type: 'text', placeholder: 'GTM-XXXXXXX' },
+      { key: 'og_tags', label: 'Delingsbilde: emneknagger (én per linje)', type: 'textarea', placeholder: 'Kurs\nSommerleirer\nDobbeltsulky' },
     ],
   },
 ];
 
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
-  const router = useRouter();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -92,12 +130,8 @@ export default function AdminSettingsPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (session && session.user.role !== 'superadmin') {
-      router.push('/admin');
-      return;
-    }
     fetchSettings();
-  }, [session, router]);
+  }, []);
 
   async function fetchSettings() {
     try {
@@ -118,8 +152,14 @@ export default function AdminSettingsPage() {
     setError(null);
 
     try {
-      const entries = Object.entries(settings);
-      for (const [key, value] of entries) {
+      // Lagre kun nøkler den innloggede rollen faktisk kan endre (unngår 403 for admins)
+      const superadmin = session?.user.role === 'superadmin';
+      const allowedKeys = new Set(
+        (superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable))
+          .flatMap(g => g.fields.map(f => f.key))
+      );
+      for (const [key, value] of Object.entries(settings)) {
+        if (!allowedKeys.has(key)) continue;
         const res = await fetch('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -148,16 +188,19 @@ export default function AdminSettingsPage() {
     );
   }
 
-  if (session?.user.role !== 'superadmin') {
-    return null;
-  }
+  const superadmin = session?.user.role === 'superadmin';
+  const visibleGroups = superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable);
 
   return (
     <div className="max-w-4xl">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Innstillinger</h1>
-          <p className="text-gray-500 mt-1">Konfigurer nettstedet. Kun tilgjengelig for superadmins.</p>
+          <p className="text-gray-500 mt-1">
+            {superadmin
+              ? 'Konfigurer nettstedet.'
+              : 'Rediger samtykketekster og påmeldingsinnstillinger. Øvrig konfigurasjon krever superadmin.'}
+          </p>
         </div>
         <button
           onClick={handleSave}
@@ -165,7 +208,7 @@ export default function AdminSettingsPage() {
           className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
             saving
               ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-[#003B7A] hover:bg-[#002855] text-white'
+              : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
           }`}
         >
           {saving ? 'Lagrer...' : 'Lagre alle endringer'}
@@ -186,7 +229,7 @@ export default function AdminSettingsPage() {
       )}
 
       <div className="space-y-8">
-        {SETTING_GROUPS.map((group) => (
+        {visibleGroups.map((group) => (
           <div key={group.title} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-1">{group.title}</h2>
             <p className="text-sm text-gray-500 mb-6">{group.description}</p>
@@ -202,7 +245,7 @@ export default function AdminSettingsPage() {
                       type="button"
                       onClick={() => updateSetting(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        settings[field.key] === 'true' ? 'bg-[#003B7A]' : 'bg-gray-300'
+                        settings[field.key] === 'true' ? 'bg-bjerke-blue' : 'bg-gray-300'
                       }`}
                     >
                       <span
@@ -218,7 +261,7 @@ export default function AdminSettingsPage() {
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       rows={3}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                     />
                   ) : (
                     <input
@@ -227,7 +270,7 @@ export default function AdminSettingsPage() {
                       value={settings[field.key] || ''}
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                     />
                   )}
                   <p className="text-xs text-gray-400 mt-1">Nøkkel: {field.key}</p>
@@ -245,7 +288,7 @@ export default function AdminSettingsPage() {
           className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
             saving
               ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-[#003B7A] hover:bg-[#002855] text-white'
+              : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
           }`}
         >
           {saving ? 'Lagrer...' : 'Lagre alle endringer'}

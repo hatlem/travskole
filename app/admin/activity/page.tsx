@@ -132,13 +132,13 @@ export default function AdminActivityPage() {
             placeholder="Sok etter detaljer eller e-post..."
             value={search}
             onChange={e => setSearch(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A]/20 focus:border-[#003B7A]"
+            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
           />
         </div>
         <select
           value={actionFilter}
           onChange={e => setActionFilter(e.target.value)}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003B7A]/20 focus:border-[#003B7A]"
+          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="">Alle handlinger</option>
           <option value="create">Opprettet</option>
@@ -150,7 +150,7 @@ export default function AdminActivityPage() {
         <select
           value={entityFilter}
           onChange={e => setEntityFilter(e.target.value)}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[#003B7A]/20 focus:border-[#003B7A]"
+          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="">Alle typer</option>
           <option value="course">Kurs</option>

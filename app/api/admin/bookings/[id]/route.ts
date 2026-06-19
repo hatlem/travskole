@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) return null;
-  return session;
-}
 
 export async function PUT(
   request: NextRequest,
@@ -20,6 +14,11 @@ export async function PUT(
 
   const { id } = await params;
   const body = await request.json();
+
+  const VALID_STATUSES = ['pending', 'confirmed', 'cancelled'];
+  if (!VALID_STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
+  }
 
   const booking = await prisma.bookingRequest.update({
     where: { id: Number(id) },

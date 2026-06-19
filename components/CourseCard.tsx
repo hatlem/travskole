@@ -4,13 +4,15 @@ import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { getCourseUrl } from '@/lib/slug';
+import { useSettings, useStrings } from '@/components/SettingsProvider';
+import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 
 export interface Course {
   id: string;
   name: string;
   slug?: string | null;
   description: string;
-  type: 'kurs' | 'leir';
+  type: string;
   start_date: string;
   end_date?: string;
   age_min?: number;
@@ -26,6 +28,9 @@ interface CourseCardProps {
 }
 
 export default function CourseCard({ course }: CourseCardProps) {
+  const settings = useSettings();
+  const t = useStrings();
+  const courseTypes = parseCourseTypes(settings.course_types);
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('nb-NO', { 
@@ -38,11 +43,11 @@ export default function CourseCard({ course }: CourseCardProps) {
   const getStatusBadge = () => {
     switch (course.status) {
       case 'full':
-        return <span className="text-sm font-medium text-red-600">Fullt</span>;
+        return <span className="text-sm font-medium text-red-600">{t('course.status_full')}</span>;
       case 'closed':
-        return <span className="text-sm font-medium text-gray-600">Stengt</span>;
+        return <span className="text-sm font-medium text-gray-600">{t('course.status_closed')}</span>;
       default:
-        return <span className="text-sm font-medium text-green-600">Ledige plasser</span>;
+        return <span className="text-sm font-medium text-green-600">{t('course.status_open')}</span>;
     }
   };
 
@@ -64,8 +69,8 @@ export default function CourseCard({ course }: CourseCardProps) {
           <h3 className="text-2xl font-semibold text-gray-900 mb-1">
             {course.name}
           </h3>
-          <span className="inline-block px-3 py-1 text-sm font-medium text-[#003B7A] bg-blue-50 rounded-full">
-            {course.type === 'kurs' ? 'Kurs' : 'Leir'}
+          <span className="inline-block px-3 py-1 text-sm font-medium text-bjerke-blue bg-blue-50 rounded-full">
+            {courseTypeLabel(courseTypes, course.type)}
           </span>
         </div>
         {getStatusBadge()}
@@ -75,27 +80,27 @@ export default function CourseCard({ course }: CourseCardProps) {
       
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
         <div>
-          <p className="text-sm text-gray-500">Startdato</p>
+          <p className="text-sm text-gray-500">{t('course.start_date')}</p>
           <p className="font-semibold">{formatDate(course.start_date)}</p>
         </div>
         {course.end_date && (
           <div>
-            <p className="text-sm text-gray-500">Sluttdato</p>
+            <p className="text-sm text-gray-500">{t('course.end_date')}</p>
             <p className="font-semibold">{formatDate(course.end_date)}</p>
           </div>
         )}
         <div>
-          <p className="text-sm text-gray-500">Aldersgruppe</p>
+          <p className="text-sm text-gray-500">{t('course.age_group')}</p>
           <p className="font-semibold">
-            {course.age_min && course.age_max 
-              ? `${course.age_min}-${course.age_max} år`
-              : 'Alle aldre'}
+            {course.age_min && course.age_max
+              ? t('course.age_range', { min: course.age_min, max: course.age_max })
+              : t('course.all_ages')}
           </p>
         </div>
         <div>
-          <p className="text-sm text-gray-500">Pris</p>
+          <p className="text-sm text-gray-500">{t('course.price')}</p>
           <p className="font-semibold">
-            {course.price === 0 ? 'Gratis' : `${course.price} kr`}
+            {course.price === 0 ? t('course.free') : `${course.price} ${t('course.currency_suffix')}`}
           </p>
         </div>
       </div>
@@ -104,11 +109,11 @@ export default function CourseCard({ course }: CourseCardProps) {
         href={getCourseUrl({ ...course, startDate: course.start_date })}
         className={`inline-block w-full text-center px-6 py-3 rounded-lg font-semibold transition ${
           course.status === 'open'
-            ? 'bg-[#003B7A] hover:bg-[#002855] text-white'
+            ? 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
             : 'bg-gray-200 text-gray-600 cursor-not-allowed'
         }`}
       >
-        {course.status === 'open' ? 'Se detaljer og meld på' : 'Se detaljer'}
+        {course.status === 'open' ? t('course.details_and_register') : t('course.details')}
       </Link>
       </div>
     </div>

@@ -1,8 +1,10 @@
 import winston from 'winston';
 import path from 'path';
+import fs from 'fs';
 
 // Create logs directory if it doesn't exist
 const logsDir = path.join(process.cwd(), 'logs');
+fs.mkdirSync(logsDir, { recursive: true });
 
 const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
@@ -46,7 +48,7 @@ const logger = winston.createLogger({
 });
 
 // Helper functions for common security events
-export const logSecurityEvent = (event: string, details: any) => {
+export const logSecurityEvent = (event: string, details: Record<string, unknown>) => {
   logger.warn('SECURITY_EVENT', {
     event,
     ...details,

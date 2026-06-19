@@ -6,12 +6,13 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
+import { useStrings } from '@/components/SettingsProvider';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Navnet må være minst 2 tegn'),
   email: z.string().email('Ugyldig e-postadresse'),
   phone: z.string().min(8, 'Telefonnummer må være minst 8 tegn'),
-  password: z.string().min(6, 'Passordet må være minst 6 tegn'),
+  password: z.string().min(8, 'Passordet må være minst 8 tegn'),
   confirmPassword: z.string(),
   address: z.string().optional(),
 }).refine((data) => data.password === data.confirmPassword, {
@@ -22,6 +23,7 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterPage() {
+  const t = useStrings();
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function RegisterPage() {
 
       // Registration successful, redirect to login
       router.push('/auth/login?registered=true');
-    } catch (err) {
+    } catch {
       setError('Noe gikk galt. Vennligst prøv igjen.');
     } finally {
       setIsLoading(false);
@@ -71,13 +73,13 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="text-center text-3xl font-bold text-gray-900">
-          Opprett konto
+          {t('auth.register_button')}
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
           Eller{' '}
           <Link
             href="/auth/login"
-            className="font-medium text-[#003B7A] hover:underline"
+            className="font-medium text-bjerke-blue hover:underline"
           >
             logg inn
           </Link>
@@ -107,7 +109,7 @@ export default function RegisterPage() {
                 autoComplete="name"
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   ${errors.name ? 'border-red-300' : 'border-gray-300'}
                 `}
                 placeholder="Ola Nordmann"
@@ -133,7 +135,7 @@ export default function RegisterPage() {
                 autoComplete="email"
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   ${errors.email ? 'border-red-300' : 'border-gray-300'}
                 `}
                 placeholder="din@epost.no"
@@ -159,7 +161,7 @@ export default function RegisterPage() {
                 autoComplete="tel"
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   ${errors.phone ? 'border-red-300' : 'border-gray-300'}
                 `}
                 placeholder="+47 123 45 678"
@@ -185,7 +187,7 @@ export default function RegisterPage() {
                 autoComplete="street-address"
                 className="
                   w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                 "
                 placeholder="Gateveien 1, 0123 Oslo"
               />
@@ -205,10 +207,10 @@ export default function RegisterPage() {
                 autoComplete="new-password"
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   ${errors.password ? 'border-red-300' : 'border-gray-300'}
                 `}
-                placeholder="Minst 6 tegn"
+                placeholder="Minst 8 tegn"
               />
               {errors.password && (
                 <p className="mt-1 text-sm text-red-600">
@@ -231,7 +233,7 @@ export default function RegisterPage() {
                 autoComplete="new-password"
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   ${errors.confirmPassword ? 'border-red-300' : 'border-gray-300'}
                 `}
                 placeholder="Gjenta passord"
@@ -247,14 +249,14 @@ export default function RegisterPage() {
               type="submit"
               disabled={isLoading}
               className="
-                w-full bg-[#003B7A] hover:bg-[#002855]
+                w-full bg-bjerke-blue hover:bg-bjerke-blue-dark
                 text-white font-semibold py-3 px-4 rounded-lg
                 transition duration-200
                 disabled:opacity-50 disabled:cursor-not-allowed
-                focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-offset-2
+                focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-offset-2
               "
             >
-              {isLoading ? 'Oppretter konto...' : 'Opprett konto'}
+              {isLoading ? t('auth.registering') : t('auth.register_button')}
             </button>
           </form>
         </div>

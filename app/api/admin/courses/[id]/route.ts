@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import logger from '@/lib/logger';
 
 export async function GET(
   _request: NextRequest,
@@ -36,7 +29,7 @@ export async function GET(
 
     return NextResponse.json({ course });
   } catch (error) {
-    console.error('Error fetching course:', error);
+    logger.error('Error fetching course', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }
@@ -54,7 +47,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, description, type, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl } = body;
+    const { name, description, type, audience, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl } = body;
 
     if (!name || !type || !startDate || !status) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
@@ -70,6 +63,7 @@ export async function PUT(
         slug: courseSlug,
         description: description || null,
         type,
+        audience: audience === 'voksen' ? 'voksen' : 'barn',
         startDate: new Date(startDate),
         endDate: endDate ? new Date(endDate) : null,
         ageMin: ageMin != null ? Number(ageMin) : null,
@@ -86,7 +80,7 @@ export async function PUT(
 
     return NextResponse.json({ course });
   } catch (error) {
-    console.error('Error updating course:', error);
+    logger.error('Error updating course', { error });
     return NextResponse.json({ error: 'Kunne ikke oppdatere kurs' }, { status: 500 });
   }
 }
@@ -111,7 +105,7 @@ export async function DELETE(
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Error deleting course:', error);
+    logger.error('Error deleting course', { error });
     return NextResponse.json({ error: 'Kunne ikke slette kurs' }, { status: 500 });
   }
 }

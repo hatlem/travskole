@@ -16,7 +16,7 @@ const MERGE_TAGS = [
 ] as const;
 
 const INPUT_CLASS =
-  'w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent outline-none';
+  'w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent outline-none';
 
 export default function EmailTemplateEditorPage({
   params,
@@ -159,7 +159,7 @@ export default function EmailTemplateEditorPage({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="animate-spin h-8 w-8 border-4 border-[#003B7A] border-t-transparent rounded-full" />
+        <div className="animate-spin h-8 w-8 border-4 border-bjerke-blue border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -270,7 +270,7 @@ export default function EmailTemplateEditorPage({
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-[#003B7A] text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-[#002855] transition-colors disabled:opacity-50"
+                className="bg-bjerke-blue text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
               >
                 {saving ? 'Lagrer...' : isNew ? 'Opprett mal' : 'Lagre endringer'}
               </button>

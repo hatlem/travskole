@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
@@ -40,12 +40,6 @@ const emptyChild: ChildForm = {
   allergies: '',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  pending: 'Venter',
-  confirmed: 'Bekreftet',
-  waitlist: 'Venteliste',
-  cancelled: 'Avlyst',
-};
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -81,10 +75,6 @@ export default function AdminRegistrationsPage() {
   const [page, setPage] = useState(1);
   const perPage = 25;
 
-  useEffect(() => {
-    fetchRegistrations();
-  }, []);
-
   // Close course dropdown on outside click
   useEffect(() => {
     function handleClick(e: MouseEvent) {
@@ -96,7 +86,7 @@ export default function AdminRegistrationsPage() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  async function fetchRegistrations() {
+  const fetchRegistrations = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/registrations');
       if (!res.ok) throw new Error('Kunne ikke hente påmeldinger');
@@ -107,7 +97,11 @@ export default function AdminRegistrationsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchRegistrations();
+  }, [fetchRegistrations]);
 
   async function fetchCourses() {
     try {
@@ -336,7 +330,7 @@ export default function AdminRegistrationsPage() {
   }
 
   const inputClass =
-    'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-[#003B7A] focus:border-transparent outline-none';
+    'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent outline-none';
 
   const visibleSelectedCount = Array.from(selectedIds).filter((id) => filteredIds.has(id)).length;
 
@@ -348,7 +342,7 @@ export default function AdminRegistrationsPage() {
         <div className="flex gap-3">
           <button
             onClick={showAddForm ? () => setShowAddForm(false) : openAddForm}
-            className="bg-[#003B7A] hover:bg-[#002855] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             {showAddForm ? 'Lukk skjema' : '+ Legg til deltaker'}
           </button>
@@ -493,7 +487,7 @@ export default function AdminRegistrationsPage() {
                   <button
                     type="button"
                     onClick={addChild}
-                    className="text-sm text-[#003B7A] hover:text-[#002855] font-medium"
+                    className="text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium"
                   >
                     + Legg til barn
                   </button>
@@ -565,7 +559,7 @@ export default function AdminRegistrationsPage() {
                 className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   submitting || !selectedCourseId
                     ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-[#003B7A] hover:bg-[#002855] text-white'
+                    : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
                 }`}
               >
                 {submitting
@@ -594,13 +588,13 @@ export default function AdminRegistrationsPage() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Søk etter kurs, barn, forelder eller e-post..."
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
           />
         </div>
         <select
           value={courseFilter}
           onChange={(e) => setCourseFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent bg-white"
+          className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
         >
           <option value="all">Alle kurs</option>
           {uniqueCourses.map(([id, name]) => (
@@ -612,7 +606,7 @@ export default function AdminRegistrationsPage() {
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent bg-white"
+          className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
         >
           <option value="all">Alle statuser</option>
           <option value="pending">Venter</option>
@@ -629,7 +623,7 @@ export default function AdminRegistrationsPage() {
 
       {/* Bulk action bar */}
       {visibleSelectedCount > 0 && (
-        <div className="bg-[#003B7A] text-white rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
+        <div className="bg-bjerke-blue text-white rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
           <span className="text-sm font-medium">{visibleSelectedCount} valgt</span>
           <div className="flex gap-2">
             <button
@@ -662,7 +656,7 @@ export default function AdminRegistrationsPage() {
           <p className="text-gray-500 mb-4">Ingen påmeldinger ennå.</p>
           <button
             onClick={openAddForm}
-            className="bg-[#003B7A] hover:bg-[#002855] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
           >
             + Legg til deltaker
           </button>
@@ -678,7 +672,7 @@ export default function AdminRegistrationsPage() {
                       type="checkbox"
                       checked={allVisibleSelected}
                       onChange={toggleSelectAll}
-                      className="h-4 w-4 rounded border-gray-300 text-[#003B7A] focus:ring-[#003B7A] cursor-pointer"
+                      className="h-4 w-4 rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue cursor-pointer"
                     />
                   </th>
                   <th className="px-4 py-3 text-left">ID</th>
@@ -705,14 +699,14 @@ export default function AdminRegistrationsPage() {
                         type="checkbox"
                         checked={selectedIds.has(reg.id)}
                         onChange={() => toggleSelect(reg.id)}
-                        className="h-4 w-4 rounded border-gray-300 text-[#003B7A] focus:ring-[#003B7A] cursor-pointer"
+                        className="h-4 w-4 rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue cursor-pointer"
                       />
                     </td>
                     <td className="px-4 py-3.5 text-gray-400 font-mono text-xs">#{reg.id}</td>
                     <td className="px-4 py-3.5 font-medium text-gray-900">
                       <Link
                         href={`/admin/courses/${reg.course.id}/edit`}
-                        className="hover:text-[#003B7A] hover:underline"
+                        className="hover:text-bjerke-blue hover:underline"
                       >
                         {reg.course.name}
                       </Link>
@@ -726,7 +720,7 @@ export default function AdminRegistrationsPage() {
                         value={reg.status}
                         onChange={(e) => updateStatus(reg.id, e.target.value)}
                         disabled={updatingId === reg.id}
-                        className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-[#003B7A] ${
+                        className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-bjerke-blue ${
                           STATUS_COLORS[reg.status] || 'bg-gray-100 text-gray-800'
                         } ${updatingId === reg.id ? 'opacity-50 cursor-wait' : ''}`}
                       >

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 export async function POST(request: Request) {
   try {
@@ -13,20 +15,22 @@ export async function POST(request: Request) {
       );
     }
 
-    if (typeof password !== 'string' || password.length < 6) {
+    if (typeof password !== 'string' || password.length < 8) {
       return NextResponse.json(
-        { error: 'Passordet må være minst 6 tegn' },
+        { error: 'Passordet må være minst 8 tegn' },
         { status: 400 }
       );
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+    // Tokens lagres som sha256-hash (se forgot-password)
+    const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
 
     // Find the verification token
     const verificationToken = await prisma.verificationToken.findFirst({
       where: {
         identifier: normalizedEmail,
-        token,
+        token: tokenHash,
       },
     });
 
@@ -44,7 +48,7 @@ export async function POST(request: Request) {
         where: {
           identifier_token: {
             identifier: normalizedEmail,
-            token,
+            token: tokenHash,
           },
         },
       });
@@ -75,19 +79,18 @@ export async function POST(request: Request) {
       data: { passwordHash },
     });
 
-    // Delete the used token
-    await prisma.verificationToken.delete({
+    // Delete the used token. Tokens lagres som sha256-hash, så slett på tokenHash
+    // (ikke rå token). deleteMany unngår P2025 dersom raden allerede er borte.
+    await prisma.verificationToken.deleteMany({
       where: {
-        identifier_token: {
-          identifier: normalizedEmail,
-          token,
-        },
+        identifier: normalizedEmail,
+        token: tokenHash,
       },
     });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('[reset-password] Error:', error);
+    logger.error('[reset-password] Error', { error });
     return NextResponse.json(
       { error: 'Noe gikk galt. Vennligst prøv igjen.' },
       { status: 500 }

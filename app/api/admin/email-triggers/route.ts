@@ -1,12 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireSuperAdmin() {
-  const session = await getServerSession();
-  if (!session || session.user.role !== 'superadmin') return null;
-  return session;
-}
+import { requireSuperAdmin } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   const session = await requireSuperAdmin();
@@ -32,7 +27,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ triggers });
   } catch (error) {
-    console.error('Error fetching email triggers:', error);
+    logger.error('Error fetching email triggers', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }
@@ -63,7 +58,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ trigger }, { status: 201 });
   } catch (error) {
-    console.error('Error creating email trigger:', error);
+    logger.error('Error creating email trigger', { error });
     return NextResponse.json({ error: 'Kunne ikke opprette trigger' }, { status: 500 });
   }
 }

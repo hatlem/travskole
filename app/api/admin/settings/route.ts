@@ -1,18 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) return null;
-  return session;
-}
-
-async function requireSuperAdmin() {
-  const session = await getServerSession();
-  if (!session || session.user.role !== 'superadmin') return null;
-  return session;
-}
+import { requireAdmin } from '@/lib/auth';
+import { ADMIN_EDITABLE_SETTINGS, isSuperAdmin } from '@/lib/settings-shared';
 
 export async function GET() {
   const session = await requireAdmin();
@@ -30,9 +19,9 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
-  const session = await requireSuperAdmin();
+  const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Kun superadmin kan endre innstillinger' }, { status: 403 });
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const body = await request.json();
@@ -40,6 +29,22 @@ export async function PUT(request: NextRequest) {
 
   if (!key) {
     return NextResponse.json({ error: 'Key is required' }, { status: 400 });
+  }
+
+  // Graded tilgang: vanlige admins kan kun endre allowlistede nøkler
+  // (samtykketekster + påmeldingsskjema). Alt annet krever superadmin.
+  if (!ADMIN_EDITABLE_SETTINGS.includes(key) && !isSuperAdmin(session.user.role)) {
+    return NextResponse.json(
+      { error: 'Kun superadmin kan endre denne innstillingen' },
+      { status: 403 }
+    );
+  }
+
+  // Tom tekst-overstyring (str.*) betyr «bruk standard» — slett raden i stedet
+  // for å lagre tomme verdier.
+  if (key.startsWith('str.') && String(value).trim() === '') {
+    await prisma.setting.deleteMany({ where: { key } });
+    return NextResponse.json({ success: true });
   }
 
   await prisma.setting.upsert({

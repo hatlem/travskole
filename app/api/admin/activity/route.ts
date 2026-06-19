@@ -1,12 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) return null;
-  return session;
-}
+import { requireAdmin } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
@@ -18,8 +12,9 @@ export async function GET(request: NextRequest) {
   const action = searchParams.get('action') || undefined;
   const entity = searchParams.get('entity') || undefined;
   const search = searchParams.get('search') || undefined;
-  const page = parseInt(searchParams.get('page') || '1', 10);
-  const perPage = parseInt(searchParams.get('perPage') || '25', 10);
+  // Klem + NaN-vakt så en klient ikke kan be om hele tabellen (DoS/minne)
+  const page = Math.max(parseInt(searchParams.get('page') || '1', 10) || 1, 1);
+  const perPage = Math.min(Math.max(parseInt(searchParams.get('perPage') || '25', 10) || 25, 1), 100);
 
   const where: Record<string, unknown> = {};
   if (action) where.action = action;

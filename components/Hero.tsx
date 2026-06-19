@@ -39,7 +39,7 @@ export default function Hero({
         {ctaText && ctaLink && (
           <a
             href={ctaLink}
-            className="bg-white text-[#003B7A] hover:bg-gray-100 px-8 py-4 rounded-md font-bold text-base uppercase tracking-wide transition shadow-lg"
+            className="bg-white text-bjerke-blue hover:bg-gray-100 px-8 py-4 rounded-md font-bold text-base uppercase tracking-wide transition shadow-lg"
           >
             {ctaText}
           </a>

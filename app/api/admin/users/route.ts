@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import { requireAdmin } from '@/lib/auth';
+import logger from '@/lib/logger';
 
 export async function GET() {
   const session = await requireAdmin();
@@ -62,7 +55,7 @@ export async function GET() {
 
     return NextResponse.json({ users });
   } catch (error) {
-    console.error('Error fetching users:', error);
+    logger.error('Error fetching users', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }

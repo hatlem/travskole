@@ -128,9 +128,9 @@ export default async function AdminDashboard() {
               </span>
             )}
             <div className="flex items-center gap-4">
-              <div className="bg-[#003B7A]/10 rounded-lg p-3">
+              <div className="bg-bjerke-blue/10 rounded-lg p-3">
                 <svg
-                  className="w-6 h-6 text-[#003B7A]"
+                  className="w-6 h-6 text-bjerke-blue"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -189,7 +189,7 @@ export default async function AdminDashboard() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Kommende kurs</h2>
-          <Link href="/admin/courses" className="text-sm text-[#003B7A] hover:underline font-medium">
+          <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
             Se alle
           </Link>
         </div>
@@ -206,7 +206,7 @@ export default async function AdminDashboard() {
                   ? 'bg-red-500'
                   : fillPercent >= 70
                     ? 'bg-yellow-500'
-                    : 'bg-[#003B7A]';
+                    : 'bg-bjerke-blue';
 
               return (
                 <div key={course.id} className="px-6 py-4">
@@ -214,7 +214,7 @@ export default async function AdminDashboard() {
                     <div className="flex items-center gap-3">
                       <Link
                         href={`/admin/courses/${course.id}`}
-                        className="font-medium text-gray-900 hover:text-[#003B7A] hover:underline"
+                        className="font-medium text-gray-900 hover:text-bjerke-blue hover:underline"
                       >
                         {course.name}
                       </Link>
@@ -254,7 +254,7 @@ export default async function AdminDashboard() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
         <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-gray-900">Siste påmeldinger</h2>
-          <Link href="/admin/registrations" className="text-sm text-[#003B7A] hover:underline font-medium">
+          <Link href="/admin/registrations" className="text-sm text-bjerke-blue hover:underline font-medium">
             Se alle
           </Link>
         </div>
@@ -275,7 +275,7 @@ export default async function AdminDashboard() {
               <tbody className="divide-y divide-gray-100">
                 {recentRegistrations.map((reg) => (
                   <tr key={reg.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium text-gray-900">{reg.child.name}</td>
+                    <td className="px-6 py-4 font-medium text-gray-900">{reg.child?.name ?? `${reg.parent.name} (voksen)`}</td>
                     <td className="px-6 py-4 text-gray-600">{reg.course.name}</td>
                     <td className="px-6 py-4 text-gray-600">{reg.parent.name}</td>
                     <td className="px-6 py-4">

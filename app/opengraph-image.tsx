@@ -1,11 +1,16 @@
 import { ImageResponse } from 'next/og';
+import { getSettings, settingToList } from '@/lib/settings';
+import { BRAND } from '@/lib/brand';
 
 export const runtime = 'nodejs';
-export const alt = 'Bjerke Ponniskole';
+export const alt = 'Bjerke — kurs og arrangementer';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
-export default function Image() {
+export default async function Image() {
+  const settings = await getSettings();
+  const tags = settingToList(settings.og_tags);
+
   return new ImageResponse(
     (
       <div
@@ -16,7 +21,7 @@ export default function Image() {
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'linear-gradient(135deg, #003B7A 0%, #002855 100%)',
+          background: `linear-gradient(135deg, ${BRAND.blue} 0%, ${BRAND.blueDark} 100%)`,
           fontFamily: 'system-ui, sans-serif',
         }}
       >
@@ -37,7 +42,7 @@ export default function Image() {
               textAlign: 'center',
             }}
           >
-            Bjerke Ponniskole
+            {settings.site_name}
           </div>
           <div
             style={{
@@ -47,49 +52,32 @@ export default function Image() {
               maxWidth: '700px',
             }}
           >
-            Kurs og leirer for barn og unge med ponni og hest
+            {settings.site_short_description}
           </div>
-          <div
-            style={{
-              marginTop: '16px',
-              display: 'flex',
-              gap: '16px',
-            }}
-          >
+          {tags.length > 0 && (
             <div
               style={{
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: '999px',
-                padding: '10px 24px',
-                fontSize: '18px',
-                color: 'white',
+                marginTop: '16px',
+                display: 'flex',
+                gap: '16px',
               }}
             >
-              Kurs
+              {tags.map((tag) => (
+                <div
+                  key={tag}
+                  style={{
+                    background: 'rgba(255,255,255,0.15)',
+                    borderRadius: '999px',
+                    padding: '10px 24px',
+                    fontSize: '18px',
+                    color: 'white',
+                  }}
+                >
+                  {tag}
+                </div>
+              ))}
             </div>
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: '999px',
-                padding: '10px 24px',
-                fontSize: '18px',
-                color: 'white',
-              }}
-            >
-              Sommerleirer
-            </div>
-            <div
-              style={{
-                background: 'rgba(255,255,255,0.15)',
-                borderRadius: '999px',
-                padding: '10px 24px',
-                fontSize: '18px',
-                color: 'white',
-              }}
-            >
-              Dobbeltsulky
-            </div>
-          </div>
+          )}
         </div>
       </div>
     ),

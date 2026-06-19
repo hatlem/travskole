@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { useStrings } from '@/components/SettingsProvider';
 
 export default function ResetPasswordForm() {
+  const t = useStrings();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
   const email = searchParams.get('email');
@@ -26,7 +28,7 @@ export default function ResetPasswordForm() {
             </p>
             <Link
               href="/auth/forgot-password"
-              className="text-sm text-[#003B7A] hover:underline"
+              className="text-sm text-bjerke-blue hover:underline"
             >
               Be om ny lenke
             </Link>
@@ -41,7 +43,7 @@ export default function ResetPasswordForm() {
     setError(null);
 
     if (password.length < 6) {
-      setError('Passordet må være minst 6 tegn');
+      setError('Passordet må være minst 8 tegn');
       return;
     }
 
@@ -104,10 +106,10 @@ export default function ResetPasswordForm() {
               <Link
                 href="/auth/login"
                 className="
-                  inline-block bg-[#003B7A] hover:bg-[#002855]
+                  inline-block bg-bjerke-blue hover:bg-bjerke-blue-dark
                   text-white font-semibold py-3 px-6 rounded-lg
                   transition duration-200
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-offset-2
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-offset-2
                 "
               >
                 Gå til innlogging
@@ -131,9 +133,9 @@ export default function ResetPasswordForm() {
                   autoComplete="new-password"
                   className="
                     w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm
-                    focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                    focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   "
-                  placeholder="Minst 6 tegn"
+                  placeholder="Minst 8 tegn"
                 />
               </div>
 
@@ -153,7 +155,7 @@ export default function ResetPasswordForm() {
                   autoComplete="new-password"
                   className="
                     w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm
-                    focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-opacity-20
+                    focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                   "
                   placeholder="Gjenta passordet"
                 />
@@ -163,14 +165,14 @@ export default function ResetPasswordForm() {
                 type="submit"
                 disabled={isLoading}
                 className="
-                  w-full bg-[#003B7A] hover:bg-[#002855]
+                  w-full bg-bjerke-blue hover:bg-bjerke-blue-dark
                   text-white font-semibold py-3 px-4 rounded-lg
                   transition duration-200
                   disabled:opacity-50 disabled:cursor-not-allowed
-                  focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:ring-offset-2
+                  focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-offset-2
                 "
               >
-                {isLoading ? 'Oppdaterer...' : 'Oppdater passord'}
+                {isLoading ? t('auth.updating') : t('auth.update_password')}
               </button>
             </form>
           )}

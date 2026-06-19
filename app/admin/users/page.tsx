@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
@@ -70,11 +70,7 @@ export default function AdminUsersPage() {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const isSuperAdmin = session?.user?.role === 'superadmin';
 
-  useEffect(() => {
-    fetchUsers();
-  }, []);
-
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/users');
       if (!res.ok) throw new Error('Kunne ikke hente brukere');
@@ -85,7 +81,11 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
 
   async function updateRole(id: number, role: string) {
     setUpdatingId(id);
@@ -194,12 +194,12 @@ export default function AdminUsersPage() {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Sok etter e-post, navn eller telefon..."
-              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent"
+              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
             />
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#003B7A] focus:border-transparent bg-white"
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
             >
               <option value="all">Alle roller</option>
               <option value="parent">Forelder</option>
@@ -237,7 +237,7 @@ export default function AdminUsersPage() {
                         >
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <div className="h-9 w-9 rounded-full bg-[#003B7A] flex items-center justify-center text-white text-xs font-bold shrink-0">
+                              <div className="h-9 w-9 rounded-full bg-bjerke-blue flex items-center justify-center text-white text-xs font-bold shrink-0">
                                 {initials}
                               </div>
                               <div className="min-w-0">
@@ -266,7 +266,7 @@ export default function AdminUsersPage() {
                               }}
                               onClick={(e) => e.stopPropagation()}
                               disabled={updatingId === user.id}
-                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-[#003B7A] ${
+                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-bjerke-blue ${
                                 user.role === 'superadmin'
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : user.role === 'admin'

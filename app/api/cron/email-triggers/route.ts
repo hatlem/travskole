@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { sendTemplatedEmail } from '@/lib/mail';
 import { getSetting } from '@/lib/settings';
 import type { MergeTagData } from '@/lib/email-templates';
+import logger from '@/lib/logger';
 
 function formatDate(date: Date): string {
   return date.toLocaleDateString('nb-NO', {
@@ -59,10 +61,16 @@ function computeSendDate(
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
+  const authHeader = request.headers.get('authorization') ?? '';
   const cronSecret = process.env.CRON_SECRET;
 
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  // SECURITY: fail closed + constant-time comparison
+  const expected = cronSecret ? `Bearer ${cronSecret}` : null;
+  const authorized =
+    expected !== null &&
+    authHeader.length === expected.length &&
+    timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+  if (!authorized) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -119,13 +127,13 @@ export async function GET(request: NextRequest) {
       for (const reg of registrations) {
         const data: MergeTagData = {
           forelder_navn: reg.parent.name,
-          barnets_navn: reg.child.name,
+          barnets_navn: reg.child?.name ?? reg.parent.name,
           kurs_navn: trigger.course.name,
           kurs_startdato: formatDate(trigger.course.startDate),
           kurs_sluttdato: trigger.course.endDate
             ? formatDate(trigger.course.endDate)
             : '',
-          allergier: reg.child.allergies || 'Ingen',
+          allergier: reg.child?.allergies || 'Ingen',
           kontakt_epost: contactEmail,
         };
 
@@ -147,7 +155,7 @@ export async function GET(request: NextRequest) {
 
           sent++;
         } catch (error) {
-          console.error(`Cron email error for registration ${reg.id}:`, error);
+          logger.error(`Cron email error for registration ${reg.id}`, { error });
           errors++;
         }
       }
@@ -155,7 +163,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ processed, sent, errors });
   } catch (error) {
-    console.error('Cron email triggers error:', error);
+    logger.error('Cron email triggers error', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
   }
 }

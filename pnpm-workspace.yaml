@@ -1,0 +1,35 @@
+allowBuilds:
+  '@prisma/client': set this to true or false
+  '@prisma/engines': set this to true or false
+  bcrypt: set this to true or false
+  prisma: set this to true or false
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false
+
+# Flat node_modules uten symlinks. Azure App Service (Kudu zipdeploy) bevarer
+# ikke symlinks ved utpakking, så pnpm sin symlink-baserte default gir knekte
+# moduler i prod (require('next') krasjer). Denne settingen leses herfra i et
+# pnpm-workspace, ikke fra .npmrc.
+nodeLinker: hoisted
+
+# Tillat native build-scripts (ellers får Prisma/sharp ikke plattform-binærfiler).
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - bcrypt
+  - sharp
+  - unrs-resolver
+
+# Sikkerhets-pins (speiler npm "overrides" i package.json). pnpm leser overrides
+# herfra, ikke fra package.json — uten dette får ikke pnpm-lockfilen
+# Dependabot-fiksene (30 sårbarheter løst på main).
+overrides:
+  nodemailer: '^8.0.5'
+  uuid: '^11.1.1'
+  postcss: '^8.5.10'
+  dompurify: '^3.4.0'
+  undici: '^7.24.0'
+  picomatch: '^4.0.4'
+  flatted: '^3.4.2'
+  cookie: '^0.7.0'

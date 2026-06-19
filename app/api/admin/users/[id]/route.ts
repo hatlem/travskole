@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getServerSession } from '@/lib/auth';
+import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-
-async function requireAdmin() {
-  const session = await getServerSession();
-  if (!session || (session.user.role !== 'admin' && session.user.role !== 'superadmin')) {
-    return null;
-  }
-  return session;
-}
+import logger from '@/lib/logger';
 
 export async function PUT(
   request: NextRequest,
@@ -39,6 +32,22 @@ export async function PUT(
       return NextResponse.json({ error: 'Kun superadmin kan tildele superadmin-rolle' }, { status: 403 });
     }
 
+    // SECURITY: only a superadmin may change another superadmin's role
+    // (prevents a regular admin from demoting/locking out the superadmin)
+    const targetUser = await prisma.user.findUnique({
+      where: { id: Number(id) },
+      select: { role: true },
+    });
+    if (!targetUser) {
+      return NextResponse.json({ error: 'Bruker ikke funnet' }, { status: 404 });
+    }
+    if (targetUser.role === 'superadmin' && session.user.role !== 'superadmin') {
+      return NextResponse.json(
+        { error: 'Kun superadmin kan endre rollen til en superadmin' },
+        { status: 403 }
+      );
+    }
+
     // Prevent admin from demoting themselves
     if (Number(id) === Number(session.user.id) && !['admin', 'superadmin'].includes(role)) {
       return NextResponse.json(
@@ -61,7 +70,7 @@ export async function PUT(
 
     return NextResponse.json({ user });
   } catch (error) {
-    console.error('Error updating user:', error);
+    logger.error('Error updating user', { error });
     return NextResponse.json({ error: 'Kunne ikke oppdatere bruker' }, { status: 500 });
   }
 }

@@ -16,7 +16,7 @@ export default function VerifyRequestPage() {
           </p>
           <Link
             href="/auth/login"
-            className="text-[#003B7A] hover:underline font-medium"
+            className="text-bjerke-blue hover:underline font-medium"
           >
             Tilbake til innlogging
           </Link>

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* Aktiverer `prose`-klassene (juridiske sider, rik-tekst-editor, e-postpreview) */
+@plugin "@tailwindcss/typography";
 
 :root {
   --background: #ffffff;
@@ -7,6 +9,7 @@
   /* Bjerke Brand Colors — from bjerke.no */
   --bjerke-blue: #003B7A;
   --bjerke-blue-dark: #002855;
+  --bjerke-blue-deep: #001a3a;
   --bjerke-blue-light: #0052A3;
   --bjerke-gray: #F5F5F5;
   --bjerke-dark: #171717;
@@ -39,7 +42,7 @@ body {
 
 /* Hero gradient fallback when image is missing */
 .hero-gradient {
-  background: linear-gradient(135deg, #003B7A 0%, #001a3a 50%, #002855 100%);
+  background: linear-gradient(135deg, var(--bjerke-blue) 0%, var(--bjerke-blue-deep) 50%, var(--bjerke-blue-dark) 100%);
 }
 
 /* Smooth page transitions */
