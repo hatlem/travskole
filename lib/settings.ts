@@ -63,8 +63,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   dobbeltsulky_description: 'Dobbeltsulky er en sulky med plass til to personer. Du sitter sammen med instruktøren og får oppleve farten og spenningen ved travsport helt tett på. Passer for alle aldre og krever ingen forkunnskaper.',
   dobbeltsulky_points: 'Ingen forkunnskaper nødvendig\nErfaren instruktør kjører med deg\nHjelm og sikkerhetsutstyr inkludert\nTid avtales individuelt',
 
-  // Sporing og deling
-  gtm_id: 'GTM-P4Q6HWFR',
+  // Sporing og deling — bjerke.no sin GTM-container (gjenbrukes på registrering)
+  gtm_id: 'GTM-MGN9X2PL',
   og_tags: 'Kurs\nLeirer\nArrangementer',
 
   // Juridiske sider (HTML, redigeres under /admin/sider, vises på /vilkar og /personvern)

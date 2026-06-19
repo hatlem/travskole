@@ -181,6 +181,18 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
         throw new Error(error.message || 'Noe gikk galt');
       }
 
+      // GTM-konvertering: fullført påmelding (GA4-tag i container fyrer på dette eventet)
+      if (typeof window !== 'undefined') {
+        const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
+        w.dataLayer = w.dataLayer || [];
+        w.dataLayer.push({
+          event: 'pamelding_fullfort',
+          course_name: courseName,
+          course_type: type,
+          waitlist: isWaitlist,
+        });
+      }
+
       router.push('/dashboard?success=registration');
     } catch {
       alert(t('reg.error_generic'));
