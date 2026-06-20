@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const emailData = { name, email, phone, participants: booking.participants, preferredDate: preferredDate ?? null, message: message ?? null };
+    const emailData = { courseName: 'Dobbeltsulky', name, email, phone, participants: booking.participants, preferredDate: preferredDate ?? null, message: message ?? null };
     await Promise.all([
       sendBookingConfirmation(emailData),
       sendBookingAdminNotification(emailData),

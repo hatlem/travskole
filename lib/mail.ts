@@ -164,6 +164,7 @@ export async function sendWaitlistPromotionEmail(data: WaitlistPromotionEmail) {
 }
 
 interface BookingEmail {
+  courseName: string;
   name: string;
   email: string;
   phone: string;
@@ -184,6 +185,7 @@ export async function sendBookingConfirmation(data: BookingEmail) {
       <h2>${escapeHtml(t('email.confirm_greeting', { navn: data.name }))}</h2>
       <p>${escapeHtml(t('email.booking_intro'))}</p>
       <table style="border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Arrangement:</td><td><strong>${escapeHtml(data.courseName)}</strong></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">Deltakere:</td><td>${data.participants}</td></tr>
         ${data.preferredDate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Ønsket dato:</td><td>${escapeHtml(new Date(data.preferredDate).toLocaleDateString('nb-NO'))}</td></tr>` : ''}
         ${data.message ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Melding:</td><td>${escapeHtml(data.message)}</td></tr>` : ''}
@@ -221,10 +223,11 @@ export async function sendBookingAdminNotification(data: BookingEmail) {
   const date = data.preferredDate ? new Date(data.preferredDate).toLocaleDateString('nb-NO') : 'Ikke spesifisert';
   await sendMail(
     adminEmail,
-    `Ny dobbeltsulky-forespørsel — ${data.name}`,
+    `Ny forespørsel — ${data.courseName} — ${data.name}`,
     `<div style="font-family:sans-serif;max-width:600px">
-      <h2>Ny dobbeltsulky-forespørsel</h2>
+      <h2>Ny forespørsel</h2>
       <table style="border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Arrangement:</td><td><strong>${escapeHtml(data.courseName)}</strong></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">Navn:</td><td><strong>${escapeHtml(data.name)}</strong></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">E-post:</td><td><a href="mailto:${escapeHtml(data.email)}">${escapeHtml(data.email)}</a></td></tr>
         <tr><td style="padding:4px 12px 4px 0;color:#666">Telefon:</td><td><a href="tel:${escapeHtml(data.phone)}">${escapeHtml(data.phone)}</a></td></tr>
