@@ -33,9 +33,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, type, audience, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl } = body;
+    const { name, description, type, audience, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl, registrationMode, requestRequiresLogin, requestConsentRisk, requestConsentTerms, requestConsentMedia, requestConsentActivities } = body;
 
-    if (!name || !type || !startDate || !status) {
+    const mode = registrationMode === 'request' ? 'request' : 'standard';
+
+    if (!name || !type || !status || (mode === 'standard' && !startDate)) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
     }
 
@@ -50,7 +52,7 @@ export async function POST(request: NextRequest) {
         description: description || null,
         type,
         audience: audience === 'voksen' ? 'voksen' : 'barn',
-        startDate: new Date(startDate),
+        startDate: startDate ? new Date(startDate) : null,
         endDate: endDate ? new Date(endDate) : null,
         ageMin: ageMin != null ? Number(ageMin) : null,
         ageMax: ageMax != null ? Number(ageMax) : null,
@@ -59,6 +61,12 @@ export async function POST(request: NextRequest) {
         maxParticipants: maxParticipants != null ? Number(maxParticipants) : null,
         status,
         imageUrl: imageUrl || null,
+        registrationMode: mode,
+        requestRequiresLogin: !!requestRequiresLogin,
+        requestConsentRisk: requestConsentRisk !== false,
+        requestConsentTerms: requestConsentTerms !== false,
+        requestConsentMedia: !!requestConsentMedia,
+        requestConsentActivities: !!requestConsentActivities,
       },
     });
 
