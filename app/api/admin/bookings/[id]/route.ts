@@ -15,7 +15,7 @@ export async function PUT(
   const { id } = await params;
   const body = await request.json();
 
-  const VALID_STATUSES = ['pending', 'confirmed', 'cancelled'];
+  const VALID_STATUSES = ['new', 'confirmed', 'cancelled'];
   if (!VALID_STATUSES.includes(body.status)) {
     return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
   }
