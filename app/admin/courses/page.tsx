@@ -18,7 +18,7 @@ interface Course {
   name: string;
   slug: string | null;
   type: string;
-  startDate: string;
+  startDate: string | null;
   endDate: string | null;
   price: number | null;
   minParticipants: number | null;
@@ -192,8 +192,12 @@ export default function AdminCoursesPage() {
           return dir * a.name.localeCompare(b.name);
         case 'type':
           return dir * a.type.localeCompare(b.type);
-        case 'startDate':
+        case 'startDate': {
+          if (a.startDate == null && b.startDate == null) return 0;
+          if (a.startDate == null) return 1;
+          if (b.startDate == null) return -1;
           return dir * (new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+        }
         case 'endDate': {
           const aEnd = a.endDate ? new Date(a.endDate).getTime() : 0;
           const bEnd = b.endDate ? new Date(b.endDate).getTime() : 0;
@@ -450,7 +454,7 @@ export default function AdminCoursesPage() {
                 <div className="grid grid-cols-2 gap-3 text-sm mb-3">
                   <div>
                     <span className="text-gray-500">Start:</span>{' '}
-                    <span className="text-gray-900">{formatDate(course.startDate)}</span>
+                    <span className="text-gray-900">{course.startDate ? formatDate(course.startDate) : 'Avtal tid'}</span>
                   </div>
                   <div>
                     <span className="text-gray-500">Slutt:</span>{' '}
@@ -538,7 +542,7 @@ export default function AdminCoursesPage() {
                         <TypeBadge type={course.type} courseTypes={courseTypes} />
                       </td>
                       <td className="px-6 py-4 text-gray-600">
-                        {formatDate(course.startDate)}
+                        {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
                       </td>
                       <td className="px-6 py-4 text-gray-600">
                         {formatDate(course.endDate)}
