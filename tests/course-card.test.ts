@@ -17,11 +17,13 @@ describe('toCourseCardProps', () => {
     expect(p.start_date).toBe('2026-08-01');
     expect(p.audience).toBe('barn');
     expect(p.registration_mode).toBe('standard');
+    expect(p.year).toBe(2026);
   });
   it('handles null startDate (request arrangement)', () => {
     const p = toCourseCardProps({ ...base, startDate: null, registrationMode: 'request' } as never);
     expect(p.start_date).toBeUndefined();
     expect(p.registration_mode).toBe('request');
+    expect(p.year).toBe(2026);
   });
 });
 

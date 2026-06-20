@@ -9,6 +9,7 @@ export interface CourseCardProps {
   type: string;
   audience: string;
   registration_mode: string;
+  year: number;
   start_date?: string;
   end_date?: string;
   age_min?: number;
@@ -28,6 +29,7 @@ export function toCourseCardProps(c: Course): CourseCardProps {
     type: c.type,
     audience: c.audience,
     registration_mode: c.registrationMode,
+    year: (c.startDate ?? c.createdAt).getFullYear(),
     start_date: c.startDate ? c.startDate.toISOString().split('T')[0] : undefined,
     end_date: c.endDate ? c.endDate.toISOString().split('T')[0] : undefined,
     age_min: c.ageMin ?? undefined,

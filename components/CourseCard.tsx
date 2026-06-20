@@ -3,7 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getCourseUrl } from '@/lib/slug';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 
@@ -15,6 +14,7 @@ export interface Course {
   type: string;
   audience?: string;
   registration_mode?: string;
+  year: number;
   start_date?: string;
   end_date?: string;
   age_min?: number;
@@ -42,9 +42,7 @@ export default function CourseCard({ course }: CourseCardProps) {
     });
   };
 
-  const courseHref = course.start_date
-    ? getCourseUrl({ ...course, startDate: course.start_date })
-    : `/arrangementer/${course.type}/${course.slug || ''}`;
+  const courseHref = `/arrangementer/${course.type}/${course.year}/${course.slug}`;
 
   const getStatusBadge = () => {
     switch (course.status) {
