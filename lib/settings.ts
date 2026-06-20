@@ -58,11 +58,6 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   course_packing_list: 'Varme klær som tåler skitt\nRidehjelm (kan lånes hvis ikke)\nStøvler eller gode sko\nMatpakke og drikkeflaske',
   instructor_description: 'Lang erfaring med barn og ungdom i travsport.',
 
-  // Dobbeltsulky
-  dobbeltsulky_enabled: 'false',
-  dobbeltsulky_description: 'Dobbeltsulky er en sulky med plass til to personer. Du sitter sammen med instruktøren og får oppleve farten og spenningen ved travsport helt tett på. Passer for alle aldre og krever ingen forkunnskaper.',
-  dobbeltsulky_points: 'Ingen forkunnskaper nødvendig\nErfaren instruktør kjører med deg\nHjelm og sikkerhetsutstyr inkludert\nTid avtales individuelt',
-
   // Sporing og deling — bjerke.no sin GTM-container (gjenbrukes på registrering)
   gtm_id: 'GTM-MGN9X2PL',
   og_tags: 'Kurs\nLeirer\nArrangementer',

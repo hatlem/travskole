@@ -8,7 +8,7 @@ export type SiteSettings = Record<string, string>;
 
 /**
  * Split a newline-separated setting value into a list of non-empty lines.
- * Used for bullet-point settings (home_feature_points, dobbeltsulky_points, ...).
+ * Used for bullet-point settings (home_feature_points, og_tags, ...).
  */
 export function settingToList(value: string | undefined): string[] {
   return (value ?? '')
