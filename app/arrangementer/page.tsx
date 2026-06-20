@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Course } from '@/components/CourseCard';
 import CourseFilter from '@/components/CourseFilter';
 import { prisma } from '@/lib/prisma';
-import { generateSlug } from '@/lib/slug';
+import { toCourseCardProps, compareForListing } from '@/lib/course-card';
 import { getSettings } from '@/lib/settings';
 import { makeT } from '@/lib/strings';
 import type { Metadata } from 'next';
@@ -30,25 +30,8 @@ async function isDobbeltsulkyEnabled(): Promise<boolean> {
 
 async function getAllCourses(): Promise<Course[]> {
   try {
-    const dbCourses = await prisma.course.findMany({
-      orderBy: { startDate: 'asc' },
-    });
-
-    return dbCourses.map((c) => ({
-      id: String(c.id),
-      name: c.name,
-      slug: c.slug || generateSlug(c.name),
-      description: c.description ?? '',
-      type: c.type,
-      start_date: c.startDate.toISOString().split('T')[0],
-      end_date: c.endDate ? c.endDate.toISOString().split('T')[0] : undefined,
-      age_min: c.ageMin ?? undefined,
-      age_max: c.ageMax ?? undefined,
-      price: c.price ?? 0,
-      max_participants: c.maxParticipants ?? 0,
-      status: c.status as 'open' | 'full' | 'closed',
-      image_url: c.imageUrl ?? null,
-    }));
+    const dbCourses = await prisma.course.findMany();
+    return dbCourses.sort(compareForListing).map(toCourseCardProps);
   } catch {
     return [];
   }

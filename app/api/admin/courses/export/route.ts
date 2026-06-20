@@ -59,7 +59,7 @@ export async function GET() {
       escapeCsvField(course.name),
       typeLabels[course.type] || course.type,
       statusLabels[course.status] || course.status,
-      new Date(course.startDate).toLocaleDateString('nb-NO'),
+      course.startDate ? new Date(course.startDate).toLocaleDateString('nb-NO') : '',
       course.endDate ? new Date(course.endDate).toLocaleDateString('nb-NO') : '',
       course.ageMin != null && course.ageMax != null
         ? `${course.ageMin}-${course.ageMax}`

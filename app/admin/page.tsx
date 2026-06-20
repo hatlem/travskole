@@ -221,11 +221,13 @@ export default async function AdminDashboard() {
                       <StatusBadge status={course.status} />
                     </div>
                     <div className="text-sm text-gray-500">
-                      {new Date(course.startDate).toLocaleDateString('nb-NO', {
-                        day: 'numeric',
-                        month: 'short',
-                        year: 'numeric',
-                      })}
+                      {course.startDate
+                        ? new Date(course.startDate).toLocaleDateString('nb-NO', {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })
+                        : 'Avtal tid'}
                     </div>
                   </div>
                   {max ? (

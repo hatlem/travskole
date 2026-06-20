@@ -95,6 +95,11 @@ export async function GET(request: NextRequest) {
     let errors = 0;
 
     for (const trigger of triggers) {
+      // Arrangementer uten startdato (forespørselsmodus) kan ikke ha datobaserte påminnelser.
+      if (!trigger.course.startDate) {
+        continue;
+      }
+
       const sendDate = computeSendDate(
         trigger.triggerType,
         trigger.offsetDays,

@@ -124,7 +124,7 @@ export async function GET() {
       createdAt: r.createdAt.toISOString(),
       courseName: r.course.name,
       courseType: r.course.type,
-      courseStartDate: r.course.startDate.toISOString(),
+      courseStartDate: r.course.startDate?.toISOString() ?? null,
       courseEndDate: r.course.endDate?.toISOString() ?? null,
       childName: r.child?.name ?? null,
     })),

@@ -137,6 +137,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Datobasert påmelding krever en startdato; forespørselsarrangementer har ingen /{år}/-URL.
+    if (!course.startDate) {
+      return NextResponse.json(
+        { error: 'Kurset finnes ikke for dette året' },
+        { status: 404 }
+      );
+    }
     const courseYear = new Date(course.startDate).getFullYear().toString();
     if (courseYear !== data.courseYear) {
       return NextResponse.json(

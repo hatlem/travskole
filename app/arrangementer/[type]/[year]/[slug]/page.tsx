@@ -86,7 +86,7 @@ export default async function CourseDetailPage({
   };
 
   const courseSlug = course.slug || generateSlug(course.name);
-  const courseYear = course.startDate.getFullYear();
+  const courseYear = course.startDate?.getFullYear() ?? new Date().getFullYear();
 
   const learningPoints = (settings.course_learning_points || '').split('\n').filter(Boolean);
   const packingList = (settings.course_packing_list || '').split('\n').filter(Boolean);
@@ -192,10 +192,12 @@ export default async function CourseDetailPage({
               </div>
 
               <div className="space-y-4 mb-6 border-t border-b border-gray-200 py-4">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">{t('course.start')}</p>
-                  <p className="font-semibold text-gray-900">{formatDate(course.startDate)}</p>
-                </div>
+                {course.startDate && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">{t('course.start')}</p>
+                    <p className="font-semibold text-gray-900">{formatDate(course.startDate)}</p>
+                  </div>
+                )}
                 {course.endDate && (
                   <div>
                     <p className="text-sm text-gray-500 mb-1">{t('course.end')}</p>
