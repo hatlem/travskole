@@ -28,11 +28,19 @@ const errorMessages: Record<string, string> = {
   Default: 'Noe gikk galt med innloggingen.',
 };
 
+// Only allow same-site relative paths as post-login redirect (open-redirect guard).
+function getSafeCallbackUrl(cb: string | null): string | null {
+  if (!cb) return null;
+  if (!cb.startsWith('/') || cb.startsWith('//') || cb.startsWith('/\\')) return null;
+  return cb;
+}
+
 export default function LoginForm() {
   const t = useStrings();
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
+  const callbackUrl = getSafeCallbackUrl(searchParams.get('callbackUrl'));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
@@ -64,7 +72,7 @@ export default function LoginForm() {
         const sessionRes = await fetch('/api/auth/session');
         const session = await sessionRes.json();
         const isAdmin = session?.user?.role === 'admin' || session?.user?.role === 'superadmin';
-        router.push(isAdmin ? '/admin' : '/dashboard');
+        router.push(callbackUrl ?? (isAdmin ? '/admin' : '/dashboard'));
         router.refresh();
       }
     } catch {
@@ -82,6 +90,7 @@ export default function LoginForm() {
       const result = await signIn('email', {
         email: data.email,
         redirect: false,
+        ...(callbackUrl ? { callbackUrl } : {}),
       });
 
       if (result?.error) {
