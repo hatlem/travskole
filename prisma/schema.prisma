@@ -66,9 +66,10 @@ model User {
   role          String   @default("parent") // 'parent', 'admin', or 'superadmin'
   createdAt     DateTime @default(now()) @map("created_at")
 
-  parent   Parent?
-  accounts Account[]
-  sessions Session[]
+  parent          Parent?
+  accounts        Account[]
+  sessions        Session[]
+  bookingRequests BookingRequest[]
 
   @@map("users")
 }
@@ -117,7 +118,7 @@ model Course {
   description     String?
   type            String    // course type value, configured in settings (course_types)
   audience        String    @default("barn") // 'barn' (foresatt melder på barn) | 'voksen' (deltaker melder på seg selv)
-  startDate       DateTime  @map("start_date")
+  startDate       DateTime? @map("start_date")
   endDate         DateTime? @map("end_date")
   ageMin          Int?      @map("age_min")
   ageMax          Int?      @map("age_max")
@@ -126,11 +127,18 @@ model Course {
   maxParticipants Int?      @map("max_participants")
   status          String    @default("open") // 'open', 'full', 'closed'
   imageUrl        String?   @map("image_url")
+  registrationMode         String  @default("standard") @map("registration_mode") // 'standard' | 'request'
+  requestRequiresLogin     Boolean @default(false) @map("request_requires_login")
+  requestConsentRisk       Boolean @default(true)  @map("request_consent_risk")
+  requestConsentTerms      Boolean @default(true)  @map("request_consent_terms")
+  requestConsentMedia      Boolean @default(false) @map("request_consent_media")
+  requestConsentActivities Boolean @default(false) @map("request_consent_activities")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
-  registrations Registration[]
-  emailTriggers EmailTrigger[]
+  registrations   Registration[]
+  emailTriggers   EmailTrigger[]
+  bookingRequests BookingRequest[]
 
   @@unique([type, slug])
   @@index([status, startDate])
@@ -146,19 +154,31 @@ model Setting {
   @@map("settings")
 }
 
-// Dobbeltsulky booking requests
+// Forespørsler til request-modus-arrangementer (avtal tid)
 model BookingRequest {
-  id            Int      @id @default(autoincrement())
+  id            Int       @id @default(autoincrement())
+  courseId      Int?      @map("course_id")
+  userId        Int?      @map("user_id")
   name          String
   email         String
   phone         String
-  participants  Int      @default(1)
+  participants  Int       @default(1)
   preferredDate DateTime? @map("preferred_date")
   message       String?
-  status        String   @default("new") // 'new', 'confirmed', 'cancelled'
-  createdAt     DateTime @default(now()) @map("created_at")
+  consentRisk       Boolean @default(false) @map("consent_risk")
+  consentTerms      Boolean @default(false) @map("consent_terms")
+  consentMedia      Boolean @default(false) @map("consent_media")
+  consentActivities Boolean @default(false) @map("consent_activities")
+  status        String    @default("new") // 'new', 'confirmed', 'cancelled'
+  confirmedAt   DateTime? @map("confirmed_at")
+  cancelledAt   DateTime? @map("cancelled_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([status])
+  @@index([courseId])
   @@map("booking_requests")
 }
 

@@ -10,6 +10,7 @@ export async function GET() {
 
   const bookings = await prisma.bookingRequest.findMany({
     orderBy: { createdAt: 'desc' },
+    include: { course: { select: { name: true } } },
   });
 
   return NextResponse.json({ bookings });

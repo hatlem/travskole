@@ -103,15 +103,6 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
-    title: 'Dobbeltsulky',
-    description: 'Innstillinger for dobbeltsulky-booking',
-    fields: [
-      { key: 'dobbeltsulky_enabled', label: 'Aktiver dobbeltsulky-booking', type: 'toggle' },
-      { key: 'dobbeltsulky_description', label: 'Beskrivelse', type: 'textarea' },
-      { key: 'dobbeltsulky_points', label: 'Punkter (ett per linje)', type: 'textarea' },
-    ],
-  },
-  {
     title: 'Sporing og deling',
     description: 'Google Tag Manager og tekst på delingsbildet (Open Graph)',
     fields: [

@@ -24,13 +24,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Dynamic course pages
   try {
     const courses = await prisma.course.findMany({
-      where: { status: { in: ['open', 'full'] } },
+      where: { status: { in: ['open', 'full'] }, startDate: { not: null } },
       select: { name: true, slug: true, type: true, startDate: true, updatedAt: true },
     });
 
     const coursePages: MetadataRoute.Sitemap = courses.map((course) => {
       const slug = course.slug || generateSlug(course.name);
-      const year = course.startDate.getFullYear();
+      const year = course.startDate!.getFullYear();
       return {
         url: `${baseUrl}/arrangementer/${course.type}/${year}/${slug}`,
         lastModified: course.updatedAt,

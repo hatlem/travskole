@@ -10,7 +10,7 @@ interface CalendarCourse {
   name: string;
   type: string;
   status: string;
-  startDate: string;
+  startDate: string | null;
   endDate: string | null;
 }
 
@@ -68,6 +68,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
   const coursesByDay = useMemo(() => {
     const map: Record<number, CalendarCourse[]> = {};
     for (const course of courses) {
+      if (!course.startDate) continue;
       const start = new Date(course.startDate);
       if (start.getFullYear() === year && start.getMonth() === month) {
         const day = start.getDate();
@@ -82,10 +83,11 @@ export function CalendarView({ courses }: CalendarViewProps) {
   const monthCourses = useMemo(() => {
     return courses
       .filter((c) => {
+        if (!c.startDate) return false;
         const d = new Date(c.startDate);
         return d.getFullYear() === year && d.getMonth() === month;
       })
-      .sort((a, b) => new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
+      .sort((a, b) => new Date(a.startDate!).getTime() - new Date(b.startDate!).getTime());
   }, [courses, year, month]);
 
   const prevMonth = () => {
@@ -230,7 +232,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
         ) : (
           <div className="space-y-2">
             {monthCourses.map((course) => {
-              const startDate = new Date(course.startDate);
+              const startDate = new Date(course.startDate!);
               const dayNum = startDate.getDate();
               const todayItem = isSameDay(startDate, today);
 

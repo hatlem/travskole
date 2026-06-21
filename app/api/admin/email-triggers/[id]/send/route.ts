@@ -76,7 +76,9 @@ export async function POST(
         forelder_navn: reg.parent.name,
         barnets_navn: reg.child?.name ?? reg.parent.name,
         kurs_navn: trigger.course.name,
-        kurs_startdato: formatDate(trigger.course.startDate),
+        kurs_startdato: trigger.course.startDate
+          ? formatDate(trigger.course.startDate)
+          : '',
         kurs_sluttdato: trigger.course.endDate
           ? formatDate(trigger.course.endDate)
           : '',

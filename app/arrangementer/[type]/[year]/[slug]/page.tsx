@@ -14,9 +14,9 @@ export async function generateMetadata({
 }: {
   params: Promise<{ type: string; year: string; slug: string }>;
 }): Promise<Metadata> {
-  const { type, year, slug } = await params;
+  const { type, slug } = await params;
   const [course, settings] = await Promise.all([
-    getCourseBySlug(type, year, slug),
+    getCourse(type, slug),
     getSettings(),
   ]);
   if (!course) return { title: `Ikke funnet - ${settings.site_name}` };
@@ -27,37 +27,13 @@ export async function generateMetadata({
   };
 }
 
-async function getCourseBySlug(type: string, year: string, slug: string) {
-  if (!/^[a-z0-9-]+$/.test(type)) return undefined;
-
-  const yearNum = parseInt(year, 10);
-  if (isNaN(yearNum)) return undefined;
-
-  let course = await prisma.course.findFirst({
-    where: {
-      type,
-      slug,
-      startDate: {
-        gte: new Date(`${yearNum}-01-01`),
-        lt: new Date(`${yearNum + 1}-01-01`),
-      },
-    },
-  });
-
-  if (!course) {
-    const courses = await prisma.course.findMany({
-      where: {
-        type,
-        startDate: {
-          gte: new Date(`${yearNum}-01-01`),
-          lt: new Date(`${yearNum + 1}-01-01`),
-        },
-      },
-    });
-    course = courses.find((c) => generateSlug(c.name) === slug) ?? null;
-  }
-
-  return course;
+async function getCourse(type: string, slug: string) {
+  if (!/^[a-z0-9-]+$/.test(type)) return null;
+  const course = await prisma.course.findFirst({ where: { type, slug } });
+  if (course) return course;
+  // Legacy fallback: courses created before slugs were stored.
+  const candidates = await prisma.course.findMany({ where: { type } });
+  return candidates.find((c) => (c.slug || generateSlug(c.name)) === slug) ?? null;
 }
 
 export default async function CourseDetailPage({
@@ -65,9 +41,9 @@ export default async function CourseDetailPage({
 }: {
   params: Promise<{ type: string; year: string; slug: string }>;
 }) {
-  const { type, year, slug } = await params;
+  const { type, slug } = await params;
   const [course, settings] = await Promise.all([
-    getCourseBySlug(type, year, slug),
+    getCourse(type, slug),
     getSettings(),
   ]);
 
@@ -86,7 +62,7 @@ export default async function CourseDetailPage({
   };
 
   const courseSlug = course.slug || generateSlug(course.name);
-  const courseYear = course.startDate.getFullYear();
+  const courseYear = course.startDate?.getFullYear() ?? new Date().getFullYear();
 
   const learningPoints = (settings.course_learning_points || '').split('\n').filter(Boolean);
   const packingList = (settings.course_packing_list || '').split('\n').filter(Boolean);
@@ -192,10 +168,12 @@ export default async function CourseDetailPage({
               </div>
 
               <div className="space-y-4 mb-6 border-t border-b border-gray-200 py-4">
-                <div>
-                  <p className="text-sm text-gray-500 mb-1">{t('course.start')}</p>
-                  <p className="font-semibold text-gray-900">{formatDate(course.startDate)}</p>
-                </div>
+                {course.startDate && (
+                  <div>
+                    <p className="text-sm text-gray-500 mb-1">{t('course.start')}</p>
+                    <p className="font-semibold text-gray-900">{formatDate(course.startDate)}</p>
+                  </div>
+                )}
                 {course.endDate && (
                   <div>
                     <p className="text-sm text-gray-500 mb-1">{t('course.end')}</p>
@@ -231,7 +209,7 @@ export default async function CourseDetailPage({
                   href={`/arrangementer/${course.type}/${courseYear}/${courseSlug}/pamelding`}
                   className="block w-full text-center bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-6 py-4 rounded-lg font-semibold text-lg transition"
                 >
-                  {t('course.register_button')}
+                  {course.registrationMode === 'request' ? 'Send forespørsel' : t('course.register_button')}
                 </Link>
               ) : course.status === 'full' ? (
                 <div>

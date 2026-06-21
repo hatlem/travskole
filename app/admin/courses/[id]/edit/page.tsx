@@ -36,6 +36,12 @@ interface CourseData {
   maxParticipants: number | null;
   status: string;
   imageUrl: string | null;
+  registrationMode?: string;
+  requestRequiresLogin?: boolean;
+  requestConsentRisk?: boolean;
+  requestConsentTerms?: boolean;
+  requestConsentMedia?: boolean;
+  requestConsentActivities?: boolean;
 }
 
 interface EmailTemplate {
@@ -109,6 +115,12 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [price, setPrice] = useState('');
   const [minParticipants, setMinParticipants] = useState('');
   const [maxParticipants, setMaxParticipants] = useState('');
+  const [registrationMode, setRegistrationMode] = useState('standard');
+  const [requestRequiresLogin, setRequestRequiresLogin] = useState(false);
+  const [reqConsentRisk, setReqConsentRisk] = useState(true);
+  const [reqConsentTerms, setReqConsentTerms] = useState(true);
+  const [reqConsentMedia, setReqConsentMedia] = useState(false);
+  const [reqConsentActivities, setReqConsentActivities] = useState(false);
 
   // Email triggers state
   const [triggers, setTriggers] = useState<EmailTrigger[]>([]);
@@ -135,7 +147,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
   const validationErrors: Record<string, string> = {};
   if (!name.trim()) validationErrors.name = 'Kursnavn er påkrevd';
-  if (!startDate) validationErrors.startDate = 'Startdato er påkrevd';
+  if (registrationMode !== 'request' && !startDate) validationErrors.startDate = 'Startdato er påkrevd';
   if (endDate && startDate && endDate < startDate)
     validationErrors.endDate = 'Sluttdato kan ikke være før startdato';
   if (ageMin && ageMax && Number(ageMin) > Number(ageMax))
@@ -166,6 +178,12 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         setPrice(c.price != null ? String(c.price) : '');
         setMinParticipants(c.minParticipants != null ? String(c.minParticipants) : '');
         setMaxParticipants(c.maxParticipants != null ? String(c.maxParticipants) : '');
+        setRegistrationMode(c.registrationMode || 'standard');
+        setRequestRequiresLogin(!!c.requestRequiresLogin);
+        setReqConsentRisk(c.requestConsentRisk ?? true);
+        setReqConsentTerms(c.requestConsentTerms ?? true);
+        setReqConsentMedia(!!c.requestConsentMedia);
+        setReqConsentActivities(!!c.requestConsentActivities);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Noe gikk galt');
       } finally {
@@ -327,6 +345,12 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       maxParticipants: maxParticipants ? Number(maxParticipants) : null,
       status,
       imageUrl: imageUrl || null,
+      registrationMode,
+      requestRequiresLogin,
+      requestConsentRisk: reqConsentRisk,
+      requestConsentTerms: reqConsentTerms,
+      requestConsentMedia: reqConsentMedia,
+      requestConsentActivities: reqConsentActivities,
     };
 
     try {
@@ -595,6 +619,30 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   </select>
                 </div>
 
+                {/* Registreringsmodus */}
+                <div>
+                  <label htmlFor="registrationMode" className={labelClass}>Registreringsmodus</label>
+                  <select
+                    id="registrationMode"
+                    value={registrationMode}
+                    onChange={(e) => setRegistrationMode(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value="standard">Påmelding (fast dato/plasser)</option>
+                    <option value="request">Forespørsel (avtal tid)</option>
+                  </select>
+                </div>
+                {registrationMode === 'request' && (
+                  <div className="space-y-2 border-l-2 border-amber-200 pl-3">
+                    <label className="flex gap-2 text-sm"><input type="checkbox" checked={requestRequiresLogin} onChange={(e) => setRequestRequiresLogin(e.target.checked)} /> Krev innlogging</label>
+                    <p className="text-sm font-medium">Samtykker som vises:</p>
+                    <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentRisk} onChange={(e) => setReqConsentRisk(e.target.checked)} /> Risiko/forsikring</label>
+                    <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentTerms} onChange={(e) => setReqConsentTerms(e.target.checked)} /> Vilkår</label>
+                    <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentMedia} onChange={(e) => setReqConsentMedia(e.target.checked)} /> Bilder/video</label>
+                    <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentActivities} onChange={(e) => setReqConsentActivities(e.target.checked)} /> Aktiviteter</label>
+                  </div>
+                )}
+
                 {/* Status */}
                 <div>
                   <label htmlFor="status" className={labelClass}>
@@ -623,7 +671,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     type="date"
                     id="startDate"
                     name="startDate"
-                    required
+                    required={registrationMode !== 'request'}
                     value={startDate}
                     onChange={(e) => setStartDate(e.target.value)}
                     onBlur={() => markTouched('startDate')}

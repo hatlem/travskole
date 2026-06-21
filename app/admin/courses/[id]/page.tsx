@@ -122,7 +122,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
             </div>
             <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-600">
               <span>
-                {formatDate(course.startDate)}
+                {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
                 {course.endDate ? ` — ${formatDate(course.endDate)}` : ''}
               </span>
               <span>{course.price != null ? `${course.price} kr` : 'Gratis'}</span>
@@ -247,7 +247,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
         `}} />
         <h1 className="text-xl font-bold mb-1">{course.name}</h1>
         <p className="text-sm text-gray-600 mb-4">
-          {formatDate(course.startDate)}{course.endDate ? ` — ${formatDate(course.endDate)}` : ''}
+          {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}{course.endDate ? ` — ${formatDate(course.endDate)}` : ''}
         </p>
         <table className="w-full text-sm border-collapse">
           <thead>

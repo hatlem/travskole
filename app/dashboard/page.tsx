@@ -27,7 +27,7 @@ interface DashboardData {
     createdAt: string;
     courseName: string;
     courseType: string;
-    courseStartDate: string;
+    courseStartDate: string | null;
     courseEndDate: string | null;
     childName: string | null;
   }[];
@@ -171,7 +171,7 @@ function DashboardContent() {
                       <div>
                         <p className="font-medium text-gray-900">{r.courseName}</p>
                         <p className="text-sm text-gray-500">
-                          {r.childName ? `${r.childName} \u00b7 ` : ''}{formatDate(r.courseStartDate)}
+                          {r.childName ? `${r.childName} \u00b7 ` : ''}{r.courseStartDate ? formatDate(r.courseStartDate) : 'Avtal tid'}
                           {r.courseEndDate && ` – ${formatDate(r.courseEndDate)}`}
                         </p>
                       </div>

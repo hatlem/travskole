@@ -16,15 +16,14 @@ interface Booking {
   createdAt: string;
   confirmedAt?: string | null;
   cancelledAt?: string | null;
+  course?: { name: string } | null;
 }
 
 type StatusFilter = 'all' | 'new' | 'confirmed' | 'cancelled';
 
-export default function AdminDobbeltsulkyPage() {
-  const [enabled, setEnabled] = useState(false);
+export default function AdminForesporslerPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -33,13 +32,8 @@ export default function AdminDobbeltsulkyPage() {
 
   useEffect(() => {
     async function load() {
-      const [settingsRes, bookingsRes] = await Promise.all([
-        fetch('/api/admin/settings'),
-        fetch('/api/admin/bookings'),
-      ]);
-      const settingsData = await settingsRes.json();
+      const bookingsRes = await fetch('/api/admin/bookings');
       const bookingsData = await bookingsRes.json();
-      setEnabled(settingsData.settings?.dobbeltsulky_enabled === 'true');
       setBookings(bookingsData.bookings || []);
       setLoading(false);
     }
@@ -73,25 +67,6 @@ export default function AdminDobbeltsulkyPage() {
     [filteredBookings]
   );
 
-  async function toggleEnabled() {
-    setToggling(true);
-    try {
-      const newValue = !enabled;
-      const res = await fetch('/api/admin/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key: 'dobbeltsulky_enabled', value: String(newValue) }),
-      });
-      if (!res.ok) throw new Error('Kunne ikke oppdatere innstilling');
-      setEnabled(newValue);
-      toast(newValue ? 'Dobbeltsulky aktivert' : 'Dobbeltsulky deaktivert', 'success');
-    } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
-    } finally {
-      setToggling(false);
-    }
-  }
-
   async function updateStatus(id: number, status: string) {
     try {
       const res = await fetch(`/api/admin/bookings/${id}`, {
@@ -116,7 +91,7 @@ export default function AdminDobbeltsulkyPage() {
         next.delete(id);
         return next;
       });
-      toast(status === 'confirmed' ? 'Booking bekreftet' : 'Booking avvist', 'success');
+      toast(status === 'confirmed' ? 'Forespørsel bekreftet' : 'Forespørsel avvist', 'success');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     }
@@ -147,7 +122,7 @@ export default function AdminDobbeltsulkyPage() {
             }
           : b
       ));
-      toast(`${ids.length} booking(er) oppdatert`, 'success');
+      toast(`${ids.length} forespørsel(er) oppdatert`, 'success');
       setSelected(new Set());
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
@@ -184,7 +159,7 @@ export default function AdminDobbeltsulkyPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Dobbeltsulky</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6">Forespørsler</h1>
         <StatCardsSkeleton count={4} />
         <div className="mt-6">
           <TableSkeleton />
@@ -195,34 +170,10 @@ export default function AdminDobbeltsulkyPage() {
 
   return (
     <div>
-      {/* Header with toggle */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dobbeltsulky</h1>
-          <p className="text-gray-600 text-sm mt-1">Administrer booking og foresporsler</p>
-        </div>
-        <button
-          onClick={toggleEnabled}
-          disabled={toggling}
-          className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-            enabled ? 'bg-green-500' : 'bg-gray-300'
-          } ${toggling ? 'opacity-50' : ''}`}
-        >
-          <span
-            className={`inline-block h-6 w-6 rounded-full bg-white shadow transition-transform ${
-              enabled ? 'translate-x-7' : 'translate-x-1'
-            }`}
-          />
-        </button>
-      </div>
-
-      {/* Status banner */}
-      <div className={`rounded-lg px-4 py-3 mb-6 text-sm font-medium ${
-        enabled ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-gray-50 text-gray-600 border border-gray-200'
-      }`}>
-        {enabled
-          ? 'Dobbeltsulky-booking er synlig for besokende pa arrangementer-siden.'
-          : 'Dobbeltsulky-booking er skjult. Besokende kan ikke booke.'}
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Forespørsler</h1>
+        <p className="text-gray-600 text-sm mt-1">Alle bookingforespørsler på tvers av arrangementer</p>
       </div>
 
       {/* Stats bar */}
@@ -253,7 +204,7 @@ export default function AdminDobbeltsulkyPage() {
           </svg>
           <input
             type="text"
-            placeholder="Sok etter navn, e-post eller telefon..."
+            placeholder="Søk etter navn, e-post eller telefon..."
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
@@ -323,8 +274,8 @@ export default function AdminDobbeltsulkyPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <p className="text-gray-500">
             {bookings.length === 0
-              ? 'Ingen foresporsler enna.'
-              : 'Ingen foresporsler matcher filteret.'}
+              ? 'Ingen forespørsler ennå.'
+              : 'Ingen forespørsler matcher filteret.'}
           </p>
         </div>
       )}
@@ -383,7 +334,11 @@ function BookingCard({
         </span>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm mb-3">
+        <div>
+          <p className="text-gray-500">Arrangement</p>
+          <p className="font-medium">{booking.course?.name ?? '—'}</p>
+        </div>
         <div>
           <p className="text-gray-500">E-post</p>
           <a href={`mailto:${booking.email}`} className="text-bjerke-blue hover:underline">{booking.email}</a>
@@ -397,7 +352,7 @@ function BookingCard({
           <p className="font-medium">{booking.participants}</p>
         </div>
         <div>
-          <p className="text-gray-500">Onsket dato</p>
+          <p className="text-gray-500">Ønsket dato</p>
           <p className="font-medium">
             {booking.preferredDate
               ? new Date(booking.preferredDate).toLocaleDateString('nb-NO')
