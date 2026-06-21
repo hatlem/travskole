@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSettings } from '@/components/SettingsProvider';
 
@@ -22,6 +22,25 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
     name: '', email: '', phone: '', participants: 1, preferredDate: '', message: '',
     consentRisk: false, consentTerms: false, consentMedia: false, consentActivities: false,
   });
+
+  // Forhåndsutfyll kontaktinfo for innloggede brukere (gir 401 for anonyme → ingen utfylling).
+  useEffect(() => {
+    let active = true;
+    fetch('/api/dashboard')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (active && data?.profile) {
+          setForm((f) => ({
+            ...f,
+            name: f.name || data.profile.name || '',
+            email: f.email || data.profile.email || '',
+            phone: f.phone || data.profile.phone || '',
+          }));
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   if (done) {
     return (

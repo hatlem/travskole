@@ -20,9 +20,14 @@ export async function PUT(
     return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
   }
 
+  const now = new Date();
   const booking = await prisma.bookingRequest.update({
     where: { id: Number(id) },
-    data: { status: body.status },
+    data: {
+      status: body.status,
+      confirmedAt: body.status === 'confirmed' ? now : null,
+      cancelledAt: body.status === 'cancelled' ? now : null,
+    },
   });
 
   logActivity({ action: 'status_change', entity: 'booking', entityId: Number(id), details: JSON.stringify({ status: body.status }), userEmail: session.user.email }).catch(() => {});

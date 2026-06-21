@@ -154,7 +154,7 @@ model Setting {
   @@map("settings")
 }
 
-// Dobbeltsulky booking requests
+// Forespørsler til request-modus-arrangementer (avtal tid)
 model BookingRequest {
   id            Int       @id @default(autoincrement())
   courseId      Int?      @map("course_id")
@@ -170,6 +170,8 @@ model BookingRequest {
   consentMedia      Boolean @default(false) @map("consent_media")
   consentActivities Boolean @default(false) @map("consent_activities")
   status        String    @default("new") // 'new', 'confirmed', 'cancelled'
+  confirmedAt   DateTime? @map("confirmed_at")
+  cancelledAt   DateTime? @map("cancelled_at")
   createdAt     DateTime  @default(now()) @map("created_at")
 
   course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
