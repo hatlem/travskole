@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
+import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
 
 interface RegistrationData {
   courseType: string;
@@ -108,9 +109,17 @@ export async function POST(request: NextRequest) {
 
     // Admin-styrte obligatoriske felt: vilkårsaksept + adresse (default obligatorisk)
     const termsRequired = (await getSetting('registration_terms_required')) !== 'false';
-    if (termsRequired && data.consentTerms !== true) {
+    // Vilkårssjekken kjører før kurset er lastet (som før). Vi isolerer kun
+    // vilkårsgrenen av den delte regelen ved å sette risiko som godtatt og
+    // markere som voksen, slik at risk/aktivitet-grenen ikke kan slå inn her.
+    const termsError = requiredRegistrationConsentError(
+      true,
+      { consentRisk: true, consentActivities: true, consentTerms: data.consentTerms },
+      termsRequired
+    );
+    if (termsError) {
       return NextResponse.json(
-        { error: 'Du må godta vilkårene for å melde på' },
+        { error: termsError },
         { status: 400 }
       );
     }
@@ -177,11 +186,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate consents — aktivitetssamtykke gjelder kun barnearrangementer
+    // Validate consents — aktivitetssamtykke gjelder kun barnearrangementer.
+    // Vilkår er allerede validert over, så vi isolerer risk/aktivitet-grenen her
+    // (requireTerms=false) via den delte regelen.
     const isAdultCourse = course.audience === 'voksen';
-    if (!data.consentRisk || (!isAdultCourse && !data.consentActivities)) {
+    const consentError = requiredRegistrationConsentError(
+      isAdultCourse,
+      { consentRisk: data.consentRisk, consentActivities: data.consentActivities, consentTerms: data.consentTerms },
+      false
+    );
+    if (consentError) {
       return NextResponse.json(
-        { error: 'Du må godta alle påkrevde samtykker' },
+        { error: consentError },
         { status: 400 }
       );
     }
@@ -295,7 +311,7 @@ export async function POST(request: NextRequest) {
     const consentTextHash = crypto.createHash('sha256').update(consentSource).digest('hex');
 
     // Create registration in database
-    const isWaitlistRegistration = data.waitlist && course.status === 'full';
+    const isWaitlistRegistration = isWaitlist(course.status, !!data.waitlist);
     const registration = await prisma.registration.create({
       data: {
         courseId: course.id,
