@@ -14,12 +14,22 @@ function formatDate(date: Date): string {
   });
 }
 
-function isSameDay(a: Date, b: Date): boolean {
-  return (
-    a.getFullYear() === b.getFullYear() &&
-    a.getMonth() === b.getMonth() &&
-    a.getDate() === b.getDate()
-  );
+/**
+ * Reduce a Date to its calendar day (YYYY-MM-DD) in the Europe/Oslo timezone.
+ *
+ * Azure App Service runs in UTC, but course dates are Oslo-time. Comparing the
+ * raw Date or using server-local getFullYear/getMonth/getDate can resolve "X
+ * days before start" to the wrong calendar day. Using the Oslo-day string for
+ * all due-date comparisons keeps sends on the intended calendar day, and the
+ * lexicographic order of YYYY-MM-DD strings matches chronological order.
+ */
+export function osloDay(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Oslo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d); // -> 'YYYY-MM-DD'
 }
 
 function addDays(date: Date, days: number): Date {
@@ -87,7 +97,7 @@ export async function GET(request: NextRequest) {
       },
     });
 
-    const today = new Date();
+    const todayOslo = osloDay(new Date());
     const contactEmail = await getSetting('contact_email');
 
     let processed = 0;
@@ -107,7 +117,11 @@ export async function GET(request: NextRequest) {
         trigger.course.endDate,
       );
 
-      if (!sendDate || !isSameDay(sendDate, today)) {
+      // Catch-up: a trigger is due once its Oslo send-day is on or before today.
+      // If the cron missed a day (cold start / deploy / error), the email still
+      // goes out on the next run. The emailLogs `none` filter below guarantees
+      // idempotency, so a past-due trigger is sent exactly once.
+      if (!sendDate || osloDay(sendDate) > todayOslo) {
         continue;
       }
 
@@ -166,7 +180,14 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ processed, sent, errors });
+    // Fail-loud: if any individual send threw, surface a 500 so Azure /
+    // monitoring sees the failure instead of a misleading "OK". We still
+    // processed every trigger above (no early abort) so partial progress is
+    // made and the summary reflects what succeeded.
+    return NextResponse.json(
+      { processed, sent, errors },
+      { status: errors > 0 ? 500 : 200 },
+    );
   } catch (error) {
     logger.error('Cron email triggers error', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
