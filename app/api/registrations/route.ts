@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
     const phoneSchema = z.string().min(8);
     const nameSchema = z.string().min(2).max(100);
 
+    // Normalize email before any use
+    data.parentEmail = data.parentEmail.trim().toLowerCase();
+
     // Validate email
     const emailValidation = emailSchema.safeParse(data.parentEmail);
     if (!emailValidation.success) {

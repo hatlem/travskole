@@ -52,8 +52,9 @@ export const authOptions: NextAuthOptions = {
           throw new Error(rateLimit.error || 'For mange innloggingsforsøk. Prøv igjen senere.');
         }
 
+        const normalizedEmail = credentials.email.trim().toLowerCase();
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email },
+          where: { email: normalizedEmail },
           include: { parent: true },
         });
 

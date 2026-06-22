@@ -34,7 +34,8 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
-    const { email, phone, password } = parsed.data;
+    const { phone, password } = parsed.data;
+    const email = parsed.data.email.trim().toLowerCase();
     const name = DOMPurify.sanitize(parsed.data.name);
     const address = parsed.data.address ? DOMPurify.sanitize(parsed.data.address) : null;
 

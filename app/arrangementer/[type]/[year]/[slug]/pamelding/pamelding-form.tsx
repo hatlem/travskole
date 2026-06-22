@@ -104,6 +104,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
   const settings = useSettings();
   const t = useStrings();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
   const [existingChildren, setExistingChildren] = useState<ChildData[]>([]);
   const [consentOpen, setConsentOpen] = useState(false);
@@ -157,6 +158,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
 
   const onSubmit = async (data: RegistrationFormData) => {
     setIsSubmitting(true);
+    setSubmitError(null);
 
     try {
       const { type, year, slug } = courseRef;
@@ -177,8 +179,8 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Noe gikk galt');
+        const errorBody = await response.json();
+        throw new Error(errorBody.error || errorBody.message || t('reg.error_generic'));
       }
 
       // GTM-konvertering: fullført påmelding (GA4-tag i container fyrer på dette eventet)
@@ -194,8 +196,8 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
       }
 
       router.push('/dashboard?success=registration');
-    } catch {
-      alert(t('reg.error_generic'));
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : t('reg.error_generic'));
     } finally {
       setIsSubmitting(false);
     }
@@ -548,6 +550,14 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
             )}
 
             <div className="pt-6 border-t border-gray-200">
+              {submitError && (
+                <div
+                  role="alert"
+                  className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm mb-4"
+                >
+                  {submitError}
+                </div>
+              )}
               <button
                 type="submit"
                 disabled={isSubmitting}
