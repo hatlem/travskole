@@ -181,48 +181,48 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // ── GDPR retention pass ───────────────────────────────────────────────
-    // Anonymize children whose personal/health data has been retained beyond
-    // `data_retention_days` since their last course ended. Scoped to children
-    // only — parents are intentionally NOT touched (they may have other active
-    // relationships, and this job's mandate is the sensitive child data:
-    // name + birthdate + allergies (art. 9). Idempotent: the query excludes
-    // already-anonymized children and the predicate re-checks `deletedAt`.
-    const retentionDays =
-      parseInt((await getSetting('data_retention_days')) || '365', 10) || 365;
-
-    const retentionCandidates = await prisma.child.findMany({
-      where: { deletedAt: null },
-      include: {
-        registrations: {
-          include: { course: { select: { startDate: true, endDate: true } } },
-        },
-      },
-    });
-
+    // ── GDPR retention pass (AV som standard) ─────────────────────────────
+    // `data_retention_days = 0` → ingen automatisk sletting. Dette er bevisst:
+    // familier skal kunne logge inn år etter år og gjenbruke informasjonen sin
+    // (gjengangere). Persondata beholdes så lenge kundeforholdet er aktivt;
+    // sletting skjer KUN på forespørsel (deletedAt) — den flyten er upåvirket.
+    // Settes til et positivt antall dager BARE hvis dere senere ønsker en
+    // tidsbasert anonymisering av barns data (navn/fødselsdato/allergier).
     let anonymized = 0;
-    const retentionNow = new Date();
+    const retentionDays =
+      parseInt((await getSetting('data_retention_days')) || '0', 10) || 0;
 
-    for (const child of retentionCandidates) {
-      if (!shouldAnonymizeChild(child, retentionNow, retentionDays)) {
-        continue;
-      }
-
-      try {
-        // THIS OVERWRITES REAL DATA — gated by the unit-tested predicate above.
-        await prisma.child.update({
-          where: { id: child.id },
-          data: {
-            name: '[slettet]',
-            birthdate: null,
-            allergies: null,
-            deletedAt: new Date(),
+    if (retentionDays > 0) {
+      const retentionCandidates = await prisma.child.findMany({
+        where: { deletedAt: null },
+        include: {
+          registrations: {
+            include: { course: { select: { startDate: true, endDate: true } } },
           },
-        });
-        anonymized++;
-      } catch (error) {
-        logger.error(`Retention anonymize error for child ${child.id}`, { error });
-        errors++;
+        },
+      });
+
+      const retentionNow = new Date();
+      for (const child of retentionCandidates) {
+        if (!shouldAnonymizeChild(child, retentionNow, retentionDays)) {
+          continue;
+        }
+        try {
+          // OVERSKRIVER EKTE DATA — kjøres kun når admin har satt retentionDays > 0.
+          await prisma.child.update({
+            where: { id: child.id },
+            data: {
+              name: '[slettet]',
+              birthdate: null,
+              allergies: null,
+              deletedAt: new Date(),
+            },
+          });
+          anonymized++;
+        } catch (error) {
+          logger.error(`Retention anonymize error for child ${child.id}`, { error });
+          errors++;
+        }
       }
     }
 

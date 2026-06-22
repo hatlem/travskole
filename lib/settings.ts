@@ -68,7 +68,9 @@ export const SETTING_DEFAULTS: Record<string, string> = {
 
   // Personvern / GDPR — antall dager etter at et barns siste kurs er avsluttet
   // før barnets personopplysninger (navn, fødselsdato, allergier) anonymiseres.
-  data_retention_days: '365',
+  // 0 = AV (standard): ingen automatisk sletting. Familier skal kunne logge inn
+  // år etter år og gjenbruke informasjonen sin; sletting skjer kun på forespørsel.
+  data_retention_days: '0',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
