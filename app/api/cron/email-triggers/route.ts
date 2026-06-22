@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { sendTemplatedEmail } from '@/lib/mail';
 import { getSetting } from '@/lib/settings';
+import { shouldAnonymizeChild } from '@/lib/retention';
 import type { MergeTagData } from '@/lib/email-templates';
 import logger from '@/lib/logger';
 
@@ -180,12 +181,57 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── GDPR retention pass ───────────────────────────────────────────────
+    // Anonymize children whose personal/health data has been retained beyond
+    // `data_retention_days` since their last course ended. Scoped to children
+    // only — parents are intentionally NOT touched (they may have other active
+    // relationships, and this job's mandate is the sensitive child data:
+    // name + birthdate + allergies (art. 9). Idempotent: the query excludes
+    // already-anonymized children and the predicate re-checks `deletedAt`.
+    const retentionDays =
+      parseInt((await getSetting('data_retention_days')) || '365', 10) || 365;
+
+    const retentionCandidates = await prisma.child.findMany({
+      where: { deletedAt: null },
+      include: {
+        registrations: {
+          include: { course: { select: { startDate: true, endDate: true } } },
+        },
+      },
+    });
+
+    let anonymized = 0;
+    const retentionNow = new Date();
+
+    for (const child of retentionCandidates) {
+      if (!shouldAnonymizeChild(child, retentionNow, retentionDays)) {
+        continue;
+      }
+
+      try {
+        // THIS OVERWRITES REAL DATA — gated by the unit-tested predicate above.
+        await prisma.child.update({
+          where: { id: child.id },
+          data: {
+            name: '[slettet]',
+            birthdate: null,
+            allergies: null,
+            deletedAt: new Date(),
+          },
+        });
+        anonymized++;
+      } catch (error) {
+        logger.error(`Retention anonymize error for child ${child.id}`, { error });
+        errors++;
+      }
+    }
+
     // Fail-loud: if any individual send threw, surface a 500 so Azure /
     // monitoring sees the failure instead of a misleading "OK". We still
     // processed every trigger above (no early abort) so partial progress is
     // made and the summary reflects what succeeded.
     return NextResponse.json(
-      { processed, sent, errors },
+      { processed, sent, errors, anonymized },
       { status: errors > 0 ? 500 : 200 },
     );
   } catch (error) {

@@ -65,6 +65,10 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Juridiske sider (HTML, redigeres under /admin/sider, vises på /vilkar og /personvern)
   vilkar_content: VILKAR_DEFAULT,
   personvern_content: PERSONVERN_DEFAULT,
+
+  // Personvern / GDPR — antall dager etter at et barns siste kurs er avsluttet
+  // før barnets personopplysninger (navn, fødselsdato, allergier) anonymiseres.
+  data_retention_days: '365',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
