@@ -68,8 +68,8 @@ export async function GET() {
         ? new Date(reg.child.birthdate).toLocaleDateString('nb-NO')
         : '',
       escapeCsvField(reg.parent.name),
-      reg.parent.user.email,
-      reg.parent.phone,
+      escapeCsvField(reg.parent.user.email),
+      escapeCsvField(reg.parent.phone),
       reg.child?.allergies ? escapeCsvField(reg.child.allergies) : '',
       reg.status,
       reg.consentActivities ? 'Ja' : 'Nei',
