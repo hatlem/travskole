@@ -226,7 +226,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12">
+    <main className="min-h-screen bg-gray-50 py-12">
       <div className="max-w-3xl mx-auto px-4">
         <Link
           href="/arrangementer"
@@ -261,10 +261,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       {...register('parentFirstName')}
                       type="text"
                       id="parentFirstName"
+                      aria-invalid={!!errors.parentFirstName}
+                      aria-describedby={errors.parentFirstName ? 'parentFirstName-error' : undefined}
                       className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                     />
                     {errors.parentFirstName && (
-                      <p className="text-red-600 text-sm mt-1">{errors.parentFirstName.message}</p>
+                      <p id="parentFirstName-error" role="alert" className="text-red-600 text-sm mt-1">{errors.parentFirstName.message}</p>
                     )}
                   </div>
                   <div>
@@ -275,10 +277,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       {...register('parentLastName')}
                       type="text"
                       id="parentLastName"
+                      aria-invalid={!!errors.parentLastName}
+                      aria-describedby={errors.parentLastName ? 'parentLastName-error' : undefined}
                       className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                     />
                     {errors.parentLastName && (
-                      <p className="text-red-600 text-sm mt-1">{errors.parentLastName.message}</p>
+                      <p id="parentLastName-error" role="alert" className="text-red-600 text-sm mt-1">{errors.parentLastName.message}</p>
                     )}
                   </div>
                 </div>
@@ -291,10 +295,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                     {...register('parentEmail')}
                     type="email"
                     id="parentEmail"
+                    aria-invalid={!!errors.parentEmail}
+                    aria-describedby={errors.parentEmail ? 'parentEmail-error' : undefined}
                     className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                   />
                   {errors.parentEmail && (
-                    <p className="text-red-600 text-sm mt-1">{errors.parentEmail.message}</p>
+                    <p id="parentEmail-error" role="alert" className="text-red-600 text-sm mt-1">{errors.parentEmail.message}</p>
                   )}
                 </div>
 
@@ -306,10 +312,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                     {...register('parentPhone')}
                     type="tel"
                     id="parentPhone"
+                    aria-invalid={!!errors.parentPhone}
+                    aria-describedby={errors.parentPhone ? 'parentPhone-error' : undefined}
                     className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                   />
                   {errors.parentPhone && (
-                    <p className="text-red-600 text-sm mt-1">{errors.parentPhone.message}</p>
+                    <p id="parentPhone-error" role="alert" className="text-red-600 text-sm mt-1">{errors.parentPhone.message}</p>
                   )}
                 </div>
 
@@ -322,10 +330,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                     type="text"
                     id="parentAddress"
                     autoComplete="street-address"
+                    aria-invalid={!!errors.parentAddress}
+                    aria-describedby={errors.parentAddress ? 'parentAddress-error' : undefined}
                     className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                   />
                   {errors.parentAddress && (
-                    <p className="text-red-600 text-sm mt-1">{errors.parentAddress.message}</p>
+                    <p id="parentAddress-error" role="alert" className="text-red-600 text-sm mt-1">{errors.parentAddress.message}</p>
                   )}
                 </div>
               </div>
@@ -368,6 +378,8 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                   <select
                     {...register('existingChildId')}
                     id="existingChildId"
+                    aria-invalid={!!errors.existingChildId}
+                    aria-describedby={errors.existingChildId ? 'existingChildId-error' : undefined}
                     className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                   >
                     <option value="">{t('reg.select_child_placeholder')}</option>
@@ -378,7 +390,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                     ))}
                   </select>
                   {errors.existingChildId && (
-                    <p className="text-red-600 text-sm mt-1">{errors.existingChildId.message}</p>
+                    <p id="existingChildId-error" role="alert" className="text-red-600 text-sm mt-1">{errors.existingChildId.message}</p>
                   )}
                 </div>
               )}
@@ -394,10 +406,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                         {...register('childFirstName')}
                         type="text"
                         id="childFirstName"
+                        aria-invalid={!!errors.childFirstName}
+                        aria-describedby={errors.childFirstName ? 'childFirstName-error' : undefined}
                         className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                       />
                       {errors.childFirstName && (
-                        <p className="text-red-600 text-sm mt-1">{errors.childFirstName.message}</p>
+                        <p id="childFirstName-error" role="alert" className="text-red-600 text-sm mt-1">{errors.childFirstName.message}</p>
                       )}
                     </div>
                     <div>
@@ -408,10 +422,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                         {...register('childLastName')}
                         type="text"
                         id="childLastName"
+                        aria-invalid={!!errors.childLastName}
+                        aria-describedby={errors.childLastName ? 'childLastName-error' : undefined}
                         className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                       />
                       {errors.childLastName && (
-                        <p className="text-red-600 text-sm mt-1">{errors.childLastName.message}</p>
+                        <p id="childLastName-error" role="alert" className="text-red-600 text-sm mt-1">{errors.childLastName.message}</p>
                       )}
                     </div>
                   </div>
@@ -424,10 +440,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       {...register('childBirthdate')}
                       type="date"
                       id="childBirthdate"
+                      aria-invalid={!!errors.childBirthdate}
+                      aria-describedby={errors.childBirthdate ? 'childBirthdate-error' : undefined}
                       className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                     />
                     {errors.childBirthdate && (
-                      <p className="text-red-600 text-sm mt-1">{errors.childBirthdate.message}</p>
+                      <p id="childBirthdate-error" role="alert" className="text-red-600 text-sm mt-1">{errors.childBirthdate.message}</p>
                     )}
                   </div>
 
@@ -491,6 +509,8 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       <input
                         {...register('consentActivities')}
                         type="checkbox"
+                        aria-invalid={!!errors.consentActivities}
+                        aria-describedby={errors.consentActivities ? 'consentActivities-error' : undefined}
                         className="w-5 h-5 text-bjerke-blue rounded border-gray-300"
                       />
                       <span className="text-gray-900 font-medium text-sm">
@@ -498,7 +518,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       </span>
                     </label>
                     {errors.consentActivities && (
-                      <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentActivities.message}</p>
+                      <p id="consentActivities-error" role="alert" className="text-red-600 text-sm mt-1 ml-8">{errors.consentActivities.message}</p>
                     )}
                   </div>
                   )}
@@ -536,6 +556,8 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       <input
                         {...register('consentRisk')}
                         type="checkbox"
+                        aria-invalid={!!errors.consentRisk}
+                        aria-describedby={errors.consentRisk ? 'consentRisk-error' : undefined}
                         className="w-5 h-5 text-bjerke-blue rounded border-gray-300"
                       />
                       <span className="text-gray-900 font-medium text-sm">
@@ -543,7 +565,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       </span>
                     </label>
                     {errors.consentRisk && (
-                      <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentRisk.message}</p>
+                      <p id="consentRisk-error" role="alert" className="text-red-600 text-sm mt-1 ml-8">{errors.consentRisk.message}</p>
                     )}
                   </div>
                 </div>
@@ -557,6 +579,8 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                   <input
                     {...register('consentTerms')}
                     type="checkbox"
+                    aria-invalid={!!errors.consentTerms}
+                    aria-describedby={errors.consentTerms ? 'consentTerms-error' : undefined}
                     className="w-5 h-5 mt-0.5 text-bjerke-blue rounded border-gray-300 flex-shrink-0"
                   />
                   <span className="text-gray-900 font-medium text-sm">
@@ -566,7 +590,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                   </span>
                 </label>
                 {errors.consentTerms && (
-                  <p className="text-red-600 text-sm mt-1 ml-8">{errors.consentTerms.message}</p>
+                  <p id="consentTerms-error" role="alert" className="text-red-600 text-sm mt-1 ml-8">{errors.consentTerms.message}</p>
                 )}
               </div>
             )}
@@ -598,6 +622,6 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
           </form>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

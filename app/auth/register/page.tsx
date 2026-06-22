@@ -70,7 +70,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="text-center text-3xl font-bold text-gray-900">
           {t('auth.register_button')}
@@ -90,7 +90,7 @@ export default function RegisterPage() {
         <div className="bg-white py-8 px-4 shadow-sm border border-gray-200 rounded-lg sm:px-10">
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              <div role="alert" className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
                 {error}
               </div>
             )}
@@ -107,6 +107,8 @@ export default function RegisterPage() {
                 id="name"
                 type="text"
                 autoComplete="name"
+                aria-invalid={!!errors.name}
+                aria-describedby={errors.name ? 'name-error' : undefined}
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
                   focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -115,7 +117,7 @@ export default function RegisterPage() {
                 placeholder="Ola Nordmann"
               />
               {errors.name && (
-                <p className="mt-1 text-sm text-red-600">
+                <p id="name-error" role="alert" className="mt-1 text-sm text-red-600">
                   {errors.name.message}
                 </p>
               )}
@@ -133,6 +135,8 @@ export default function RegisterPage() {
                 id="email"
                 type="email"
                 autoComplete="email"
+                aria-invalid={!!errors.email}
+                aria-describedby={errors.email ? 'email-error' : undefined}
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
                   focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -141,7 +145,7 @@ export default function RegisterPage() {
                 placeholder="din@epost.no"
               />
               {errors.email && (
-                <p className="mt-1 text-sm text-red-600">
+                <p id="email-error" role="alert" className="mt-1 text-sm text-red-600">
                   {errors.email.message}
                 </p>
               )}
@@ -159,6 +163,8 @@ export default function RegisterPage() {
                 id="phone"
                 type="tel"
                 autoComplete="tel"
+                aria-invalid={!!errors.phone}
+                aria-describedby={errors.phone ? 'phone-error' : undefined}
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
                   focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -167,7 +173,7 @@ export default function RegisterPage() {
                 placeholder="+47 123 45 678"
               />
               {errors.phone && (
-                <p className="mt-1 text-sm text-red-600">
+                <p id="phone-error" role="alert" className="mt-1 text-sm text-red-600">
                   {errors.phone.message}
                 </p>
               )}
@@ -205,6 +211,8 @@ export default function RegisterPage() {
                 id="password"
                 type="password"
                 autoComplete="new-password"
+                aria-invalid={!!errors.password}
+                aria-describedby={errors.password ? 'password-error' : undefined}
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
                   focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -213,7 +221,7 @@ export default function RegisterPage() {
                 placeholder="Minst 8 tegn"
               />
               {errors.password && (
-                <p className="mt-1 text-sm text-red-600">
+                <p id="password-error" role="alert" className="mt-1 text-sm text-red-600">
                   {errors.password.message}
                 </p>
               )}
@@ -231,6 +239,8 @@ export default function RegisterPage() {
                 id="confirmPassword"
                 type="password"
                 autoComplete="new-password"
+                aria-invalid={!!errors.confirmPassword}
+                aria-describedby={errors.confirmPassword ? 'confirmPassword-error' : undefined}
                 className={`
                   w-full px-3 py-2 border rounded-lg shadow-sm
                   focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -239,7 +249,7 @@ export default function RegisterPage() {
                 placeholder="Gjenta passord"
               />
               {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">
+                <p id="confirmPassword-error" role="alert" className="mt-1 text-sm text-red-600">
                   {errors.confirmPassword.message}
                 </p>
               )}
@@ -261,6 +271,6 @@ export default function RegisterPage() {
           </form>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

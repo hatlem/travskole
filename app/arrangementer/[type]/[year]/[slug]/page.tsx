@@ -68,7 +68,7 @@ export default async function CourseDetailPage({
   const packingList = (settings.course_packing_list || '').split('\n').filter(Boolean);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50">
       <div className="bg-bjerke-blue text-white py-12">
         <div className="max-w-4xl mx-auto px-4">
           <Link
@@ -239,6 +239,6 @@ export default async function CourseDetailPage({
           </div>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

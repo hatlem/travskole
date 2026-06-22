@@ -14,7 +14,7 @@ export default function SignOutPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+    <main className="min-h-screen bg-gray-50 flex items-center justify-center">
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 max-w-sm w-full mx-4 text-center">
         <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('auth.logout_button')}</h1>
         <p className="text-gray-600 mb-6">{t('auth.logout_heading')}</p>
@@ -35,6 +35,6 @@ export default function SignOutPage() {
           </button>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

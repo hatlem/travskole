@@ -44,10 +44,10 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
 
   if (done) {
     return (
-      <div className="max-w-xl mx-auto p-6 text-center">
+      <main className="max-w-xl mx-auto p-6 text-center">
         <h1 className="text-2xl font-bold mb-2">Forespørsel sendt!</h1>
         <p className="text-gray-600">Vi har mottatt forespørselen din om {courseName} og tar kontakt for å avtale tid.</p>
-      </div>
+      </main>
     );
   }
 
@@ -85,6 +85,7 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }));
 
   return (
+    <main>
     <form onSubmit={submit} className="max-w-xl mx-auto p-6 space-y-4">
       <h1 className="text-2xl font-bold">Send forespørsel — {courseName}</h1>
       <p className="text-gray-600">Fyll ut skjemaet så tar vi kontakt for å avtale tid.</p>
@@ -146,5 +147,6 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
         {submitting ? 'Sender...' : 'Send forespørsel'}
       </button>
     </form>
+    </main>
   );
 }

@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export default function VerifyRequestPage() {
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-6 shadow-sm border border-gray-200 rounded-lg text-center">
           <h2 className="text-2xl font-bold text-gray-900 mb-4">
@@ -22,6 +22,6 @@ export default function VerifyRequestPage() {
           </Link>
         </div>
       </div>
-    </div>
+    </main>
   );
 }

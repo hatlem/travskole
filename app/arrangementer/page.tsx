@@ -31,7 +31,7 @@ export default async function ArrangementerPage() {
   ]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <main className="min-h-screen bg-gray-50">
       <div className="bg-bjerke-blue text-white py-16">
         <div className="max-w-7xl mx-auto px-6">
           <h1 className="text-4xl md:text-5xl font-bold mb-3">{settings.arrangementer_heading}</h1>
@@ -42,6 +42,6 @@ export default async function ArrangementerPage() {
       </div>
 
       <CourseFilter courses={courses} />
-    </div>
+    </main>
   );
 }

@@ -71,7 +71,9 @@ export default function Header() {
           <button
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             className="md:hidden p-1"
-            aria-label="Toggle menu"
+            aria-label={mobileMenuOpen ? 'Lukk meny' : 'Åpne meny'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-menu"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               {mobileMenuOpen ? (
@@ -85,7 +87,7 @@ export default function Header() {
 
         {/* Mobile Menu */}
         {mobileMenuOpen && (
-          <div className="md:hidden mt-4 pb-4 space-y-3 border-t border-white/20 pt-4">
+          <div id="mobile-menu" className="md:hidden mt-4 pb-4 space-y-3 border-t border-white/20 pt-4">
             <Link
               href="/arrangementer"
               className="block uppercase text-sm tracking-wide hover:text-blue-200 transition"

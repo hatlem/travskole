@@ -108,7 +108,7 @@ export default function LoginForm() {
   const displayError = error || (urlError ? (errorMessages[urlError] || errorMessages.Default) : null);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <h2 className="text-center text-3xl font-bold text-gray-900">
           {t('auth.login_button')}
@@ -127,7 +127,10 @@ export default function LoginForm() {
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-sm border border-gray-200 rounded-lg sm:px-10">
           {displayError && (
-            <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+            <div
+              role="alert"
+              className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm"
+            >
               {displayError}
             </div>
           )}
@@ -190,6 +193,8 @@ export default function LoginForm() {
                     id="magic-email"
                     type="email"
                     autoComplete="email"
+                    aria-invalid={!!magicForm.formState.errors.email}
+                    aria-describedby={magicForm.formState.errors.email ? 'magic-email-error' : undefined}
                     className={`
                       w-full px-3 py-2 border rounded-lg shadow-sm
                       focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -198,7 +203,7 @@ export default function LoginForm() {
                     placeholder="din@epost.no"
                   />
                   {magicForm.formState.errors.email && (
-                    <p className="mt-1 text-sm text-red-600">
+                    <p id="magic-email-error" role="alert" className="mt-1 text-sm text-red-600">
                       {magicForm.formState.errors.email.message}
                     </p>
                   )}
@@ -236,6 +241,8 @@ export default function LoginForm() {
                   id="email"
                   type="email"
                   autoComplete="email"
+                  aria-invalid={!!passwordForm.formState.errors.email}
+                  aria-describedby={passwordForm.formState.errors.email ? 'email-error' : undefined}
                   className={`
                     w-full px-3 py-2 border rounded-lg shadow-sm
                     focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -244,7 +251,7 @@ export default function LoginForm() {
                   placeholder="din@epost.no"
                 />
                 {passwordForm.formState.errors.email && (
-                  <p className="mt-1 text-sm text-red-600">
+                  <p id="email-error" role="alert" className="mt-1 text-sm text-red-600">
                     {passwordForm.formState.errors.email.message}
                   </p>
                 )}
@@ -262,6 +269,8 @@ export default function LoginForm() {
                   id="password"
                   type="password"
                   autoComplete="current-password"
+                  aria-invalid={!!passwordForm.formState.errors.password}
+                  aria-describedby={passwordForm.formState.errors.password ? 'password-error' : undefined}
                   className={`
                     w-full px-3 py-2 border rounded-lg shadow-sm
                     focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
@@ -270,7 +279,7 @@ export default function LoginForm() {
                   placeholder="Ditt passord"
                 />
                 {passwordForm.formState.errors.password && (
-                  <p className="mt-1 text-sm text-red-600">
+                  <p id="password-error" role="alert" className="mt-1 text-sm text-red-600">
                     {passwordForm.formState.errors.password.message}
                   </p>
                 )}
@@ -298,6 +307,6 @@ export default function LoginForm() {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }

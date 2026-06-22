@@ -166,12 +166,14 @@ export function AdminShell({
 
       {/* Mobile sidebar */}
       <aside
+        id="admin-mobile-sidebar"
         className={`fixed inset-y-0 left-0 z-50 w-64 bg-bjerke-blue text-white flex flex-col transform transition-transform duration-200 ease-in-out lg:hidden ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
         <button
           onClick={() => setSidebarOpen(false)}
+          aria-label="Lukk meny"
           className="absolute top-4 right-4 text-white/70 hover:text-white"
         >
           <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -186,6 +188,9 @@ export function AdminShell({
         <header className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-4 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
+            aria-label="Åpne meny"
+            aria-expanded={sidebarOpen}
+            aria-controls="admin-mobile-sidebar"
             className="lg:hidden text-gray-500 hover:text-gray-700"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

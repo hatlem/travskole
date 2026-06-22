@@ -26,7 +26,7 @@ export default async function Home() {
   const t = makeT(settings);
 
   return (
-    <div className="min-h-screen">
+    <main className="min-h-screen">
       <Hero
         title={settings.hero_title}
         subtitle={settings.hero_subtitle}
@@ -141,6 +141,6 @@ export default async function Home() {
           </Link>
         </div>
       </section>
-    </div>
+    </main>
   );
 }
