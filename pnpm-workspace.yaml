@@ -25,7 +25,7 @@ onlyBuiltDependencies:
 # herfra, ikke fra package.json — uten dette får ikke pnpm-lockfilen
 # Dependabot-fiksene (30 sårbarheter løst på main).
 overrides:
-  nodemailer: '^8.0.5'
+  nodemailer: '^9.0.1'
   uuid: '^11.1.1'
   postcss: '^8.5.10'
   dompurify: '^3.4.0'
