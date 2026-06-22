@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import DOMPurify from 'isomorphic-dompurify';
@@ -7,7 +8,7 @@ import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
-import { getSetting } from '@/lib/settings';
+import { getSetting, getSettings } from '@/lib/settings';
 
 interface RegistrationData {
   courseType: string;
@@ -276,6 +277,20 @@ export async function POST(request: NextRequest) {
       childAllergies = child.allergies ?? undefined;
     }
 
+    // GDPR: compute a hash of the consent text shown at submission time so we
+    // can later prove which version the user saw (GDPR art. 7).
+    const consentSettings = await getSettings();
+    const consentSource = [
+      consentSettings.consent_activities_text,
+      consentSettings.consent_media_text,
+      consentSettings.consent_media_text_adult,
+      consentSettings.consent_risk_text,
+      consentSettings.consent_risk_text_adult,
+      consentSettings.consent_risk_detail,
+      consentSettings.consent_terms_text,
+    ].map((s) => s ?? '').join('\n');
+    const consentTextHash = crypto.createHash('sha256').update(consentSource).digest('hex');
+
     // Create registration in database
     const isWaitlistRegistration = data.waitlist && course.status === 'full';
     const registration = await prisma.registration.create({
@@ -286,6 +301,9 @@ export async function POST(request: NextRequest) {
         consentActivities: data.consentActivities,
         consentMedia: data.consentMedia,
         consentRisk: data.consentRisk,
+        consentTerms: !!data.consentTerms,
+        consentAt: new Date(),
+        consentTextHash,
         status: isWaitlistRegistration ? 'waitlist' : 'pending',
       },
     });
@@ -403,7 +421,13 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status');
 
     // Build Prisma where clause
-    const where: Record<string, unknown> = {};
+    const where: Record<string, unknown> = {
+      parent: { deletedAt: null },
+      OR: [
+        { childId: null },
+        { child: { deletedAt: null } },
+      ],
+    };
     if (courseId) {
       const numCourseId = parseInt(courseId, 10);
       if (!isNaN(numCourseId)) where.courseId = numCourseId;

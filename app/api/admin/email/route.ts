@@ -35,6 +35,11 @@ export async function POST(request: NextRequest) {
       where: {
         courseId: Number(courseId),
         status: statusFilter,
+        parent: { deletedAt: null },
+        OR: [
+          { childId: null },
+          { child: { deletedAt: null } },
+        ],
       },
       include: {
         parent: {

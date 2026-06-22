@@ -46,6 +46,11 @@ export async function POST(
       where: {
         courseId: trigger.courseId,
         status: { in: ['pending', 'confirmed'] },
+        parent: { deletedAt: null },
+        OR: [
+          { childId: null },
+          { child: { deletedAt: null } },
+        ],
       },
       include: {
         child: true,

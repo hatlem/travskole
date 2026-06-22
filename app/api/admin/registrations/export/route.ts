@@ -23,6 +23,13 @@ export async function GET() {
 
   try {
     const registrations = await prisma.registration.findMany({
+      where: {
+        parent: { deletedAt: null },
+        OR: [
+          { childId: null },
+          { child: { deletedAt: null } },
+        ],
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         course: { select: { name: true } },

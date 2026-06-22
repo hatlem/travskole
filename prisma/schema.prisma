@@ -205,6 +205,9 @@ model Registration {
   consentActivities  Boolean  @default(false) @map("consent_activities")
   consentMedia       Boolean  @default(false) @map("consent_media")
   consentRisk        Boolean  @default(false) @map("consent_risk")
+  consentTerms       Boolean  @default(false) @map("consent_terms")
+  consentAt          DateTime? @map("consent_at")
+  consentTextHash    String?  @map("consent_text_hash")
   status             String   @default("pending") // 'pending', 'confirmed', 'cancelled'
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")

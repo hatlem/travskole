@@ -124,7 +124,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const courseId = searchParams.get('courseId');
 
-    const where = courseId ? { courseId: Number(courseId) } : {};
+    const baseWhere = {
+      parent: { deletedAt: null },
+      OR: [
+        { childId: null },
+        { child: { deletedAt: null } },
+      ],
+    };
+    const where = courseId
+      ? { ...baseWhere, courseId: Number(courseId) }
+      : baseWhere;
 
     const registrations = await prisma.registration.findMany({
       where,

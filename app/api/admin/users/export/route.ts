@@ -30,6 +30,7 @@ export async function GET() {
         role: true,
         createdAt: true,
         parent: {
+          where: { deletedAt: null },
           select: {
             name: true,
             phone: true,

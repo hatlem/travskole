@@ -18,6 +18,7 @@ export async function GET() {
         role: true,
         createdAt: true,
         parent: {
+          where: { deletedAt: null },
           select: {
             id: true,
             name: true,
@@ -30,6 +31,7 @@ export async function GET() {
               },
             },
             children: {
+              where: { deletedAt: null },
               select: {
                 id: true,
                 name: true,
