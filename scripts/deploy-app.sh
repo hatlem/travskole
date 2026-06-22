@@ -98,4 +98,7 @@ fi
 echo "==> Deploy OK (HTTP $HTTP_CODE)"
 echo "    https://registrering.bjerke.no"
 echo
-echo "Husk ved skjemaendringer: kjør 'npx prisma db push' mot prod-databasen."
+echo "Skjemaendringer: brannmuren er stengt, så 'prisma db push' utenfra funker IKKE."
+echo "  Kjør DDL via en engangs CRON_SECRET-beskyttet API-rute som kjører på app-en"
+echo "  (prisma.\$executeRawUnsafe, idempotent). Generer DDL offline med:"
+echo "  prisma migrate diff --from-schema-datamodel <gammel> --to-schema-datamodel prisma/schema.prisma --script"
