@@ -15,6 +15,25 @@ function escapeHtml(str: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// Enkel plain-text-versjon fra HTML (for multipart-e-post → bedre leverbarhet,
+// unngår MIME_HTML_ONLY/HTML_MIME_NO_HTML_TAG-fradrag).
+function htmlToText(html: string): string {
+  return html
+    .replace(/<\s*br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|tr|h[1-6]|div|li|table)>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim();
+}
+
 async function getAdminEmail() {
   return getSetting('contact_email');
 }
@@ -53,13 +72,19 @@ async function sendMail(to: string, subject: string, html: string) {
     : fromAddress.includes('<')
       ? fromAddress
       : `${siteName} <${fromAddress}>`;
+  // Sørg for et komplett HTML-dokument (mange e-poster sender en rå <div>);
+  // legg ved en ren-tekst-del. Begge hever leverbarheten.
+  const fullHtml = /<html[\s>]/i.test(html)
+    ? html
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${html}</body></html>`;
   await transporter.sendMail({
     from,
     // Replies should reach the school, regardless of sender address
     replyTo: adminEmail,
     to,
     subject,
-    html,
+    html: fullHtml,
+    text: htmlToText(html),
   });
 }
 
