@@ -118,6 +118,21 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
   const requireAddress = settings.registration_address_required !== 'false';
   const requireTerms = settings.registration_terms_required !== 'false';
 
+  const { type, year, slug } = courseRef;
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
+      w.dataLayer = w.dataLayer || [];
+      w.dataLayer.push({
+        event: 'pamelding_startet',
+        course_name: courseName,
+        course_type: type,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!session || isAdult) return;
     fetch('/api/dashboard')
@@ -154,6 +169,15 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
 
   const onInvalid = () => {
     setConsentOpen(true);
+    if (typeof window !== 'undefined') {
+      const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
+      w.dataLayer = w.dataLayer || [];
+      w.dataLayer.push({
+        event: 'pamelding_skjemafeil',
+        course_name: courseName,
+        course_type: type,
+      });
+    }
   };
 
   const onSubmit = async (data: RegistrationFormData) => {
@@ -161,8 +185,6 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
     setSubmitError(null);
 
     try {
-      const { type, year, slug } = courseRef;
-
       const { parentFirstName, parentLastName, childFirstName, childLastName, ...rest } = data;
       const response = await fetch('/api/registrations', {
         method: 'POST',

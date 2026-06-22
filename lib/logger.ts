@@ -14,14 +14,15 @@ const logger = winston.createLogger({
     winston.format.json()
   ),
   transports: [
-    // Write all logs to console in development
+    // Write all logs to stdout — captured by Azure App Service log stream / docker logs
     new winston.transports.Console({
       format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
+        winston.format.timestamp(),
+        winston.format.errors({ stack: true }),
+        winston.format.json()
       )
     }),
-    
+
     // Write all logs with level `error` and below to `error.log`
     new winston.transports.File({
       filename: path.join(logsDir, 'error.log'),
