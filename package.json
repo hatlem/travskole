@@ -38,7 +38,7 @@
     "@tailwindcss/postcss": "^4",
     "@tailwindcss/typography": "^0.5.20",
     "@types/bcrypt": "^6.0.0",
-    "@types/node": "^24",
+    "@types/node": "^26",
     "@types/nodemailer": "^7.0.11",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
