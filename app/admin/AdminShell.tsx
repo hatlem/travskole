@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useSettings } from '@/components/SettingsProvider';
@@ -66,7 +66,6 @@ export function AdminShell({
   const settings = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const accountRef = useRef<HTMLDivElement>(null);
   const breadcrumbs = buildBreadcrumbs(pathname);
   const isSuperAdmin = role === 'superadmin';
   const siteName = settings.site_name || 'Bjerke Registrering';
@@ -89,11 +88,16 @@ export function AdminShell({
     { href: '/admin/activity', label: 'Aktivitetslogg', icon: ACTIVITY_ICON },
   ];
 
-  // Lukk konto-menyen ved klikk utenfor.
+  // Lukk konto-menyen ved klikk utenfor. MERK: sidebarContent rendres to ganger
+  // (desktop + mobil), så én ref ville pekt på feil kopi og fått klikk i den
+  // synlige menyen til å telle som «utenfor» (lukket på mousedown før click rakk
+  // å navigere). Bruk et delt data-attributt + closest slik at klikk i BEGGE
+  // kopiene teller som innenfor.
   useEffect(() => {
     if (!accountOpen) return;
     const onPointerDown = (e: MouseEvent) => {
-      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+      const target = e.target as Element | null;
+      if (!target?.closest('[data-account-menu]')) {
         setAccountOpen(false);
       }
     };
@@ -147,7 +151,7 @@ export function AdminShell({
       </nav>
 
       {/* Konto — dropdown med e-post som trigger */}
-      <div ref={accountRef} className="p-4 border-t border-white/20 relative">
+      <div data-account-menu className="p-4 border-t border-white/20 relative">
         {accountOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 rounded-lg bg-bjerke-blue-dark border border-white/20 shadow-lg max-h-[70vh] overflow-y-auto">
             {accountMenuItems.map((item) => {
