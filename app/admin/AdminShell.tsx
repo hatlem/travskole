@@ -13,19 +13,15 @@ const navItems = [
   { href: '/admin/registrations', label: 'Påmeldinger', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
   { href: '/admin/users', label: 'Brukere', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
   { href: '/admin/foresporsler', label: 'Forespørsler', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-  { href: '/admin/activity', label: 'Aktivitetslogg', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { href: '/admin/sider', label: 'Sider', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
 ];
 
-// Innstillinger samler generelle innstillinger + (kun superadmin) tekster og
-// e-postmaler under én utvidbar menyoppføring, i stedet for tre løse toppnivå-lenker.
+// Ikoner for oppføringene som ligger i konto-dropdownen nederst i sidebaren
+// (innstillinger, tekster, e-postmaler, aktivitetslogg) — ikke i hoved-navigasjonen.
 const SETTINGS_ICON = 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z';
-
-const settingsChildrenAll: { href: string; label: string; superadmin: boolean }[] = [
-  { href: '/admin/settings', label: 'Generelt', superadmin: false },
-  { href: '/admin/tekster', label: 'Tekster', superadmin: true },
-  { href: '/admin/email-templates', label: 'E-postmaler', superadmin: true },
-];
+const ACTIVITY_ICON = 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
+const TEKSTER_ICON = 'M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129';
+const EMAIL_ICON = 'M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75';
 
 function buildBreadcrumbs(pathname: string) {
   const segments = pathname.split('/').filter(Boolean);
@@ -69,22 +65,29 @@ export function AdminShell({
   const pathname = usePathname();
   const settings = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const accountRef = useRef<HTMLDivElement>(null);
   const breadcrumbs = buildBreadcrumbs(pathname);
   const isSuperAdmin = role === 'superadmin';
   const siteName = settings.site_name || 'Bjerke Registrering';
 
-  const settingsChildren = settingsChildrenAll.filter((c) => isSuperAdmin || !c.superadmin);
-
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin';
     return pathname.startsWith(href);
   };
 
-  const settingsActive = settingsChildren.some((c) => isActive(c.href));
-  const showSettingsChildren = settingsOpen || settingsActive;
+  // Innstillinger, tekster, e-postmaler og aktivitetslogg ligger i konto-dropdownen
+  // nederst — ikke i hoved-navigasjonen.
+  const accountMenuItems = [
+    { href: '/admin/settings', label: 'Innstillinger', icon: SETTINGS_ICON },
+    ...(isSuperAdmin
+      ? [
+          { href: '/admin/tekster', label: 'Tekster', icon: TEKSTER_ICON },
+          { href: '/admin/email-templates', label: 'E-postmaler', icon: EMAIL_ICON },
+        ]
+      : []),
+    { href: '/admin/activity', label: 'Aktivitetslogg', icon: ACTIVITY_ICON },
+  ];
 
   // Lukk konto-menyen ved klikk utenfor.
   useEffect(() => {
@@ -141,71 +144,36 @@ export function AdminShell({
           );
         })}
 
-        {/* Innstillinger: enkeltlenke for admin (kun Generelt), utvidbar gruppe for superadmin */}
-        {settingsChildren.length === 1 ? (
-          <Link
-            href="/admin/settings"
-            onClick={() => setSidebarOpen(false)}
-            className={linkClass(settingsActive)}
-          >
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d={SETTINGS_ICON} />
-            </svg>
-            Innstillinger
-          </Link>
-        ) : (
-          <div>
-            <button
-              type="button"
-              onClick={() => setSettingsOpen((o) => !o)}
-              aria-expanded={showSettingsChildren}
-              className={`w-full justify-between ${linkClass(settingsActive)}`}
-            >
-              <span className="flex items-center gap-3">
-                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d={SETTINGS_ICON} />
-                </svg>
-                Innstillinger
-              </span>
-              <svg
-                className={`w-4 h-4 flex-shrink-0 transition-transform ${showSettingsChildren ? 'rotate-180' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
-            </button>
-            {showSettingsChildren && (
-              <div className="mt-1 ml-4 space-y-1 border-l border-white/15 pl-3">
-                {settingsChildren.map((child) => {
-                  const active = isActive(child.href);
-                  return (
-                    <Link
-                      key={child.href}
-                      href={child.href}
-                      onClick={() => setSidebarOpen(false)}
-                      className={`block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                        active
-                          ? 'bg-white/10 text-white font-semibold'
-                          : 'text-blue-100 hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      {child.label}
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
       </nav>
 
       {/* Konto — dropdown med e-post som trigger */}
       <div ref={accountRef} className="p-4 border-t border-white/20 relative">
         {accountOpen && (
-          <div className="absolute bottom-full left-4 right-4 mb-2 rounded-lg bg-bjerke-blue-dark border border-white/20 shadow-lg overflow-hidden">
+          <div className="absolute bottom-full left-4 right-4 mb-2 rounded-lg bg-bjerke-blue-dark border border-white/20 shadow-lg max-h-[70vh] overflow-y-auto">
+            {accountMenuItems.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => {
+                    setAccountOpen(false);
+                    setSidebarOpen(false);
+                  }}
+                  className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
+                    active
+                      ? 'bg-white/10 text-white font-semibold'
+                      : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                  </svg>
+                  {item.label}
+                </Link>
+              );
+            })}
+            <div className="border-t border-white/15" />
             <Link
               href="/dashboard"
               onClick={() => {
