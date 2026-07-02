@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useSettings } from '@/components/SettingsProvider';
@@ -15,14 +15,16 @@ const navItems = [
   { href: '/admin/foresporsler', label: 'Forespørsler', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
   { href: '/admin/activity', label: 'Aktivitetslogg', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
   { href: '/admin/sider', label: 'Sider', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
-  // Innstillinger er synlig for admin, men siden viser kun samtykketekster +
-  // påmeldingsskjema for vanlige admins; superadmin ser alt.
-  { href: '/admin/settings', label: 'Innstillinger', icon: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z' },
 ];
 
-const superadminItems = [
-  { href: '/admin/email-templates', label: 'E-postmaler', icon: 'M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75' },
-  { href: '/admin/tekster', label: 'Tekster', icon: 'M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129' },
+// Innstillinger samler generelle innstillinger + (kun superadmin) tekster og
+// e-postmaler under én utvidbar menyoppføring, i stedet for tre løse toppnivå-lenker.
+const SETTINGS_ICON = 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z';
+
+const settingsChildrenAll: { href: string; label: string; superadmin: boolean }[] = [
+  { href: '/admin/settings', label: 'Generelt', superadmin: false },
+  { href: '/admin/tekster', label: 'Tekster', superadmin: true },
+  { href: '/admin/email-templates', label: 'E-postmaler', superadmin: true },
 ];
 
 function buildBreadcrumbs(pathname: string) {
@@ -67,16 +69,41 @@ export function AdminShell({
   const pathname = usePathname();
   const settings = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  const accountRef = useRef<HTMLDivElement>(null);
   const breadcrumbs = buildBreadcrumbs(pathname);
   const isSuperAdmin = role === 'superadmin';
   const siteName = settings.site_name || 'Bjerke Registrering';
 
-  const allNavItems = isSuperAdmin ? [...navItems, ...superadminItems] : navItems;
+  const settingsChildren = settingsChildrenAll.filter((c) => isSuperAdmin || !c.superadmin);
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin';
     return pathname.startsWith(href);
   };
+
+  const settingsActive = settingsChildren.some((c) => isActive(c.href));
+  const showSettingsChildren = settingsOpen || settingsActive;
+
+  // Lukk konto-menyen ved klikk utenfor.
+  useEffect(() => {
+    if (!accountOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) {
+        setAccountOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [accountOpen]);
+
+  const linkClass = (active: boolean) =>
+    `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
+      active
+        ? 'bg-white/10 text-white font-semibold'
+        : 'text-blue-100 hover:bg-white/10 hover:text-white'
+    }`;
 
   const sidebarContent = (
     <>
@@ -90,19 +117,15 @@ export function AdminShell({
         )}
       </div>
 
-      <nav className="p-4 space-y-1 flex-1">
-        {allNavItems.map((item) => {
+      <nav className="p-4 space-y-1 flex-1 overflow-y-auto">
+        {navItems.map((item) => {
           const active = isActive(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
               onClick={() => setSidebarOpen(false)}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${
-                active
-                  ? 'bg-white/10 text-white font-semibold'
-                  : 'text-blue-100 hover:bg-white/10 hover:text-white'
-              }`}
+              className={linkClass(active)}
             >
               <svg
                 className="w-5 h-5 flex-shrink-0"
@@ -117,112 +140,203 @@ export function AdminShell({
             </Link>
           );
         })}
+
+        {/* Innstillinger: enkeltlenke for admin (kun Generelt), utvidbar gruppe for superadmin */}
+        {settingsChildren.length === 1 ? (
+          <Link
+            href="/admin/settings"
+            onClick={() => setSidebarOpen(false)}
+            className={linkClass(settingsActive)}
+          >
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d={SETTINGS_ICON} />
+            </svg>
+            Innstillinger
+          </Link>
+        ) : (
+          <div>
+            <button
+              type="button"
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-expanded={showSettingsChildren}
+              className={`w-full justify-between ${linkClass(settingsActive)}`}
+            >
+              <span className="flex items-center gap-3">
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={SETTINGS_ICON} />
+                </svg>
+                Innstillinger
+              </span>
+              <svg
+                className={`w-4 h-4 flex-shrink-0 transition-transform ${showSettingsChildren ? 'rotate-180' : ''}`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showSettingsChildren && (
+              <div className="mt-1 ml-4 space-y-1 border-l border-white/15 pl-3">
+                {settingsChildren.map((child) => {
+                  const active = isActive(child.href);
+                  return (
+                    <Link
+                      key={child.href}
+                      href={child.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`block px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                        active
+                          ? 'bg-white/10 text-white font-semibold'
+                          : 'text-blue-100 hover:bg-white/10 hover:text-white'
+                      }`}
+                    >
+                      {child.label}
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
-      <div className="p-4 border-t border-white/20">
-        <div className="px-4 py-2 text-sm text-blue-200">
-          <p className="truncate">{email}</p>
-        </div>
-        <Link
-          href="/dashboard"
-          onClick={() => setSidebarOpen(false)}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-200 hover:bg-white/10 hover:text-white transition-colors"
+      {/* Konto — dropdown med e-post som trigger */}
+      <div ref={accountRef} className="p-4 border-t border-white/20 relative">
+        {accountOpen && (
+          <div className="absolute bottom-full left-4 right-4 mb-2 rounded-lg bg-bjerke-blue-dark border border-white/20 shadow-lg overflow-hidden">
+            <Link
+              href="/dashboard"
+              onClick={() => {
+                setAccountOpen(false);
+                setSidebarOpen(false);
+              }}
+              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Tilbake til nettstedet
+            </Link>
+            <Link
+              href="/api/auth/signout"
+              onClick={() => {
+                setAccountOpen(false);
+                setSidebarOpen(false);
+              }}
+              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Logg ut
+            </Link>
+          </div>
+        )}
+        <button
+          type="button"
+          onClick={() => setAccountOpen((o) => !o)}
+          aria-expanded={accountOpen}
+          aria-haspopup="true"
+          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
         >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          <span className="flex items-center gap-3 min-w-0">
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            </svg>
+            <span className="truncate">{email}</span>
+          </span>
+          <svg
+            className={`w-4 h-4 flex-shrink-0 transition-transform ${accountOpen ? 'rotate-180' : ''}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
           </svg>
-          Tilbake til nettstedet
-        </Link>
-        <Link
-          href="/api/auth/signout"
-          onClick={() => setSidebarOpen(false)}
-          className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-200 hover:bg-white/10 hover:text-white transition-colors"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-          </svg>
-          Logg ut
-        </Link>
+        </button>
       </div>
     </>
   );
 
   return (
     <ToastProvider>
-    <KeyboardShortcuts />
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Desktop sidebar */}
-      <aside className="hidden lg:flex w-64 bg-bjerke-blue text-white flex-shrink-0 min-h-screen flex-col">
-        {sidebarContent}
-      </aside>
+      <KeyboardShortcuts />
+      <div className="min-h-screen bg-gray-50 flex">
+        {/* Desktop sidebar */}
+        <aside className="hidden lg:flex w-64 bg-bjerke-blue text-white flex-shrink-0 min-h-screen flex-col">
+          {sidebarContent}
+        </aside>
 
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+        {/* Mobile sidebar overlay */}
+        {sidebarOpen && (
+          <div
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
 
-      {/* Mobile sidebar */}
-      <aside
-        id="admin-mobile-sidebar"
-        className={`fixed inset-y-0 left-0 z-50 w-64 bg-bjerke-blue text-white flex flex-col transform transition-transform duration-200 ease-in-out lg:hidden ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
-      >
-        <button
-          onClick={() => setSidebarOpen(false)}
-          aria-label="Lukk meny"
-          className="absolute top-4 right-4 text-white/70 hover:text-white"
+        {/* Mobile sidebar */}
+        <aside
+          id="admin-mobile-sidebar"
+          className={`fixed inset-y-0 left-0 z-50 w-64 bg-bjerke-blue text-white flex flex-col transform transition-transform duration-200 ease-in-out lg:hidden ${
+            sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
         >
-          <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-        {sidebarContent}
-      </aside>
-
-      {/* Main content */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-4 flex-shrink-0">
           <button
-            onClick={() => setSidebarOpen(true)}
-            aria-label="Åpne meny"
-            aria-expanded={sidebarOpen}
-            aria-controls="admin-mobile-sidebar"
-            className="lg:hidden text-gray-500 hover:text-gray-700"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Lukk meny"
+            className="absolute top-4 right-4 text-white/70 hover:text-white"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          {sidebarContent}
+        </aside>
 
-          <nav className="flex items-center text-sm text-gray-500">
-            {breadcrumbs.map((crumb, i) => (
-              <span key={crumb.href} className="flex items-center">
-                {i > 0 && (
-                  <svg className="w-4 h-4 mx-1 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                )}
-                {i === breadcrumbs.length - 1 ? (
-                  <span className="text-gray-900 font-medium">{crumb.label}</span>
-                ) : (
-                  <Link href={crumb.href} className="hover:text-gray-700">
-                    {crumb.label}
-                  </Link>
-                )}
-              </span>
-            ))}
-          </nav>
-        </header>
+        {/* Main content */}
+        <div className="flex-1 flex flex-col min-w-0">
+          <header className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-4 flex-shrink-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Åpne meny"
+              aria-expanded={sidebarOpen}
+              aria-controls="admin-mobile-sidebar"
+              className="lg:hidden text-gray-500 hover:text-gray-700"
+            >
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
+            </button>
 
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
-          {children}
-        </main>
+            <nav className="flex items-center text-sm text-gray-500">
+              {breadcrumbs.map((crumb, i) => (
+                <span key={crumb.href} className="flex items-center">
+                  {i > 0 && (
+                    <svg className="w-4 h-4 mx-1 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                  )}
+                  {i === breadcrumbs.length - 1 ? (
+                    <span className="text-gray-900 font-medium">{crumb.label}</span>
+                  ) : (
+                    <Link href={crumb.href} className="hover:text-gray-700">
+                      {crumb.label}
+                    </Link>
+                  )}
+                </span>
+              ))}
+            </nav>
+          </header>
+
+          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+            {children}
+          </main>
+        </div>
       </div>
-    </div>
     </ToastProvider>
   );
 }
