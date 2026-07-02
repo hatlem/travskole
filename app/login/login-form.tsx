@@ -87,14 +87,15 @@ export default function LoginForm() {
     setError(null);
 
     try {
-      const result = await signIn('email', {
-        email: data.email,
-        redirect: false,
-        ...(callbackUrl ? { callbackUrl } : {}),
+      const res = await fetch('/api/auth/magic-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: data.email }),
       });
 
-      if (result?.error) {
-        setError('Kunne ikke sende innloggingslenke. Prøv igjen.');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setError(body.error || 'Kunne ikke sende innloggingslenke. Prøv igjen.');
       } else {
         setMagicLinkSent(true);
       }
@@ -116,7 +117,7 @@ export default function LoginForm() {
         <p className="mt-2 text-center text-sm text-gray-600">
           Eller{' '}
           <Link
-            href="/auth/register"
+            href="/register"
             className="font-medium text-bjerke-blue hover:underline"
           >
             opprett en ny konto
@@ -284,7 +285,7 @@ export default function LoginForm() {
                   </p>
                 )}
                 <div className="mt-1 text-right">
-                  <Link href="/auth/forgot-password" className="text-sm text-bjerke-blue hover:underline">
+                  <Link href="/forgot-password" className="text-sm text-bjerke-blue hover:underline">
                     Glemt passord?
                   </Link>
                 </div>

@@ -62,7 +62,7 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
         body: JSON.stringify({ courseId, ...form, preferredDate: form.preferredDate || null }),
       });
       if (res.status === 401) {
-        router.push(`/auth/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
+        router.push(`/login?callbackUrl=${encodeURIComponent(window.location.pathname)}`);
         return;
       }
       if (!res.ok) {

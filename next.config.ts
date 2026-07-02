@@ -38,6 +38,14 @@ const nextConfig: NextConfig = {
         destination: '/arrangementer',
         permanent: true,
       },
+      // Auth-sidene flyttet fra /auth/* til rot. Behold redirects for gamle
+      // bokmerker og for reset-/verifiseringslenker i allerede utsendte e-poster
+      // (Next bevarer query-string som ?token=…&email=… automatisk).
+      {
+        source: '/auth/:path*',
+        destination: '/:path*',
+        permanent: true,
+      },
     ];
   },
   async headers() {

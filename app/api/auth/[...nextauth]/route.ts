@@ -1,37 +1,73 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import EmailProvider from 'next-auth/providers/email';
-import { PrismaAdapter } from '@auth/prisma-adapter';
-import type { Adapter } from 'next-auth/adapters';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth';
 import { loginLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logFailedLogin } from '@/lib/logger';
+import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
 
-// Only include EmailProvider when email server is configured
-const emailProvider = process.env.EMAIL_SERVER_HOST
-  ? [
-      EmailProvider({
-        server: {
-          host: process.env.EMAIL_SERVER_HOST,
-          port: Number(process.env.EMAIL_SERVER_PORT || 587),
-          auth: {
-            user: process.env.EMAIL_SERVER_USER,
-            pass: process.env.EMAIL_SERVER_PASSWORD,
-          },
-        },
-        from: process.env.EMAIL_FROM || process.env.SMTP_FROM || 'registrering@bjerke.no',
-      }),
-    ]
-  : [];
-
+// Passordløs innlogging (magic link) er implementert som en egen credentials-
+// provider, IKKE via NextAuths EmailProvider + PrismaAdapter. Adapteret sammen med
+// CredentialsProvider + JWT-strategi ga tomme sesjoner, så vi holder oss til et rent
+// JWT-oppsett og validerer engangs-tokenet selv (samme mønster som passord-reset).
 export const authOptions: NextAuthOptions = {
-  // Only use adapter when email provider is configured (needed for verification tokens)
-  // PrismaAdapter with CredentialsProvider + JWT strategy causes empty sessions
-  ...(process.env.EMAIL_SERVER_HOST ? { adapter: PrismaAdapter(prisma) as Adapter } : {}),
-
   providers: [
-    ...emailProvider,
+    CredentialsProvider({
+      id: 'magic-link',
+      name: 'Magic Link',
+      credentials: {
+        email: { label: 'E-post', type: 'email' },
+        token: { label: 'Token', type: 'text' },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.token) {
+          throw new Error('Ugyldig innloggingslenke');
+        }
+
+        const normalizedEmail = credentials.email.trim().toLowerCase();
+        const identifier = MAGIC_LINK_PREFIX + normalizedEmail;
+        // Tokens lagres som sha256-hash (se /api/auth/magic-link).
+        const tokenHash = crypto.createHash('sha256').update(credentials.token).digest('hex');
+
+        const vt = await prisma.verificationToken.findFirst({
+          where: { identifier, token: tokenHash },
+        });
+
+        if (!vt || vt.expires < new Date()) {
+          // Rydd bort et utløpt token så det ikke blir liggende.
+          if (vt) {
+            await prisma.verificationToken.deleteMany({ where: { identifier, token: tokenHash } });
+          }
+          throw new Error('Ugyldig eller utløpt innloggingslenke');
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { email: normalizedEmail },
+          include: { parent: true },
+        });
+        if (!user) {
+          throw new Error('Ugyldig eller utløpt innloggingslenke');
+        }
+
+        // Engangsbruk: forbruk tokenet umiddelbart.
+        await prisma.verificationToken.deleteMany({ where: { identifier, token: tokenHash } });
+
+        // Magic link beviser kontroll over e-postadressen → marker som verifisert.
+        if (!user.emailVerified) {
+          await prisma.user
+            .update({ where: { id: user.id }, data: { emailVerified: new Date() } })
+            .catch(() => {});
+        }
+
+        return {
+          id: user.id.toString(),
+          email: user.email,
+          role: user.role,
+          name: user.parent?.name || null,
+        };
+      },
+    }),
     CredentialsProvider({
       name: 'Credentials',
       credentials: {
@@ -88,10 +124,10 @@ export const authOptions: NextAuthOptions = {
   },
 
   pages: {
-    signIn: '/auth/login',
-    signOut: '/auth/signout',
-    error: '/auth/login',
-    verifyRequest: '/auth/verify-request',
+    signIn: '/login',
+    signOut: '/signout',
+    error: '/login',
+    verifyRequest: '/verify-request',
   },
 
   callbacks: {

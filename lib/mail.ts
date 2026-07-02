@@ -224,7 +224,7 @@ export async function sendBookingConfirmation(data: BookingEmail) {
 export async function sendPasswordResetEmail(email: string, token: string) {
   const siteName = await getSiteName();
   const baseUrl = getBaseUrl();
-  const resetUrl = `${baseUrl}/auth/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
   await sendMail(
     email,
     `Tilbakestill passord — ${siteName}`,
@@ -238,6 +238,27 @@ export async function sendPasswordResetEmail(email: string, token: string) {
         </a>
       </p>
       <p style="color:#666;font-size:14px">Denne lenken utløper om 1 time. Hvis du ikke ba om å tilbakestille passordet, kan du ignorere denne e-posten.</p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${siteName}</p>
+    </div>`,
+  );
+}
+
+export async function sendMagicLinkEmail(email: string, token: string) {
+  const siteName = await getSiteName();
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}/magic-link?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  await sendMail(
+    email,
+    `Innloggingslenke — ${siteName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Logg inn</h2>
+      <p>Klikk på knappen under for å logge inn. Lenken er personlig og kan kun brukes én gang.</p>
+      <p style="margin:24px 0">
+        <a href="${url}" style="background:${BRAND.blue};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
+          Logg inn
+        </a>
+      </p>
+      <p style="color:#666;font-size:14px">Denne lenken utløper om 15 minutter. Hvis du ikke ba om å logge inn, kan du ignorere denne e-posten.</p>
       <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${siteName}</p>
     </div>`,
   );

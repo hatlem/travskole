@@ -27,7 +27,7 @@ export default function ResetPasswordForm() {
               Denne lenken er ugyldig eller har utløpt. Be om en ny tilbakestillingslenke.
             </p>
             <Link
-              href="/auth/forgot-password"
+              href="/forgot-password"
               className="text-sm text-bjerke-blue hover:underline"
             >
               Be om ny lenke
@@ -104,7 +104,7 @@ export default function ResetPasswordForm() {
                 Du kan nå logge inn med det nye passordet ditt.
               </p>
               <Link
-                href="/auth/login"
+                href="/login"
                 className="
                   inline-block bg-bjerke-blue hover:bg-bjerke-blue-dark
                   text-white font-semibold py-3 px-6 rounded-lg

@@ -59,7 +59,7 @@ export default function Header() {
               </>
             ) : (
               <Link
-                href="/auth/login"
+                href="/login"
                 className="bg-white text-bjerke-blue px-5 py-2 rounded-md font-semibold text-sm uppercase tracking-wide hover:bg-gray-100 transition"
               >
                 {t('nav.login')}
@@ -122,7 +122,7 @@ export default function Header() {
               </>
             ) : (
               <Link
-                href="/auth/login"
+                href="/login"
                 className="block bg-white text-bjerke-blue px-4 py-2 rounded-md font-semibold text-center text-sm uppercase tracking-wide hover:bg-gray-100 transition"
                 onClick={() => setMobileMenuOpen(false)}
               >

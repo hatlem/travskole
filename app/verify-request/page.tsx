@@ -15,7 +15,7 @@ export default function VerifyRequestPage() {
             Finner du ikke e-posten? Sjekk søppelpost-mappen.
           </p>
           <Link
-            href="/auth/login"
+            href="/login"
             className="text-bjerke-blue hover:underline font-medium"
           >
             Tilbake til innlogging

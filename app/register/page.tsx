@@ -61,7 +61,7 @@ export default function RegisterPage() {
       }
 
       // Registration successful, redirect to login
-      router.push('/auth/login?registered=true');
+      router.push('/login?registered=true');
     } catch {
       setError('Noe gikk galt. Vennligst prøv igjen.');
     } finally {
@@ -78,7 +78,7 @@ export default function RegisterPage() {
         <p className="mt-2 text-center text-sm text-gray-600">
           Eller{' '}
           <Link
-            href="/auth/login"
+            href="/login"
             className="font-medium text-bjerke-blue hover:underline"
           >
             logg inn

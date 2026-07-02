@@ -39,7 +39,7 @@ export default withAuth(
       },
     },
     pages: {
-      signIn: '/auth/login',
+      signIn: '/login',
     },
   }
 );

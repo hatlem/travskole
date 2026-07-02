@@ -63,7 +63,7 @@ export default function ForgotPasswordPage() {
                 Hvis det finnes en konto med denne e-postadressen, har vi sendt en lenke for å tilbakestille passordet.
               </p>
               <Link
-                href="/auth/login"
+                href="/login"
                 className="mt-6 inline-block text-sm text-bjerke-blue hover:underline"
               >
                 Tilbake til innlogging
@@ -109,7 +109,7 @@ export default function ForgotPasswordPage() {
 
               <div className="text-center">
                 <Link
-                  href="/auth/login"
+                  href="/login"
                   className="text-sm text-bjerke-blue hover:underline"
                 >
                   Tilbake til innlogging
