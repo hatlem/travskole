@@ -23,5 +23,7 @@ declare module 'next-auth/jwt' {
   interface JWT {
     id: string;
     role: string;
+    /** Satt når kontoen er deaktivert eller anonymisert — blokkerer tilgang. */
+    deactivated?: boolean;
   }
 }

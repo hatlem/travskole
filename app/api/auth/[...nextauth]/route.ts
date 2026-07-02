@@ -49,6 +49,9 @@ export const authOptions: NextAuthOptions = {
         if (!user) {
           throw new Error('Ugyldig eller utløpt innloggingslenke');
         }
+        if (user.deactivatedAt || user.anonymizedAt) {
+          throw new Error('Kontoen er deaktivert. Kontakt administrator.');
+        }
 
         // Engangsbruk: forbruk tokenet umiddelbart.
         await prisma.verificationToken.deleteMany({ where: { identifier, token: tokenHash } });
@@ -108,6 +111,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error('Feil e-post eller passord');
         }
 
+        if (user.deactivatedAt || user.anonymizedAt) {
+          throw new Error('Kontoen er deaktivert. Kontakt administrator.');
+        }
+
         return {
           id: user.id.toString(),
           email: user.email,
@@ -145,14 +152,22 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await prisma.user.findUnique({
             where: { id: Number(token.id) },
-            select: { role: true },
+            select: { role: true, deactivatedAt: true, anonymizedAt: true },
           });
           if (!dbUser) {
             // Bruker slettet → tom rolle (ikke admin/superadmin) = de-privilegert
             token.role = '';
+            token.deactivated = true;
+            return token;
+          }
+          if (dbUser.deactivatedAt || dbUser.anonymizedAt) {
+            // Deaktivert/anonymisert → lås ute umiddelbart (også aktive sesjoner)
+            token.role = '';
+            token.deactivated = true;
             return token;
           }
           token.role = dbUser.role;
+          token.deactivated = false;
         } catch {
           // DB midlertidig utilgjengelig: behold token (fail-open for tilgjengelighet)
         }

@@ -29,9 +29,10 @@ export default withAuth(
       authorized: ({ token, req }) => {
         const pathname = req.nextUrl.pathname;
 
-        // Require authentication for protected routes
+        // Require authentication for protected routes. Deaktiverte/anonymiserte
+        // kontoer (token.deactivated) låses ute selv om sesjonen ellers er gyldig.
         if (pathname.startsWith('/dashboard') || pathname.startsWith('/admin')) {
-          return !!token;
+          return !!token && !token.deactivated;
         }
 
         // All other matched routes are public

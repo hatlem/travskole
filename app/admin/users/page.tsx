@@ -5,12 +5,25 @@ import { useSession } from 'next-auth/react';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { canManageUser } from '@/lib/user-admin';
+import { UserFormModal, type EditableUser } from './UserFormModal';
+
+type AccountStatus = 'active' | 'deactivated' | 'anonymized';
+
+function userStatus(u: { deactivatedAt: string | null; anonymizedAt: string | null }): AccountStatus {
+  if (u.anonymizedAt) return 'anonymized';
+  if (u.deactivatedAt) return 'deactivated';
+  return 'active';
+}
 
 interface User {
   id: number;
   email: string;
   role: string;
   createdAt: string;
+  deactivatedAt: string | null;
+  anonymizedAt: string | null;
   parent: {
     id: number;
     name: string;
@@ -69,6 +82,11 @@ export default function AdminUsersPage() {
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const isSuperAdmin = session?.user?.role === 'superadmin';
+  const currentRole = session?.user?.role ?? '';
+  const [formModal, setFormModal] = useState<{ mode: 'create' | 'edit'; user: EditableUser | null } | null>(null);
+  const [confirm, setConfirm] = useState<{ user: User; action: 'deactivate' | 'reactivate' | 'anonymize' } | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'all' | AccountStatus>('all');
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -91,11 +109,12 @@ export default function AdminUsersPage() {
     setUpdatingId(id);
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
-        method: 'PUT',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role }),
       });
-      if (!res.ok) throw new Error('Kunne ikke oppdatere rolle');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Kunne ikke oppdatere rolle');
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, role } : u))
       );
@@ -104,6 +123,52 @@ export default function AdminUsersPage() {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setUpdatingId(null);
+    }
+  }
+
+  function openEdit(u: User) {
+    setFormModal({
+      mode: 'edit',
+      user: {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        name: u.parent?.name ?? '',
+        phone: u.parent?.phone ?? '',
+        address: u.parent?.address ?? null,
+      },
+    });
+  }
+
+  async function runConfirmedAction() {
+    if (!confirm) return;
+    setActionLoading(true);
+    const { user, action } = confirm;
+    try {
+      const res =
+        action === 'anonymize'
+          ? await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' })
+          : await fetch(`/api/admin/users/${user.id}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ deactivated: action === 'deactivate' }),
+            });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Handlingen feilet');
+      toast(
+        action === 'anonymize'
+          ? 'Bruker anonymisert'
+          : action === 'deactivate'
+          ? 'Bruker deaktivert'
+          : 'Bruker reaktivert',
+        'success',
+      );
+      setConfirm(null);
+      fetchUsers();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setActionLoading(false);
     }
   }
 
@@ -122,6 +187,7 @@ export default function AdminUsersPage() {
   const filteredUsers = useMemo(() => {
     return users.filter((user) => {
       if (roleFilter !== 'all' && user.role !== roleFilter) return false;
+      if (statusFilter !== 'all' && userStatus(user) !== statusFilter) return false;
       if (!searchQuery) return true;
       const query = searchQuery.toLowerCase();
       return (
@@ -130,10 +196,10 @@ export default function AdminUsersPage() {
         (user.parent?.phone?.includes(query) ?? false)
       );
     });
-  }, [users, searchQuery, roleFilter]);
+  }, [users, searchQuery, roleFilter, statusFilter]);
 
   // Reset page when filters change
-  useEffect(() => setPage(1), [searchQuery, roleFilter]);
+  useEffect(() => setPage(1), [searchQuery, roleFilter, statusFilter]);
 
   const paginatedUsers = filteredUsers.slice((page - 1) * perPage, page * perPage);
 
@@ -157,12 +223,20 @@ export default function AdminUsersPage() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Brukere</h1>
-        <button
-          onClick={() => window.open('/api/admin/users/export')}
-          className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-        >
-          Eksporter CSV
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => window.open('/api/admin/users/export')}
+            className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            Eksporter CSV
+          </button>
+          <button
+            onClick={() => setFormModal({ mode: 'create', user: null })}
+            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            + Ny bruker
+          </button>
+        </div>
       </div>
 
       {/* Stats bar */}
@@ -206,6 +280,16 @@ export default function AdminUsersPage() {
               <option value="admin">Admin</option>
               {isSuperAdmin && <option value="superadmin">Superadmin</option>}
             </select>
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | AccountStatus)}
+              className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
+            >
+              <option value="all">Alle statuser</option>
+              <option value="active">Aktiv</option>
+              <option value="deactivated">Deaktivert</option>
+              <option value="anonymized">Anonymisert</option>
+            </select>
           </div>
           <p className="text-sm text-gray-500 mb-4">
             Viser {filteredUsers.length} av {users.length} brukere
@@ -221,13 +305,17 @@ export default function AdminUsersPage() {
                     <th className="px-6 py-3 text-left">Barn</th>
                     <th className="px-6 py-3 text-left">Pam.</th>
                     <th className="px-6 py-3 text-left">Rolle</th>
+                    <th className="px-6 py-3 text-left">Status</th>
                     <th className="px-6 py-3 text-left">Opprettet</th>
+                    <th className="px-6 py-3 text-right">Handlinger</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {paginatedUsers.map((user) => {
                     const isExpanded = expandedIds.has(user.id);
                     const initials = getInitials(user.parent?.name);
+                    const status = userStatus(user);
+                    const manageable = canManageUser(currentRole, user.role) && status !== 'anonymized';
                     return (
                       <>
                         <tr
@@ -265,29 +353,72 @@ export default function AdminUsersPage() {
                                 updateRole(user.id, e.target.value);
                               }}
                               onClick={(e) => e.stopPropagation()}
-                              disabled={updatingId === user.id}
-                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-bjerke-blue ${
+                              disabled={updatingId === user.id || !manageable}
+                              className={`text-xs font-medium rounded-full px-2.5 py-1 border-0 focus:ring-2 focus:ring-bjerke-blue ${
+                                manageable ? 'cursor-pointer' : 'cursor-not-allowed'
+                              } ${
                                 user.role === 'superadmin'
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : user.role === 'admin'
                                   ? 'bg-purple-100 text-purple-800'
                                   : 'bg-blue-100 text-blue-800'
-                              } ${updatingId === user.id ? 'opacity-50' : ''}`}
+                              } ${updatingId === user.id || !manageable ? 'opacity-50' : ''}`}
                             >
                               <option value="parent">Forelder</option>
                               <option value="admin">Admin</option>
                               {isSuperAdmin && <option value="superadmin">Superadmin</option>}
                             </select>
                           </td>
+                          <td className="px-6 py-4">
+                            <span
+                              className={`text-xs font-medium rounded-full px-2.5 py-1 ${
+                                status === 'anonymized'
+                                  ? 'bg-gray-200 text-gray-600'
+                                  : status === 'deactivated'
+                                  ? 'bg-red-100 text-red-800'
+                                  : 'bg-green-100 text-green-800'
+                              }`}
+                            >
+                              {status === 'anonymized' ? 'Anonymisert' : status === 'deactivated' ? 'Deaktivert' : 'Aktiv'}
+                            </span>
+                          </td>
                           <td className="px-6 py-4 text-gray-500">
                             {new Date(user.createdAt).toLocaleDateString('nb-NO')}
+                          </td>
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                            {manageable ? (
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => openEdit(user)}
+                                  className="text-xs font-medium text-bjerke-blue hover:underline"
+                                >
+                                  Rediger
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setConfirm({ user, action: status === 'deactivated' ? 'reactivate' : 'deactivate' })
+                                  }
+                                  className="text-xs font-medium text-gray-600 hover:underline"
+                                >
+                                  {status === 'deactivated' ? 'Reaktiver' : 'Deaktiver'}
+                                </button>
+                                <button
+                                  onClick={() => setConfirm({ user, action: 'anonymize' })}
+                                  className="text-xs font-medium text-red-600 hover:underline"
+                                >
+                                  Anonymiser
+                                </button>
+                              </div>
+                            ) : (
+                              <span className="block text-right text-gray-300">–</span>
+                            )}
                           </td>
                         </tr>
 
                         {/* Expanded detail row */}
                         {isExpanded && (
                           <tr key={`${user.id}-detail`} className="bg-blue-50/50">
-                            <td colSpan={6} className="px-6 py-4">
+                            <td colSpan={8} className="px-6 py-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Address */}
                                 {user.parent?.address && (
@@ -366,6 +497,47 @@ export default function AdminUsersPage() {
           </div>
           <Pagination total={filteredUsers.length} page={page} perPage={perPage} onChange={setPage} />
         </>
+      )}
+
+      {formModal && (
+        <UserFormModal
+          open
+          mode={formModal.mode}
+          user={formModal.user}
+          isSuperAdmin={isSuperAdmin}
+          onClose={() => setFormModal(null)}
+          onSaved={(msg) => {
+            toast(msg, 'success');
+            fetchUsers();
+          }}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmModal
+          open
+          loading={actionLoading}
+          variant={confirm.action === 'anonymize' ? 'danger' : confirm.action === 'deactivate' ? 'warning' : 'info'}
+          title={
+            confirm.action === 'anonymize'
+              ? 'Anonymiser bruker?'
+              : confirm.action === 'deactivate'
+              ? 'Deaktiver bruker?'
+              : 'Reaktiver bruker?'
+          }
+          message={
+            confirm.action === 'anonymize'
+              ? 'Persondata (navn, kontakt, barn) slettes permanent. Påmeldingshistorikk beholdes avidentifisert. Dette kan ikke angres.'
+              : confirm.action === 'deactivate'
+              ? 'Brukeren kan ikke logge inn før kontoen reaktiveres. All data beholdes.'
+              : 'Brukeren kan logge inn igjen.'
+          }
+          confirmLabel={
+            confirm.action === 'anonymize' ? 'Anonymiser' : confirm.action === 'deactivate' ? 'Deaktiver' : 'Reaktiver'
+          }
+          onConfirm={runConfirmedAction}
+          onCancel={() => setConfirm(null)}
+        />
       )}
     </div>
   );

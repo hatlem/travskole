@@ -64,6 +64,11 @@ model User {
   emailVerified DateTime? @map("email_verified")
   passwordHash  String?  @map("password_hash")
   role          String   @default("parent") // 'parent', 'admin', or 'superadmin'
+  // Kontostatus (admin-styrt). deactivatedAt: reversibel utestengelse (kan ikke
+  // logge inn). anonymizedAt: permanent GDPR-sletting — persondata scrubbet, men
+  // påmeldingshistorikk beholdt. Begge blokkerer innlogging.
+  deactivatedAt DateTime? @map("deactivated_at")
+  anonymizedAt  DateTime? @map("anonymized_at")
   createdAt     DateTime @default(now()) @map("created_at")
 
   parent          Parent?
