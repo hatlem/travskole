@@ -63,6 +63,11 @@ export default function Footer() {
                   </Link>
                 </li>
               ))}
+              <li>
+                <Link href="/feedback" className="text-white/70 hover:text-white transition">
+                  {t('feedback.footer_link')}
+                </Link>
+              </li>
             </ul>
           </div>
 
