@@ -171,6 +171,11 @@ export const STRINGS: Record<string, string> = {
   'sulky.cta_text': 'Vil du prøve dobbeltsulky? Ta kontakt for å avtale tid. Passer for alle aldre og krever ingen forkunnskaper.',
   'sulky.cta_button': 'Book dobbeltsulky',
 
+  // Tilbakemeldingsside
+  'feedback.page_title': 'Send tilbakemelding',
+  'feedback.page_description': 'Fant du en feil eller har en idé? Si ifra — det går rett til teamet vårt.',
+  'feedback.footer_link': 'Gi tilbakemelding',
+
   // Feilsider
   'error.not_found_heading': 'Siden ble ikke funnet',
   'error.not_found_text': 'Beklager, vi finner ikke siden du leter etter.',
@@ -207,6 +212,7 @@ export const STRING_SECTIONS: Record<string, string> = {
   dash: 'Min side',
   auth: 'Innlogging og konto',
   sulky: 'Dobbeltsulky',
+  feedback: 'Tilbakemelding',
   error: 'Feilsider',
   email: 'E-poster',
 };
