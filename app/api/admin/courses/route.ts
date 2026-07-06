@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { serializePaymentMethods } from '@/lib/payments';
 import logger from '@/lib/logger';
 
 export async function GET() {
@@ -33,7 +34,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { name, description, type, audience, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl, registrationMode, requestRequiresLogin, requestConsentRisk, requestConsentTerms, requestConsentMedia, requestConsentActivities } = body;
+    const { name, description, type, audience, startDate, endDate, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl, registrationMode, requestRequiresLogin, requestConsentRisk, requestConsentTerms, requestConsentMedia, requestConsentActivities, paymentMethods } = body;
 
     const mode = registrationMode === 'request' ? 'request' : 'standard';
 
@@ -62,6 +63,7 @@ export async function POST(request: NextRequest) {
         status,
         imageUrl: imageUrl || null,
         registrationMode: mode,
+        paymentMethods: serializePaymentMethods(paymentMethods),
         requestRequiresLogin: !!requestRequiresLogin,
         requestConsentRisk: requestConsentRisk !== false,
         requestConsentTerms: requestConsentTerms !== false,

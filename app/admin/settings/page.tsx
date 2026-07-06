@@ -103,6 +103,13 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: 'Betaling',
+    description: 'Testmodus bruker Stripe/Vipps sine testnøkler. Slå av for å ta ekte betalinger (live). Betalingsmåter velges per kurs.',
+    fields: [
+      { key: 'payment_test_mode', label: 'Testmodus (bruk testnøkler)', type: 'toggle' },
+    ],
+  },
+  {
     title: 'Sporing og deling',
     description: 'Google Tag Manager og tekst på delingsbildet (Open Graph)',
     fields: [

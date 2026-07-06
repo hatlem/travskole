@@ -9,6 +9,7 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
+import { parsePaymentMethods } from '@/lib/payments';
 
 function slugify(text: string): string {
   return text
@@ -37,6 +38,7 @@ interface CourseData {
   status: string;
   imageUrl: string | null;
   registrationMode?: string;
+  paymentMethods?: string | null;
   requestRequiresLogin?: boolean;
   requestConsentRisk?: boolean;
   requestConsentTerms?: boolean;
@@ -121,6 +123,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [reqConsentTerms, setReqConsentTerms] = useState(true);
   const [reqConsentMedia, setReqConsentMedia] = useState(false);
   const [reqConsentActivities, setReqConsentActivities] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(['faktura']);
 
   // Email triggers state
   const [triggers, setTriggers] = useState<EmailTrigger[]>([]);
@@ -184,6 +187,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         setReqConsentTerms(c.requestConsentTerms ?? true);
         setReqConsentMedia(!!c.requestConsentMedia);
         setReqConsentActivities(!!c.requestConsentActivities);
+        setPaymentMethods(parsePaymentMethods(c.paymentMethods));
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Noe gikk galt');
       } finally {
@@ -346,6 +350,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       status,
       imageUrl: imageUrl || null,
       registrationMode,
+      paymentMethods,
       requestRequiresLogin,
       requestConsentRisk: reqConsentRisk,
       requestConsentTerms: reqConsentTerms,
@@ -757,6 +762,28 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">
                       kr
                     </span>
+                  </div>
+                </div>
+
+                {/* Betalingsmåter */}
+                <div className="sm:col-span-2">
+                  <span className={labelClass}>Betalingsmåter</span>
+                  <div className="flex flex-wrap gap-4 mt-1">
+                    {[{ v: 'faktura', l: 'Faktura' }, { v: 'stripe', l: 'Stripe (kort)' }].map((pm) => (
+                      <label key={pm.v} className="flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={paymentMethods.includes(pm.v)}
+                          onChange={() =>
+                            setPaymentMethods((prev) =>
+                              prev.includes(pm.v) ? prev.filter((x) => x !== pm.v) : [...prev, pm.v]
+                            )
+                          }
+                          className="rounded border-gray-300"
+                        />
+                        {pm.l}
+                      </label>
+                    ))}
                   </div>
                 </div>
 

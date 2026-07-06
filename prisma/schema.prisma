@@ -133,6 +133,8 @@ model Course {
   status          String    @default("open") // 'open', 'full', 'closed'
   imageUrl        String?   @map("image_url")
   registrationMode         String  @default("standard") @map("registration_mode") // 'standard' | 'request'
+  // Tillatte betalingsmåter, komma-separert ('faktura','stripe'). Se lib/payments.ts.
+  paymentMethods           String  @default("faktura") @map("payment_methods")
   requestRequiresLogin     Boolean @default(false) @map("request_requires_login")
   requestConsentRisk       Boolean @default(true)  @map("request_consent_risk")
   requestConsentTerms      Boolean @default(true)  @map("request_consent_terms")

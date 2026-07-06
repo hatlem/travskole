@@ -52,6 +52,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Påmeldingsskjema — admin styrer hvilke felt som er obligatoriske ('true'/'false')
   registration_address_required: 'true',
   registration_terms_required: 'true',
+  // Betaling — testmodus på som standard under utrulling (bruker testnøkler)
+  payment_test_mode: 'true',
 
   // Kursdetaljer
   course_learning_points: 'Grunnleggende om travhester og deres behov\nSikkerhet rundt hester og på banen\nPraktisk erfaring med stell og håndtering\nMoro og vennskap med andre hesteglade barn',

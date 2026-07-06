@@ -52,6 +52,7 @@ export default function NewCoursePage() {
   const [reqConsentTerms, setReqConsentTerms] = useState(true);
   const [reqConsentMedia, setReqConsentMedia] = useState(false);
   const [reqConsentActivities, setReqConsentActivities] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(['faktura']);
 
   // Validation
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -92,6 +93,7 @@ export default function NewCoursePage() {
       status,
       imageUrl: imageUrl || null,
       registrationMode,
+      paymentMethods,
       requestRequiresLogin,
       requestConsentRisk: reqConsentRisk,
       requestConsentTerms: reqConsentTerms,
@@ -416,6 +418,31 @@ export default function NewCoursePage() {
                     kr
                   </span>
                 </div>
+              </div>
+
+              {/* Betalingsmåter */}
+              <div className="sm:col-span-2">
+                <span className={labelClass}>Betalingsmåter</span>
+                <div className="flex flex-wrap gap-4 mt-1">
+                  {[{ v: 'faktura', l: 'Faktura' }, { v: 'stripe', l: 'Stripe (kort)' }].map((pm) => (
+                    <label key={pm.v} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={paymentMethods.includes(pm.v)}
+                        onChange={() =>
+                          setPaymentMethods((prev) =>
+                            prev.includes(pm.v) ? prev.filter((x) => x !== pm.v) : [...prev, pm.v]
+                          )
+                        }
+                        className="rounded border-gray-300"
+                      />
+                      {pm.l}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">
+                  Kortbetaling (Stripe) aktiveres når betalingsnøklene er satt opp.
+                </p>
               </div>
 
               {/* Min participants */}
