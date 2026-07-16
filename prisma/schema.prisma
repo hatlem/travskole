@@ -75,6 +75,11 @@ model User {
   accounts        Account[]
   sessions        Session[]
   bookingRequests BookingRequest[]
+  ownedOrganizations Organization[] @relation("OrgOwner")
+  ownedContacts      Contact[]      @relation("ContactOwner")
+  crmContact         Contact?       @relation("ContactUser")
+  ownedDeals         Deal[]         @relation("DealOwner")
+  assignedTasks      Task[]         @relation("TaskAssignee")
 
   @@map("users")
 }
@@ -93,7 +98,8 @@ model Parent {
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   children      Child[]
   registrations Registration[]
-  
+  crmContacts   Contact[]
+
   @@map("parents")
 }
 
@@ -277,4 +283,250 @@ model EmailLog {
   @@unique([triggerId, registrationId])
   @@index([registrationId])
   @@map("email_logs")
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// CRM — Engasjementsplattform delprosjekt 1
+// Spec: docs/superpowers/specs/2026-07-06-contact-crm-core-design.md
+// ═══════════════════════════════════════════════════════════════════════
+
+// Bedrift som booker arrangementer (julebord, firmafest, afterwork).
+model Organization {
+  id             Int       @id @default(autoincrement())
+  name           String
+  orgNumber      String?   @map("org_number") // norsk organisasjonsnummer
+  domain         String?   // f.eks. "acme.no" — brukes til dedup
+  phone          String?
+  address        String?
+  ownerId        Int?      @map("owner_id") // ansvarlig ansatt (User)
+  stage          String    @default("lead") // lead|active|customer|dormant|lost
+  tags           String    @default("[]") // JSON string[]
+  customFields   String    @default("{}") @map("custom_fields") // JSON objekt
+  lastActivityAt DateTime? @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  owner      User?             @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  contacts   Contact[]
+  deals      Deal[]
+  activities ContactActivity[]
+
+  @@index([domain])
+  @@index([stage])
+  @@map("organizations")
+}
+
+// Person. Kan tilhøre en bedrift; kan lenkes til eksisterende User/Parent.
+model Contact {
+  id             Int       @id @default(autoincrement())
+  email          String?   @unique // normalisert lowercase; null for telefon-kontakter
+  name           String
+  phone          String?
+  organizationId Int?      @map("organization_id")
+  roleTitle      String?   @map("role_title") // f.eks. "Arrangementsansvarlig"
+  userId         Int?      @unique @map("user_id")
+  parentId       Int?      @map("parent_id")
+  source         String    @default("manual") // manual|import|booking|registration|signup
+  ownerId        Int?      @map("owner_id")
+  stage          String    @default("lead") // lead|active|customer|dormant|lost
+  tags           String    @default("[]") // JSON string[]
+  customFields   String    @default("{}") @map("custom_fields")
+  lastActivityAt DateTime? @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  organization Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  owner        User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  user         User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
+  parent       Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  deals        Deal[]
+  memberships  ContactListMembership[]
+  activities   ContactActivity[]
+  tasks        Task[]
+  notes        Note[]
+  consent      Consent?
+
+  @@index([organizationId])
+  @@index([stage])
+  @@index([parentId])
+  @@map("contacts")
+}
+
+// Statiske lister (import-mål, manuelle grupperinger).
+model ContactList {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  memberships ContactListMembership[]
+
+  @@map("contact_lists")
+}
+
+model ContactListMembership {
+  id        Int      @id @default(autoincrement())
+  listId    Int      @map("list_id")
+  contactId Int      @map("contact_id")
+  addedAt   DateTime @default(now()) @map("added_at")
+
+  list    ContactList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  contact Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@unique([listId, contactId])
+  @@index([contactId])
+  @@map("contact_list_memberships")
+}
+
+// Dynamisk, regelbasert segment — evalueres ved lesing (lib/crm/segments.ts).
+model Segment {
+  id        Int      @id @default(autoincrement())
+  name      String
+  rules     String   @default("{}") // JSON: { all: [{ field, op, value }] }
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("segments")
+}
+
+model Pipeline {
+  id        Int      @id @default(autoincrement())
+  name      String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  stages Stage[]
+  deals  Deal[]
+
+  @@map("pipelines")
+}
+
+model Stage {
+  id         Int     @id @default(autoincrement())
+  pipelineId Int     @map("pipeline_id")
+  name       String
+  position   Int     @default(0) // rekkefølge i kanban
+  isWon      Boolean @default(false) @map("is_won")
+  isLost     Boolean @default(false) @map("is_lost")
+
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  deals    Deal[]
+
+  @@index([pipelineId])
+  @@map("stages")
+}
+
+// En deal = kurspåmelding eller arrangementsbooking.
+// eventType/eventDate driver sesongbasert re-engasjement senere.
+model Deal {
+  id               Int       @id @default(autoincrement())
+  title            String
+  pipelineId       Int       @map("pipeline_id")
+  stageId          Int       @map("stage_id")
+  contactId        Int?      @map("contact_id")
+  organizationId   Int?      @map("organization_id")
+  ownerId          Int?      @map("owner_id")
+  value            Float?    // NOK
+  probability      Int?      // 0-100
+  eventType        String?   @map("event_type") // julebord|firmafest|afterwork|kurs|annet
+  eventDate        DateTime? @map("event_date")
+  status           String    @default("open") // open|won|lost
+  closedAt         DateTime? @map("closed_at")
+  source           String    @default("manual") // manual|booking|registration
+  bookingRequestId Int?      @unique @map("booking_request_id") // idempotens-bro
+  registrationId   Int?      @unique @map("registration_id")   // idempotens-bro
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  pipeline     Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stage        Stage         @relation(fields: [stageId], references: [id], onDelete: Restrict)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  owner        User?         @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  @@index([pipelineId, stageId])
+  @@index([contactId])
+  @@index([organizationId])
+  @@index([eventType, eventDate])
+  @@map("deals")
+}
+
+// Samlet tidslinje per kontakt/bedrift — append-only.
+model ContactActivity {
+  id             Int      @id @default(autoincrement())
+  contactId      Int?     @map("contact_id")
+  organizationId Int?     @map("organization_id")
+  type           String   // booking|registration|note|task|deal_change|import|event
+  title          String
+  body           String?
+  meta           String   @default("{}") // JSON — payload, lenker
+  actorEmail     String?  @map("actor_email") // ansatt, hvis manuell handling
+  occurredAt     DateTime @default(now()) @map("occurred_at")
+
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([contactId, occurredAt])
+  @@index([organizationId, occurredAt])
+  @@map("contact_activities")
+}
+
+model Task {
+  id             Int       @id @default(autoincrement())
+  title          String
+  contactId      Int?      @map("contact_id")
+  organizationId Int?      @map("organization_id")
+  dealId         Int?      @map("deal_id")
+  assigneeId     Int?      @map("assignee_id")
+  dueAt          DateTime? @map("due_at")
+  status         String    @default("open") // open|done|cancelled
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  contact  Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+
+  @@index([assigneeId, status])
+  @@index([contactId])
+  @@map("tasks")
+}
+
+model Note {
+  id             Int      @id @default(autoincrement())
+  body           String
+  contactId      Int?     @map("contact_id")
+  organizationId Int?     @map("organization_id")
+  dealId         Int?     @map("deal_id")
+  authorEmail    String   @map("author_email")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([contactId])
+  @@map("notes")
+}
+
+// Samtykke registreres nå så delprosjekt 4–5 kan sende lovlig.
+model Consent {
+  id          Int       @id @default(autoincrement())
+  contactId   Int       @unique @map("contact_id")
+  marketing   Boolean   @default(false)
+  lawfulBasis String?   @map("lawful_basis") // consent|legitimate_interest|contract
+  consentAt   DateTime? @map("consent_at")
+  source      String?   // hvor samtykket ble innhentet
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@map("consents")
+}
+
+// Global ikke-kontakt-liste (avmelding/bounce/klage/manuell).
+model Suppression {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  reason    String   @default("unsubscribe") // unsubscribe|bounce|complaint|manual
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("suppressions")
 }
