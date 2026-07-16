@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { parseCsv } from '@/lib/crm/csv';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 
@@ -38,6 +39,15 @@ export default function ImportPage() {
     }
   }, [toast]);
 
+  function resetImport() {
+    setCsv('');
+    setHeaders([]);
+    setMapping({ name: null, email: null, phone: null, organization: null });
+    setListId('');
+    setPlan(null);
+    setResult(null);
+  }
+
   useEffect(() => {
     const t = setTimeout(loadLists, 0);
     return () => clearTimeout(t);
@@ -50,14 +60,12 @@ export default function ImportPage() {
       setCsv(text);
       setPlan(null);
       setResult(null);
-      // Første linje = header — autodetekter skilletegn som i lib/crm/csv.ts
-      const firstLine = text.split('\n')[0] ?? '';
-      const delimiter = (firstLine.match(/;/g)?.length ?? 0) > (firstLine.match(/,/g)?.length ?? 0) ? ';' : ',';
-      const cols = firstLine.replace(/^﻿/, '').split(delimiter).map((h) => h.replace(/^"|"$/g, '').trim());
-      setHeaders(cols);
+      // Parse CSV headers using shared parser
+      const parsed = parseCsv(text);
+      setHeaders(parsed.headers);
       // Gjett mapping fra headernavn
       const guess = (patterns: RegExp): number | null => {
-        const i = cols.findIndex((c) => patterns.test(c.toLowerCase()));
+        const i = parsed.headers.findIndex((c) => patterns.test(c.toLowerCase()));
         return i === -1 ? null : i;
       };
       setMapping({
@@ -134,7 +142,7 @@ export default function ImportPage() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {(Object.keys(MAPPING_LABELS) as MappingKey[]).map((key) => (
                 <label key={key} className="text-sm">
-                  <span className="block text-gray-600 mb-1">{MAPPING_LABELS[key]}{key === 'name' && ' *'}</span>
+                  <span className="block text-gray-600 mb-1">{MAPPING_LABELS[key]}</span>
                   <select
                     value={mapping[key] ?? ''}
                     onChange={(e) => setMapping({ ...mapping, [key]: e.target.value === '' ? null : Number(e.target.value) })}
@@ -146,6 +154,7 @@ export default function ImportPage() {
                 </label>
               ))}
             </div>
+            <p className="text-sm text-gray-500 mt-2">Navn eller e-post må være valgt.</p>
             <div className="flex items-end gap-3 mt-4">
               <label className="text-sm">
                 <span className="block text-gray-600 mb-1">Legg til i liste (valgfritt)</span>
@@ -212,7 +221,11 @@ export default function ImportPage() {
 
         {result && (
           <section className="border border-green-200 bg-green-50 rounded-lg p-4 text-sm">
-            Import fullført: {result.created} nye, {result.updated} oppdatert, {result.skipped} hoppet over.
+            <p className="mb-3">Import fullført: {result.created} nye, {result.updated} oppdatert, {result.skipped} hoppet over.</p>
+            <button onClick={resetImport}
+              className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
+              Ny import
+            </button>
           </section>
         )}
       </div>
