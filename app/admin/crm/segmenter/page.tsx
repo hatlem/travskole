@@ -12,16 +12,21 @@ interface Suppression { id: number; email: string; reason: string; createdAt: st
 interface Rule { field: string; op: string; value: string }
 interface ContactSearchResult { id: number; name: string; email: string | null }
 
-const FIELDS = [
-  { value: 'stage', label: 'Stadium' },
-  { value: 'source', label: 'Kilde' },
-  { value: 'email', label: 'E-post' },
-  { value: 'tags', label: 'Tagg' },
-  { value: 'deal.eventType', label: 'Deal: arrangementstype' },
-  { value: 'deal.eventDate', label: 'Deal: dato' },
-  { value: 'deal.status', label: 'Deal: status' },
+const FIELDS: Array<{
+  value: string;
+  label: string;
+  allowedOps: Array<'eq' | 'neq' | 'contains' | 'lt' | 'gt' | 'is_null' | 'not_null'>;
+}> = [
+  { value: 'stage', label: 'Stadium', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'source', label: 'Kilde', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'email', label: 'E-post', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'tags', label: 'Tagg', allowedOps: ['contains', 'is_null', 'not_null'] },
+  { value: 'deal.eventType', label: 'Deal: arrangementstype', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'deal.eventDate', label: 'Deal: dato', allowedOps: ['lt', 'gt', 'is_null', 'not_null'] },
+  { value: 'deal.status', label: 'Deal: status', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
 ];
-const OPS = [
+
+const ALL_OPS = [
   { value: 'eq', label: 'er' },
   { value: 'neq', label: 'er ikke' },
   { value: 'contains', label: 'inneholder' },
@@ -31,7 +36,17 @@ const OPS = [
   { value: 'not_null', label: 'finnes' },
 ];
 
-const emptyRule = (): Rule => ({ field: 'stage', op: 'eq', value: '' });
+function getAllowedOpsForField(fieldValue: string): typeof ALL_OPS {
+  const field = FIELDS.find((f) => f.value === fieldValue);
+  if (!field) return ALL_OPS;
+  return ALL_OPS.filter((op) => field.allowedOps.includes(op.value as never));
+}
+
+const emptyRule = (): Rule => {
+  const defaultField = FIELDS[0];
+  const defaultOp = defaultField?.allowedOps?.[0] || 'eq';
+  return { field: defaultField?.value || 'stage', op: defaultOp as string, value: '' };
+};
 
 export default function SegmenterPage() {
   const [segments, setSegments] = useState<Segment[]>([]);
@@ -44,7 +59,7 @@ export default function SegmenterPage() {
 
   // Segmenter
   const [segName, setSegName] = useState('');
-  const [rules, setRules] = useState<Rule[]>([{ field: 'deal.eventType', op: 'eq', value: '' }]);
+  const [rules, setRules] = useState<Rule[]>([emptyRule()]);
   const [segmentBusy, setSegmentBusy] = useState(false);
   const [deletingSegmentId, setDeletingSegmentId] = useState<number | null>(null);
 
@@ -137,7 +152,7 @@ export default function SegmenterPage() {
       }
       toast('Segment opprettet', 'success');
       setSegName('');
-      setRules([{ field: 'deal.eventType', op: 'eq', value: '' }]);
+      setRules([emptyRule()]);
       await load();
     } catch {
       toast('Kunne ikke opprette segment', 'error');
@@ -380,41 +395,52 @@ export default function SegmenterPage() {
               placeholder="Navn, f.eks. Julebord 2025"
               className="border border-gray-300 rounded-md px-3 py-2 text-sm w-full"
             />
-            {rules.map((rule, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <select
-                  value={rule.field}
-                  onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, field: e.target.value } : r)))}
-                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
-                >
-                  {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                </select>
-                <select
-                  value={rule.op}
-                  onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, op: e.target.value } : r)))}
-                  className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
-                >
-                  {OPS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-                {rule.op !== 'is_null' && rule.op !== 'not_null' && (
-                  <input
-                    value={rule.value}
-                    onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
-                    placeholder="verdi"
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1"
-                  />
-                )}
-                {rules.length > 1 && (
-                  <button
-                    onClick={() => setRules(rules.filter((_, j) => j !== i))}
-                    className="text-gray-400 hover:text-red-600 text-sm"
-                    aria-label="Fjern regel"
+            {rules.map((rule, i) => {
+              const allowedOps = getAllowedOpsForField(rule.field);
+              const opIsAllowed = allowedOps.some((o) => o.value === rule.op);
+              const effectiveOp = opIsAllowed ? rule.op : allowedOps[0]?.value || 'eq';
+
+              return (
+                <div key={i} className="flex gap-2 items-center">
+                  <select
+                    value={rule.field}
+                    onChange={(e) => {
+                      const newField = e.target.value;
+                      const newAllowedOps = getAllowedOpsForField(newField);
+                      const newOp = newAllowedOps[0]?.value || 'eq';
+                      setRules(rules.map((r, j) => (j === i ? { ...r, field: newField, op: newOp } : r)));
+                    }}
+                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
                   >
-                    ✕
-                  </button>
-                )}
-              </div>
-            ))}
+                    {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                  </select>
+                  <select
+                    value={effectiveOp}
+                    onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, op: e.target.value } : r)))}
+                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                  >
+                    {allowedOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  {effectiveOp !== 'is_null' && effectiveOp !== 'not_null' && (
+                    <input
+                      value={rule.value}
+                      onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                      placeholder="verdi"
+                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1"
+                    />
+                  )}
+                  {rules.length > 1 && (
+                    <button
+                      onClick={() => setRules(rules.filter((_, j) => j !== i))}
+                      className="text-gray-400 hover:text-red-600 text-sm"
+                      aria-label="Fjern regel"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             <div className="flex gap-2">
               <button
                 onClick={() => setRules([...rules, emptyRule()])}
