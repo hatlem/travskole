@@ -6,6 +6,8 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { parseJsonArray } from '@/lib/crm/normalize';
 
+const PAGE_SIZE = 25;
+
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
@@ -15,21 +17,29 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const q = sp.get('q')?.trim() ?? '';
   const stage = sp.get('stage') ?? '';
+  const page = Math.max(1, Number(sp.get('page')) || 1);
 
-  const organizations = await prisma.organization.findMany({
-    where: {
-      ...(q && {
-        OR: [
-          { name: { contains: q, mode: 'insensitive' as const } },
-          { domain: { contains: q.toLowerCase() } },
-          { orgNumber: { contains: q } },
-        ],
-      }),
-      ...(stage && { stage }),
-    },
-    orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
-    include: { _count: { select: { contacts: true, deals: true } } },
-  });
+  const where = {
+    ...(q && {
+      OR: [
+        { name: { contains: q, mode: 'insensitive' as const } },
+        { domain: { contains: q.toLowerCase() } },
+        { orgNumber: { contains: q } },
+      ],
+    }),
+    ...(stage && { stage }),
+  };
+
+  const [organizations, total] = await Promise.all([
+    prisma.organization.findMany({
+      where,
+      orderBy: [{ lastActivityAt: 'desc' }, { id: 'desc' }],
+      include: { _count: { select: { contacts: true, deals: true } } },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    prisma.organization.count({ where }),
+  ]);
 
   return NextResponse.json({
     organizations: organizations.map((o) => ({
@@ -44,6 +54,9 @@ export async function GET(request: NextRequest) {
       dealCount: o._count.deals,
       lastActivityAt: o.lastActivityAt,
     })),
+    total,
+    page,
+    pageSize: PAGE_SIZE,
   });
 }
 

@@ -37,6 +37,7 @@ export default function BedrifterPage() {
   const [q, setQ] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [newOrg, setNewOrg] = useState({ name: '', domain: '', phone: '' });
+  const [creating, setCreating] = useState(false);
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -79,24 +80,37 @@ export default function BedrifterPage() {
   }, []);
 
   async function createOrg() {
-    const res = await fetch('/api/admin/crm/organizations', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: newOrg.name,
-        domain: newOrg.domain || null,
-        phone: newOrg.phone || null,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      toast(data.error || 'Kunne ikke opprette bedrift', 'error');
-      return;
+    if (creating) return;
+    setCreating(true);
+    try {
+      const res = await fetch('/api/admin/crm/organizations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newOrg.name,
+          domain: newOrg.domain || null,
+          phone: newOrg.phone || null,
+        }),
+      });
+      let data: { error?: string } = {};
+      try {
+        data = await res.json();
+      } catch {
+        // non-JSON response body; fall through to generic error handling below
+      }
+      if (!res.ok) {
+        toast(data.error || 'Kunne ikke opprette bedrift', 'error');
+        return;
+      }
+      toast('Bedrift opprettet', 'success');
+      setShowNew(false);
+      setNewOrg({ name: '', domain: '', phone: '' });
+      load();
+    } catch {
+      toast('Kunne ikke opprette bedrift', 'error');
+    } finally {
+      setCreating(false);
     }
-    toast('Bedrift opprettet', 'success');
-    setShowNew(false);
-    setNewOrg({ name: '', domain: '', phone: '' });
-    load();
   }
 
   return (
@@ -151,12 +165,16 @@ export default function BedrifterPage() {
           </label>
           <button
             onClick={createOrg}
-            disabled={!newOrg.name}
+            disabled={!newOrg.name || creating}
             className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
           >
-            Lagre
+            {creating ? 'Lagrer …' : 'Lagre'}
           </button>
-          <button onClick={() => setShowNew(false)} className="text-sm text-gray-600 px-2 py-2">
+          <button
+            onClick={() => setShowNew(false)}
+            disabled={creating}
+            className="text-sm text-gray-600 px-2 py-2 disabled:opacity-50"
+          >
             Avbryt
           </button>
         </div>
