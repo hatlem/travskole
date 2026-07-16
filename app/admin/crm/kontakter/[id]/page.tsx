@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
+import { CardSkeleton } from '@/components/admin/Skeleton';
 
 interface ContactDetail {
   id: number;
@@ -41,6 +42,7 @@ function fmtDate(d: string | null): string {
 export default function KontaktDetaljPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [contact, setContact] = useState<ContactDetail | null>(null);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -69,6 +71,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
+        setInitialLoading(false);
       }
     }
   }, [id, toast]);
@@ -181,7 +184,22 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
     }
   }
 
-  if (loading) return <div className="text-gray-500 p-8">Laster …</div>;
+  if (initialLoading) {
+    return (
+      <div>
+        <CrmTabs />
+        <div className="p-8">
+          <div className="space-y-6">
+            <CardSkeleton />
+            <div className="grid md:grid-cols-2 gap-6">
+              <CardSkeleton />
+              <CardSkeleton />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (loadError) {
     return (
       <div>
