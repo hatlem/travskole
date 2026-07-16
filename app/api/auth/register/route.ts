@@ -5,6 +5,8 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
 import { signupLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Navnet må være minst 2 tegn').max(100),
@@ -77,6 +79,23 @@ export async function POST(request: NextRequest) {
 
       return { user, parent };
     });
+
+    // Hendelsesbuss: bruker registrert + identity stitching (fire-safe)
+    (async () => {
+      const contactEmail = normalizeEmail(result.user.email);
+      const contact = contactEmail
+        ? await prisma.contact.findUnique({ where: { email: contactEmail }, select: { id: true } })
+        : null;
+      const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
+      if (contact) await stitchVisitorToContact(publicId, contact.id);
+      await emitEvent({
+        type: 'user.registered',
+        source: 'server',
+        contactId: contact?.id ?? null,
+        meta: { userId: result.user.id },
+        dedupeKey: `user.registered:${result.user.id}`,
+      });
+    })().catch(() => {});
 
     return NextResponse.json(
       {

@@ -6,6 +6,8 @@ import { verifyPassword } from '@/lib/auth';
 import { loginLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logFailedLogin } from '@/lib/logger';
 import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
+import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
 
 // Passordløs innlogging (magic link) er implementert som en egen credentials-
 // provider, IKKE via NextAuths EmailProvider + PrismaAdapter. Adapteret sammen med
@@ -181,6 +183,30 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string;
       }
       return session;
+    },
+  },
+
+  events: {
+    async signIn({ user }) {
+      // Hendelsesbuss: innlogging + identity stitching (fire-safe — auth må
+      // aldri kunne feile pga. bussen). Ingen NextRequest her, så cookies()
+      // fra next/headers brukes i stedet.
+      (async () => {
+        const { cookies } = await import('next/headers');
+        const jar = await cookies();
+        const publicId = jar.get(VISITOR_COOKIE)?.value;
+        const contactEmail = user.email ? normalizeEmail(user.email) : null;
+        const contact = contactEmail
+          ? await prisma.contact.findUnique({ where: { email: contactEmail }, select: { id: true } })
+          : null;
+        if (contact) await stitchVisitorToContact(publicId, contact.id);
+        await emitEvent({
+          type: 'user.logged_in',
+          source: 'server',
+          contactId: contact?.id ?? null,
+          meta: {},
+        });
+      })().catch(() => {});
     },
   },
 

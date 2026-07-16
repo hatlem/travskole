@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { emitEvent } from '@/lib/events/bus';
 
 const consentSchema = z.object({
   marketing: z.boolean(),
@@ -57,6 +58,14 @@ export async function PUT(
     });
 
     logActivity({ action: 'update', entity: 'consent', entityId: consent.id, details: JSON.stringify({ marketing: data.marketing }), userEmail: session.user.email }).catch(() => {});
+
+    emitEvent({
+      type: 'consent.updated',
+      source: 'server',
+      contactId,
+      meta: { marketing: data.marketing ?? null, lawfulBasis: data.lawfulBasis ?? null },
+    }).catch(() => {});
+
     return NextResponse.json({ consent });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === 'P2025' || error.code === 'P2003')) {
