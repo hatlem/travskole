@@ -46,7 +46,7 @@ export async function PATCH(
   try {
     const existing = await prisma.deal.findUnique({
       where: { id: dealId },
-      include: { stage: { select: { name: true } } },
+      select: { stageId: true, pipelineId: true, contactId: true, organizationId: true, stage: { select: { name: true } }, closedAt: true },
     });
     if (!existing) {
       return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
@@ -62,9 +62,9 @@ export async function PATCH(
       }
       newStageName = stage.name;
       statusPatch = stage.isWon
-        ? { status: 'won', closedAt: new Date() }
+        ? { status: 'won', ...(existing.closedAt === null && { closedAt: new Date() }) }
         : stage.isLost
-          ? { status: 'lost', closedAt: new Date() }
+          ? { status: 'lost', ...(existing.closedAt === null && { closedAt: new Date() }) }
           : { status: 'open', closedAt: null };
     }
 
@@ -109,7 +109,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return NextResponse.json({ error: 'Duplikat-problem oppstod' }, { status: 409 });
+      return NextResponse.json({ error: 'Duplikat: raden finnes allerede' }, { status: 409 });
     }
     throw error;
   }

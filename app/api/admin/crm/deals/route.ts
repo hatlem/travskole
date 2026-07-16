@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
     }
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return NextResponse.json({ error: 'Sammenhengen finnes allerede' }, { status: 409 });
+      return NextResponse.json({ error: 'Duplikat: raden finnes allerede' }, { status: 409 });
     }
     throw error;
   }
