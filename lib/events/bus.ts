@@ -6,8 +6,9 @@ import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { isEventType, timelineTitle, type EventType } from '@/lib/events/taxonomy';
 import { planStitch } from '@/lib/events/stitch';
+import { VISITOR_COOKIE } from '@/lib/events/constants';
 
-export const VISITOR_COOKIE = 'bjerke_vid';
+export { VISITOR_COOKIE };
 
 export interface EmitEventInput {
   type: string;

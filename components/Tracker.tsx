@@ -6,8 +6,8 @@
 import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { hasAnalyticsConsent } from '@/lib/events/consent';
+import { VISITOR_COOKIE } from '@/lib/events/constants';
 
-const VISITOR_COOKIE = 'bjerke_vid';
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 395; // ~13 måneder
 
 function readCookie(name: string): string | null {
@@ -61,6 +61,7 @@ export function trackClientEvent(type: 'signup.started' | 'cta.clicked', meta: R
 export function Tracker() {
   const pathname = usePathname();
   const enabledRef = useRef(false);
+  const lastPath = useRef<string | null>(null);
 
   // Samtykke-livssyklus
   useEffect(() => {
@@ -71,6 +72,7 @@ export function Tracker() {
       // Admin-sider spores aldri, heller ikke som første sidevisning ved samtykke/mount på /admin.
       if (!window.location.pathname.startsWith('/admin')) {
         send('page.viewed', { path: window.location.pathname });
+        lastPath.current = window.location.pathname;
       }
     };
     const disable = () => {
@@ -96,14 +98,11 @@ export function Tracker() {
   }, []);
 
   // Sidevisninger ved App Router-navigasjon
-  const lastPath = useRef<string | null>(null);
   useEffect(() => {
     if (!enabledRef.current || !pathname) return;
     if (pathname.startsWith('/admin')) return; // ikke spor admin
     if (lastPath.current === pathname) return;
-    const isFirst = lastPath.current === null;
     lastPath.current = pathname;
-    if (isFirst) return; // første visning sendes av enable()
     send('page.viewed', { path: pathname });
     // Ekte kurs-rute: app/arrangementer/[type]/[year]/[slug]/page.tsx (slug-basert, ikke id-basert).
     const courseMatch = pathname.match(/^\/arrangementer\/([^/]+)\/([^/]+)\/([^/]+)$/);
