@@ -330,25 +330,30 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // CRM-bro: fire-and-forget
-    syncRegistrationToCrm(registration.id).catch(() => {});
-
-    // Hendelsesbuss: registrering opprettet + identity stitching (fire-safe)
-    (async () => {
-      const email = normalizeEmail(data.parentEmail);
-      const contact = email
-        ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
-        : null;
-      const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
-      if (contact) await stitchVisitorToContact(publicId, contact.id);
-      await emitEvent({
-        type: 'registration.created',
-        source: 'server',
-        contactId: contact?.id ?? null,
-        meta: { registrationId: registration.id, courseId: registration.courseId, courseName: course.name },
-        dedupeKey: `registration.created:${registration.id}`,
-      });
-    })().catch(() => {});
+    // CRM-bro: fire-and-forget.
+    // Hendelsesbuss-oppslaget kjeder seg PÅ syncen (ikke parallelt): syncRegistrationToCrm
+    // oppretter/oppdaterer Contact-raden, så vi må vente til den er ferdig før vi
+    // slår opp kontakten her — ellers finner findUnique intet for en helt ny e-post,
+    // hendelsen lagres anonym, og stitchVisitorToContact får aldri kjørt. Fortsatt
+    // helt frakoblet fra responsen (begge grener fanges).
+    syncRegistrationToCrm(registration.id)
+      .catch(() => {})
+      .then(async () => {
+        const email = normalizeEmail(data.parentEmail);
+        const contact = email
+          ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+          : null;
+        const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
+        if (contact) await stitchVisitorToContact(publicId, contact.id);
+        await emitEvent({
+          type: 'registration.created',
+          source: 'server',
+          contactId: contact?.id ?? null,
+          meta: { registrationId: registration.id, courseId: registration.courseId, courseName: course.name },
+          dedupeKey: `registration.created:${registration.id}`,
+        });
+      })
+      .catch(() => {});
 
     // Auto-set course to "full" when maxParticipants reached
     if (course.maxParticipants && course.status === 'open') {

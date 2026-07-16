@@ -78,25 +78,30 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // CRM-bro: fire-and-forget — får aldri stoppe bookingen
-    syncBookingToCrm(booking.id).catch(() => {});
-
-    // Hendelsesbuss: forespørsel opprettet + identity stitching (fire-safe)
-    (async () => {
-      const email = normalizeEmail(booking.email);
-      const contact = email
-        ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
-        : null;
-      const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
-      if (contact) await stitchVisitorToContact(publicId, contact.id);
-      await emitEvent({
-        type: 'booking.created',
-        source: 'server',
-        contactId: contact?.id ?? null,
-        meta: { bookingRequestId: booking.id, eventType: course.type },
-        dedupeKey: `booking.created:${booking.id}`,
-      });
-    })().catch(() => {});
+    // CRM-bro: fire-and-forget — får aldri stoppe bookingen.
+    // Hendelsesbuss-oppslaget kjeder seg PÅ syncen (ikke parallelt): syncBookingToCrm
+    // oppretter/oppdaterer Contact-raden, så vi må vente til den er ferdig før vi
+    // slår opp kontakten her — ellers finner findUnique intet for en helt ny e-post,
+    // hendelsen lagres anonym, og stitchVisitorToContact får aldri kjørt. Fortsatt
+    // helt frakoblet fra responsen (begge grener fanges).
+    syncBookingToCrm(booking.id)
+      .catch(() => {})
+      .then(async () => {
+        const email = normalizeEmail(booking.email);
+        const contact = email
+          ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+          : null;
+        const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
+        if (contact) await stitchVisitorToContact(publicId, contact.id);
+        await emitEvent({
+          type: 'booking.created',
+          source: 'server',
+          contactId: contact?.id ?? null,
+          meta: { bookingRequestId: booking.id, eventType: course.type },
+          dedupeKey: `booking.created:${booking.id}`,
+        });
+      })
+      .catch(() => {});
 
     const emailData = {
       courseName: course.name,
