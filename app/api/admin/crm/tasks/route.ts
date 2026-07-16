@@ -74,11 +74,26 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (task.contactId || task.organizationId) {
+    let activityContactId = task.contactId;
+    let activityOrganizationId = task.organizationId;
+
+    // If no direct contact/org but deal exists, use deal's contact/org
+    if (!activityContactId && !activityOrganizationId && task.dealId) {
+      const deal = await prisma.deal.findUnique({
+        where: { id: task.dealId },
+        select: { contactId: true, organizationId: true },
+      });
+      if (deal) {
+        activityContactId = deal.contactId;
+        activityOrganizationId = deal.organizationId;
+      }
+    }
+
+    if (activityContactId || activityOrganizationId) {
       await prisma.contactActivity.create({
         data: {
-          contactId: task.contactId,
-          organizationId: task.organizationId,
+          contactId: activityContactId,
+          organizationId: activityOrganizationId,
           type: 'task',
           title: `Oppgave opprettet: ${task.title}`,
           actorEmail: session.user.email,

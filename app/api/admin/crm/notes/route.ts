@@ -49,16 +49,31 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    if (note.contactId || note.organizationId) {
+    let activityContactId = note.contactId;
+    let activityOrganizationId = note.organizationId;
+
+    // If no direct contact/org but deal exists, use deal's contact/org
+    if (!activityContactId && !activityOrganizationId && note.dealId) {
+      const deal = await prisma.deal.findUnique({
+        where: { id: note.dealId },
+        select: { contactId: true, organizationId: true },
+      });
+      if (deal) {
+        activityContactId = deal.contactId;
+        activityOrganizationId = deal.organizationId;
+      }
+    }
+
+    if (activityContactId || activityOrganizationId) {
       await prisma.contactActivity.create({
         data: {
-          contactId: note.contactId,
-          organizationId: note.organizationId,
+          contactId: activityContactId,
+          organizationId: activityOrganizationId,
           type: 'note',
           title: 'Notat',
           body: note.body.slice(0, 500),
           actorEmail: session.user.email,
-          meta: JSON.stringify({ noteId: note.id }),
+          meta: JSON.stringify({ noteId: note.id, dealId: note.dealId }),
         },
       });
     }
