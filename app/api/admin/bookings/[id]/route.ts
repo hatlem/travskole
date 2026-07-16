@@ -42,12 +42,13 @@ export async function PUT(
     const contact = email
       ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
       : null;
+    // Ingen dedupeKey her: statusendringer er tilsiktet append-only — samme
+    // status kan settes flere ganger og skal hver gang gi et eget hendelses-innslag.
     await emitEvent({
       type: 'booking.status_changed',
       source: 'server',
       contactId: contact?.id ?? null,
       meta: { bookingRequestId: booking.id, status: booking.status },
-      dedupeKey: `booking.status:${booking.id}:${booking.status}:${Date.now()}`,
     });
   })().catch(() => {});
 

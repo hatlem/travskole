@@ -55,13 +55,18 @@ export function timelineTitle(type: EventType, meta: Record<string, unknown>): s
     case 'user.registered':
       return 'Bruker registrert';
     case 'booking.created':
-      return 'Booking-forespørsel mottatt';
+      // CRM-broen (lib/crm/bridge.ts) skriver allerede "Forespørsel: X" til
+      // tidslinjen ved første sync — å skrive et innslag her ville dupliseres.
+      return null;
     case 'booking.status_changed':
       return typeof meta.status === 'string'
         ? `Booking-status endret: ${meta.status}`
         : 'Booking-status endret';
     case 'registration.created':
-      return courseName ? `Påmelding opprettet: ${courseName}` : 'Påmelding opprettet';
+      // CRM-broen skriver allerede "Påmelding: X" til tidslinjen ved første
+      // sync (kun ved deal-opprettelse, ikke ved statusoppdatering) — se
+      // lib/crm/bridge.ts. Denne typen skal derfor ikke gi et eget innslag.
+      return null;
     case 'registration.confirmed':
       return courseName ? `Påmelding bekreftet: ${courseName}` : 'Påmelding bekreftet';
     case 'registration.cancelled':

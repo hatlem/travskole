@@ -28,9 +28,19 @@ describe('taxonomy', () => {
     expect(timelineTitle('registration.confirmed', { courseName: 'Begynnerkurs' })).toBe(
       'Påmelding bekreftet: Begynnerkurs'
     );
-    expect(timelineTitle('booking.created', {})).toBe('Booking-forespørsel mottatt');
+    expect(timelineTitle('registration.cancelled', { courseName: 'Begynnerkurs' })).toBe(
+      'Påmelding avlyst: Begynnerkurs'
+    );
+    expect(timelineTitle('booking.status_changed', { status: 'confirmed' })).toBe(
+      'Booking-status endret: confirmed'
+    );
     expect(timelineTitle('payment.succeeded', { amount: 2500 })).toBe('Betaling mottatt (2500 kr)');
     expect(timelineTitle('user.logged_in', {})).toBeNull();
     expect(timelineTitle('page.viewed', { path: '/kurs' })).toBeNull();
+  });
+
+  it('timelineTitle: booking.created and registration.created are null — the CRM bridge owns those timeline moments on first sync', () => {
+    expect(timelineTitle('booking.created', {})).toBeNull();
+    expect(timelineTitle('registration.created', { courseName: 'Begynnerkurs' })).toBeNull();
   });
 });

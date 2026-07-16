@@ -15,16 +15,21 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
+/** `Secure` only applies over HTTPS — setting it on plain HTTP silently drops the cookie. */
+function secureAttr(): string {
+  return location.protocol === 'https:' ? '; Secure' : '';
+}
+
 function ensureVisitorId(): string {
   const existing = readCookie(VISITOR_COOKIE);
   if (existing) return existing;
   const id = crypto.randomUUID();
-  document.cookie = `${VISITOR_COOKIE}=${id}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax`;
+  document.cookie = `${VISITOR_COOKIE}=${id}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax${secureAttr()}`;
   return id;
 }
 
 function deleteVisitorCookie(): void {
-  document.cookie = `${VISITOR_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  document.cookie = `${VISITOR_COOKIE}=; path=/; max-age=0; SameSite=Lax${secureAttr()}`;
 }
 
 function consentGranted(): boolean {
