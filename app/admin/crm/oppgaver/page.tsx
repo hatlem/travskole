@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { EmptyState } from '@/components/admin/EmptyState';
+import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 
 interface TaskRow {
@@ -111,8 +112,21 @@ export default function OppgaverPage() {
     }
   }
 
+  const isOverdue = (dueAtStr: string): boolean => {
+    const dueDate = new Date(dueAtStr);
+    const today = new Date();
+    // Compare date-only: extract local date components
+    const dueDateLocal = new Date(
+      dueDate.getFullYear(),
+      dueDate.getMonth(),
+      dueDate.getDate(),
+    );
+    const todayLocal = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    return dueDateLocal < todayLocal;
+  };
+
   const overdue = (t: TaskRow) =>
-    t.status === 'open' && t.dueAt !== null && new Date(t.dueAt) < new Date();
+    t.status === 'open' && t.dueAt !== null && isOverdue(t.dueAt);
 
   return (
     <div>
@@ -151,7 +165,7 @@ export default function OppgaverPage() {
       </div>
 
       {loading ? (
-        <div className="text-gray-500 p-8">Laster …</div>
+        <TableSkeleton rows={8} />
       ) : loadError ? (
         <EmptyState
           title="Kunne ikke laste oppgaver"
@@ -171,7 +185,7 @@ export default function OppgaverPage() {
                 type="checkbox"
                 checked={t.status === 'done'}
                 onChange={() => toggle(t)}
-                disabled={updatingId !== null}
+                disabled={updatingId === t.id}
               />
               <span
                 className={t.status === 'done' ? 'line-through text-gray-400' : ''}
