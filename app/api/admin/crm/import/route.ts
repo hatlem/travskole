@@ -57,6 +57,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ plan });
   }
 
+  if (listId) {
+    const list = await prisma.contactList.findUnique({
+      where: { id: listId },
+    });
+    if (!list) {
+      return NextResponse.json({ error: 'Listen finnes ikke' }, { status: 404 });
+    }
+  }
+
   const touchedIds: number[] = [];
 
   async function orgIdFor(row: ImportRow): Promise<number | null> {
@@ -94,6 +103,9 @@ export async function POST(request: NextRequest) {
         },
       });
       touchedIds.push(contact.id);
+      await prisma.contactActivity.create({
+        data: { contactId: contact.id, type: 'import', title: 'Oppdatert via import', actorEmail: session.user.email },
+      });
     }
 
     if (listId && touchedIds.length > 0) {
