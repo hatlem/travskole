@@ -9,6 +9,7 @@ const SHORTCUTS: { keys: string; label: string; path: string }[] = [
   { keys: 'g r', label: 'Påmeldinger', path: '/admin/registrations' },
   { keys: 'g u', label: 'Brukere', path: '/admin/users' },
   { keys: 'g b', label: 'Forespørsler', path: '/admin/foresporsler' },
+  { keys: 'g k', label: 'CRM', path: '/admin/crm/kontakter' },
   { keys: 'g a', label: 'Aktivitetslogg', path: '/admin/activity' },
 ];
 
