@@ -56,3 +56,6 @@ testit-*.md
 sec-review.md
 sec-review-*.md
 
+
+# Sales material (kept local; remove this line to commit)
+docs/pitch/
