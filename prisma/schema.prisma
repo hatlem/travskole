@@ -295,7 +295,7 @@ model Organization {
   id             Int       @id @default(autoincrement())
   name           String
   orgNumber      String?   @map("org_number") // norsk organisasjonsnummer
-  domain         String?   // f.eks. "acme.no" — brukes til dedup
+  domain         String?   @unique // f.eks. "acme.no" — brukes til dedup
   phone          String?
   address        String?
   ownerId        Int?      @map("owner_id") // ansvarlig ansatt (User)
@@ -313,7 +313,6 @@ model Organization {
   notes      Note[]
   activities ContactActivity[]
 
-  @@index([domain])
   @@index([stage])
   @@map("organizations")
 }
@@ -393,7 +392,7 @@ model Segment {
 
 model Pipeline {
   id        Int      @id @default(autoincrement())
-  name      String
+  name      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 const DEFAULT_STAGES = [
@@ -13,18 +14,35 @@ const DEFAULT_STAGES = [
  * Idempotent: returnerer første pipeline, eller oppretter standard-pipelinen
  * "Arrangementsbooking" med faste stadier ved første kall.
  */
+const PIPELINE_INCLUDE = {
+  stages: { orderBy: { position: 'asc' as const }, select: { id: true, name: true } },
+};
+
 export async function ensureDefaultPipeline() {
   const existing = await prisma.pipeline.findFirst({
     orderBy: { id: 'asc' },
-    include: { stages: { orderBy: { position: 'asc' }, select: { id: true, name: true } } },
+    include: PIPELINE_INCLUDE,
   });
   if (existing) return existing;
 
-  return prisma.pipeline.create({
-    data: {
-      name: 'Arrangementsbooking',
-      stages: { create: [...DEFAULT_STAGES] },
-    },
-    include: { stages: { orderBy: { position: 'asc' }, select: { id: true, name: true } } },
-  });
+  try {
+    return await prisma.pipeline.create({
+      data: {
+        name: 'Arrangementsbooking',
+        stages: { create: [...DEFAULT_STAGES] },
+      },
+      include: PIPELINE_INCLUDE,
+    });
+  } catch (error) {
+    // Race: en samtidig sync opprettet standard-pipelinen mellom findFirst og
+    // create. name er @unique — fall tilbake til vinnerens rad.
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      const winner = await prisma.pipeline.findFirst({
+        orderBy: { id: 'asc' },
+        include: PIPELINE_INCLUDE,
+      });
+      if (winner) return winner;
+    }
+    throw error;
+  }
 }

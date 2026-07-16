@@ -47,7 +47,7 @@ model Organization {
   id            Int      @id @default(autoincrement())
   name          String
   orgNumber     String?  @map("org_number")   // Norwegian organisasjonsnummer
-  domain        String?                        // e.g. "acme.no" — used for dedup
+  domain        String?  @unique               // e.g. "acme.no" — used for dedup
   phone         String?
   address       String?
   ownerId       Int?     @map("owner_id")      // staff User responsible
@@ -65,7 +65,6 @@ model Organization {
   notes      Note[]
   activities ContactActivity[]
 
-  @@index([domain])
   @@index([stage])
   @@map("organizations")
 }
@@ -174,7 +173,7 @@ Multiple pipelines allowed (e.g. "Arrangementsbooking", "Kursrekruttering").
 ```prisma
 model Pipeline {
   id        Int      @id @default(autoincrement())
-  name      String
+  name      String   @unique
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

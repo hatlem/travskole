@@ -3,6 +3,7 @@
 // Idempotent: Deal.bookingRequestId/registrationId er @unique, kontakter
 // upsertes på normalisert e-post, organisasjoner på domene.
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { bookingToCrm, registrationToCrm, type CrmSyncInput } from '@/lib/crm/bridge-mapping';
@@ -18,9 +19,23 @@ async function applySync(input: CrmSyncInput): Promise<void> {
     const existingOrg = await prisma.organization.findFirst({
       where: { domain: input.organization.domain },
     });
-    const org = existingOrg ?? await prisma.organization.create({
-      data: { name: input.organization.name, domain: input.organization.domain, stage: 'lead' },
-    });
+    let org = existingOrg;
+    if (!org) {
+      try {
+        org = await prisma.organization.create({
+          data: { name: input.organization.name, domain: input.organization.domain, stage: 'lead' },
+        });
+      } catch (error) {
+        // Race: en samtidig sync opprettet samme domene mellom findFirst og create.
+        // domain er @unique — fall tilbake til vinnerens rad.
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          org = await prisma.organization.findFirst({
+            where: { domain: input.organization.domain },
+          });
+        }
+        if (!org) throw error;
+      }
+    }
     organizationId = org.id;
   }
 
@@ -63,16 +78,27 @@ async function applySync(input: CrmSyncInput): Promise<void> {
     eventType: input.deal.eventType,
     eventDate: input.deal.eventDate,
     status: input.deal.status,
-    closedAt: input.deal.status === 'open' ? null : new Date(),
     source: input.deal.source,
     bookingRequestId: input.deal.bookingRequestId,
     registrationId: input.deal.registrationId,
   };
   const existingDeal = await prisma.deal.findUnique({ where: dealWhere });
   if (existingDeal) {
-    await prisma.deal.update({ where: { id: existingDeal.id }, data: dealData });
+    // closedAt: bevar første lukketidspunkt. Sett kun ved overgang til
+    // won/lost (fra null), nullstill ved reåpning, ellers urørt.
+    const closedAt = input.deal.status === 'open'
+      ? null
+      : existingDeal.closedAt === null
+        ? new Date()
+        : undefined;
+    await prisma.deal.update({
+      where: { id: existingDeal.id },
+      data: { ...dealData, ...(closedAt !== undefined ? { closedAt } : {}) },
+    });
   } else {
-    await prisma.deal.create({ data: dealData });
+    await prisma.deal.create({
+      data: { ...dealData, closedAt: input.deal.status === 'open' ? null : new Date() },
+    });
     // Tidslinje kun ved første sync — status-oppdateringer gir egne innslag senere
     await prisma.contactActivity.create({
       data: {
