@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSession } from 'next-auth/react';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
+import { trackClientEvent } from '@/components/Tracker';
 
 const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requireTerms: boolean) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
@@ -119,6 +120,14 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
   const requireTerms = settings.registration_terms_required !== 'false';
 
   const { type, year, slug } = courseRef;
+
+  // signup.started: fyres kun på første interaksjon med skjemaet, én gang per mount.
+  const signupStartedRef = useRef(false);
+  const handleFirstInteraction = () => {
+    if (signupStartedRef.current) return;
+    signupStartedRef.current = true;
+    trackClientEvent('signup.started', { courseSlug: slug });
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -261,6 +270,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
                       {...register('parentFirstName')}
                       type="text"
                       id="parentFirstName"
+                      onFocus={handleFirstInteraction}
                       aria-invalid={!!errors.parentFirstName}
                       aria-describedby={errors.parentFirstName ? 'parentFirstName-error' : undefined}
                       className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"

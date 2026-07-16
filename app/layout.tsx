@@ -6,6 +6,7 @@ import SiteChrome from "@/components/SiteChrome";
 import Providers from "@/components/Providers";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
+import { Tracker } from "@/components/Tracker";
 import { getSettings } from "@/lib/settings";
 
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,14 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer',${JSON.stringify(gtmId)});`}
           </Script>
         )}
+        {/* getcookies samtykke-widget — kun aktiv når domain-id er satt (unngår i dev/preview uten oppsett) */}
+        {process.env.NEXT_PUBLIC_GETCOOKIES_DOMAIN_ID && (
+          <script
+            src="https://cdn.getcookies.co/api/v1/widget/loader.js"
+            data-domain-id={process.env.NEXT_PUBLIC_GETCOOKIES_DOMAIN_ID}
+            async
+          />
+        )}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
@@ -89,6 +98,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
             <FeedbackWidget />
           </SettingsProvider>
         </Providers>
+        <Tracker />
       </body>
     </html>
   );
