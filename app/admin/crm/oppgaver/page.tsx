@@ -24,7 +24,7 @@ export default function OppgaverPage() {
   const [title, setTitle] = useState('');
   const [dueAt, setDueAt] = useState('');
   const [creating, setCreating] = useState(false);
-  const [updatingId, setUpdatingId] = useState<number | null>(null);
+  const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -92,9 +92,13 @@ export default function OppgaverPage() {
   }
 
   async function toggle(task: TaskRow) {
-    if (updatingId !== null) return;
+    if (updatingIds.has(task.id)) return;
 
-    setUpdatingId(task.id);
+    setUpdatingIds((prev) => {
+      const next = new Set(prev);
+      next.add(task.id);
+      return next;
+    });
     try {
       const res = await fetch(`/api/admin/crm/tasks/${task.id}`, {
         method: 'PATCH',
@@ -108,7 +112,11 @@ export default function OppgaverPage() {
       }
       await load();
     } finally {
-      setUpdatingId(null);
+      setUpdatingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
     }
   }
 
@@ -185,7 +193,7 @@ export default function OppgaverPage() {
                 type="checkbox"
                 checked={t.status === 'done'}
                 onChange={() => toggle(t)}
-                disabled={updatingId === t.id}
+                disabled={updatingIds.has(t.id)}
               />
               <span
                 className={t.status === 'done' ? 'line-through text-gray-400' : ''}
