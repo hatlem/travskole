@@ -6,3 +6,4 @@ export { KeyboardShortcuts } from './KeyboardShortcuts';
 export { Skeleton, TableSkeleton, CardSkeleton, StatCardsSkeleton } from './Skeleton';
 export { ConfirmModal } from './ConfirmModal';
 export { EmptyState } from './EmptyState';
+export { CrmTabs } from './CrmTabs';
