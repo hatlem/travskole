@@ -39,6 +39,7 @@ export async function POST(
       skipDuplicates: true,
     });
 
+    logActivity({ action: 'add_members', entity: 'contact_list', entityId: listId, details: JSON.stringify({ added: result.count }), userEmail: session.user.email }).catch(() => {});
     return NextResponse.json({ added: result.count });
   } catch (error) {
     if (

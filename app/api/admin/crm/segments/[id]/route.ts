@@ -4,7 +4,14 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-import { parseSegmentRules } from '@/lib/crm/segments';
+
+const rulesSchema = z.object({
+  all: z.array(z.object({
+    field: z.string().min(1),
+    op: z.enum(['eq', 'neq', 'contains', 'lt', 'gt', 'is_null', 'not_null']),
+    value: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  })),
+});
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
@@ -38,12 +45,29 @@ export async function PATCH(
   }
   const data = parsed.data;
 
+  // Strict validation for rules if present
+  let validatedRules: string | undefined;
+  if (data.rules !== undefined) {
+    let parsedRules;
+    try {
+      parsedRules = JSON.parse(data.rules);
+    } catch {
+      return NextResponse.json({ error: 'Ugyldige segmentregler' }, { status: 400 });
+    }
+
+    const rulesValidation = rulesSchema.safeParse(parsedRules);
+    if (!rulesValidation.success) {
+      return NextResponse.json({ error: 'Ugyldige segmentregler' }, { status: 400 });
+    }
+    validatedRules = JSON.stringify(rulesValidation.data);
+  }
+
   try {
     const segment = await prisma.segment.update({
       where: { id: segmentId },
       data: {
         ...(data.name !== undefined && { name: data.name }),
-        ...(data.rules !== undefined && { rules: JSON.stringify(parseSegmentRules(data.rules)) }),
+        ...(validatedRules !== undefined && { rules: validatedRules }),
       },
     });
 
