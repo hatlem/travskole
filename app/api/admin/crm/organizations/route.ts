@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
@@ -83,23 +84,33 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const organization = await prisma.organization.create({
-    data: {
-      name: data.name,
-      domain,
-      orgNumber: data.orgNumber ?? null,
-      phone: data.phone ?? null,
-      address: data.address ?? null,
-      stage: data.stage ?? 'lead',
-      tags: JSON.stringify(data.tags ?? []),
-    },
-  });
+  try {
+    const organization = await prisma.organization.create({
+      data: {
+        name: data.name,
+        domain,
+        orgNumber: data.orgNumber ?? null,
+        phone: data.phone ?? null,
+        address: data.address ?? null,
+        stage: data.stage ?? 'lead',
+        tags: JSON.stringify(data.tags ?? []),
+      },
+    });
 
-  logActivity({
-    action: 'create',
-    entity: 'organization',
-    entityId: organization.id,
-    userEmail: session.user.email,
-  }).catch(() => {});
-  return NextResponse.json({ organization }, { status: 201 });
+    logActivity({
+      action: 'create',
+      entity: 'organization',
+      entityId: organization.id,
+      userEmail: session.user.email,
+    }).catch(() => {});
+    return NextResponse.json({ organization }, { status: 201 });
+  } catch (error) {
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return NextResponse.json({ error: 'En bedrift med dette domenet finnes allerede' }, { status: 409 });
+    }
+    throw error;
+  }
 }

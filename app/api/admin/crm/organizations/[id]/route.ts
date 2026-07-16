@@ -88,6 +88,17 @@ export async function PATCH(
   }
   const data = parsed.data;
 
+  // Pre-check domain uniqueness if being set to a non-null value
+  if (data.domain !== undefined && data.domain !== null) {
+    const normalizedDomain = data.domain.trim().toLowerCase();
+    const existing = await prisma.organization.findFirst({
+      where: { domain: normalizedDomain },
+    });
+    if (existing && existing.id !== orgId) {
+      return NextResponse.json({ error: 'En bedrift med dette domenet finnes allerede' }, { status: 409 });
+    }
+  }
+
   try {
     const organization = await prisma.organization.update({
       where: { id: orgId },
@@ -116,6 +127,12 @@ export async function PATCH(
       (error.code === 'P2025' || error.code === 'P2003')
     ) {
       return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
+    }
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === 'P2002'
+    ) {
+      return NextResponse.json({ error: 'En bedrift med dette domenet finnes allerede' }, { status: 409 });
     }
     throw error;
   }
