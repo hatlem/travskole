@@ -26,6 +26,7 @@ export default function ImportPage() {
   const [previewBusy, setPreviewBusy] = useState(false);
   const [commitBusy, setCommitBusy] = useState(false);
   const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
+  const [creatingList, setCreatingList] = useState(false);
   const { toast } = useToast();
 
   const loadLists = useCallback(async () => {
@@ -79,6 +80,33 @@ export default function ImportPage() {
       toast('Kunne ikke lese filen', 'error');
     };
     reader.readAsText(file);
+  }
+
+  async function createList() {
+    if (creatingList) return;
+    const name = window.prompt('Navn på ny liste:');
+    if (!name?.trim()) return;
+
+    setCreatingList(true);
+    try {
+      const res = await fetch('/api/admin/crm/lists', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error || 'Kunne ikke opprette liste', 'error');
+        return;
+      }
+      setLists((prev) => [...prev, { id: data.list.id, name: data.list.name }]);
+      setListId(String(data.list.id));
+      toast('Liste opprettet', 'success');
+    } catch {
+      toast('Kunne ikke opprette liste', 'error');
+    } finally {
+      setCreatingList(false);
+    }
   }
 
   async function preview() {
@@ -164,6 +192,13 @@ export default function ImportPage() {
                   {lists.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
                 </select>
               </label>
+              <button
+                onClick={createList}
+                disabled={creatingList}
+                className="text-sm text-blue-700 hover:underline pb-2 disabled:opacity-50"
+              >
+                + Ny liste
+              </button>
               <button onClick={preview} disabled={previewBusy || (mapping.name === null && mapping.email === null)}
                 className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
                 {previewBusy ? 'Leser …' : 'Forhåndsvis'}

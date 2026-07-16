@@ -8,6 +8,7 @@ const TABS = [
   { href: '/admin/crm/bedrifter', label: 'Bedrifter' },
   { href: '/admin/crm/pipeline', label: 'Pipeline' },
   { href: '/admin/crm/oppgaver', label: 'Oppgaver' },
+  { href: '/admin/crm/segmenter', label: 'Segmenter' },
   { href: '/admin/crm/import', label: 'Import' },
 ];
 
