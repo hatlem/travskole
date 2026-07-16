@@ -10,6 +10,7 @@ import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
 import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
+import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 
 interface RegistrationData {
   courseType: string;
@@ -326,6 +327,9 @@ export async function POST(request: NextRequest) {
         status: isWaitlistRegistration ? 'waitlist' : 'pending',
       },
     });
+
+    // CRM-bro: fire-and-forget
+    syncRegistrationToCrm(registration.id).catch(() => {});
 
     // Auto-set course to "full" when maxParticipants reached
     if (course.maxParticipants && course.status === 'open') {

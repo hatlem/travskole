@@ -6,6 +6,7 @@ import { getServerSession } from '@/lib/auth';
 import { bookingConsentError } from '@/lib/booking';
 import { sendBookingConfirmation, sendBookingAdminNotification } from '@/lib/mail';
 import logger from '@/lib/logger';
+import { syncBookingToCrm } from '@/lib/crm/bridge';
 
 const bookingSchema = z.object({
   courseId: z.coerce.number().int().positive(),
@@ -74,6 +75,9 @@ export async function POST(request: NextRequest) {
         consentActivities: data.consentActivities,
       },
     });
+
+    // CRM-bro: fire-and-forget — får aldri stoppe bookingen
+    syncBookingToCrm(booking.id).catch(() => {});
 
     const emailData = {
       courseName: course.name,

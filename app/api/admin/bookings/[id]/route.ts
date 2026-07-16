@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { syncBookingToCrm } from '@/lib/crm/bridge';
 
 export async function PUT(
   request: NextRequest,
@@ -31,6 +32,7 @@ export async function PUT(
   });
 
   logActivity({ action: 'status_change', entity: 'booking', entityId: Number(id), details: JSON.stringify({ status: body.status }), userEmail: session.user.email }).catch(() => {});
+  syncBookingToCrm(Number(id)).catch(() => {});
 
   return NextResponse.json({ booking });
 }
