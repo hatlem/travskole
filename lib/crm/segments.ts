@@ -76,6 +76,8 @@ function checkValue(actual: unknown, rule: SegmentRule): boolean {
       if (a === null || b === null || typeof a !== typeof b) return false;
       return rule.op === 'lt' ? a < b : a > b;
     }
+    default:
+      return false;
   }
 }
 
@@ -83,12 +85,6 @@ function checkRule(contact: SegmentContact, rule: SegmentRule): boolean {
   if (rule.field.startsWith('deal.')) {
     const dealField = rule.field.slice('deal.'.length);
     if (!['eventType', 'eventDate', 'status'].includes(dealField)) return false;
-    // is_null skal bety "har ingen deal som har verdi" → ingen deals = match
-    if (rule.op === 'is_null') {
-      return contact.deals.every(
-        (d) => checkValue(d[dealField as keyof typeof d], rule),
-      );
-    }
     return contact.deals.some((d) => checkValue(d[dealField as keyof typeof d], rule));
   }
 

@@ -66,4 +66,25 @@ describe('contactMatchesSegment', () => {
   it('unknown field never matches', () => {
     expect(contactMatchesSegment(contact(), { all: [{ field: 'finnesIkke', op: 'eq', value: 1 }] })).toBe(false);
   });
+  it('deal.* is_null with ANY semantics — matches if any deal has null field', () => {
+    expect(contactMatchesSegment(
+      contact({ deals: [
+        { eventType: null, eventDate: new Date('2026-01-01'), status: 'open' },
+        { eventType: 'julebord', eventDate: new Date('2026-01-02'), status: 'won' },
+      ] }),
+      { all: [{ field: 'deal.eventType', op: 'is_null' }] },
+    )).toBe(true);
+  });
+  it('deal.* is_null does not match contact with zero deals', () => {
+    expect(contactMatchesSegment(
+      contact({ deals: [] }),
+      { all: [{ field: 'deal.eventType', op: 'is_null' }] },
+    )).toBe(false);
+  });
+  it('unknown operator returns false', () => {
+    expect(contactMatchesSegment(
+      contact(),
+      { all: [{ field: 'stage', op: 'unknown_op' as never, value: 'customer' }] },
+    )).toBe(false);
+  });
 });
