@@ -346,6 +346,8 @@ model Contact {
   tasks        Task[]
   notes        Note[]
   consent      Consent?
+  visitors     Visitor[]
+  events       AppEvent[]
 
   @@index([organizationId])
   @@index([stage])
@@ -540,4 +542,41 @@ model Suppression {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("suppressions")
+}
+
+// ── Event bus (delprosjekt 2a) ─────────────────────────────────────────────
+
+model Visitor {
+  id          Int        @id @default(autoincrement())
+  publicId    String     @unique @map("public_id") // uuid v4 — verdien i bjerke_vid-cookien
+  contactId   Int?       @map("contact_id") // settes ved identity stitching
+  contact     Contact?   @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  firstSeenAt DateTime   @default(now()) @map("first_seen_at")
+  lastSeenAt  DateTime   @default(now()) @map("last_seen_at")
+  events      AppEvent[]
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@index([contactId])
+  @@map("visitors")
+}
+
+model AppEvent {
+  id         Int      @id @default(autoincrement())
+  type       String // fast taksonomi — valideres i lib/events/taxonomy.ts
+  source     String // 'server' | 'client' | 'webhook'
+  contactId  Int?     @map("contact_id")
+  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  visitorId  Int?     @map("visitor_id")
+  visitor    Visitor? @relation(fields: [visitorId], references: [id], onDelete: SetNull)
+  meta       String   @default("{}") // JSON-string, fritt per type
+  dedupeKey  String?  @unique @map("dedupe_key") // idempotens — P2002 svelges i emitEvent
+  occurredAt DateTime @default(now()) @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([type])
+  @@index([contactId, occurredAt])
+  @@index([visitorId, occurredAt])
+  @@index([occurredAt])
+  @@map("app_events")
 }
