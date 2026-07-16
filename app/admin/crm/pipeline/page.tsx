@@ -68,7 +68,10 @@ export default function PipelinePage() {
     }
   }, [toast]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const t = setTimeout(load, 0);
+    return () => clearTimeout(t);
+  }, [load]);
 
   useEffect(() => {
     return () => abortRef.current?.abort();
