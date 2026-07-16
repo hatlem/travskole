@@ -11,6 +11,8 @@ import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTe
 import { getSetting, getSettings } from '@/lib/settings';
 import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
+import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
 
 interface RegistrationData {
   courseType: string;
@@ -330,6 +332,23 @@ export async function POST(request: NextRequest) {
 
     // CRM-bro: fire-and-forget
     syncRegistrationToCrm(registration.id).catch(() => {});
+
+    // Hendelsesbuss: registrering opprettet + identity stitching (fire-safe)
+    (async () => {
+      const email = normalizeEmail(data.parentEmail);
+      const contact = email
+        ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+        : null;
+      const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
+      if (contact) await stitchVisitorToContact(publicId, contact.id);
+      await emitEvent({
+        type: 'registration.created',
+        source: 'server',
+        contactId: contact?.id ?? null,
+        meta: { registrationId: registration.id, courseId: registration.courseId, courseName: course.name },
+        dedupeKey: `registration.created:${registration.id}`,
+      });
+    })().catch(() => {});
 
     // Auto-set course to "full" when maxParticipants reached
     if (course.maxParticipants && course.status === 'open') {

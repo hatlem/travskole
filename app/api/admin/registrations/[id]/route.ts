@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import logger from '@/lib/logger';
+import { emitEvent } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
 
 export async function PUT(
   request: NextRequest,
@@ -32,6 +34,28 @@ export async function PUT(
     });
 
     logActivity({ action: 'status_change', entity: 'registration', entityId: Number(id), details: JSON.stringify({ from: oldStatus, to: status }), userEmail: session.user.email }).catch(() => {});
+
+    // Hendelsesbuss: registrering bekreftet/kansellert (fire-safe)
+    if (status === 'confirmed' || status === 'cancelled') {
+      (async () => {
+        // Registration har ingen egen e-post — den ligger på parent.user, som i CRM-broen.
+        const regWithParent = await prisma.registration.findUnique({
+          where: { id: registration.id },
+          select: { parent: { select: { user: { select: { email: true } } } } },
+        });
+        const email = normalizeEmail(regWithParent?.parent.user.email);
+        const contact = email
+          ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+          : null;
+        await emitEvent({
+          type: status === 'confirmed' ? 'registration.confirmed' : 'registration.cancelled',
+          source: 'server',
+          contactId: contact?.id ?? null,
+          meta: { registrationId: registration.id, courseId: registration.courseId },
+          dedupeKey: `registration.${status}:${registration.id}:${Date.now()}`,
+        });
+      })().catch(() => {});
+    }
 
     // If a registration was cancelled, check for waitlist entries
     if (status === 'cancelled') {

@@ -7,6 +7,8 @@ import { bookingConsentError } from '@/lib/booking';
 import { sendBookingConfirmation, sendBookingAdminNotification } from '@/lib/mail';
 import logger from '@/lib/logger';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
+import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
 
 const bookingSchema = z.object({
   courseId: z.coerce.number().int().positive(),
@@ -78,6 +80,23 @@ export async function POST(request: NextRequest) {
 
     // CRM-bro: fire-and-forget — får aldri stoppe bookingen
     syncBookingToCrm(booking.id).catch(() => {});
+
+    // Hendelsesbuss: forespørsel opprettet + identity stitching (fire-safe)
+    (async () => {
+      const email = normalizeEmail(booking.email);
+      const contact = email
+        ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+        : null;
+      const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
+      if (contact) await stitchVisitorToContact(publicId, contact.id);
+      await emitEvent({
+        type: 'booking.created',
+        source: 'server',
+        contactId: contact?.id ?? null,
+        meta: { bookingRequestId: booking.id, eventType: course.type },
+        dedupeKey: `booking.created:${booking.id}`,
+      });
+    })().catch(() => {});
 
     const emailData = {
       courseName: course.name,

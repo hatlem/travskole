@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
+import { emitEvent } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
 
 export async function PUT(
   request: NextRequest,
@@ -33,6 +35,21 @@ export async function PUT(
 
   logActivity({ action: 'status_change', entity: 'booking', entityId: Number(id), details: JSON.stringify({ status: body.status }), userEmail: session.user.email }).catch(() => {});
   syncBookingToCrm(Number(id)).catch(() => {});
+
+  // Hendelsesbuss: bookingstatus endret (fire-safe)
+  (async () => {
+    const email = normalizeEmail(booking.email);
+    const contact = email
+      ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+      : null;
+    await emitEvent({
+      type: 'booking.status_changed',
+      source: 'server',
+      contactId: contact?.id ?? null,
+      meta: { bookingRequestId: booking.id, status: booking.status },
+      dedupeKey: `booking.status:${booking.id}:${booking.status}:${Date.now()}`,
+    });
+  })().catch(() => {});
 
   return NextResponse.json({ booking });
 }
