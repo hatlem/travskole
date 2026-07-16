@@ -24,6 +24,15 @@ export const signupLimiter = new RateLimiterMemory({
   duration: 60 * 60,
 });
 
+// /api/track IP backstop: 300 requests per 5 min per IP. The per-visitor
+// limiter in lib/events/rate-limit.ts is keyed by the (client-supplied)
+// bjerke_vid cookie, which a hostile client can freely rotate — this IP-keyed
+// limiter is the backstop that survives cookie rotation.
+export const trackLimiter = new RateLimiterMemory({
+  points: 300,
+  duration: 5 * 60,
+});
+
 /** Best-effort client IP from proxy headers (Azure/Railway set x-forwarded-for). */
 export function getClientIp(headers: Headers): string {
   return (

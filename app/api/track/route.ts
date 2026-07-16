@@ -5,11 +5,14 @@ import { getServerSession } from '@/lib/auth';
 import { emitEvent, VISITOR_COOKIE } from '@/lib/events/bus';
 import { isClientEventType } from '@/lib/events/taxonomy';
 import { createRateLimiter } from '@/lib/events/rate-limit';
+import { checkRateLimit, getClientIp, trackLimiter } from '@/lib/rate-limiter';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import logger from '@/lib/logger';
 
 // 120 hendelser per visitor per 5 min — romslig for ekte bruk, stopper løpsk klient.
-const limiter = createRateLimiter({ limit: 120, windowMs: 5 * 60_000 });
+// maxKeys begrenser hvor mange distinkte besøkende vi holder i minnet samtidig
+// (eldste nøkkel kastes ved overskridelse) — se lib/events/rate-limit.ts.
+const limiter = createRateLimiter({ limit: 120, windowMs: 5 * 60_000, maxKeys: 10_000 });
 
 const trackSchema = z.object({
   type: z.string().min(1).max(60),
@@ -44,6 +47,13 @@ export async function POST(request: NextRequest) {
   if (!cookieId || cookieId !== publicId) return new NextResponse(null, { status: 204 });
 
   if (!isClientEventType(type)) return new NextResponse(null, { status: 204 });
+
+  // IP-backstop FØR per-visitor-grensen: bjerke_vid er klient-styrt og kan
+  // roteres fritt, så den alene stopper ikke en klient som spammer med nye
+  // cookies. IP-en er langt vanskeligere å rotere i stor skala.
+  const ip = getClientIp(request.headers);
+  const ipRateLimit = await checkRateLimit(trackLimiter, ip);
+  if (!ipRateLimit.allowed) return new NextResponse(null, { status: 429 });
 
   if (!limiter.allow(publicId)) return new NextResponse(null, { status: 429 });
 
