@@ -1,11 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
+import { Pagination } from '@/components/admin/Pagination';
 
 interface ContactRow {
   id: number;
@@ -33,32 +34,54 @@ export default function KontakterPage() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
   const [q, setQ] = useState('');
   const [stage, setStage] = useState('');
   const [segmentId, setSegmentId] = useState('');
   const [showNew, setShowNew] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', email: '', phone: '' });
   const { toast } = useToast();
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setLoading(true);
-    const params = new URLSearchParams();
-    if (q) params.set('q', q);
-    if (stage) params.set('stage', stage);
-    if (segmentId) params.set('segmentId', segmentId);
-    params.set('page', String(page));
-    const res = await fetch(`/api/admin/crm/contacts?${params}`);
-    const data = await res.json();
-    setContacts(data.contacts || []);
-    setTotal(data.total || 0);
-    setPageSize(data.pageSize || 50);
-    setLoading(false);
-  }, [q, stage, segmentId, page]);
+    try {
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
+      if (stage) params.set('stage', stage);
+      if (segmentId) params.set('segmentId', segmentId);
+      params.set('page', String(page));
+      const res = await fetch(`/api/admin/crm/contacts?${params}`, { signal: controller.signal });
+      if (!res.ok) throw new Error('Kunne ikke laste kontakter');
+      const data = await res.json();
+      setContacts(data.contacts || []);
+      setTotal(data.total || 0);
+      setPageSize(data.pageSize || 50);
+      setLoadError(false);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      setLoadError(true);
+      setContacts([]);
+      toast(err instanceof Error ? err.message : 'Kunne ikke laste kontakter', 'error');
+    } finally {
+      if (abortRef.current === controller) {
+        setLoading(false);
+      }
+    }
+  }, [q, stage, segmentId, page, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 300 : 0);
     return () => clearTimeout(t);
   }, [load, q]);
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
 
   useEffect(() => {
     fetch('/api/admin/crm/segments')
@@ -154,6 +177,12 @@ export default function KontakterPage() {
 
       {loading ? (
         <TableSkeleton rows={8} />
+      ) : loadError ? (
+        <EmptyState
+          title="Kunne ikke laste kontakter"
+          description="Noe gikk galt under henting av kontakter. Prøv igjen."
+          action={{ label: 'Prøv igjen', onClick: () => load() }}
+        />
       ) : contacts.length === 0 ? (
         <EmptyState title="Ingen kontakter" description="Opprett en kontakt eller importer fra CSV." />
       ) : (
@@ -204,14 +233,8 @@ export default function KontakterPage() {
         </div>
       )}
 
-      {total > pageSize && (
-        <div className="flex items-center gap-2 mt-4 text-sm">
-          <button disabled={page === 1} onClick={() => setPage(page - 1)}
-            className="border rounded px-3 py-1 disabled:opacity-40">Forrige</button>
-          <span>Side {page} av {Math.ceil(total / pageSize)}</span>
-          <button disabled={page >= Math.ceil(total / pageSize)} onClick={() => setPage(page + 1)}
-            className="border rounded px-3 py-1 disabled:opacity-40">Neste</button>
-        </div>
+      {!loading && !loadError && contacts.length > 0 && (
+        <Pagination total={total} page={page} perPage={pageSize} onChange={setPage} />
       )}
     </div>
   );
