@@ -226,6 +226,36 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ── GDPR anonymous visitor purge ────────────────────────────────────
+    // Delete anonymous visitors (no contactId) and their events after 180 days,
+    // plus fully orphaned anonymous events. Stitched history (contactId set on events)
+    // is never purged. Stale visitor rows with stitched events will be deleted
+    // (events survive with visitorId set NULL by FK constraint).
+    const ANON_RETENTION_DAYS = 180;
+    const cutoff = new Date(Date.now() - ANON_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+    try {
+      const staleVisitors = await prisma.visitor.findMany({
+        where: { contactId: null, lastSeenAt: { lt: cutoff } },
+        select: { id: true },
+      });
+      if (staleVisitors.length > 0) {
+        const ids = staleVisitors.map((v) => v.id);
+        const deletedEvents = await prisma.appEvent.deleteMany({
+          where: { visitorId: { in: ids }, contactId: null },
+        });
+        const deletedVisitors = await prisma.visitor.deleteMany({ where: { id: { in: ids } } });
+        logger.info(
+          `Retensjon: slettet ${deletedVisitors.count} anonyme besøkende og ${deletedEvents.count} hendelser`
+        );
+      }
+      // Fully orphaned anonymous events (neither contactId nor visitorId)
+      await prisma.appEvent.deleteMany({
+        where: { contactId: null, visitorId: null, occurredAt: { lt: cutoff } },
+      });
+    } catch (error) {
+      logger.error('Retensjons-purge feilet', { error });
+    }
+
     // Fail-loud: if any individual send threw, surface a 500 so Azure /
     // monitoring sees the failure instead of a misleading "OK". We still
     // processed every trigger above (no early abort) so partial progress is
