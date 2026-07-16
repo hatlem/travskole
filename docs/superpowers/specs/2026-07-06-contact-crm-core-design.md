@@ -58,9 +58,12 @@ model Organization {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  owner    User?    @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  contacts Contact[]
-  deals    Deal[]
+  owner      User?             @relation("OrgOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  contacts   Contact[]
+  deals      Deal[]
+  tasks      Task[]
+  notes      Note[]
+  activities ContactActivity[]
 
   @@index([domain])
   @@index([stage])
@@ -220,6 +223,8 @@ model Deal {
   contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   owner        User?         @relation("DealOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  tasks        Task[]
+  notes        Note[]
 
   @@index([pipelineId, stageId])
   @@index([contactId])
@@ -270,11 +275,15 @@ model Task {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  contact  Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  assignee User?    @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  deal         Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
+  assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
 
   @@index([assigneeId, status])
   @@index([contactId])
+  @@index([organizationId])
+  @@index([dealId])
   @@map("tasks")
 }
 
@@ -287,9 +296,13 @@ model Note {
   authorEmail    String   @map("author_email")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  contact Contact? @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  contact      Contact?      @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  deal         Deal?         @relation(fields: [dealId], references: [id], onDelete: SetNull)
 
   @@index([contactId])
+  @@index([organizationId])
+  @@index([dealId])
   @@map("notes")
 }
 ```
