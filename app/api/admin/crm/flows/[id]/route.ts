@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 
 export async function GET(
   request: NextRequest,
@@ -101,6 +102,34 @@ export async function PATCH(
     }
     if (!isValidStatusTransition(existing.status, data.status)) {
       return NextResponse.json({ error: 'Ugyldig statusovergang.' }, { status: 409 });
+    }
+
+    // Gjenopptak krever grønn validering — grafen kan ha blitt endret under pause.
+    if (existing.status === 'paused' && data.status === 'active') {
+      const flow = await prisma.flow.findUnique({
+        where: { id: flowId },
+        include: { nodes: true, edges: true },
+      });
+      if (!flow) {
+        return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
+      }
+
+      const graphNodes: GraphNode[] = flow.nodes.map((node) => ({
+        id: node.id,
+        type: node.type as GraphNode['type'],
+        config: parseNodeConfig(node.config),
+      }));
+      const graphEdges: GraphEdge[] = flow.edges.map((edge) => ({
+        id: edge.id,
+        fromNodeId: edge.fromNodeId,
+        toNodeId: edge.toNodeId,
+        branch: edge.branch,
+      }));
+
+      const errors = validateFlow(graphNodes, graphEdges);
+      if (errors.length > 0) {
+        return NextResponse.json({ errors }, { status: 400 });
+      }
     }
   }
 
