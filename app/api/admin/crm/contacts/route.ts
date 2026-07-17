@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, Number(sp.get('page')) || 1);
 
   const where = {
+    source: { not: 'system' },
     ...(q && {
       OR: [
         { name: { contains: q, mode: 'insensitive' as const } },

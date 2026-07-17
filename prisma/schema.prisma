@@ -335,7 +335,7 @@ model Contact {
   roleTitle      String?   @map("role_title") // f.eks. "Arrangementsansvarlig"
   userId         Int?      @unique @map("user_id")
   parentId       Int?      @map("parent_id")
-  source         String    @default("manual") // manual|import|booking|registration|signup
+  source         String    @default("manual") // manual|import|booking|registration|signup|system
   ownerId        Int?      @map("owner_id")
   stage          String    @default("lead") // lead|active|customer|dormant|lost
   tags           String    @default("[]") // JSON string[]

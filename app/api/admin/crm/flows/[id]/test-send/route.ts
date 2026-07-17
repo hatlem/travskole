@@ -6,6 +6,7 @@ import { sendMailAs } from '@/lib/mail';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { logActivity } from '@/lib/activity';
 import logger from '@/lib/logger';
 
 // Deliberately distinct from the "Kari Nordmann"-style preview sample in
@@ -145,6 +146,7 @@ export async function POST(
       subject: renderedSubject,
       html,
     });
+    logActivity({ action: 'flow_test_send', entity: 'flow', entityId: flowId, details: JSON.stringify({ nodeId: node.id, toEmail }), userEmail: session.user.email }).catch(() => {});
   } catch (error) {
     logger.error('Test-utsending feilet', {
       flowId,

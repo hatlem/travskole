@@ -55,6 +55,7 @@ export async function enrollSegment(flowId: number, segmentId: number): Promise<
 
   const rules = parseSegmentRules(segment.rules);
   const contacts = await prisma.contact.findMany({
+    where: { source: { not: 'system' } },
     include: { deals: { select: { eventType: true, eventDate: true, status: true } } },
   });
 
