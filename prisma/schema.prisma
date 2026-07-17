@@ -185,6 +185,9 @@ model BookingRequest {
   status        String    @default("new") // 'new', 'confirmed', 'cancelled'
   confirmedAt   DateTime? @map("confirmed_at")
   cancelledAt   DateTime? @map("cancelled_at")
+  paymentStatus String    @default("none") @map("payment_status") // none | pending | paid | failed | refunded
+  paymentProvider String? @map("payment_provider") // stripe | vipps
+  paymentRef    String?   @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
   createdAt     DateTime  @default(now()) @map("created_at")
 
   course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
@@ -222,9 +225,12 @@ model Registration {
   consentAt          DateTime? @map("consent_at")
   consentTextHash    String?  @map("consent_text_hash")
   status             String   @default("pending") // 'pending', 'confirmed', 'cancelled'
+  paymentStatus      String   @default("none") @map("payment_status") // none | pending | paid | failed | refunded
+  paymentProvider    String?  @map("payment_provider") // stripe | vipps
+  paymentRef         String?  @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
-  
+
   course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   child     Child?     @relation(fields: [childId], references: [id], onDelete: Cascade)
   parent    Parent     @relation(fields: [parentId], references: [id], onDelete: Cascade)
