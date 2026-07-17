@@ -4,27 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-
-// The 7 verified bjerke.no sending addresses. Seeded idempotently (createMany
-// + skipDuplicates on the unique `email` column) on first GET, so this list
-// is the single source of truth — adding an address here is enough, no
-// separate migration/seed script needed.
-const SEED_IDENTITIES = [
-  { email: 'registrering@bjerke.no', displayName: 'Bjerke Registrering' },
-  { email: 'hilde.apneseth@bjerke.no', displayName: 'Hilde Apneseth' },
-  { email: 'andre.ringelien@bjerke.no', displayName: 'Andre Ringelien' },
-  { email: 'hege.karin.arverud@bjerke.no', displayName: 'Hege Karin Arverud' },
-  { email: 'stine.rasmussen@bjerke.no', displayName: 'Stine Rasmussen' },
-  { email: 'bjerke@bjerke.no', displayName: 'Bjerke Travbane' },
-  { email: 'arild.engebretsen@bjerke.no', displayName: 'Arild Engebretsen' },
-] as const;
-
-async function ensureSeeded(): Promise<void> {
-  await prisma.senderIdentity.createMany({
-    data: SEED_IDENTITIES.map((identity) => ({ ...identity, active: true })),
-    skipDuplicates: true,
-  });
-}
+import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 
 export async function GET() {
   const session = await requireAdmin();
@@ -32,7 +12,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  await ensureSeeded();
+  await ensureSenderIdentitiesSeeded();
 
   const identities = await prisma.senderIdentity.findMany({ orderBy: { id: 'asc' } });
   return NextResponse.json({ identities });
