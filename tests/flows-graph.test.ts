@@ -145,6 +145,12 @@ describe('validateFlow', () => {
     expect(validateFlow(nodes, edges)).toEqual([]);
   });
 
+  it('wait with negative hours -> wait_config', () => {
+    const nodes = [n(1, 'start'), n(2, 'wait', { days: 1, hours: -23 }), n(3, 'end')];
+    const edges = [e(1, 1, 2), e(2, 2, 3)];
+    expect(codes(validateFlow(nodes, edges))).toContain('wait_config');
+  });
+
   it('condition with invalid kind -> condition_config', () => {
     const nodes = [n(1, 'start'), n(2, 'condition', { kind: 'bogus', value: 'x' }), n(3, 'end'), n(4, 'end')];
     const edges = [e(1, 1, 2), e(2, 2, 3, 'ja'), e(3, 2, 4, 'nei')];
@@ -225,5 +231,32 @@ describe('validateFlow', () => {
       expect(typeof err.message).toBe('string');
       expect(err.message.length).toBeGreaterThan(0);
     }
+  });
+
+  it('diamond pattern (reconverging branches) is NOT a cycle', () => {
+    // a→b, a→c (condition branches ja/nei), b→d, c→d (reconverge), d→end
+    const nodes = [
+      n(1, 'start'),
+      n(2, 'condition', validConditionConfig),
+      n(3, 'action', { kind: 'add_tag', value: 'tag_ja' }),
+      n(4, 'action', { kind: 'add_tag', value: 'tag_nei' }),
+      n(5, 'email', validEmailConfig),
+      n(6, 'end'),
+    ];
+    const edges = [
+      e(1, 1, 2),           // start → condition
+      e(2, 2, 3, 'ja'),     // condition → action_ja
+      e(3, 2, 4, 'nei'),    // condition → action_nei
+      e(4, 3, 5),           // action_ja → email (reconverge)
+      e(5, 4, 5),           // action_nei → email (reconverge)
+      e(6, 5, 6),           // email → end
+    ];
+    expect(validateFlow(nodes, edges)).toEqual([]);
+  });
+
+  it('end node with outgoing edge -> end_with_edge', () => {
+    const nodes = [n(1, 'start'), n(2, 'end'), n(3, 'end')];
+    const edges = [e(1, 1, 2), e(2, 2, 3)];
+    expect(codes(validateFlow(nodes, edges))).toContain('end_with_edge');
   });
 });

@@ -66,6 +66,12 @@ function validateWaitConfig(node: GraphNode): ValidationError | null {
   if (hours !== undefined && !isFiniteNumber(hours)) {
     return err(node.id, 'wait_config', 'Vent-noden har en ugyldig verdi for timer.');
   }
+  if (isFiniteNumber(days) && days < 0) {
+    return err(node.id, 'wait_config', 'Vent-noden kan ikke ha negative dager.');
+  }
+  if (isFiniteNumber(hours) && hours < 0) {
+    return err(node.id, 'wait_config', 'Vent-noden kan ikke ha negative timer.');
+  }
   const totalHours = (isFiniteNumber(days) ? days : 0) * 24 + (isFiniteNumber(hours) ? hours : 0);
   if (totalHours < 1) {
     return err(node.id, 'wait_config', 'Vent-noden må ha en varighet på minst 1 time.');
@@ -164,8 +170,14 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
 
   // --- Edge-count / branch rules ---
   for (const node of nodes) {
-    if (node.type === 'end') continue;
     const nodeOutgoing = outgoing.get(node.id) ?? [];
+
+    if (node.type === 'end') {
+      if (nodeOutgoing.length > 0) {
+        errors.push(err(node.id, 'end_with_edge', 'Slutt-noden kan ikke ha utgående koblinger.'));
+      }
+      continue;
+    }
 
     if (node.type === 'condition') {
       const branches = nodeOutgoing.map((edge) => edge.branch).sort();
