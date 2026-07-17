@@ -2,7 +2,7 @@
 // Development: SQLite | Production: PostgreSQL
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // Azure App Service kjører Linux/amd64. Bundle Linux-query-engines for både
   // Bullseye (openssl 1.1) og Bookworm (openssl 3.0) så bygget fungerer uansett
   // hvilket Debian-image Azure bruker. "native" beholder lokal dev (macOS).
@@ -59,42 +59,42 @@ model VerificationToken {
 
 // User model - Authentication & Role-based access
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
+  id            Int       @id @default(autoincrement())
+  email         String    @unique
   emailVerified DateTime? @map("email_verified")
-  passwordHash  String?  @map("password_hash")
-  role          String   @default("parent") // 'parent', 'admin', or 'superadmin'
+  passwordHash  String?   @map("password_hash")
+  role          String    @default("parent") // 'parent', 'admin', or 'superadmin'
   // Kontostatus (admin-styrt). deactivatedAt: reversibel utestengelse (kan ikke
   // logge inn). anonymizedAt: permanent GDPR-sletting — persondata scrubbet, men
   // påmeldingshistorikk beholdt. Begge blokkerer innlogging.
   deactivatedAt DateTime? @map("deactivated_at")
   anonymizedAt  DateTime? @map("anonymized_at")
-  createdAt     DateTime @default(now()) @map("created_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
 
-  parent          Parent?
-  accounts        Account[]
-  sessions        Session[]
-  bookingRequests BookingRequest[]
-  ownedOrganizations Organization[] @relation("OrgOwner")
-  ownedContacts      Contact[]      @relation("ContactOwner")
-  crmContact         Contact?       @relation("ContactUser")
-  ownedDeals         Deal[]         @relation("DealOwner")
-  assignedTasks      Task[]         @relation("TaskAssignee")
+  parent             Parent?
+  accounts           Account[]
+  sessions           Session[]
+  bookingRequests    BookingRequest[]
+  ownedOrganizations Organization[]   @relation("OrgOwner")
+  ownedContacts      Contact[]        @relation("ContactOwner")
+  crmContact         Contact?         @relation("ContactUser")
+  ownedDeals         Deal[]           @relation("DealOwner")
+  assignedTasks      Task[]           @relation("TaskAssignee")
 
   @@map("users")
 }
 
 // Parent model - Foreldre (linked to User)
 model Parent {
-  id        Int      @id @default(autoincrement())
-  userId    Int      @unique @map("user_id")
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique @map("user_id")
   name      String
   phone     String
   address   String?
   deletedAt DateTime? @map("deleted_at") // GDPR soft delete
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   children      Child[]
   registrations Registration[]
@@ -113,7 +113,7 @@ model Child {
   deletedAt DateTime? @map("deleted_at") // GDPR soft delete
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
-  
+
   parent        Parent         @relation(fields: [parentId], references: [id], onDelete: Cascade)
   registrations Registration[]
 
@@ -123,31 +123,31 @@ model Child {
 
 // Course model - Kurs & Leirer
 model Course {
-  id              Int       @id @default(autoincrement())
-  name            String
-  slug            String?
-  description     String?
-  type            String    // course type value, configured in settings (course_types)
-  audience        String    @default("barn") // 'barn' (foresatt melder på barn) | 'voksen' (deltaker melder på seg selv)
-  startDate       DateTime? @map("start_date")
-  endDate         DateTime? @map("end_date")
-  ageMin          Int?      @map("age_min")
-  ageMax          Int?      @map("age_max")
-  price           Float?
-  minParticipants Int?      @map("min_participants")
-  maxParticipants Int?      @map("max_participants")
-  status          String    @default("open") // 'open', 'full', 'closed'
-  imageUrl        String?   @map("image_url")
-  registrationMode         String  @default("standard") @map("registration_mode") // 'standard' | 'request'
+  id                       Int       @id @default(autoincrement())
+  name                     String
+  slug                     String?
+  description              String?
+  type                     String // course type value, configured in settings (course_types)
+  audience                 String    @default("barn") // 'barn' (foresatt melder på barn) | 'voksen' (deltaker melder på seg selv)
+  startDate                DateTime? @map("start_date")
+  endDate                  DateTime? @map("end_date")
+  ageMin                   Int?      @map("age_min")
+  ageMax                   Int?      @map("age_max")
+  price                    Float?
+  minParticipants          Int?      @map("min_participants")
+  maxParticipants          Int?      @map("max_participants")
+  status                   String    @default("open") // 'open', 'full', 'closed'
+  imageUrl                 String?   @map("image_url")
+  registrationMode         String    @default("standard") @map("registration_mode") // 'standard' | 'request'
   // Tillatte betalingsmåter, komma-separert ('faktura','stripe'). Se lib/payments.ts.
-  paymentMethods           String  @default("faktura") @map("payment_methods")
-  requestRequiresLogin     Boolean @default(false) @map("request_requires_login")
-  requestConsentRisk       Boolean @default(true)  @map("request_consent_risk")
-  requestConsentTerms      Boolean @default(true)  @map("request_consent_terms")
-  requestConsentMedia      Boolean @default(false) @map("request_consent_media")
-  requestConsentActivities Boolean @default(false) @map("request_consent_activities")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  paymentMethods           String    @default("faktura") @map("payment_methods")
+  requestRequiresLogin     Boolean   @default(false) @map("request_requires_login")
+  requestConsentRisk       Boolean   @default(true) @map("request_consent_risk")
+  requestConsentTerms      Boolean   @default(true) @map("request_consent_terms")
+  requestConsentMedia      Boolean   @default(false) @map("request_consent_media")
+  requestConsentActivities Boolean   @default(false) @map("request_consent_activities")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
   registrations   Registration[]
   emailTriggers   EmailTrigger[]
@@ -169,27 +169,27 @@ model Setting {
 
 // Forespørsler til request-modus-arrangementer (avtal tid)
 model BookingRequest {
-  id            Int       @id @default(autoincrement())
-  courseId      Int?      @map("course_id")
-  userId        Int?      @map("user_id")
-  name          String
-  email         String
-  phone         String
-  participants  Int       @default(1)
-  preferredDate DateTime? @map("preferred_date")
-  message       String?
-  consentRisk       Boolean @default(false) @map("consent_risk")
-  consentTerms      Boolean @default(false) @map("consent_terms")
-  consentMedia      Boolean @default(false) @map("consent_media")
-  consentActivities Boolean @default(false) @map("consent_activities")
-  status        String    @default("new") // 'new', 'confirmed', 'cancelled'
-  confirmedAt   DateTime? @map("confirmed_at")
-  cancelledAt   DateTime? @map("cancelled_at")
-  paymentStatus String    @default("none") @map("payment_status") // none | pending | paid | failed | refunded
-  paymentProvider String? @map("payment_provider") // stripe | vipps
-  paymentRef    String?   @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
-  paymentIntentRef String? @unique @map("payment_intent_ref") // Stripe payment-intent-id (stabil nøkkel — paymentRef skrives ikke om ved webhook)
-  createdAt     DateTime  @default(now()) @map("created_at")
+  id                Int       @id @default(autoincrement())
+  courseId          Int?      @map("course_id")
+  userId            Int?      @map("user_id")
+  name              String
+  email             String
+  phone             String
+  participants      Int       @default(1)
+  preferredDate     DateTime? @map("preferred_date")
+  message           String?
+  consentRisk       Boolean   @default(false) @map("consent_risk")
+  consentTerms      Boolean   @default(false) @map("consent_terms")
+  consentMedia      Boolean   @default(false) @map("consent_media")
+  consentActivities Boolean   @default(false) @map("consent_activities")
+  status            String    @default("new") // 'new', 'confirmed', 'cancelled'
+  confirmedAt       DateTime? @map("confirmed_at")
+  cancelledAt       DateTime? @map("cancelled_at")
+  paymentStatus     String    @default("none") @map("payment_status") // none | pending | paid | failed | refunded
+  paymentProvider   String?   @map("payment_provider") // stripe | vipps
+  paymentRef        String?   @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
+  paymentIntentRef  String?   @unique @map("payment_intent_ref") // Stripe payment-intent-id (stabil nøkkel — paymentRef skrives ikke om ved webhook)
+  createdAt         DateTime  @default(now()) @map("created_at")
 
   course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
   user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -202,10 +202,10 @@ model BookingRequest {
 // Activity log - Admin handlinger
 model ActivityLog {
   id        Int      @id @default(autoincrement())
-  action    String   // 'create', 'update', 'delete', 'email', 'status_change'
-  entity    String   // 'course', 'registration', 'user', 'booking'
+  action    String // 'create', 'update', 'delete', 'email', 'status_change'
+  entity    String // 'course', 'registration', 'user', 'booking'
   entityId  Int?     @map("entity_id")
-  details   String?  // JSON string with extra info
+  details   String? // JSON string with extra info
   userEmail String   @map("user_email")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -215,23 +215,23 @@ model ActivityLog {
 
 // Registration model - Påmeldinger (links Course, Child, Parent)
 model Registration {
-  id                 Int      @id @default(autoincrement())
-  courseId           Int      @map("course_id")
-  childId            Int?     @map("child_id") // null for voksen-arrangementer (deltaker = parent)
-  parentId           Int      @map("parent_id")
-  consentActivities  Boolean  @default(false) @map("consent_activities")
-  consentMedia       Boolean  @default(false) @map("consent_media")
-  consentRisk        Boolean  @default(false) @map("consent_risk")
-  consentTerms       Boolean  @default(false) @map("consent_terms")
-  consentAt          DateTime? @map("consent_at")
-  consentTextHash    String?  @map("consent_text_hash")
-  status             String   @default("pending") // 'pending', 'confirmed', 'cancelled'
-  paymentStatus      String   @default("none") @map("payment_status") // none | pending | paid | failed | refunded
-  paymentProvider    String?  @map("payment_provider") // stripe | vipps
-  paymentRef         String?  @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
-  paymentIntentRef   String?  @unique @map("payment_intent_ref") // Stripe payment-intent-id (stabil nøkkel — paymentRef skrives ikke om ved webhook)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                Int       @id @default(autoincrement())
+  courseId          Int       @map("course_id")
+  childId           Int?      @map("child_id") // null for voksen-arrangementer (deltaker = parent)
+  parentId          Int       @map("parent_id")
+  consentActivities Boolean   @default(false) @map("consent_activities")
+  consentMedia      Boolean   @default(false) @map("consent_media")
+  consentRisk       Boolean   @default(false) @map("consent_risk")
+  consentTerms      Boolean   @default(false) @map("consent_terms")
+  consentAt         DateTime? @map("consent_at")
+  consentTextHash   String?   @map("consent_text_hash")
+  status            String    @default("pending") // 'pending', 'confirmed', 'cancelled'
+  paymentStatus     String    @default("none") @map("payment_status") // none | pending | paid | failed | refunded
+  paymentProvider   String?   @map("payment_provider") // stripe | vipps
+  paymentRef        String?   @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
+  paymentIntentRef  String?   @unique @map("payment_intent_ref") // Stripe payment-intent-id (stabil nøkkel — paymentRef skrives ikke om ved webhook)
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
 
   course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   child     Child?     @relation(fields: [childId], references: [id], onDelete: Cascade)
@@ -261,12 +261,12 @@ model EmailTemplate {
 model EmailTrigger {
   id          Int      @id @default(autoincrement())
   courseId    Int      @map("course_id")
-  templateId Int?     @map("template_id")
-  triggerType String  @map("trigger_type")
-  offsetDays Int      @default(0) @map("offset_days")
-  enabled    Boolean  @default(false)
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  templateId  Int?     @map("template_id")
+  triggerType String   @map("trigger_type")
+  offsetDays  Int      @default(0) @map("offset_days")
+  enabled     Boolean  @default(false)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   course   Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
   template EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
@@ -344,20 +344,20 @@ model Contact {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  organization   Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  owner          User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  user           User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
-  parent         Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
-  deals          Deal[]
-  memberships    ContactListMembership[]
-  activities     ContactActivity[]
-  tasks          Task[]
-  notes          Note[]
-  consent        Consent?
-  visitors       Visitor[]
-  events         AppEvent[]
+  organization    Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  owner           User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  user            User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
+  parent          Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  deals           Deal[]
+  memberships     ContactListMembership[]
+  activities      ContactActivity[]
+  tasks           Task[]
+  notes           Note[]
+  consent         Consent?
+  visitors        Visitor[]
+  events          AppEvent[]
   flowEnrollments FlowEnrollment[]
-  messageSends   MessageSend[]
+  messageSends    MessageSend[]
 
   @@index([organizationId])
   @@index([stage])
@@ -439,15 +439,15 @@ model Deal {
   contactId        Int?      @map("contact_id")
   organizationId   Int?      @map("organization_id")
   ownerId          Int?      @map("owner_id")
-  value            Float?    // NOK
-  probability      Int?      // 0-100
+  value            Float? // NOK
+  probability      Int? // 0-100
   eventType        String?   @map("event_type") // julebord|firmafest|afterwork|kurs|annet
   eventDate        DateTime? @map("event_date")
   status           String    @default("open") // open|won|lost
   closedAt         DateTime? @map("closed_at")
   source           String    @default("manual") // manual|booking|registration
   bookingRequestId Int?      @unique @map("booking_request_id") // idempotens-bro
-  registrationId   Int?      @unique @map("registration_id")   // idempotens-bro
+  registrationId   Int?      @unique @map("registration_id") // idempotens-bro
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -471,7 +471,7 @@ model ContactActivity {
   id             Int      @id @default(autoincrement())
   contactId      Int?     @map("contact_id")
   organizationId Int?     @map("organization_id")
-  type           String   // booking|registration|note|task|deal_change|import|event
+  type           String // booking|registration|note|task|deal_change|import|event
   title          String
   body           String?
   meta           String   @default("{}") // JSON — payload, lenker
@@ -536,7 +536,7 @@ model Consent {
   marketing   Boolean   @default(false)
   lawfulBasis String?   @map("lawful_basis") // consent|legitimate_interest|contract
   consentAt   DateTime? @map("consent_at")
-  source      String?   // hvor samtykket ble innhentet
+  source      String? // hvor samtykket ble innhentet
   updatedAt   DateTime  @updatedAt @map("updated_at")
 
   contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
@@ -605,6 +605,7 @@ model Flow {
   enrollments FlowEnrollment[]
   createdAt   DateTime         @default(now()) @map("created_at")
   updatedAt   DateTime         @updatedAt @map("updated_at")
+
   @@map("flows")
 }
 
@@ -612,12 +613,13 @@ model FlowNode {
   id        Int      @id @default(autoincrement())
   flowId    Int      @map("flow_id")
   flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  type      String   // start | email | wait | condition | action | end
+  type      String // start | email | wait | condition | action | end
   config    String   @default("{}") // JSON per nodetype (se under)
   posX      Float    @default(0) @map("pos_x")
   posY      Float    @default(0) @map("pos_y")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
   @@index([flowId])
   @@map("flow_nodes")
 }
@@ -628,9 +630,10 @@ model FlowEdge {
   flow       Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
   fromNodeId Int      @map("from_node_id")
   toNodeId   Int      @map("to_node_id")
-  branch     String?  // 'ja' | 'nei' for condition-noder; null ellers
+  branch     String? // 'ja' | 'nei' for condition-noder; null ellers
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
+
   @@index([flowId])
   @@map("flow_edges")
 }
@@ -643,6 +646,7 @@ model FlowTrigger {
   filter    String   @default("{}") // JSON subset-match mot event.meta (f.eks. {"courseId": 3})
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
+
   @@index([eventType])
   @@map("flow_triggers")
 }
@@ -661,6 +665,7 @@ model FlowEnrollment {
   failReason    String?   @map("fail_reason")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
+
   @@index([status, nextRunAt]) // runnerens arbeidskø
   // NB: maks-én-aktiv-håndheving er IKKE bare "i kode" — den håndheves også av en
   // partial unique index (`flow_enrollments_one_active` på (flow_id, contact_id)
@@ -673,13 +678,14 @@ model FlowEnrollment {
 }
 
 model SenderIdentity {
-  id          Int          @id @default(autoincrement())
-  email       String       @unique // en av de 7 verifiserte bjerke.no-adressene
-  displayName String       @map("display_name")
-  active      Boolean      @default(true)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @updatedAt @map("updated_at")
+  id           Int           @id @default(autoincrement())
+  email        String        @unique // en av de 7 verifiserte bjerke.no-adressene
+  displayName  String        @map("display_name")
+  active       Boolean       @default(true)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
   messageSends MessageSend[]
+
   @@map("sender_identities")
 }
 
@@ -698,6 +704,28 @@ model MessageSend {
   dedupeKey        String?         @unique @map("dedupe_key") // flow:{enrollmentId}:{nodeId}
   sentAt           DateTime        @default(now()) @map("sent_at")
   createdAt        DateTime        @default(now()) @map("created_at")
+  trackingToken    String?         @unique @map("tracking_token")
+  messageId        String?         @map("message_id")
+  openedAt         DateTime?       @map("opened_at")
+  firstClickedAt   DateTime?       @map("first_clicked_at")
+  clickCount       Int             @default(0) @map("click_count")
+  repliedAt        DateTime?       @map("replied_at")
+  bouncedAt        DateTime?       @map("bounced_at")
+  links            MessageLink[]
+
   @@index([contactId, sentAt])
+  @@index([messageId])
   @@map("message_sends")
+}
+
+model MessageLink {
+  id            Int         @id @default(autoincrement())
+  messageSendId Int         @map("message_send_id")
+  messageSend   MessageSend @relation(fields: [messageSendId], references: [id], onDelete: Cascade)
+  idx           Int
+  url           String
+  createdAt     DateTime    @default(now()) @map("created_at")
+
+  @@unique([messageSendId, idx])
+  @@map("message_links")
 }
