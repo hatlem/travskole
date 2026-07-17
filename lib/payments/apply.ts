@@ -17,28 +17,12 @@ import logger from '@/lib/logger';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import type { PaymentEventInput } from './mapping';
+import { planStatusTransition, type PaymentStatus } from './transitions';
 
 const STATUS_MAP: Record<PaymentEventInput['type'], string> = {
   'payment.succeeded': 'paid',
   'payment.failed': 'failed',
   'payment.refunded': 'refunded',
-};
-
-/**
- * Monoton rangering av betalingsstatus — hindrer at forsinkede/omspilte
- * webhook-events (Stripe/Vipps gjenforsøker levering, eller leverer
- * ute av rekkefølge) kan degradere en terminal status. Eks.: en omspilt
- * Vipps AUTHORIZED etter REFUNDED skal ALDRI sette raden tilbake til
- * 'paid', og en sent ankommet Stripe payment_intent.payment_failed etter
- * at betalingen allerede lyktes skal ALDRI overskrive 'paid' med 'failed'.
- * Kun strengt økende overganger skriver ny status (se applyPaymentEvent).
- */
-const STATUS_RANK: Record<string, number> = {
-  none: 0,
-  pending: 1,
-  failed: 2,
-  paid: 3,
-  refunded: 4,
 };
 
 type ResolvedRow =
@@ -196,16 +180,14 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
   }
 
   const newStatus = STATUS_MAP[input.type];
-  const currentRank = STATUS_RANK[row.paymentStatus] ?? STATUS_RANK.none;
-  const newRank = STATUS_RANK[newStatus];
-  const isDowngrade = newRank < currentRank;
+  const { write, downgrade: isDowngrade } = planStatusTransition(row.paymentStatus, newStatus as PaymentStatus);
 
   // nextRef er kun satt av Stripe checkout.session.completed (payment.succeeded)
   // og bærer den faktiske payment-intent-IDen. Vi lagrer den i den dedikerte
   // paymentIntentRef-kolonnen og lar paymentRef (cs_-IDen) stå urørt, slik at
   // takk-sidens `?ref=cs_...`-oppslag fortsatt treffer etter webhooken kjører.
   const updateData: Prisma.RegistrationUpdateInput | Prisma.BookingRequestUpdateInput = {
-    ...(newRank > currentRank && { paymentStatus: newStatus }),
+    ...(write && { paymentStatus: newStatus }),
     ...(input.nextRef && { paymentIntentRef: input.nextRef }),
   };
 
