@@ -20,30 +20,57 @@ const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const PROD_WEBHOOK_HOST = 'registrering.bjerke.no';
 const PROD_WEBHOOK_PATH = '/api/webhooks/vipps';
 
-/** Er Vipps konfigurert (alle nødvendige env-variabler satt)? */
-export function isVippsConfigured(): boolean {
-  return !!(
-    process.env.VIPPS_CLIENT_ID &&
-    process.env.VIPPS_CLIENT_SECRET &&
-    process.env.VIPPS_SUBSCRIPTION_KEY &&
-    process.env.VIPPS_MSN
-  );
+export interface VippsEnv {
+  clientId?: string;
+  clientSecret?: string;
+  subscriptionKey?: string;
+  msn?: string;
 }
 
-/** Test- eller live-miljø for Vipps API, styrt av VIPPS_TEST_MODE. */
-export function vippsBaseUrl(): string {
-  return process.env.VIPPS_TEST_MODE === 'true' ? 'https://apitest.vipps.no' : 'https://api.vipps.no';
+/** Resolves Vipps env vars from an object, selecting live or test set based on testMode. */
+export function vippsEnvFrom(env: Record<string, string | undefined>, testMode: boolean): VippsEnv {
+  if (testMode) {
+    return {
+      clientId: env.VIPPS_CLIENT_ID_TEST,
+      clientSecret: env.VIPPS_CLIENT_SECRET_TEST,
+      subscriptionKey: env.VIPPS_SUBSCRIPTION_KEY_TEST,
+      msn: env.VIPPS_MSN_TEST,
+    };
+  }
+  return {
+    clientId: env.VIPPS_CLIENT_ID,
+    clientSecret: env.VIPPS_CLIENT_SECRET,
+    subscriptionKey: env.VIPPS_SUBSCRIPTION_KEY,
+    msn: env.VIPPS_MSN,
+  };
+}
+
+/** Resolves Vipps env vars from process.env, selecting live or test set based on testMode. */
+export function vippsEnv(testMode: boolean): VippsEnv {
+  return vippsEnvFrom(process.env, testMode);
+}
+
+/** Er Vipps konfigurert (alle nødvendige env-variabler satt) for valgt modus? */
+export function isVippsConfigured(testMode: boolean): boolean {
+  const env = vippsEnv(testMode);
+  return !!(env.clientId && env.clientSecret && env.subscriptionKey && env.msn);
+}
+
+/** Test- eller live-miljø for Vipps API, basert på testMode. */
+export function vippsBaseUrl(testMode: boolean): string {
+  return testMode ? 'https://apitest.vipps.no' : 'https://api.vipps.no';
 }
 
 /** Henter access token fra Vipps. Aldri throw — null ved feil (logget). */
-async function getVippsAccessToken(): Promise<string | null> {
+async function getVippsAccessToken(testMode: boolean): Promise<string | null> {
   try {
-    const res = await fetch(`${vippsBaseUrl()}/accesstoken/get`, {
+    const env = vippsEnv(testMode);
+    const res = await fetch(`${vippsBaseUrl(testMode)}/accesstoken/get`, {
       method: 'POST',
       headers: {
-        client_id: process.env.VIPPS_CLIENT_ID as string,
-        client_secret: process.env.VIPPS_CLIENT_SECRET as string,
-        'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY as string,
+        client_id: env.clientId as string,
+        client_secret: env.clientSecret as string,
+        'Ocp-Apim-Subscription-Key': env.subscriptionKey as string,
       },
     });
     if (!res.ok) {
@@ -67,29 +94,31 @@ export interface CreateVippsPaymentInput {
   amountKr: number;
   description: string;
   returnUrl: string;
+  testMode: boolean;
 }
 
 /** Oppretter en Vipps ePayment for påmelding eller bestillingsforespørsel. */
 export async function createVippsPayment(
   input: CreateVippsPaymentInput
 ): Promise<{ url: string; ref: string } | null> {
-  const { reference, amountKr, description, returnUrl } = input;
-  if (!isVippsConfigured()) {
+  const { reference, amountKr, description, returnUrl, testMode } = input;
+  if (!isVippsConfigured(testMode)) {
     logger.error('Vipps ikke konfigurert — kan ikke opprette betaling', { reference });
     return null;
   }
 
-  const accessToken = await getVippsAccessToken();
+  const accessToken = await getVippsAccessToken(testMode);
   if (!accessToken) return null;
 
   try {
-    const res = await fetch(`${vippsBaseUrl()}/epayment/v1/payments`, {
+    const env = vippsEnv(testMode);
+    const res = await fetch(`${vippsBaseUrl(testMode)}/epayment/v1/payments`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${accessToken}`,
-        'Ocp-Apim-Subscription-Key': process.env.VIPPS_SUBSCRIPTION_KEY as string,
-        'Merchant-Serial-Number': process.env.VIPPS_MSN as string,
+        'Ocp-Apim-Subscription-Key': env.subscriptionKey as string,
+        'Merchant-Serial-Number': env.msn as string,
         'Idempotency-Key': reference,
       },
       body: JSON.stringify({

@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
       testMode,
     });
   } else {
-    if (!isVippsConfigured()) {
+    if (!isVippsConfigured(testMode)) {
       return NextResponse.json({ error: 'Betaling er ikke konfigurert' }, { status: 503 });
     }
     const prefix = target.entity === 'registration' ? 'reg' : 'book';
@@ -177,6 +177,7 @@ export async function POST(request: NextRequest) {
       amountKr,
       description: target.title,
       returnUrl: `${origin}/betaling/takk?ref=${reference}`,
+      testMode,
     });
   }
 
