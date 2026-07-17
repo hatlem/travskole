@@ -7,6 +7,14 @@
  * network send. A unique-constraint violation (P2002) means a previous run
  * already sent (or attempted) this exact enrollment/node pair — we return
  * without sending again. This holds even if a batch runner retries mid-send.
+ *
+ * Transient-failure recovery: if the actual SMTP send throws (network blip,
+ * provider hiccup — as opposed to a P2002 above), the dedupe-keyed row is
+ * DELETED and replaced with a fresh row that has NO `dedupeKey`. This keeps
+ * the audit trail (a 'failed' MessageSend still exists) while freeing the
+ * dedupe slot, so a later manual re-run/reactivation of the enrollment can
+ * legitimately resend instead of being permanently blocked by its own
+ * failed attempt.
  */
 
 import { Prisma } from '@prisma/client';
@@ -152,7 +160,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
 
   try {
     await sendMailAs({
-      from: identity.email,
+      from: `"${identity.displayName}" <${identity.email}>`,
       replyTo: identity.email,
       to: contact.email,
       subject,
@@ -169,9 +177,23 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       contactId: input.contactId,
       error: error instanceof Error ? error.message : String(error),
     });
-    await prisma.messageSend.update({
-      where: { id: messageSendId },
-      data: { status: 'failed' },
+    // Transient SMTP failures (network blip, provider hiccup) must not
+    // permanently occupy the dedupe slot: delete the row that reserved
+    // `dedupeKey` and record a fresh audit row WITHOUT one, so a later
+    // manual re-run/reactivation can legitimately resend for this
+    // enrollment/node pair instead of being told "already_sent" forever.
+    await prisma.messageSend.delete({ where: { id: messageSendId } }).catch(() => {});
+    await prisma.messageSend.create({
+      data: {
+        enrollmentId: input.enrollmentId,
+        nodeId: input.nodeId,
+        contactId: input.contactId,
+        senderIdentityId: input.senderIdentityId,
+        toEmail: contact.email,
+        subject,
+        bodyHtml: html,
+        status: 'failed',
+      },
     });
     return 'failed';
   }

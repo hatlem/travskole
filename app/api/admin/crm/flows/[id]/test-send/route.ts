@@ -119,6 +119,11 @@ export async function POST(
     );
   }
 
+  const suppression = await prisma.suppression.findUnique({ where: { email: toEmail } });
+  if (suppression) {
+    return NextResponse.json({ error: 'Adressen er suppressert' }, { status: 400 });
+  }
+
   const renderedSubject = replaceMergeTags(subject, TEST_MERGE_DATA);
   const renderedBody = replaceMergeTags(bodyHtml, TEST_MERGE_DATA);
   const html = wrapEmailHtml(TEST_BANNER + renderedBody, identity.displayName);
@@ -140,7 +145,7 @@ export async function POST(
 
   try {
     await sendMailAs({
-      from: identity.email,
+      from: `"${identity.displayName}" <${identity.email}>`,
       replyTo: identity.email,
       to: toEmail,
       subject: renderedSubject,
