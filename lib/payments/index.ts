@@ -7,14 +7,15 @@
  * bakes inn her (de vises uansett i nettleseren); secret-nøklene leses fra env.
  */
 
-export type PaymentMethod = 'faktura' | 'stripe';
+export type PaymentMethod = 'faktura' | 'stripe' | 'vipps';
 
 export const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'faktura', label: 'Faktura' },
   { value: 'stripe', label: 'Stripe (kort)' },
+  { value: 'vipps', label: 'Vipps' },
 ];
 
-const VALID = new Set<PaymentMethod>(['faktura', 'stripe']);
+const VALID = new Set<PaymentMethod>(['faktura', 'stripe', 'vipps']);
 
 /** Parser lagret verdi ("faktura,stripe") → liste. Faller tilbake til faktura. */
 export function parsePaymentMethods(raw: string | null | undefined): PaymentMethod[] {

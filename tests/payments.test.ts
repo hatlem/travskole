@@ -19,9 +19,10 @@ describe('parsePaymentMethods', () => {
   it('parses valid methods and dedupes', () => {
     expect(parsePaymentMethods('faktura,stripe')).toEqual(['faktura', 'stripe']);
     expect(parsePaymentMethods('stripe, stripe ,faktura')).toEqual(['stripe', 'faktura']);
+    expect(parsePaymentMethods('stripe,vipps')).toEqual(['stripe', 'vipps']);
   });
   it('drops unknown methods', () => {
-    expect(parsePaymentMethods('stripe,vipps')).toEqual(['stripe']);
+    expect(parsePaymentMethods('stripe,bogus')).toEqual(['stripe']);
   });
 });
 
