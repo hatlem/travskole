@@ -10,6 +10,13 @@ import Stripe from 'stripe';
 import logger from '@/lib/logger';
 import { stripeSecretKey, isStripeConfigured, kronerToOre } from '@/lib/payments';
 
+/** Verifisert Stripe-event med utvidet typ for komposisjon med mapStripeEvent. */
+export interface VerifiedStripeEvent {
+  id: string;
+  type: string;
+  data: { object: Record<string, unknown> };
+}
+
 function stripeClient(testMode: boolean): Stripe | null {
   const secretKey = stripeSecretKey(testMode);
   if (!secretKey) return null;
@@ -80,7 +87,7 @@ export function verifyStripeWebhook(
   rawBody: string,
   signature: string | null,
   testMode: boolean
-): Stripe.Event | null {
+): VerifiedStripeEvent | null {
   if (!signature) {
     logger.error('Stripe webhook mangler signatur');
     return null;
@@ -96,7 +103,9 @@ export function verifyStripeWebhook(
     return null;
   }
   try {
-    return client.webhooks.constructEvent(rawBody, signature, webhookSecret);
+    const event = client.webhooks.constructEvent(rawBody, signature, webhookSecret);
+    // Verifiseringsgrensen: cast til VerifiedStripeEvent slik at konsumenter kan komponere med mapStripeEvent.
+    return event as unknown as VerifiedStripeEvent;
   } catch (error) {
     logger.error('Stripe webhook-verifisering feilet', { error });
     return null;
