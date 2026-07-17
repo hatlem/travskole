@@ -45,6 +45,7 @@ function buildBreadcrumbs(pathname: string) {
       oppgaver: 'Oppgaver',
       segmenter: 'Segmenter',
       hendelser: 'Hendelser',
+      flyter: 'Flyter',
       import: 'Import',
       settings: 'Innstillinger',
       tekster: 'Tekster',
