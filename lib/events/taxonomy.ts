@@ -10,6 +10,10 @@ export const SERVER_EVENT_TYPES = [
   'registration.confirmed',
   'registration.cancelled',
   'consent.updated',
+  'email.opened',
+  'email.clicked',
+  'email.replied',
+  'email.bounced',
 ] as const;
 
 export const CLIENT_EVENT_TYPES = [
@@ -86,6 +90,14 @@ export function timelineTitle(type: EventType, meta: Record<string, unknown>): s
       return 'Betaling feilet';
     case 'payment.refunded':
       return amount !== null ? `Betaling refundert (${amount} kr)` : 'Betaling refundert';
+    case 'email.opened':
+      return 'Åpnet e-post';
+    case 'email.clicked':
+      return typeof meta.url === 'string' ? `Klikket lenke i e-post: ${meta.url}` : 'Klikket lenke i e-post';
+    case 'email.replied':
+      return 'Svarte på e-post';
+    case 'email.bounced':
+      return 'E-post kom i retur';
     default:
       return null;
   }

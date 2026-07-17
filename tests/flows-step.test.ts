@@ -39,6 +39,7 @@ const NOW = new Date('2026-01-01T00:00:00.000Z');
 const makeCtx = (overrides: Partial<StepContext> = {}): StepContext => ({
   contact: makeContact(),
   segmentRulesById: {},
+  lastSendOpened: null,
   now: NOW,
   ...overrides,
 });
@@ -170,6 +171,36 @@ describe('planStep: condition deal_status', () => {
     const node = n(4, 'condition', { kind: 'not_a_real_kind', value: 'x' });
     const edges = [e(1, 4, 5, 'ja'), e(2, 4, 6, 'nei')];
     expect(planStep(node, edges, makeCtx()).kind).toBe('fail');
+  });
+});
+
+describe('planStep: condition opened_email', () => {
+  it('takes the ja branch when lastSendOpened is true', () => {
+    const node = n(4, 'condition', { kind: 'opened_email' });
+    const edges = [e(1, 4, 5, 'ja'), e(2, 4, 6, 'nei')];
+    const ctx = makeCtx({ lastSendOpened: true });
+    expect(planStep(node, edges, ctx)).toEqual({ kind: 'advance', nextNodeId: 5 });
+  });
+
+  it('takes the nei branch when lastSendOpened is false', () => {
+    const node = n(4, 'condition', { kind: 'opened_email' });
+    const edges = [e(1, 4, 5, 'ja'), e(2, 4, 6, 'nei')];
+    const ctx = makeCtx({ lastSendOpened: false });
+    expect(planStep(node, edges, ctx)).toEqual({ kind: 'advance', nextNodeId: 6 });
+  });
+
+  it('takes the nei branch when lastSendOpened is null (no prior tracked send — not a failure)', () => {
+    const node = n(4, 'condition', { kind: 'opened_email' });
+    const edges = [e(1, 4, 5, 'ja'), e(2, 4, 6, 'nei')];
+    const ctx = makeCtx({ lastSendOpened: null });
+    expect(planStep(node, edges, ctx)).toEqual({ kind: 'advance', nextNodeId: 6 });
+  });
+
+  it('config with no value key at all still advances (not a fail plan) when opened_email', () => {
+    const node = n(4, 'condition', { kind: 'opened_email' });
+    const edges = [e(1, 4, 5, 'ja'), e(2, 4, 6, 'nei')];
+    const plan = planStep(node, edges, makeCtx({ lastSendOpened: true }));
+    expect(plan.kind).toBe('advance');
   });
 });
 

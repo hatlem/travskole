@@ -13,6 +13,7 @@ import { contactMatchesSegment, parseSegmentRules, type SegmentContact } from '@
 export interface StepContext {
   contact: SegmentContact & { stage: string | null; tags: string[] };
   segmentRulesById: Record<number, string>; // segmentId → raw rules-JSON (for in_segment)
+  lastSendOpened: boolean | null; // most recent tracked email-node send's openedAt !== null in THIS enrollment; null = no prior tracked send exists
   now: Date;
 }
 
@@ -61,6 +62,11 @@ function planWait(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPl
 /** Returns null when the condition config itself is malformed/unrecognized. */
 function evaluateCondition(node: GraphNode, ctx: StepContext): boolean | null {
   const { kind, value } = node.config;
+
+  if (kind === 'opened_email') {
+    return ctx.lastSendOpened === true;
+  }
+
   if (value === undefined || value === null) return null;
 
   if (kind === 'in_segment') {

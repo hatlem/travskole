@@ -163,6 +163,24 @@ describe('validateFlow', () => {
     expect(codes(validateFlow(nodes, edges))).toContain('condition_config');
   });
 
+  it('condition in_segment without a value key at all -> condition_config (regression guard)', () => {
+    const nodes = [n(1, 'start'), n(2, 'condition', { kind: 'in_segment' }), n(3, 'end'), n(4, 'end')];
+    const edges = [e(1, 1, 2), e(2, 2, 3, 'ja'), e(3, 2, 4, 'nei')];
+    expect(codes(validateFlow(nodes, edges))).toContain('condition_config');
+  });
+
+  it('condition opened_email without a value key -> valid (value not required)', () => {
+    const nodes = [n(1, 'start'), n(2, 'condition', { kind: 'opened_email' }), n(3, 'end'), n(4, 'end')];
+    const edges = [e(1, 1, 2), e(2, 2, 3, 'ja'), e(3, 2, 4, 'nei')];
+    expect(validateFlow(nodes, edges)).toEqual([]);
+  });
+
+  it('condition opened_email with an (unneeded) value present -> still valid', () => {
+    const nodes = [n(1, 'start'), n(2, 'condition', { kind: 'opened_email', value: 'anything' }), n(3, 'end'), n(4, 'end')];
+    const edges = [e(1, 1, 2), e(2, 2, 3, 'ja'), e(3, 2, 4, 'nei')];
+    expect(validateFlow(nodes, edges)).toEqual([]);
+  });
+
   it('action add_tag without value -> action_config', () => {
     const nodes = [n(1, 'start'), n(2, 'action', { kind: 'add_tag' }), n(3, 'end')];
     const edges = [e(1, 1, 2), e(2, 2, 3)];

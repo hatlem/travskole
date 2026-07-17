@@ -38,7 +38,7 @@ export function parseNodeConfig(raw: string): Record<string, unknown> {
   }
 }
 
-const CONDITION_KINDS = ['in_segment', 'stage_is', 'deal_status'] as const;
+const CONDITION_KINDS = ['in_segment', 'stage_is', 'deal_status', 'opened_email'] as const;
 const ACTION_KINDS = ['add_tag', 'remove_tag', 'set_stage', 'notify_admin', 'exit'] as const;
 const ACTION_KINDS_REQUIRING_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);
 
@@ -82,7 +82,10 @@ function validateWaitConfig(node: GraphNode): ValidationError | null {
 function validateConditionConfig(node: GraphNode): ValidationError | null {
   const { kind, value } = node.config;
   const validKind = typeof kind === 'string' && (CONDITION_KINDS as readonly string[]).includes(kind);
-  if (!validKind || !hasValue(value)) {
+  if (!validKind) {
+    return err(node.id, 'condition_config', 'Betingelses-noden mangler type eller verdi.');
+  }
+  if (kind !== 'opened_email' && !hasValue(value)) {
     return err(node.id, 'condition_config', 'Betingelses-noden mangler type eller verdi.');
   }
   return null;

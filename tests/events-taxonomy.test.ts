@@ -53,4 +53,21 @@ describe('taxonomy', () => {
     expect(timelineTitle('booking.created', {})).toBeNull();
     expect(timelineTitle('registration.created', { courseName: 'Begynnerkurs' })).toBeNull();
   });
+
+  it('accepts every declared email event type', () => {
+    expect(isEventType('email.opened')).toBe(true);
+    expect(isEventType('email.clicked')).toBe(true);
+    expect(isEventType('email.replied')).toBe(true);
+    expect(isEventType('email.bounced')).toBe(true);
+  });
+
+  it('timelineTitle: email events get Norwegian titles', () => {
+    expect(timelineTitle('email.opened', {})).toBe('Åpnet e-post');
+    expect(timelineTitle('email.clicked', { url: 'https://example.com' })).toBe(
+      'Klikket lenke i e-post: https://example.com'
+    );
+    expect(timelineTitle('email.clicked', {})).toBe('Klikket lenke i e-post');
+    expect(timelineTitle('email.replied', {})).toBe('Svarte på e-post');
+    expect(timelineTitle('email.bounced', {})).toBe('E-post kom i retur');
+  });
 });

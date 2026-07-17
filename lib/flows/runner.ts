@@ -207,7 +207,10 @@ async function processEnrollment(
       return { sent, failed: true, completed: false };
     }
 
-    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, now };
+    // lastSendOpened: real query wired up in a later task (opened_email
+    // support); null here means "no prior tracked send" — same as the
+    // condition's own "no send yet" semantics, so this is a safe default.
+    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, lastSendOpened: null, now };
     const plan = planStep(node, graph.edges, ctx);
 
     switch (plan.kind) {
