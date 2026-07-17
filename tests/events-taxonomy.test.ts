@@ -34,9 +34,19 @@ describe('taxonomy', () => {
     expect(timelineTitle('booking.status_changed', { status: 'confirmed' })).toBe(
       'Booking-status endret: confirmed'
     );
-    expect(timelineTitle('payment.succeeded', { amount: 2500 })).toBe('Betaling mottatt (2500 kr)');
+    expect(timelineTitle('payment.succeeded', { amountKr: 2500 })).toBe(
+      'Betaling mottatt (2500 kr)'
+    );
+    expect(timelineTitle('payment.refunded', { amountKr: 1200 })).toBe(
+      'Betaling refundert (1200 kr)'
+    );
     expect(timelineTitle('user.logged_in', {})).toBeNull();
     expect(timelineTitle('page.viewed', { path: '/kurs' })).toBeNull();
+  });
+
+  it('timelineTitle: payment amount falls back to meta.amount when amountKr is absent', () => {
+    expect(timelineTitle('payment.succeeded', { amount: 2500 })).toBe('Betaling mottatt (2500 kr)');
+    expect(timelineTitle('payment.succeeded', {})).toBe('Betaling mottatt');
   });
 
   it('timelineTitle: booking.created and registration.created are null — the CRM bridge owns those timeline moments on first sync', () => {

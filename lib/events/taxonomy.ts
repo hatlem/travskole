@@ -49,7 +49,14 @@ export function isClientEventType(v: string): v is ClientEventType {
  */
 export function timelineTitle(type: EventType, meta: Record<string, unknown>): string | null {
   const courseName = typeof meta.courseName === 'string' ? meta.courseName : null;
-  const amount = typeof meta.amount === 'number' ? meta.amount : null;
+  // Betalingshendelser sender beløp som meta.amountKr (kroner); meta.amount
+  // holdes som fallback for eldre/andre kilder.
+  const amount =
+    typeof meta.amountKr === 'number'
+      ? meta.amountKr
+      : typeof meta.amount === 'number'
+        ? meta.amount
+        : null;
 
   switch (type) {
     case 'user.registered':
