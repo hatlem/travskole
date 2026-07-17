@@ -66,13 +66,10 @@ function StatusBox({ title, message, color }: StatusBoxProps) {
 /**
  * Payment success page: looks up payment status from DB by paymentRef.
  *
- * Handles Stripe session-id rewrite: when the Stripe webhook fires,
- * paymentRef may be rewritten from session-id (cs_...) to payment-intent-id
- * via the nextRef handoff in apply.ts. If lookup by URL ref misses but
- * ref looks like a Stripe session ID, we assume the webhook is still
- * processing and show the "behandles" message. This is a known seam to
- * revisit: ideally apply.ts would preserve the original ref for takk-page
- * lookup, but that's outside this task's scope.
+ * paymentRef is stable across the payment lifecycle — the Stripe webhook
+ * writes the payment-intent-id to the dedicated paymentIntentRef column
+ * (see lib/payments/apply.ts) instead of rewriting paymentRef, so the
+ * redirect's `?ref=cs_...` keeps resolving after the webhook runs.
  */
 export default async function TakkPage({
   searchParams,
@@ -103,12 +100,6 @@ export default async function TakkPage({
         status = booking.paymentStatus;
       }
     }
-  }
-
-  // Handle the Stripe session-id rewrite: if lookup missed but ref looks
-  // like a Stripe session ID, assume webhook is still processing
-  if (status === 'not_found' && ref?.startsWith('cs_')) {
-    status = 'pending';
   }
 
   return (
