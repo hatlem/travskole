@@ -17,6 +17,7 @@
  * failed attempt.
  */
 
+import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendMailAs } from '@/lib/mail';
@@ -24,6 +25,7 @@ import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-
 import { signUnsubscribeToken } from './unsubscribe-token';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
+import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import logger from '@/lib/logger';
 
 export type SendFlowEmailResult =
@@ -134,6 +136,17 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const oneClickUrl = oneClickUnsubscribeUrl(unsubToken);
   const html = wrapEmailHtml(renderedBody + unsubscribeFooter(unsubUrl), identity.displayName);
 
+  const baseUrl = getBaseUrl();
+  let finalHtml = html;
+  let trackingToken: string | undefined;
+  let trackingLinks: string[] = [];
+  if (input.isMarketing) {
+    trackingToken = crypto.randomBytes(12).toString('hex');
+    const rewritten = rewriteHtmlForTracking(html, baseUrl, trackingToken);
+    trackingLinks = rewritten.links;
+    finalHtml = injectPixel(rewritten.html, baseUrl, trackingToken);
+  }
+
   const dedupeKey = dedupeKeyFor(input.enrollmentId, input.nodeId);
   let messageSendId: number;
   try {
@@ -145,12 +158,18 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         senderIdentityId: input.senderIdentityId,
         toEmail: contact.email,
         subject,
-        bodyHtml: html,
+        bodyHtml: finalHtml,
         status: 'sent',
         dedupeKey,
+        trackingToken: trackingToken,
       },
     });
     messageSendId = messageSend.id;
+    if (input.isMarketing && trackingLinks.length > 0) {
+      await prisma.messageLink.createMany({
+        data: trackingLinks.map((url, idx) => ({ messageSendId, idx, url })),
+      });
+    }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return 'already_sent';
@@ -159,17 +178,20 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   }
 
   try {
-    await sendMailAs({
+    const { messageId } = await sendMailAs({
       from: `"${identity.displayName}" <${identity.email}>`,
       replyTo: identity.email,
       to: contact.email,
       subject,
-      html,
+      html: finalHtml,
       headers: {
         'List-Unsubscribe': `<mailto:${identity.email}>, <${oneClickUrl}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     });
+    if (messageId) {
+      await prisma.messageSend.update({ where: { id: messageSendId }, data: { messageId } });
+    }
   } catch (error) {
     logger.error('Flow email send failed', {
       enrollmentId: input.enrollmentId,
@@ -191,7 +213,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         senderIdentityId: input.senderIdentityId,
         toEmail: contact.email,
         subject,
-        bodyHtml: html,
+        bodyHtml: finalHtml,
         status: 'failed',
       },
     });

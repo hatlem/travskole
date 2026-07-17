@@ -102,16 +102,16 @@ interface SendMailAsInput {
  * sender address (flow sends use one of the verified sender identities)
  * and optional raw headers (e.g. `List-Unsubscribe`).
  */
-export async function sendMailAs(input: SendMailAsInput): Promise<void> {
+export async function sendMailAs(input: SendMailAsInput): Promise<{ messageId: string | null }> {
   const transporter = getTransporter();
   if (!transporter) {
     logger.warn('SMTP not configured — skipping email', { to: input.to, subject: input.subject });
-    return;
+    return { messageId: null };
   }
   const fullHtml = /<html[\s>]/i.test(input.html)
     ? input.html
     : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${input.html}</body></html>`;
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: input.from,
     replyTo: input.replyTo,
     to: input.to,
@@ -120,6 +120,7 @@ export async function sendMailAs(input: SendMailAsInput): Promise<void> {
     text: htmlToText(input.html),
     headers: input.headers,
   });
+  return { messageId: info.messageId ?? null };
 }
 
 interface RegistrationEmail {
