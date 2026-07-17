@@ -188,6 +188,7 @@ model BookingRequest {
   paymentStatus String    @default("none") @map("payment_status") // none | pending | paid | failed | refunded
   paymentProvider String? @map("payment_provider") // stripe | vipps
   paymentRef    String?   @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
+  paymentIntentRef String? @unique @map("payment_intent_ref") // Stripe payment-intent-id (stabil nøkkel — paymentRef skrives ikke om ved webhook)
   createdAt     DateTime  @default(now()) @map("created_at")
 
   course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
@@ -228,6 +229,7 @@ model Registration {
   paymentStatus      String   @default("none") @map("payment_status") // none | pending | paid | failed | refunded
   paymentProvider    String?  @map("payment_provider") // stripe | vipps
   paymentRef         String?  @unique @map("payment_ref") // provider-ref (Stripe session/PI-id, Vipps reference)
+  paymentIntentRef   String?  @unique @map("payment_intent_ref") // Stripe payment-intent-id (stabil nøkkel — paymentRef skrives ikke om ved webhook)
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 

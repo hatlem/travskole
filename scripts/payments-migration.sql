@@ -1,10 +1,15 @@
 -- Produksjonsmigrasjon: betalingsfelter på registrations og booking_requests
 -- (delprosjekt 2b — Stripe/Vipps-betaling).
 --
--- Formål: legger til payment_status/payment_provider/payment_ref-kolonner
--- pluss unike indekser på payment_ref, slik at eksisterende
--- registrerings-/booking-rader kan spores gjennom betalingsflyten uten å
--- røre eksisterende data.
+-- Formål: legger til payment_status/payment_provider/payment_ref/
+-- payment_intent_ref-kolonner pluss unike indekser på payment_ref og
+-- payment_intent_ref, slik at eksisterende registrerings-/booking-rader kan
+-- spores gjennom betalingsflyten uten å røre eksisterende data.
+--
+-- payment_intent_ref er en dedikert, stabil kolonne for Stripes
+-- payment-intent-id: webhooken skriver den hit i stedet for å skrive om
+-- payment_ref (som ellers ville gjort takk-sidens `?ref=cs_...`-oppslag
+-- permanent ugyldig etter at webhooken kjører).
 --
 -- Kun additive endringer: ALTER TABLE ... ADD COLUMN og CREATE UNIQUE INDEX.
 -- Ingen DROP, RENAME eller endring av eksisterende kolonner — trygt å kjøre
@@ -17,12 +22,14 @@
 --     --script
 
 -- AlterTable
-ALTER TABLE "booking_requests" ADD COLUMN     "payment_provider" TEXT,
+ALTER TABLE "booking_requests" ADD COLUMN     "payment_intent_ref" TEXT,
+ADD COLUMN     "payment_provider" TEXT,
 ADD COLUMN     "payment_ref" TEXT,
 ADD COLUMN     "payment_status" TEXT NOT NULL DEFAULT 'none';
 
 -- AlterTable
-ALTER TABLE "registrations" ADD COLUMN     "payment_provider" TEXT,
+ALTER TABLE "registrations" ADD COLUMN     "payment_intent_ref" TEXT,
+ADD COLUMN     "payment_provider" TEXT,
 ADD COLUMN     "payment_ref" TEXT,
 ADD COLUMN     "payment_status" TEXT NOT NULL DEFAULT 'none';
 
@@ -30,4 +37,10 @@ ADD COLUMN     "payment_status" TEXT NOT NULL DEFAULT 'none';
 CREATE UNIQUE INDEX "booking_requests_payment_ref_key" ON "booking_requests"("payment_ref");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "booking_requests_payment_intent_ref_key" ON "booking_requests"("payment_intent_ref");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "registrations_payment_ref_key" ON "registrations"("payment_ref");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "registrations_payment_intent_ref_key" ON "registrations"("payment_intent_ref");

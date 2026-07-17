@@ -24,23 +24,60 @@ const STATUS_MAP: Record<PaymentEventInput['type'], string> = {
   'payment.refunded': 'refunded',
 };
 
+/**
+ * Monoton rangering av betalingsstatus — hindrer at forsinkede/omspilte
+ * webhook-events (Stripe/Vipps gjenforsøker levering, eller leverer
+ * ute av rekkefølge) kan degradere en terminal status. Eks.: en omspilt
+ * Vipps AUTHORIZED etter REFUNDED skal ALDRI sette raden tilbake til
+ * 'paid', og en sent ankommet Stripe payment_intent.payment_failed etter
+ * at betalingen allerede lyktes skal ALDRI overskrive 'paid' med 'failed'.
+ * Kun strengt økende overganger skriver ny status (se applyPaymentEvent).
+ */
+const STATUS_RANK: Record<string, number> = {
+  none: 0,
+  pending: 1,
+  failed: 2,
+  paid: 3,
+  refunded: 4,
+};
+
 type ResolvedRow =
-  | { kind: 'registration'; id: number }
-  | { kind: 'bookingRequest'; id: number };
+  | { kind: 'registration'; id: number; paymentStatus: string }
+  | { kind: 'bookingRequest'; id: number; paymentStatus: string };
 
 async function resolveRow(input: PaymentEventInput): Promise<ResolvedRow | null> {
   if (input.refKind === 'paymentRef') {
     const registration = await prisma.registration.findUnique({
       where: { paymentRef: input.ref },
-      select: { id: true },
+      select: { id: true, paymentStatus: true },
     });
-    if (registration) return { kind: 'registration', id: registration.id };
+    if (registration) return { kind: 'registration', id: registration.id, paymentStatus: registration.paymentStatus };
+
+    // Stripe skriver om paymentRef fra checkout-sesjon (cs_) til payment
+    // intent (pi_) ved payment.succeeded (se applyPaymentEvent) — senere
+    // events nøkla på PI-en (f.eks. charge.refunded) må derfor også kunne
+    // slå opp via den stabile paymentIntentRef-kolonnen.
+    const registrationByPi = await prisma.registration.findUnique({
+      where: { paymentIntentRef: input.ref },
+      select: { id: true, paymentStatus: true },
+    });
+    if (registrationByPi) {
+      return { kind: 'registration', id: registrationByPi.id, paymentStatus: registrationByPi.paymentStatus };
+    }
 
     const booking = await prisma.bookingRequest.findUnique({
       where: { paymentRef: input.ref },
-      select: { id: true },
+      select: { id: true, paymentStatus: true },
     });
-    if (booking) return { kind: 'bookingRequest', id: booking.id };
+    if (booking) return { kind: 'bookingRequest', id: booking.id, paymentStatus: booking.paymentStatus };
+
+    const bookingByPi = await prisma.bookingRequest.findUnique({
+      where: { paymentIntentRef: input.ref },
+      select: { id: true, paymentStatus: true },
+    });
+    if (bookingByPi) {
+      return { kind: 'bookingRequest', id: bookingByPi.id, paymentStatus: bookingByPi.paymentStatus };
+    }
 
     return null;
   }
@@ -49,16 +86,16 @@ async function resolveRow(input: PaymentEventInput): Promise<ResolvedRow | null>
   if (input.registrationId) {
     const registration = await prisma.registration.findUnique({
       where: { id: input.registrationId },
-      select: { id: true },
+      select: { id: true, paymentStatus: true },
     });
-    if (registration) return { kind: 'registration', id: registration.id };
+    if (registration) return { kind: 'registration', id: registration.id, paymentStatus: registration.paymentStatus };
   }
   if (input.bookingRequestId) {
     const booking = await prisma.bookingRequest.findUnique({
       where: { id: input.bookingRequestId },
-      select: { id: true },
+      select: { id: true, paymentStatus: true },
     });
-    if (booking) return { kind: 'bookingRequest', id: booking.id };
+    if (booking) return { kind: 'bookingRequest', id: booking.id, paymentStatus: booking.paymentStatus };
   }
   return null;
 }
@@ -158,16 +195,43 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
     return 'not_found';
   }
 
-  const paymentStatus = STATUS_MAP[input.type];
+  const newStatus = STATUS_MAP[input.type];
+  const currentRank = STATUS_RANK[row.paymentStatus] ?? STATUS_RANK.none;
+  const newRank = STATUS_RANK[newStatus];
+  const isDowngrade = newRank < currentRank;
+
+  // nextRef er kun satt av Stripe checkout.session.completed (payment.succeeded)
+  // og bærer den faktiske payment-intent-IDen. Vi lagrer den i den dedikerte
+  // paymentIntentRef-kolonnen og lar paymentRef (cs_-IDen) stå urørt, slik at
+  // takk-sidens `?ref=cs_...`-oppslag fortsatt treffer etter webhooken kjører.
   const updateData: Prisma.RegistrationUpdateInput | Prisma.BookingRequestUpdateInput = {
-    paymentStatus,
-    ...(input.nextRef && { paymentRef: input.nextRef }),
+    ...(newRank > currentRank && { paymentStatus: newStatus }),
+    ...(input.nextRef && { paymentIntentRef: input.nextRef }),
   };
 
-  if (row.kind === 'registration') {
-    await prisma.registration.update({ where: { id: row.id }, data: updateData });
-  } else {
-    await prisma.bookingRequest.update({ where: { id: row.id }, data: updateData });
+  if (isDowngrade) {
+    logger.info('applyPaymentEvent: ignorert nedgradering av betalingsstatus', {
+      provider: input.provider,
+      eventId: input.eventId,
+      fraStatus: row.paymentStatus,
+      tilStatus: newStatus,
+      ...(row.kind === 'registration' ? { registrationId: row.id } : { bookingRequestId: row.id }),
+    });
+  }
+
+  if (Object.keys(updateData).length > 0) {
+    if (row.kind === 'registration') {
+      await prisma.registration.update({ where: { id: row.id }, data: updateData });
+    } else {
+      await prisma.bookingRequest.update({ where: { id: row.id }, data: updateData });
+    }
+  }
+
+  // Ignorerte nedgraderinger endrer ikke terminal status — ingen bussevent,
+  // ingen deal-flytting. Bokføring av nextRef/paymentIntentRef over gjelder
+  // uansett (best-effort-uavhengig, gjort før denne returen).
+  if (isDowngrade) {
+    return 'applied';
   }
 
   // Kontakt-oppslag og hendelsesemisjon: best-effort, felter for CRM/tidslinje.
