@@ -101,6 +101,36 @@ async function logSkippedSend(
   });
 }
 
+/**
+ * Shared transient-failure recovery: deletes the dedupe-keyed `MessageSend`
+ * row and replaces it with a fresh audit row that has NO `dedupeKey`/
+ * `trackingToken`, so a later manual re-run/reactivation can legitimately
+ * resend for this enrollment/node pair instead of being permanently blocked
+ * by its own failed attempt. Used by both the SMTP-send failure path and the
+ * tracking-link persistence failure path.
+ */
+async function recoverFromFailedSend(
+  messageSendId: number,
+  input: SendFlowEmailInput,
+  toEmail: string,
+  subject: string,
+  bodyHtml: string,
+): Promise<void> {
+  await prisma.messageSend.delete({ where: { id: messageSendId } }).catch(() => {});
+  await prisma.messageSend.create({
+    data: {
+      enrollmentId: input.enrollmentId,
+      nodeId: input.nodeId,
+      contactId: input.contactId,
+      senderIdentityId: input.senderIdentityId,
+      toEmail,
+      subject,
+      bodyHtml,
+      status: 'failed',
+    },
+  });
+}
+
 export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlowEmailResult> {
   const contact = await prisma.contact.findUnique({
     where: { id: input.contactId },
@@ -165,16 +195,32 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       },
     });
     messageSendId = messageSend.id;
-    if (input.isMarketing && trackingLinks.length > 0) {
-      await prisma.messageLink.createMany({
-        data: trackingLinks.map((url, idx) => ({ messageSendId, idx, url })),
-      });
-    }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
       return 'already_sent';
     }
     throw error;
+  }
+
+  if (input.isMarketing && trackingLinks.length > 0) {
+    try {
+      await prisma.messageLink.createMany({
+        data: trackingLinks.map((url, idx) => ({ messageSendId, idx, url })),
+      });
+    } catch (error) {
+      logger.error('Flow email tracking-link persistence failed', {
+        enrollmentId: input.enrollmentId,
+        nodeId: input.nodeId,
+        contactId: input.contactId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // A createMany failure here (DB timeout, connection blip, deadlock)
+      // must not leave a 'sent' row squatting the dedupe slot with no
+      // tracking links and no email actually sent — recover exactly like a
+      // failed SMTP send would.
+      await recoverFromFailedSend(messageSendId, input, contact.email, subject, finalHtml);
+      return 'failed';
+    }
   }
 
   try {
@@ -204,19 +250,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     // `dedupeKey` and record a fresh audit row WITHOUT one, so a later
     // manual re-run/reactivation can legitimately resend for this
     // enrollment/node pair instead of being told "already_sent" forever.
-    await prisma.messageSend.delete({ where: { id: messageSendId } }).catch(() => {});
-    await prisma.messageSend.create({
-      data: {
-        enrollmentId: input.enrollmentId,
-        nodeId: input.nodeId,
-        contactId: input.contactId,
-        senderIdentityId: input.senderIdentityId,
-        toEmail: contact.email,
-        subject,
-        bodyHtml: finalHtml,
-        status: 'failed',
-      },
-    });
+    await recoverFromFailedSend(messageSendId, input, contact.email, subject, finalHtml);
     return 'failed';
   }
 
