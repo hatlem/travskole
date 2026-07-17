@@ -15,6 +15,7 @@ import { sendMailAs } from '@/lib/mail';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { getBaseUrl } from '@/lib/site';
 import logger from '@/lib/logger';
 
 export type SendFlowEmailResult =
@@ -51,7 +52,7 @@ function contactMergeTagData(contact: { name: string }): MergeTagData {
 }
 
 function unsubscribeUrl(contactId: number): string {
-  const appUrl = process.env.NEXTAUTH_URL;
+  const appUrl = getBaseUrl();
   const token = signUnsubscribeToken(contactId);
   return `${appUrl}/avmeld?token=${token}`;
 }
@@ -111,7 +112,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const subject = replaceMergeTags(input.subject, mergeData);
   const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
   const unsubUrl = unsubscribeUrl(input.contactId);
-  const html = `${wrapEmailHtml(renderedBody, identity.displayName)}${unsubscribeFooter(unsubUrl)}`;
+  const html = wrapEmailHtml(renderedBody + unsubscribeFooter(unsubUrl), identity.displayName);
 
   const dedupeKey = dedupeKeyFor(input.enrollmentId, input.nodeId);
   let messageSendId: number;
@@ -144,7 +145,10 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       to: contact.email,
       subject,
       html,
-      headers: { 'List-Unsubscribe': `<mailto:${identity.email}>, <${unsubUrl}>` },
+      headers: {
+        'List-Unsubscribe': `<mailto:${identity.email}>, <${unsubUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+      },
     });
   } catch (error) {
     logger.error('Flow email send failed', {
