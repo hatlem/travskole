@@ -2,9 +2,14 @@
  * POST /api/payments/checkout
  *
  * Starter en betalingsøkt (Stripe Checkout eller Vipps ePayment) for en
- * påmelding eller bestillingsforespørsel. Sesjonsbeskyttet + eierskapssjekket:
- * en bruker kan kun betale for sin EGEN rad (foresattes e-post for
- * påmelding, `email`-feltet for bestillingsforespørsel).
+ * påmelding eller bestillingsforespørsel. Eierskapsbeskyttet: en bruker kan
+ * kun betale for sin EGEN rad (foresattes e-post for påmelding,
+ * `email`-feltet for bestillingsforespørsel) — enten bevist ved sesjon
+ * (e-postmatch), eller ved en signert checkout-token utstedt av
+ * POST /api/registrations rett etter opprettelse (se
+ * lib/payments/checkout-token.ts). Tokenen finnes fordi påmelding er en
+ * anonym (uinnlogget) hovedstrøm for foresatte, mens denne ruten ellers ville
+ * kreve sesjon og dermed gjøre "betal nå" uoppnåelig for dem.
  *
  * Beløp hentes fra kurset (aldri fra klienten) — se lib/crm/bridge-mapping.ts
  * for de samme verdireglene (booking = pris × deltakere).
@@ -20,12 +25,14 @@ import { getSetting } from '@/lib/settings';
 import { parsePaymentMethods, isTestMode, isStripeConfigured } from '@/lib/payments';
 import { createStripeCheckout } from '@/lib/payments/stripe';
 import { isVippsConfigured, createVippsPayment } from '@/lib/payments/vipps';
+import { verifyCheckoutToken } from '@/lib/payments/checkout-token';
 
 const checkoutSchema = z
   .object({
     registrationId: z.number().int().positive().optional(),
     bookingRequestId: z.number().int().positive().optional(),
     provider: z.enum(['stripe', 'vipps']),
+    token: z.string().optional(),
   })
   .refine((data) => Boolean(data.registrationId) !== Boolean(data.bookingRequestId), {
     message: 'Oppgi enten registrationId eller bookingRequestId, ikke begge',
@@ -37,11 +44,12 @@ interface CheckoutTarget {
   amountKr: number | null;
   title: string;
   paymentMethodsRaw: string;
+  ownerEmail: string;
 }
 
-type TargetResult = CheckoutTarget | 'not_found' | 'forbidden';
+type TargetResult = CheckoutTarget | 'not_found';
 
-async function loadRegistrationTarget(id: number, sessionEmail: string): Promise<TargetResult> {
+async function loadRegistrationTarget(id: number): Promise<TargetResult> {
   const registration = await prisma.registration.findUnique({
     where: { id },
     include: {
@@ -50,7 +58,6 @@ async function loadRegistrationTarget(id: number, sessionEmail: string): Promise
     },
   });
   if (!registration) return 'not_found';
-  if (registration.parent.user.email.toLowerCase() !== sessionEmail) return 'forbidden';
 
   return {
     entity: 'registration',
@@ -58,16 +65,16 @@ async function loadRegistrationTarget(id: number, sessionEmail: string): Promise
     amountKr: registration.course.price,
     title: `${registration.course.name} — ${registration.parent.name}`,
     paymentMethodsRaw: registration.course.paymentMethods,
+    ownerEmail: registration.parent.user.email.toLowerCase(),
   };
 }
 
-async function loadBookingTarget(id: number, sessionEmail: string): Promise<TargetResult> {
+async function loadBookingTarget(id: number): Promise<TargetResult> {
   const booking = await prisma.bookingRequest.findUnique({
     where: { id },
     include: { course: true },
   });
   if (!booking || !booking.course) return 'not_found';
-  if (booking.email.toLowerCase() !== sessionEmail) return 'forbidden';
 
   return {
     entity: 'booking',
@@ -75,14 +82,13 @@ async function loadBookingTarget(id: number, sessionEmail: string): Promise<Targ
     amountKr: booking.course.price !== null ? booking.course.price * booking.participants : null,
     title: `${booking.course.name} — ${booking.name}`,
     paymentMethodsRaw: booking.course.paymentMethods,
+    ownerEmail: booking.email.toLowerCase(),
   };
 }
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession();
-  if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const sessionEmail = session?.user?.email?.toLowerCase();
 
   let body: unknown;
   try {
@@ -95,19 +101,37 @@ export async function POST(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const { provider, registrationId } = parsed.data;
-  const sessionEmail = session.user.email.toLowerCase();
+  const { provider, registrationId, token } = parsed.data;
+
+  // Ingen sesjon og ingen token oppgitt: ingenting å bevise eierskap med.
+  if (!sessionEmail && !token) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
 
   const target: TargetResult =
     registrationId !== undefined
-      ? await loadRegistrationTarget(registrationId, sessionEmail)
-      : await loadBookingTarget(parsed.data.bookingRequestId as number, sessionEmail);
+      ? await loadRegistrationTarget(registrationId)
+      : await loadBookingTarget(parsed.data.bookingRequestId as number);
 
   if (target === 'not_found') {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
-  if (target === 'forbidden') {
-    return NextResponse.json({ error: 'Ingen tilgang' }, { status: 403 });
+
+  // Eierskap: sesjonens e-post matcher raden, ELLER en gyldig token hvis
+  // kind+id matcher nøyaktig den forespurte raden.
+  let authorized = sessionEmail !== undefined && target.ownerEmail === sessionEmail;
+  if (!authorized && token) {
+    const verified = verifyCheckoutToken(token);
+    authorized = !!verified && verified.kind === target.entity && verified.id === target.id;
+  }
+
+  if (!authorized) {
+    // Innlogget, men feil eier: som før, 403. Ikke innlogget (kun en ugyldig/
+    // manglende token å vise til): 401 — speiler "ingen sesjon"-tilfellet over.
+    if (sessionEmail) {
+      return NextResponse.json({ error: 'Ingen tilgang' }, { status: 403 });
+    }
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   const methods = parsePaymentMethods(target.paymentMethodsRaw);
@@ -183,7 +207,7 @@ export async function POST(request: NextRequest) {
     action: 'checkout_started',
     entity: target.entity,
     entityId: target.id,
-    userEmail: session.user.email,
+    userEmail: target.ownerEmail,
   }).catch(() => {});
 
   return NextResponse.json({ url: providerResult.url });

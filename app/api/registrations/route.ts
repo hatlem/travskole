@@ -13,6 +13,10 @@ import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { parsePaymentMethods } from '@/lib/payments';
+import { signCheckoutToken } from '@/lib/payments/checkout-token';
+
+const CHECKOUT_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 time
 
 interface RegistrationData {
   courseType: string;
@@ -432,12 +436,31 @@ export async function POST(request: NextRequest) {
       ]).catch(() => {});
     }
 
+    // Anonym påmelding (ingen sesjon) er hovedstrømmen for foresatte, men
+    // /api/payments/checkout krever normalt sesjon + e-postmatch for eierskap.
+    // Utsted en kortlevd checkout-token her slik at "betal nå" er nåbart uten
+    // innlogging. Best-effort: en manglende NEXTAUTH_SECRET er en
+    // server-feilkonfig, ikke noe som skal blokkere selve påmeldingen.
+    let checkoutToken: string | undefined;
+    if (parsePaymentMethods(course.paymentMethods).some((m) => m === 'stripe' || m === 'vipps')) {
+      try {
+        checkoutToken = signCheckoutToken({
+          kind: 'registration',
+          id: registration.id,
+          expMs: Date.now() + CHECKOUT_TOKEN_TTL_MS,
+        });
+      } catch (error) {
+        logger.error('Kunne ikke signere checkout-token', { error });
+      }
+    }
+
     return NextResponse.json({
       success: true,
       registration: {
         id: String(registration.id),
         status: registration.status,
-      }
+      },
+      ...(checkoutToken ? { checkoutToken } : {}),
     }, { status: 201 });
 
   } catch (error) {

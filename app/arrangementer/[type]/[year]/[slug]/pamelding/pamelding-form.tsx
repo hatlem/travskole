@@ -128,24 +128,35 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
     (m): m is PayableProvider => m === 'stripe' || m === 'vipps'
   );
   const [pendingRegistrationId, setPendingRegistrationId] = useState<string | null>(null);
+  const [checkoutToken, setCheckoutToken] = useState<string | null>(null);
   const [checkoutProvider, setCheckoutProvider] = useState<PayableProvider | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
   const showPaymentChoice = payableMethods.length > 1;
 
-  const startCheckout = useCallback(async (registrationId: string, provider: PayableProvider) => {
+  const startCheckout = useCallback(async (registrationId: string, provider: PayableProvider, token: string | null) => {
     setCheckoutProvider(provider);
     setCheckoutError(null);
     try {
       const res = await fetch('/api/payments/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ registrationId: Number(registrationId), provider }),
+        body: JSON.stringify({
+          registrationId: Number(registrationId),
+          provider,
+          ...(token ? { token } : {}),
+        }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
-        // Påmeldingen står uansett — betaling kan gjøres senere fra dashbordet.
+        // Påmeldingen står uansett — betaling kan gjøres senere.
         setCheckoutError(checkoutErrorMessage(errBody.error));
-        setTimeout(() => router.push('/dashboard?success=registration'), 3000);
+        // Innlogget: dashbordet finnes for dem — gammel oppførsel uendret.
+        // Anonym (ingen sesjon): /dashboard gir 401, så vi lar den inline
+        // suksess-tilstanden (med "Til forsiden" / "Logg inn") stå i stedet
+        // for å redirecte til en side de ikke kan se.
+        if (session) {
+          setTimeout(() => router.push('/dashboard?success=registration'), 3000);
+        }
         return;
       }
       const { url } = await res.json();
@@ -153,11 +164,13 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
     } catch {
       // Nettverksfeil e.l. — vis en generisk norsk melding, aldri rå engelsk feiltekst.
       setCheckoutError(CHECKOUT_FALLBACK_ERROR);
-      setTimeout(() => router.push('/dashboard?success=registration'), 3000);
+      if (session) {
+        setTimeout(() => router.push('/dashboard?success=registration'), 3000);
+      }
     } finally {
       setCheckoutProvider(null);
     }
-  }, [router]);
+  }, [router, session]);
 
   const consentActivitiesText = settings.consent_activities_text || '';
   const consentMediaText = (isAdult ? settings.consent_media_text_adult : settings.consent_media_text) || '';
@@ -265,6 +278,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
 
       const responseBody = await response.json();
       const newRegistrationId: string | undefined = responseBody?.registration?.id;
+      const newCheckoutToken: string | undefined = responseBody?.checkoutToken;
 
       // GTM-konvertering: fullført påmelding (GA4-tag i container fyrer på dette eventet)
       if (typeof window !== 'undefined') {
@@ -287,12 +301,14 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
       // Flere metoder: vis valg-skjermen og la brukeren velge.
       if (payableMethods.length > 1) {
         setPendingRegistrationId(newRegistrationId);
+        setCheckoutToken(newCheckoutToken ?? null);
         return;
       }
 
       // Én betalingsmetode: vis "sender deg videre"-skjermen og start betalingen direkte.
       setPendingRegistrationId(newRegistrationId);
-      await startCheckout(newRegistrationId, payableMethods[0]);
+      setCheckoutToken(newCheckoutToken ?? null);
+      await startCheckout(newRegistrationId, payableMethods[0], newCheckoutToken ?? null);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : t('reg.error_generic'));
     } finally {
@@ -313,7 +329,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                 : 'Sender deg videre til betaling…'}
             </p>
 
-            {checkoutError && (
+            {checkoutError && session && (
               <div
                 role="alert"
                 className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm mb-6 text-left"
@@ -322,12 +338,30 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
               </div>
             )}
 
+            {/* Anonym bruker (ingen sesjon): /dashboard 401er for dem, så vi viser
+                en inline suksess-tilstand i stedet for å redirecte dit — påmeldingen
+                står uansett, betaling kan gjøres senere via lenkene under. */}
+            {checkoutError && !session && (
+              <div role="alert" className="bg-green-50 border border-green-200 rounded-lg p-6 mb-6 text-left">
+                <p className="text-green-800 font-semibold text-lg mb-2">Påmeldingen er registrert!</p>
+                <p className="text-red-700 text-sm mb-4">{checkoutError}</p>
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <Link href="/" className="text-bjerke-blue hover:underline font-medium">
+                    Til forsiden
+                  </Link>
+                  <Link href="/login" className="text-bjerke-blue hover:underline font-medium">
+                    Logg inn
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {showPaymentChoice ? (
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 {payableMethods.includes('stripe') && (
                   <button
                     type="button"
-                    onClick={() => startCheckout(pendingRegistrationId, 'stripe')}
+                    onClick={() => startCheckout(pendingRegistrationId, 'stripe', checkoutToken)}
                     disabled={checkoutProvider !== null}
                     className={`px-6 py-3 rounded-lg font-semibold transition ${
                       checkoutProvider !== null
@@ -341,7 +375,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                 {payableMethods.includes('vipps') && (
                   <button
                     type="button"
-                    onClick={() => startCheckout(pendingRegistrationId, 'vipps')}
+                    onClick={() => startCheckout(pendingRegistrationId, 'vipps', checkoutToken)}
                     disabled={checkoutProvider !== null}
                     className={`px-6 py-3 rounded-lg font-semibold transition ${
                       checkoutProvider !== null
