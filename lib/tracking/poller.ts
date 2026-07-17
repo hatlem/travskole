@@ -19,18 +19,17 @@
 // tick, blir resten hentet på NESTE 5-minutters tick — ingen meldinger
 // hoppes over, de fordeles bare over flere tick.
 //
-// DSN-parsing (bounce-deteksjon) er en beste-forsøk RFC 3464-tolkning
-// (Status:/Final-Recipient:-felt) av DSN-ens tekstbody via regex. Reelle
-// DSN-formater varierer noe mellom leverandører, så en DSN som ikke treffer
-// noen av regexene blir likevel registrert som en bounce (via
-// classifyInboundMessage sin regel om at enhver DSN — selv med utolkbar
-// status — er en bounce med hard: false), men uten failedRecipient. I så
-// fall kan ikke recordBounce sin fallback-matching på mottaker-adresse
-// finne en MessageSend å oppdatere, og bounce-registreringen blir reelt
-// en no-op (selv om den telles i denne pollerens `bounces`-returverdi,
-// siden klassifiseringen i seg selv lyktes). Dette er en akseptert
-// avveining — bedre å forsøke og av og til bomme enn å stille droppe all
-// bounce-deteksjon.
+// DSN-parsing (bounce-deteksjon): Status:/Final-Recipient:-feltene fra RFC
+// 3464 ligger i praksis i en nested message/delivery-status-vedleggsdel
+// (ikke i den menneskelesbare body.content) — hentes derfor via et eget
+// oppslag mot meldingens vedlegg (fetchDsnDetailText). Faller tilbake til
+// body.content dersom vedlegget mangler, ikke kan hentes, eller ikke
+// inneholder de forventede feltene. Uansett utfall klassifiseres meldingen
+// fortsatt som en bounce (via classifyInboundMessage sin regel om at enhver
+// DSN — selv med utolkbar status — er en bounce med hard: false); det er
+// kun failedRecipient/dsnStatus-oppløsningen (og dermed recordBounce sin
+// evne til å faktisk finne og suppresjere riktig mottaker) som avhenger av
+// om detaljene lot seg hente.
 
 import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
@@ -92,11 +91,45 @@ async function getGraphAccessToken(): Promise<string | null> {
 }
 
 interface GraphMessage {
+  id?: string;
   receivedDateTime?: string;
   subject?: string;
   from?: { emailAddress?: { address?: string } };
   internetMessageHeaders?: { name: string; value: string }[];
   body?: { contentType?: string; content?: string };
+}
+
+interface GraphAttachment {
+  contentType?: string;
+  contentBytes?: string;
+}
+
+/**
+ * Henter DSN-rapportens maskinlesbare del (Status:/Final-Recipient:-felt) fra
+ * meldingens vedlegg, siden disse feltene i praksis ligger i en nested
+ * message/delivery-status-del (ikke i den menneskelesbare body.content).
+ * Fire-safe: returnerer null ved enhver feil — kalleren faller da tilbake
+ * til body.content, som fortsatt kan inneholde nok til klassifisering.
+ */
+async function fetchDsnDetailText(mailbox: string, messageId: string, token: string): Promise<string | null> {
+  try {
+    const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages/${encodeURIComponent(messageId)}/attachments`;
+    const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) return null;
+    const json = (await res.json()) as { value?: GraphAttachment[] };
+    const attachments = json.value ?? [];
+    const dsnPart = attachments.find(
+      (a) => (a.contentType ?? '').toLowerCase() === 'message/delivery-status',
+    );
+    if (!dsnPart?.contentBytes) return null;
+    return Buffer.from(dsnPart.contentBytes, 'base64').toString('utf-8');
+  } catch (error) {
+    logger.error('Henting av DSN-vedlegg feilet', {
+      mailbox,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
 }
 
 function findHeader(message: GraphMessage, name: string): string | null {
@@ -106,12 +139,17 @@ function findHeader(message: GraphMessage, name: string): string | null {
   return header?.value ?? null;
 }
 
-function toInboundMessageLike(message: GraphMessage): InboundMessageLike {
+async function toInboundMessageLike(
+  message: GraphMessage,
+  mailbox: string,
+  token: string,
+): Promise<InboundMessageLike> {
   const contentType = findHeader(message, 'Content-Type') ?? '';
   const isDsn = /multipart\/report/i.test(contentType) && /report-type\s*=\s*delivery-status/i.test(contentType);
 
   if (isDsn) {
-    const bodyText = message.body?.content ?? '';
+    const dsnDetailText = message.id ? await fetchDsnDetailText(mailbox, message.id, token) : null;
+    const bodyText = dsnDetailText ?? message.body?.content ?? '';
     const statusMatch = /^Status:\s*(\d\.\d{1,3}\.\d{1,3})/im.exec(bodyText);
     const recipientMatch = /^Final-Recipient:\s*rfc822;\s*(\S+)/im.exec(bodyText);
     return {
@@ -147,7 +185,7 @@ async function pollOneMailbox(
   const cursor = rawCursor || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const filter = encodeURIComponent(`receivedDateTime gt ${cursor}`);
-  const select = encodeURIComponent('internetMessageHeaders,receivedDateTime,from,subject,body');
+  const select = encodeURIComponent('id,internetMessageHeaders,receivedDateTime,from,subject,body');
   const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages?$filter=${filter}&$select=${select}&$orderby=receivedDateTime asc&$top=50`;
 
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
@@ -169,7 +207,7 @@ async function pollOneMailbox(
       maxReceivedDateTime = message.receivedDateTime;
     }
     try {
-      const msg = toInboundMessageLike(message);
+      const msg = await toInboundMessageLike(message, mailbox, token);
       const classification = classifyInboundMessage(msg, knownMessageIds);
       if (classification.kind === 'reply') {
         await recordReply(classification.matchedMessageId);
