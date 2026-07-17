@@ -73,6 +73,18 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
         .update({ where: { id: input.visitorId }, data: { lastSeenAt: now } })
         .catch(() => {});
     }
+
+    // Best-effort flow-enrollment hook. Dynamic import avoids a static
+    // bus → flows → bus cycle; `.catch(() => {})` on top of enrollFromEvent's
+    // own internal try/catch means a bug here can never break event emission.
+    if (input.contactId) {
+      const contactId = input.contactId;
+      await import('@/lib/flows/enroll')
+        .then(({ enrollFromEvent }) =>
+          enrollFromEvent({ type: input.type, contactId, meta: input.meta ?? {} }),
+        )
+        .catch(() => {});
+    }
   } catch (error) {
     logger.error('emitEvent feilet', error);
   }
