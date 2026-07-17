@@ -344,18 +344,20 @@ model Contact {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  organization Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  owner        User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  user         User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
-  parent       Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
-  deals        Deal[]
-  memberships  ContactListMembership[]
-  activities   ContactActivity[]
-  tasks        Task[]
-  notes        Note[]
-  consent      Consent?
-  visitors     Visitor[]
-  events       AppEvent[]
+  organization   Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  owner          User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  user           User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
+  parent         Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  deals          Deal[]
+  memberships    ContactListMembership[]
+  activities     ContactActivity[]
+  tasks          Task[]
+  notes          Note[]
+  consent        Consent?
+  visitors       Visitor[]
+  events         AppEvent[]
+  flowEnrollments FlowEnrollment[]
+  messageSends   MessageSend[]
 
   @@index([organizationId])
   @@index([stage])
@@ -587,4 +589,109 @@ model AppEvent {
   @@index([visitorId, occurredAt])
   @@index([occurredAt])
   @@map("app_events")
+}
+
+// ── Flyt-motor (delprosjekt 3) ──────────────────────────────────────────────
+
+model Flow {
+  id          Int              @id @default(autoincrement())
+  name        String
+  description String?
+  status      String           @default("draft") // draft | active | paused | archived
+  isMarketing Boolean          @default(true) @map("is_marketing") // markedsføring krever samtykke ved send
+  nodes       FlowNode[]
+  edges       FlowEdge[]
+  triggers    FlowTrigger[]
+  enrollments FlowEnrollment[]
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  @@map("flows")
+}
+
+model FlowNode {
+  id        Int      @id @default(autoincrement())
+  flowId    Int      @map("flow_id")
+  flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  type      String   // start | email | wait | condition | action | end
+  config    String   @default("{}") // JSON per nodetype (se under)
+  posX      Float    @default(0) @map("pos_x")
+  posY      Float    @default(0) @map("pos_y")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([flowId])
+  @@map("flow_nodes")
+}
+
+model FlowEdge {
+  id         Int      @id @default(autoincrement())
+  flowId     Int      @map("flow_id")
+  flow       Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  fromNodeId Int      @map("from_node_id")
+  toNodeId   Int      @map("to_node_id")
+  branch     String?  // 'ja' | 'nei' for condition-noder; null ellers
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  @@index([flowId])
+  @@map("flow_edges")
+}
+
+model FlowTrigger {
+  id        Int      @id @default(autoincrement())
+  flowId    Int      @map("flow_id")
+  flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  eventType String   @map("event_type") // fra bussens taksonomi
+  filter    String   @default("{}") // JSON subset-match mot event.meta (f.eks. {"courseId": 3})
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@index([eventType])
+  @@map("flow_triggers")
+}
+
+model FlowEnrollment {
+  id            Int       @id @default(autoincrement())
+  flowId        Int       @map("flow_id")
+  flow          Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  contactId     Int       @map("contact_id")
+  contact       Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  currentNodeId Int?      @map("current_node_id") // null før første tick (står på start)
+  status        String    @default("active") // active | completed | exited | failed
+  nextRunAt     DateTime  @default(now()) @map("next_run_at")
+  enteredAt     DateTime  @default(now()) @map("entered_at")
+  finishedAt    DateTime? @map("finished_at")
+  failReason    String?   @map("fail_reason")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  @@index([status, nextRunAt]) // runnerens arbeidskø
+  @@index([flowId, contactId, status]) // maks-én-aktiv-håndheving i kode
+  @@map("flow_enrollments")
+}
+
+model SenderIdentity {
+  id          Int          @id @default(autoincrement())
+  email       String       @unique // en av de 7 verifiserte bjerke.no-adressene
+  displayName String       @map("display_name")
+  active      Boolean      @default(true)
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+  messageSends MessageSend[]
+  @@map("sender_identities")
+}
+
+model MessageSend {
+  id               Int             @id @default(autoincrement())
+  enrollmentId     Int?            @map("enrollment_id")
+  nodeId           Int?            @map("node_id")
+  contactId        Int             @map("contact_id")
+  contact          Contact         @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  senderIdentityId Int?            @map("sender_identity_id")
+  senderIdentity   SenderIdentity? @relation(fields: [senderIdentityId], references: [id], onDelete: SetNull)
+  toEmail          String          @map("to_email")
+  subject          String
+  bodyHtml         String          @map("body_html")
+  status           String          @default("sent") // sent | failed | skipped_suppressed | skipped_no_consent | test
+  dedupeKey        String?         @unique @map("dedupe_key") // flow:{enrollmentId}:{nodeId}
+  sentAt           DateTime        @default(now()) @map("sent_at")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  @@index([contactId, sentAt])
+  @@map("message_sends")
 }
