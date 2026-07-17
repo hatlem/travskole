@@ -88,6 +88,40 @@ async function sendMail(to: string, subject: string, html: string) {
   });
 }
 
+interface SendMailAsInput {
+  from: string;
+  replyTo?: string;
+  to: string;
+  subject: string;
+  html: string;
+  headers?: Record<string, string>;
+}
+
+/**
+ * Same transporter/formatting as `sendMail`, but with a caller-specified
+ * sender address (flow sends use one of the verified sender identities)
+ * and optional raw headers (e.g. `List-Unsubscribe`).
+ */
+export async function sendMailAs(input: SendMailAsInput): Promise<void> {
+  const transporter = getTransporter();
+  if (!transporter) {
+    logger.warn('SMTP not configured — skipping email', { to: input.to, subject: input.subject });
+    return;
+  }
+  const fullHtml = /<html[\s>]/i.test(input.html)
+    ? input.html
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${input.html}</body></html>`;
+  await transporter.sendMail({
+    from: input.from,
+    replyTo: input.replyTo,
+    to: input.to,
+    subject: input.subject,
+    html: fullHtml,
+    text: htmlToText(input.html),
+    headers: input.headers,
+  });
+}
+
 interface RegistrationEmail {
   courseName: string;
   /** Utelatt for voksen-arrangementer — deltakeren er forelderen selv */

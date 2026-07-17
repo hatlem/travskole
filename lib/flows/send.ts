@@ -1,0 +1,164 @@
+/**
+ * Flow send layer — turns a planned `send_email` step into an actual
+ * message: consent/suppression gating, merge-tag rendering, the unsubscribe
+ * footer, and idempotent delivery via a verified sender identity.
+ *
+ * Idempotency: the `MessageSend` row with `dedupeKey` is created BEFORE the
+ * network send. A unique-constraint violation (P2002) means a previous run
+ * already sent (or attempted) this exact enrollment/node pair — we return
+ * without sending again. This holds even if a batch runner retries mid-send.
+ */
+
+import { Prisma } from '@prisma/client';
+import { prisma } from '@/lib/prisma';
+import { sendMailAs } from '@/lib/mail';
+import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { signUnsubscribeToken } from './unsubscribe-token';
+import { normalizeEmail } from '@/lib/crm/normalize';
+import logger from '@/lib/logger';
+
+export type SendFlowEmailResult =
+  | 'sent'
+  | 'already_sent'
+  | 'skipped_suppressed'
+  | 'skipped_no_consent'
+  | 'failed';
+
+export interface SendFlowEmailInput {
+  enrollmentId: number;
+  nodeId: number;
+  contactId: number;
+  subject: string;
+  bodyHtml: string;
+  senderIdentityId: number;
+  isMarketing: boolean;
+}
+
+function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
+  return `flow:${enrollmentId}:${nodeId}`;
+}
+
+function contactMergeTagData(contact: { name: string }): MergeTagData {
+  return {
+    forelder_navn: contact.name,
+    barnets_navn: '',
+    kurs_navn: '',
+    kurs_startdato: '',
+    kurs_sluttdato: '',
+    allergier: '',
+    kontakt_epost: '',
+  };
+}
+
+function unsubscribeUrl(contactId: number): string {
+  const appUrl = process.env.NEXTAUTH_URL;
+  const token = signUnsubscribeToken(contactId);
+  return `${appUrl}/avmeld?token=${token}`;
+}
+
+function unsubscribeFooter(unsubUrl: string): string {
+  return `<p style="font-size:12px;color:#6b7280">Du mottar denne e-posten fra Bjerke Travbane. <a href="${unsubUrl}">Meld deg av</a></p>`;
+}
+
+/** Logs a skipped send (suppressed / no consent) — never gets a dedupeKey. */
+async function logSkippedSend(
+  input: SendFlowEmailInput,
+  toEmail: string,
+  status: 'skipped_suppressed' | 'skipped_no_consent',
+): Promise<void> {
+  await prisma.messageSend.create({
+    data: {
+      enrollmentId: input.enrollmentId,
+      nodeId: input.nodeId,
+      contactId: input.contactId,
+      senderIdentityId: input.senderIdentityId,
+      toEmail,
+      subject: input.subject,
+      bodyHtml: input.bodyHtml,
+      status,
+    },
+  });
+}
+
+export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlowEmailResult> {
+  const contact = await prisma.contact.findUnique({
+    where: { id: input.contactId },
+    select: { email: true, name: true },
+  });
+  if (!contact?.email) return 'failed';
+
+  const normalizedEmail = normalizeEmail(contact.email);
+  if (!normalizedEmail) return 'failed';
+
+  const suppression = await prisma.suppression.findUnique({ where: { email: normalizedEmail } });
+  if (suppression) {
+    await logSkippedSend(input, contact.email, 'skipped_suppressed');
+    return 'skipped_suppressed';
+  }
+
+  if (input.isMarketing) {
+    const consent = await prisma.consent.findUnique({ where: { contactId: input.contactId } });
+    if (!consent?.marketing) {
+      await logSkippedSend(input, contact.email, 'skipped_no_consent');
+      return 'skipped_no_consent';
+    }
+  }
+
+  const identity = await prisma.senderIdentity.findUnique({ where: { id: input.senderIdentityId } });
+  if (!identity?.active) return 'failed';
+
+  const mergeData = contactMergeTagData(contact);
+  const subject = replaceMergeTags(input.subject, mergeData);
+  const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
+  const unsubUrl = unsubscribeUrl(input.contactId);
+  const html = `${wrapEmailHtml(renderedBody, identity.displayName)}${unsubscribeFooter(unsubUrl)}`;
+
+  const dedupeKey = dedupeKeyFor(input.enrollmentId, input.nodeId);
+  let messageSendId: number;
+  try {
+    const messageSend = await prisma.messageSend.create({
+      data: {
+        enrollmentId: input.enrollmentId,
+        nodeId: input.nodeId,
+        contactId: input.contactId,
+        senderIdentityId: input.senderIdentityId,
+        toEmail: contact.email,
+        subject,
+        bodyHtml: html,
+        status: 'sent',
+        dedupeKey,
+      },
+    });
+    messageSendId = messageSend.id;
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return 'already_sent';
+    }
+    throw error;
+  }
+
+  try {
+    await sendMailAs({
+      from: identity.email,
+      replyTo: identity.email,
+      to: contact.email,
+      subject,
+      html,
+      headers: { 'List-Unsubscribe': `<mailto:${identity.email}>, <${unsubUrl}>` },
+    });
+  } catch (error) {
+    logger.error('Flow email send failed', {
+      enrollmentId: input.enrollmentId,
+      nodeId: input.nodeId,
+      contactId: input.contactId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    await prisma.messageSend.update({
+      where: { id: messageSendId },
+      data: { status: 'failed' },
+    });
+    return 'failed';
+  }
+
+  return 'sent';
+}
