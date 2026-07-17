@@ -20,6 +20,7 @@ import { sendFlowEmail } from './send';
 
 const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
+const LEASE_MINUTES = 10;
 
 export interface FlowBatchResult {
   processed: number;
@@ -272,23 +273,60 @@ async function processEnrollment(
 }
 
 /**
- * Claims up to `BATCH_SIZE` due, active enrollments and ticks each one
- * forward. Enrollments whose flow is no longer 'active' (paused/archived)
- * are left untouched — they'll be reconsidered on a later batch once the
- * flow is reactivated.
+ * Atomically claims up to `BATCH_SIZE` due, active enrollment ids using
+ * `SELECT ... FOR UPDATE SKIP LOCKED` inside a transaction, then immediately
+ * bumps their `nextRunAt` forward by a `LEASE_MINUTES` lease before
+ * committing. This is what makes overlapping cron ticks safe: a second tick
+ * that starts before the first finishes will `SKIP LOCKED` rows the first
+ * tick has already claimed (still locked until its transaction commits),
+ * and even after that commit those rows' `nextRunAt` is now in the future,
+ * so the second tick's own `next_run_at <= now()` filter excludes them too.
+ * If an enrollment turns out not to need another tick this soon (e.g. it
+ * sleeps for longer, or completes), `processEnrollment` overwrites the
+ * leased `nextRunAt` with the real value — the lease is just a placeholder
+ * until then.
+ */
+async function claimDueEnrollmentIds(now: Date): Promise<number[]> {
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<{ id: number }[]>`
+      SELECT id FROM flow_enrollments
+      WHERE status = 'active' AND next_run_at <= ${now}
+      ORDER BY next_run_at ASC
+      LIMIT ${BATCH_SIZE}
+      FOR UPDATE SKIP LOCKED
+    `;
+    const ids = rows.map((row) => row.id);
+    if (ids.length === 0) return ids;
+
+    const leaseUntil = new Date(now.getTime() + LEASE_MINUTES * 60_000);
+    await tx.flowEnrollment.updateMany({
+      where: { id: { in: ids } },
+      data: { nextRunAt: leaseUntil },
+    });
+    return ids;
+  });
+}
+
+/**
+ * Claims up to `BATCH_SIZE` due, active enrollments (see
+ * `claimDueEnrollmentIds`) and ticks each one forward. Enrollments whose
+ * flow is no longer 'active' (paused/archived) are left untouched beyond
+ * the claim/lease — they'll be reconsidered once the lease expires (or
+ * sooner, once the flow is reactivated and re-ticked).
  */
 export async function runFlowBatch(now: Date = new Date()): Promise<FlowBatchResult> {
+  const claimedIds = await claimDueEnrollmentIds(now);
+  const result: FlowBatchResult = { processed: 0, sent: 0, failed: 0, completed: 0 };
+  if (claimedIds.length === 0) return result;
+
   const dueEnrollments = await prisma.flowEnrollment.findMany({
-    where: { status: 'active', nextRunAt: { lte: now } },
-    orderBy: { nextRunAt: 'asc' },
-    take: BATCH_SIZE,
+    where: { id: { in: claimedIds } },
+    orderBy: { id: 'asc' },
     include: { flow: { select: { status: true, isMarketing: true } } },
   });
 
   const graphCache = new Map<number, FlowGraph>();
   const segmentRulesById = await loadSegmentRulesById();
-
-  const result: FlowBatchResult = { processed: 0, sent: 0, failed: 0, completed: 0 };
 
   for (const enrollment of dueEnrollments) {
     if (enrollment.flow.status !== 'active') continue;
