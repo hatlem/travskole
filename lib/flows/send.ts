@@ -51,10 +51,20 @@ function contactMergeTagData(contact: { name: string }): MergeTagData {
   };
 }
 
-function unsubscribeUrl(contactId: number): string {
+/** Human-facing confirmation page link — shown in the footer. */
+function unsubscribeUrl(token: string): string {
   const appUrl = getBaseUrl();
-  const token = signUnsubscribeToken(contactId);
   return `${appUrl}/avmeld?token=${token}`;
+}
+
+/**
+ * RFC 8058 one-click endpoint — this is what `List-Unsubscribe`/
+ * `List-Unsubscribe-Post` actually point at, so mailbox providers can POST
+ * directly without rendering the confirmation page.
+ */
+function oneClickUnsubscribeUrl(token: string): string {
+  const appUrl = getBaseUrl();
+  return `${appUrl}/api/avmeld/one-click?token=${token}`;
 }
 
 function unsubscribeFooter(unsubUrl: string): string {
@@ -111,7 +121,9 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const mergeData = contactMergeTagData(contact);
   const subject = replaceMergeTags(input.subject, mergeData);
   const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
-  const unsubUrl = unsubscribeUrl(input.contactId);
+  const unsubToken = signUnsubscribeToken(input.contactId);
+  const unsubUrl = unsubscribeUrl(unsubToken);
+  const oneClickUrl = oneClickUnsubscribeUrl(unsubToken);
   const html = wrapEmailHtml(renderedBody + unsubscribeFooter(unsubUrl), identity.displayName);
 
   const dedupeKey = dedupeKeyFor(input.enrollmentId, input.nodeId);
@@ -146,7 +158,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       subject,
       html,
       headers: {
-        'List-Unsubscribe': `<mailto:${identity.email}>, <${unsubUrl}>`,
+        'List-Unsubscribe': `<mailto:${identity.email}>, <${oneClickUrl}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     });
