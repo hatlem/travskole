@@ -26,6 +26,7 @@ import { signUnsubscribeToken } from './unsubscribe-token';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
+import { extractMessageIds } from '@/lib/tracking/reply-match';
 import logger from '@/lib/logger';
 
 export type SendFlowEmailResult =
@@ -236,7 +237,27 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       },
     });
     if (messageId) {
-      await prisma.messageSend.update({ where: { id: messageSendId }, data: { messageId } });
+      // Normalisert (uten vinkelparenteser) slik at den matcher formatet
+      // Graph-polleren og classifyInboundMessage bruker ved svar-matching
+      // (nodemailer sin rå messageId inkluderer vinkelparenteser, f.eks.
+      // "<abc@host>" — extractMessageIds fjerner dem allerede ved lesing i
+      // lib/tracking/poller.ts, så vi lagrer den i samme normaliserte form
+      // her for at de to sidene av sammenligningen skal stemme overens).
+      const normalizedMessageId = extractMessageIds(messageId)[0] ?? messageId;
+      // Kun beste-forsøk: en feil her må ALDRI reversere en allerede
+      // levert sending (se recoverFromFailedSend sin dokumentasjon) — den
+      // svekker kun svar-matching for akkurat denne meldingen, så vi
+      // logger og fortsetter i stedet for å trigge dedupe-slot-gjenoppretting.
+      await prisma.messageSend
+        .update({ where: { id: messageSendId }, data: { messageId: normalizedMessageId } })
+        .catch((error) => {
+          logger.error('Kunne ikke lagre messageId etter vellykket sending', {
+            enrollmentId: input.enrollmentId,
+            nodeId: input.nodeId,
+            contactId: input.contactId,
+            error: error instanceof Error ? error.message : String(error),
+          });
+        });
     }
   } catch (error) {
     logger.error('Flow email send failed', {
