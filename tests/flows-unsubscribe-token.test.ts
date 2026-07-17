@@ -80,18 +80,23 @@ describe('unsubscribe token', () => {
     });
 
     it('should return null for non-integer contactId in payload', () => {
-      const malformedPayload = Buffer.from('unsub.abc').toString('base64url');
-      const sig = Buffer.from('fake').toString('base64url');
-      const malformedToken = `${malformedPayload}.${sig}`;
-      const result = verifyUnsubscribeToken(malformedToken, testSecret);
+      // Correctly-signed token with payload 'unsub.abc' (fails digit regex at line 67)
+      const token = 'dW5zdWIuYWJj._N4XDQ98UqZXaJ69wA4SS65h5OWWG2K08Ya_wOxaDX0';
+      const result = verifyUnsubscribeToken(token, testSecret);
       expect(result).toBeNull();
     });
 
-    it('should return null for malformed payload structure', () => {
-      const malformedPayload = Buffer.from('unsub').toString('base64url');
-      const sig = Buffer.from('fake').toString('base64url');
-      const malformedToken = `${malformedPayload}.${sig}`;
-      const result = verifyUnsubscribeToken(malformedToken, testSecret);
+    it('should return null for wrong prefix in payload', () => {
+      // Correctly-signed token with payload 'notunsub.42' (fails prefix check at line 66)
+      const token = 'bm90dW5zdWIuNDI.ECrMlsIFQrWwwUgMVPoDGYC5FmDO8-TnqCGISK80ThU';
+      const result = verifyUnsubscribeToken(token, testSecret);
+      expect(result).toBeNull();
+    });
+
+    it('should return null for malformed payload structure (too many segments)', () => {
+      // Correctly-signed token with payload 'unsub.42.extra' (fails segment count check at line 64)
+      const token = 'dW5zdWIuNDIuZXh0cmE.NBw9q7TCmeRHTYkYD10GNkfSV-InNf4Dj_u_T2dseM0';
+      const result = verifyUnsubscribeToken(token, testSecret);
       expect(result).toBeNull();
     });
 
