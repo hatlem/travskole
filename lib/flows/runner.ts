@@ -122,6 +122,23 @@ async function loadContactState(contactId: number): Promise<ContactState | null>
   };
 }
 
+/**
+ * Henter om kontaktens siste EKTE (dedupeKey-bærende) e-post i DENNE
+ * enrollmentet ble åpnet — kun de faktisk sendte/forsøkte sendene har en
+ * dedupeKey (skippede/re-opprettede feilrader etter en mislykket sending har
+ * det aldri, se lib/flows/send.ts). `null` betyr «ingen tidligere sporet
+ * sending i dette enrollmentet» — samme semantikk som opened_email-
+ * betingelsens egen "nei"-standard for et manglende svar.
+ */
+async function loadLastSendOpened(enrollmentId: number): Promise<boolean | null> {
+  const send = await prisma.messageSend.findFirst({
+    where: { enrollmentId, dedupeKey: { not: null } },
+    orderBy: { sentAt: 'desc' },
+    select: { openedAt: true },
+  });
+  return send ? send.openedAt !== null : null;
+}
+
 /** Applies an `act` step's side effect. Mutates `contact` in place so later
  * hops in the same tick see the updated tags/stage without a re-fetch. */
 async function applyAction(
@@ -207,10 +224,9 @@ async function processEnrollment(
       return { sent, failed: true, completed: false };
     }
 
-    // lastSendOpened: real query wired up in a later task (opened_email
-    // support); null here means "no prior tracked send" — same as the
-    // condition's own "no send yet" semantics, so this is a safe default.
-    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, lastSendOpened: null, now };
+    const needsLastSendOpened = node.type === 'condition' && node.config.kind === 'opened_email';
+    const lastSendOpened = needsLastSendOpened ? await loadLastSendOpened(enrollment.id) : null;
+    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, lastSendOpened, now };
     const plan = planStep(node, graph.edges, ctx);
 
     switch (plan.kind) {

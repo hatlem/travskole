@@ -252,6 +252,7 @@ export function NodeConfigPanel({
               <option value="in_segment">I segment</option>
               <option value="stage_is">Stadium er</option>
               <option value="deal_status">Deal-status er</option>
+              <option value="opened_email">Åpnet forrige e-post</option>
             </select>
           </div>
           {config.kind === 'in_segment' && (
