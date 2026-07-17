@@ -10,6 +10,7 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 interface Registration {
   id: number;
   status: string;
+  paymentStatus?: string;
   consentActivities: boolean;
   consentMedia: boolean;
   consentRisk: boolean;
@@ -47,6 +48,23 @@ const STATUS_COLORS: Record<string, string> = {
   waitlist: 'bg-blue-100 text-blue-800',
   cancelled: 'bg-red-100 text-red-800',
 };
+
+const PAYMENT_STATUS_BADGES: Record<string, { label: string; className: string }> = {
+  paid: { label: 'Betalt', className: 'bg-green-100 text-green-800' },
+  pending: { label: 'Venter', className: 'bg-amber-100 text-amber-800' },
+  failed: { label: 'Feilet', className: 'bg-red-100 text-red-800' },
+  refunded: { label: 'Refundert', className: 'bg-gray-100 text-gray-600' },
+};
+
+function PaymentBadge({ status }: { status?: string }) {
+  const badge = status ? PAYMENT_STATUS_BADGES[status] : undefined;
+  if (!badge) return null;
+  return (
+    <span className={`text-xs font-semibold rounded-full px-3 py-1 ${badge.className}`}>
+      {badge.label}
+    </span>
+  );
+}
 
 export default function AdminRegistrationsPage() {
   const [registrations, setRegistrations] = useState<Registration[]>([]);
@@ -324,7 +342,7 @@ export default function AdminRegistrationsPage() {
     return (
       <div>
         <h1 className="text-3xl font-bold text-gray-900 mb-6">Påmeldinger</h1>
-        <TableSkeleton rows={8} cols={9} />
+        <TableSkeleton rows={8} cols={11} />
       </div>
     );
   }
@@ -682,6 +700,7 @@ export default function AdminRegistrationsPage() {
                   <th className="px-4 py-3 text-left">E-post</th>
                   <th className="px-4 py-3 text-left">Telefon</th>
                   <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Betaling</th>
                   <th className="px-4 py-3 text-left">Dato</th>
                   <th className="px-4 py-3 text-left">Handlinger</th>
                 </tr>
@@ -730,6 +749,9 @@ export default function AdminRegistrationsPage() {
                         <option value="cancelled">Avlyst</option>
                       </select>
                     </td>
+                    <td className="px-4 py-3.5">
+                      <PaymentBadge status={reg.paymentStatus} />
+                    </td>
                     <td className="px-4 py-3.5 text-gray-400 text-xs">
                       {new Date(reg.createdAt).toLocaleDateString('nb-NO')}
                     </td>
@@ -745,7 +767,7 @@ export default function AdminRegistrationsPage() {
                 ))}
                 {paginatedRegistrations.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                       Ingen påmeldinger matcher filteret.
                     </td>
                   </tr>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
@@ -91,13 +91,26 @@ interface ChildData {
   birthdate: string;
 }
 
+type PayableProvider = 'stripe' | 'vipps';
+
+const CHECKOUT_FALLBACK_ERROR = 'Kunne ikke starte betaling. Prøv igjen fra dashbordet.';
+
+// checkoutSchema-endepunktet returnerer et par tekniske/engelske feil (f.eks.
+// "Unauthorized" når man ikke er innlogget) ved siden av sine norske
+// forretningsfeil. Vis alltid norsk tekst til brukeren her.
+function checkoutErrorMessage(raw: string | undefined): string {
+  if (!raw || raw === 'Unauthorized') return CHECKOUT_FALLBACK_ERROR;
+  return raw;
+}
+
 interface PameldingFormProps {
   courseRef: { type: string; year: string; slug: string };
   courseName: string;
   isAdult: boolean;
+  paymentMethods: string[];
 }
 
-export default function PameldingForm({ courseRef, courseName, isAdult }: PameldingFormProps) {
+export default function PameldingForm({ courseRef, courseName, isAdult, paymentMethods }: PameldingFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isWaitlist = searchParams.get('venteliste') === 'true';
@@ -109,6 +122,42 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
   const [existingChildren, setExistingChildren] = useState<ChildData[]>([]);
   const [consentOpen, setConsentOpen] = useState(false);
+
+  // Betalingsvalg vises kun når kurset har flere enn én online-metode aktivert.
+  const payableMethods = paymentMethods.filter(
+    (m): m is PayableProvider => m === 'stripe' || m === 'vipps'
+  );
+  const [pendingRegistrationId, setPendingRegistrationId] = useState<string | null>(null);
+  const [checkoutProvider, setCheckoutProvider] = useState<PayableProvider | null>(null);
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const showPaymentChoice = payableMethods.length > 1;
+
+  const startCheckout = useCallback(async (registrationId: string, provider: PayableProvider) => {
+    setCheckoutProvider(provider);
+    setCheckoutError(null);
+    try {
+      const res = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId: Number(registrationId), provider }),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        // Påmeldingen står uansett — betaling kan gjøres senere fra dashbordet.
+        setCheckoutError(checkoutErrorMessage(errBody.error));
+        setTimeout(() => router.push('/dashboard?success=registration'), 3000);
+        return;
+      }
+      const { url } = await res.json();
+      window.location.assign(url);
+    } catch {
+      // Nettverksfeil e.l. — vis en generisk norsk melding, aldri rå engelsk feiltekst.
+      setCheckoutError(CHECKOUT_FALLBACK_ERROR);
+      setTimeout(() => router.push('/dashboard?success=registration'), 3000);
+    } finally {
+      setCheckoutProvider(null);
+    }
+  }, [router]);
 
   const consentActivitiesText = settings.consent_activities_text || '';
   const consentMediaText = (isAdult ? settings.consent_media_text_adult : settings.consent_media_text) || '';
@@ -214,6 +263,9 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
         throw new Error(errorBody.error || errorBody.message || t('reg.error_generic'));
       }
 
+      const responseBody = await response.json();
+      const newRegistrationId: string | undefined = responseBody?.registration?.id;
+
       // GTM-konvertering: fullført påmelding (GA4-tag i container fyrer på dette eventet)
       if (typeof window !== 'undefined') {
         const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
@@ -226,13 +278,93 @@ export default function PameldingForm({ courseRef, courseName, isAdult }: Pameld
         });
       }
 
-      router.push('/dashboard?success=registration');
+      // Faktura-only, eller ukjent registrerings-id (bør ikke skje): uendret dashboard-redirect.
+      if (!newRegistrationId || payableMethods.length === 0) {
+        router.push('/dashboard?success=registration');
+        return;
+      }
+
+      // Flere metoder: vis valg-skjermen og la brukeren velge.
+      if (payableMethods.length > 1) {
+        setPendingRegistrationId(newRegistrationId);
+        return;
+      }
+
+      // Én betalingsmetode: vis "sender deg videre"-skjermen og start betalingen direkte.
+      setPendingRegistrationId(newRegistrationId);
+      await startCheckout(newRegistrationId, payableMethods[0]);
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : t('reg.error_generic'));
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Kurset tillater begge betalingsmåter: la brukeren velge før vi sender videre.
+  if (pendingRegistrationId) {
+    return (
+      <main className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-3xl mx-auto px-4">
+          <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Påmeldingen er mottatt</h1>
+            <p className="text-gray-600 mb-8">
+              {showPaymentChoice
+                ? 'Velg betalingsmåte for å fullføre påmeldingen.'
+                : 'Sender deg videre til betaling…'}
+            </p>
+
+            {checkoutError && (
+              <div
+                role="alert"
+                className="bg-red-50 border border-red-200 text-red-700 rounded p-3 text-sm mb-6 text-left"
+              >
+                {checkoutError} Du blir sendt videre til dashbordet…
+              </div>
+            )}
+
+            {showPaymentChoice ? (
+              <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                {payableMethods.includes('stripe') && (
+                  <button
+                    type="button"
+                    onClick={() => startCheckout(pendingRegistrationId, 'stripe')}
+                    disabled={checkoutProvider !== null}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${
+                      checkoutProvider !== null
+                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                        : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
+                    }`}
+                  >
+                    {checkoutProvider === 'stripe' ? 'Starter betaling…' : 'Betal med kort'}
+                  </button>
+                )}
+                {payableMethods.includes('vipps') && (
+                  <button
+                    type="button"
+                    onClick={() => startCheckout(pendingRegistrationId, 'vipps')}
+                    disabled={checkoutProvider !== null}
+                    className={`px-6 py-3 rounded-lg font-semibold transition ${
+                      checkoutProvider !== null
+                        ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
+                        : 'bg-orange-500 hover:bg-orange-600 text-white'
+                    }`}
+                  >
+                    {checkoutProvider === 'vipps' ? 'Starter betaling…' : 'Betal med Vipps'}
+                  </button>
+                )}
+              </div>
+            ) : (
+              !checkoutError && (
+                <div className="flex justify-center">
+                  <div className="h-8 w-8 rounded-full border-2 border-bjerke-blue border-t-transparent animate-spin" />
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-gray-50 py-12">

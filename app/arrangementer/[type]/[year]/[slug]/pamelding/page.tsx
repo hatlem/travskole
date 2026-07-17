@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { parsePaymentMethods } from '@/lib/payments';
 import PameldingForm from './pamelding-form';
 import RequestForm from './request-form';
 
@@ -49,6 +50,7 @@ export default async function PameldingPage({
       courseRef={{ type, year, slug }}
       courseName={course.name}
       isAdult={course.audience === 'voksen'}
+      paymentMethods={parsePaymentMethods(course.paymentMethods)}
     />
   );
 }

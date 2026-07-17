@@ -7,6 +7,7 @@ import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
+import { PAYMENT_METHODS } from '@/lib/payments';
 
 function slugify(text: string): string {
   return text
@@ -424,24 +425,24 @@ export default function NewCoursePage() {
               <div className="sm:col-span-2">
                 <span className={labelClass}>Betalingsmåter</span>
                 <div className="flex flex-wrap gap-4 mt-1">
-                  {[{ v: 'faktura', l: 'Faktura' }, { v: 'stripe', l: 'Stripe (kort)' }].map((pm) => (
-                    <label key={pm.v} className="flex items-center gap-2 text-sm text-gray-700">
+                  {PAYMENT_METHODS.map((pm) => (
+                    <label key={pm.value} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="checkbox"
-                        checked={paymentMethods.includes(pm.v)}
+                        checked={paymentMethods.includes(pm.value)}
                         onChange={() =>
                           setPaymentMethods((prev) =>
-                            prev.includes(pm.v) ? prev.filter((x) => x !== pm.v) : [...prev, pm.v]
+                            prev.includes(pm.value) ? prev.filter((x) => x !== pm.value) : [...prev, pm.value]
                           )
                         }
                         className="rounded border-gray-300"
                       />
-                      {pm.l}
+                      {pm.label}
                     </label>
                   ))}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  Kortbetaling (Stripe) aktiveres når betalingsnøklene er satt opp.
+                  Kortbetaling (Stripe) og Vipps aktiveres når betalingsnøklene er satt opp.
                 </p>
               </div>
 
