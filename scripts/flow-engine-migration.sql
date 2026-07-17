@@ -186,3 +186,24 @@ ALTER TABLE "message_sends" ADD CONSTRAINT "message_sends_contact_id_fkey" FOREI
 
 -- AddForeignKey
 ALTER TABLE "message_sends" ADD CONSTRAINT "message_sends_sender_identity_id_fkey" FOREIGN KEY ("sender_identity_id") REFERENCES "sender_identities"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- ============================================================================
+-- Tillegg (etter opprinnelig migrering ovenfor): partial unique index som
+-- håndhever maks én AKTIV enrollment per (flow, kontakt)-par på DB-nivå.
+--
+-- Dette er en partial index (WHERE status = 'active') — Prisma sitt skjema
+-- (schema.prisma) kan ikke uttrykke partial/filtrerte unique-indekser, så den
+-- finnes kun her og må vedlikeholdes manuelt i denne SQL-filen. Uten denne
+-- håndheves "maks én aktiv" kun i applikasjonskode (race-utsatt: to samtidige
+-- kall til enrollContact/enrollFromEvent for samme par kan begge se "ingen
+-- aktiv enrollment" og opprette to — som igjen dobbelt-sender e-post). Se
+-- kommentaren over @@index([flowId, contactId, status]) i FlowEnrollment.
+--
+-- Verifisert (dev-DB): opprettet indeksen, satt inn to aktive enrollments for
+-- samme (flow_id, contact_id) — andre innsettingen feilet med unik-constraint
+-- (P2002), som forventet. En tredje innsetting med status <> 'active' for
+-- samme par ble tillatt (indeksen er korrekt begrenset til status = 'active').
+-- ============================================================================
+
+-- CreateIndex
+CREATE UNIQUE INDEX IF NOT EXISTS "flow_enrollments_one_active" ON "flow_enrollments"("flow_id","contact_id") WHERE status = 'active';

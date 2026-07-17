@@ -662,6 +662,12 @@ model FlowEnrollment {
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
   @@index([status, nextRunAt]) // runnerens arbeidskø
+  // NB: maks-én-aktiv-håndheving er IKKE bare "i kode" — den håndheves også av en
+  // partial unique index (`flow_enrollments_one_active` på (flow_id, contact_id)
+  // WHERE status = 'active') som Prisma-skjemaet ikke kan uttrykke (partial index).
+  // Se scripts/flow-engine-migration.sql. lib/flows/enroll.ts fanger P2002 fra
+  // denne indeksen som fallback dersom kode-sjekken (hasActiveEnrollment) skulle
+  // tape et race.
   @@index([flowId, contactId, status]) // maks-én-aktiv-håndheving i kode
   @@map("flow_enrollments")
 }

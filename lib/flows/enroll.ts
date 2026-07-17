@@ -6,8 +6,16 @@
  * that emitted the event. `enrollContact` and `enrollSegment` are used by the
  * admin API and are allowed to throw (the API layer decides how to surface
  * that to the caller).
+ *
+ * Race safety: the in-code `hasActiveEnrollment` check is advisory — the
+ * real guard is a partial unique index (`flow_enrollments_one_active` on
+ * (flow_id, contact_id) WHERE status = 'active', see
+ * scripts/flow-engine-migration.sql). If two concurrent calls both pass the
+ * check and both attempt to create, the DB rejects the loser with a P2002,
+ * which we treat as "already enrolled" — never thrown, never double-counted.
  */
 
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { matchTriggers, type EventLike } from './match';
@@ -15,6 +23,10 @@ import { contactMatchesSegment, parseSegmentRules } from '@/lib/crm/segments';
 import { parseJsonArray } from '@/lib/crm/normalize';
 
 const SEGMENT_ENROLL_CAP = 500;
+
+function isDuplicateEnrollment(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+}
 
 async function hasActiveEnrollment(flowId: number, contactId: number): Promise<boolean> {
   const existing = await prisma.flowEnrollment.findFirst({
@@ -31,16 +43,21 @@ async function hasActiveEnrollment(flowId: number, contactId: number): Promise<b
  */
 export async function enrollContact(flowId: number, contactId: number): Promise<boolean> {
   if (await hasActiveEnrollment(flowId, contactId)) return false;
-  await prisma.flowEnrollment.create({
-    data: {
-      flowId,
-      contactId,
-      currentNodeId: null,
-      status: 'active',
-      nextRunAt: new Date(),
-    },
-  });
-  return true;
+  try {
+    await prisma.flowEnrollment.create({
+      data: {
+        flowId,
+        contactId,
+        currentNodeId: null,
+        status: 'active',
+        nextRunAt: new Date(),
+      },
+    });
+    return true;
+  } catch (error) {
+    if (isDuplicateEnrollment(error)) return false;
+    throw error;
+  }
 }
 
 /**
