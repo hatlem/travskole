@@ -181,7 +181,11 @@ export async function POST(request: NextRequest) {
   }
 
   if (!providerResult) {
-    return NextResponse.json({ error: 'Betaling er ikke konfigurert' }, { status: 503 });
+    // Leverandøren er konfigurert (sjekket over), men sesjonsopprettelsen
+    // feilet likevel (API-feil hos Stripe/Vipps) — 502, ikke 503, for å
+    // ikke villede med "ikke konfigurert" når problemet faktisk er en
+    // forbigående oppstrøms-feil.
+    return NextResponse.json({ error: 'Betalingstjenesten er utilgjengelig — prøv igjen' }, { status: 502 });
   }
 
   try {
