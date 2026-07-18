@@ -63,6 +63,15 @@ export async function POST(request: NextRequest) {
     const phoneSchema = z.string().min(8);
     const nameSchema = z.string().min(2).max(100);
 
+    // SECURITY: guard against missing/non-string parentEmail before any dereference
+    // (malformed/bot payloads must get a clean 400, not a TypeError -> 500)
+    if (typeof data.parentEmail !== 'string' || !data.parentEmail.trim()) {
+      return NextResponse.json(
+        { error: 'Manglende påkrevde felter' },
+        { status: 400 }
+      );
+    }
+
     // Normalize email before any use
     data.parentEmail = data.parentEmail.trim().toLowerCase();
 
