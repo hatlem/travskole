@@ -69,14 +69,10 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
 })(window,document,'script','dataLayer',${JSON.stringify(gtmId)});`}
           </Script>
         )}
-        {/* getcookies samtykke-widget — kun aktiv når domain-id er satt (unngår i dev/preview uten oppsett) */}
-        {process.env.NEXT_PUBLIC_GETCOOKIES_DOMAIN_ID && (
-          <script
-            src="https://cdn.getcookies.co/api/v1/widget/loader.js"
-            data-domain-id={process.env.NEXT_PUBLIC_GETCOOKIES_DOMAIN_ID}
-            async
-          />
-        )}
+        {/* getcookies samtykke-widget lastes sentralt via bjerke.no sin delte
+            GTM-container (gjenbrukes på registrering) — ikke som egen loader her,
+            for å unngå at widgeten initialiseres to ganger. Tracker.tsx lytter på
+            `getcookies:consent`-eventene widgeten sender uansett hvem som lastet den. */}
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}

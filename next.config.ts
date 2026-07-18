@@ -62,6 +62,7 @@ const nextConfig: NextConfig = {
                 https://www.google-analytics.com
                 https://connect.facebook.net
                 https://sc-static.net
+                https://getcookies.co
                 https://cdn.getcookies.co
                 https://js.stripe.com
                 https://checkout.vipps.no;
@@ -72,6 +73,7 @@ const nextConfig: NextConfig = {
                 https://www.google-analytics.com
                 https://www.facebook.com
                 https://tr.snapchat.com
+                https://getcookies.co
                 https://api.getcookies.co
                 https://api.stripe.com
                 https://api.vipps.no;
