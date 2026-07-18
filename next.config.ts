@@ -71,6 +71,8 @@ const nextConfig: NextConfig = {
               font-src 'self' data:;
               connect-src 'self'
                 https://www.google-analytics.com
+                https://*.google-analytics.com
+                https://*.analytics.google.com
                 https://www.facebook.com
                 https://tr.snapchat.com
                 https://getcookies.co
