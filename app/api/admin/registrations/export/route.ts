@@ -78,9 +78,9 @@ export async function GET() {
       new Date(reg.createdAt).toLocaleDateString('nb-NO'),
     ]);
 
-    const csv = [headers.join(','), ...rows.map((row) => row.join(','))].join(
-      '\n'
-    );
+    const csv =
+      '\uFEFF' +
+      [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
 
     const today = new Date().toISOString().split('T')[0];
     const filename = `pameldinger-${today}.csv`;
