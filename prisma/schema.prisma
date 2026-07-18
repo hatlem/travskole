@@ -594,17 +594,18 @@ model AppEvent {
 // ── Flyt-motor (delprosjekt 3) ──────────────────────────────────────────────
 
 model Flow {
-  id          Int              @id @default(autoincrement())
-  name        String
-  description String?
-  status      String           @default("draft") // draft | active | paused | archived
-  isMarketing Boolean          @default(true) @map("is_marketing") // markedsføring krever samtykke ved send
-  nodes       FlowNode[]
-  edges       FlowEdge[]
-  triggers    FlowTrigger[]
-  enrollments FlowEnrollment[]
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id            Int              @id @default(autoincrement())
+  name          String
+  description   String?
+  status        String           @default("draft") // draft | active | paused | archived
+  isMarketing   Boolean          @default(true) @map("is_marketing") // markedsføring krever samtykke ved send
+  nodes         FlowNode[]
+  edges         FlowEdge[]
+  triggers      FlowTrigger[]
+  enrollments   FlowEnrollment[]
+  aiSuggestions AiSuggestion[]
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
 
   @@map("flows")
 }
@@ -711,6 +712,7 @@ model MessageSend {
   clickCount       Int             @default(0) @map("click_count")
   repliedAt        DateTime?       @map("replied_at")
   bouncedAt        DateTime?       @map("bounced_at")
+  aiPersonalized   Boolean         @default(false) @map("ai_personalized")
   links            MessageLink[]
 
   @@index([contactId, sentAt])
@@ -728,4 +730,20 @@ model MessageLink {
 
   @@unique([messageSendId, idx])
   @@map("message_links")
+}
+
+model AiSuggestion {
+  id        Int      @id @default(autoincrement())
+  flowId    Int      @map("flow_id")
+  flow      Flow     @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  kind      String // followup | send_timing
+  title     String
+  detail    String // JSON
+  status    String   @default("open") // open | dismissed | applied
+  dedupeKey String   @unique @map("dedupe_key") // {kind}:{flowId}:{YYYY-MM}
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([flowId, status])
+  @@map("ai_suggestions")
 }
