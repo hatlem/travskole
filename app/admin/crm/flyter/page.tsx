@@ -18,6 +18,12 @@ interface FlowRow {
   updatedAt: string;
 }
 
+interface SenderIdentityOption {
+  id: number;
+  email: string;
+  displayName: string;
+}
+
 interface ValidationError {
   nodeId: number | null;
   code: string;
@@ -57,6 +63,14 @@ export default function FlyterPage() {
   const [showNew, setShowNew] = useState(false);
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(false);
+  const [showGenerate, setShowGenerate] = useState(false);
+  const [goal, setGoal] = useState('');
+  const [emailCount, setEmailCount] = useState(2);
+  const [senderIdentityId, setSenderIdentityId] = useState<number | ''>('');
+  const [senderIdentities, setSenderIdentities] = useState<SenderIdentityOption[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
@@ -97,6 +111,38 @@ export default function FlyterPage() {
     return () => abortRef.current?.abort();
   }, []);
 
+  useEffect(() => {
+    const loadAiStatus = async () => {
+      try {
+        const res = await fetch('/api/admin/crm/ai/status');
+        if (res.ok) {
+          const data = await res.json();
+          setAiConfigured(Boolean(data.configured));
+        }
+      } catch { /* KI-status er valgfri — feiler stille */ }
+    };
+    const t = setTimeout(loadAiStatus, 0);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    if (!showGenerate || senderIdentities.length > 0) return;
+    const loadSenderIdentities = async () => {
+      try {
+        const res = await fetch('/api/admin/crm/sender-identities');
+        if (!res.ok) return;
+        const data = await res.json();
+        const identities: SenderIdentityOption[] = Array.isArray(data.identities)
+          ? data.identities.filter((i: { active?: boolean }) => i.active !== false)
+          : [];
+        setSenderIdentities(identities);
+        setSenderIdentityId((prev) => (prev === '' && identities.length > 0 ? identities[0].id : prev));
+      } catch { /* håndteres ved innsending */ }
+    };
+    const t = setTimeout(loadSenderIdentities, 0);
+    return () => clearTimeout(t);
+  }, [showGenerate, senderIdentities.length]);
+
   function withPending<T>(id: number, fn: () => Promise<T>): Promise<T> {
     setPendingIds((prev) => new Set(prev).add(id));
     return fn().finally(() => {
@@ -130,6 +176,33 @@ export default function FlyterPage() {
       toast('Kunne ikke opprette flyt', 'error');
     } finally {
       setCreating(false);
+    }
+  }
+
+  async function generateFlow() {
+    if (goal.trim().length < 10 || senderIdentityId === '' || generating) return;
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const res = await fetch('/api/admin/crm/ai/generate-flow', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          goal: goal.trim(),
+          emailCount,
+          senderIdentityId,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGenerateError(data.error || 'Kunne ikke generere flyt');
+        return;
+      }
+      router.push(`/admin/crm/flyter/${data.flowId}`);
+    } catch {
+      setGenerateError('Kunne ikke generere flyt');
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -202,13 +275,87 @@ export default function FlyterPage() {
       <CrmTabs />
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <span className="text-sm text-gray-500">{flows.length} flyter</span>
-        <button
-          onClick={() => setShowNew(true)}
-          className="ml-auto bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
-        >
-          Ny flyt
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          {aiConfigured && (
+            <button
+              onClick={() => { setShowNew(false); setShowGenerate((v) => !v); }}
+              className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700"
+            >
+              Generer med KI
+            </button>
+          )}
+          <button
+            onClick={() => { setShowGenerate(false); setShowNew(true); }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+          >
+            Ny flyt
+          </button>
+        </div>
       </div>
+
+      {showGenerate && (
+        <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-purple-50 flex flex-wrap gap-3 items-end">
+          <label className="text-sm flex-1 min-w-[240px]">
+            <span className="block text-gray-600 mb-1">Mål *</span>
+            <textarea
+              autoFocus
+              value={goal}
+              onChange={(e) => setGoal(e.target.value)}
+              placeholder="F.eks.: vinn tilbake fjorårets julebord-kunder"
+              rows={2}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="block text-gray-600 mb-1">Antall e-poster</span>
+            <input
+              type="number"
+              min={1}
+              max={5}
+              value={emailCount}
+              onChange={(e) =>
+                setEmailCount(Math.min(5, Math.max(1, Number(e.target.value) || 1)))
+              }
+              className="w-20 border border-gray-300 rounded-md px-3 py-2 text-sm"
+            />
+          </label>
+          <label className="text-sm">
+            <span className="block text-gray-600 mb-1">Avsender</span>
+            <select
+              value={senderIdentityId}
+              onChange={(e) => setSenderIdentityId(e.target.value ? Number(e.target.value) : '')}
+              className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+            >
+              <option value="">Velg avsender …</option>
+              {senderIdentities.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.displayName} ({s.email})
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            onClick={generateFlow}
+            disabled={goal.trim().length < 10 || senderIdentityId === '' || generating}
+            className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+          >
+            {generating ? 'Genererer …' : 'Generer utkast'}
+          </button>
+          <button
+            onClick={() => {
+              setShowGenerate(false);
+              setGoal('');
+              setEmailCount(2);
+              setSenderIdentityId('');
+              setGenerateError(null);
+            }}
+            className="text-sm text-gray-600 px-2 py-2"
+          >
+            Avbryt
+          </button>
+          {generateError && <p className="w-full text-sm text-red-600">{generateError}</p>}
+        </div>
+      )}
 
       {showNew && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50 flex flex-wrap gap-3 items-end">
