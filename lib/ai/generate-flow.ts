@@ -58,6 +58,13 @@ export interface BuiltGraph {
 }
 
 export function buildGraphFromOutline(outline: FlowOutline, senderIdentityId: number): BuiltGraph {
+  // Håndhever én-condition-regelen HER også (ikke bare i parseFlowOutline) —
+  // funksjonen skal være trygg for fremtidige direkte kallere som hopper
+  // over parse-laget. (Hardening-notat fra delprosjekt 5-sluttgjennomgangen.)
+  if (outline.nodes.filter((n) => n.type === 'condition').length > 1) {
+    throw new Error('buildGraphFromOutline: maks én condition-node støttes');
+  }
+
   const nodes: BuiltGraph['nodes'] = [];
   const edges: BuiltGraph['edges'] = [];
   let nextId = 1;

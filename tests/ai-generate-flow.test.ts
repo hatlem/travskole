@@ -54,4 +54,14 @@ describe('buildGraphFromOutline', () => {
     expect(nodes.find((n) => n.id === nei.toNodeId)!.type).toBe('email');
     expect(validateFlow(nodes, edges)).toEqual([]);
   });
+  it('buildGraphFromOutline kaster ved mer enn én condition (egen guard, ikke bare parse-laget)', () => {
+    const twoConditions = { name: 'x', nodes: [
+      { type: 'email', subject: 'a', bodyHtml: '<p>a</p>' },
+      { type: 'condition', kind: 'opened_email' },
+      { type: 'email', subject: 'b', bodyHtml: '<p>b</p>' },
+      { type: 'condition', kind: 'opened_email' },
+      { type: 'email', subject: 'c', bodyHtml: '<p>c</p>' },
+    ] };
+    expect(() => buildGraphFromOutline(twoConditions as never, 1)).toThrow();
+  });
 });
