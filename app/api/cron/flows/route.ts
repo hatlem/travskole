@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
 import { runFlowBatch } from '@/lib/flows/runner';
 import { pollMailboxes } from '@/lib/tracking/poller';
+import { runAiAnalysis } from '@/lib/ai/analyze-runner';
 import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -24,6 +25,7 @@ export async function POST(request: NextRequest) {
       logger.error('Graph-polling kastet uventet feil', { error: error instanceof Error ? error.message : String(error) });
       return { replies: 0, bounces: 0, scanned: 0 };
     });
+    const suggestions = await runAiAnalysis().catch(() => ({ created: 0 }));
 
     logger.info('Flows cron batch completed', {
       processed: result.processed,
@@ -31,10 +33,11 @@ export async function POST(request: NextRequest) {
       failed: result.failed,
       completed: result.completed,
       poller,
+      suggestions,
     });
 
     return NextResponse.json(
-      { ...result, poller },
+      { ...result, poller, suggestions },
       { status: result.failed > 0 ? 500 : 200 },
     );
   } catch (error) {
