@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { MERGE_TAGS } from '@/lib/email-templates';
 import type { FlowRFNode } from './node-types';
@@ -76,6 +76,25 @@ export function NodeConfigPanel({
   const { toast } = useToast();
   const [testEmail, setTestEmail] = useState('');
   const [sending, setSending] = useState(false);
+  const [aiConfigured, setAiConfigured] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [subjectSuggestions, setSubjectSuggestions] = useState<string[]>([]);
+  const [aiTone, setAiTone] = useState<'formell' | 'vennlig' | 'kort'>('vennlig');
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const res = await fetch('/api/admin/crm/ai/status');
+        if (res.ok) {
+          const data = await res.json();
+          setAiConfigured(Boolean(data.configured));
+        }
+      } catch { /* KI-status er valgfri — feiler stille */ }
+    };
+    const t = setTimeout(load, 0);
+    return () => clearTimeout(t);
+  }, []);
 
   if (!node) {
     return (
@@ -115,6 +134,30 @@ export function NodeConfigPanel({
       setSending(false);
     }
   }
+
+  const runAssist = async (kind: 'subject_variants' | 'tone' | 'shorten') => {
+    setAiBusy(true); setAiError(null); setSubjectSuggestions([]);
+    try {
+      const res = await fetch('/api/admin/crm/ai/assist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          kind,
+          subject: typeof config.subject === 'string' ? config.subject : '',
+          bodyHtml: typeof config.bodyHtml === 'string' ? config.bodyHtml : '',
+          ...(kind === 'tone' ? { tone: aiTone } : {}),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { setAiError(data.error ?? 'Noe gikk galt'); return; }
+      if (kind === 'subject_variants') setSubjectSuggestions(data.suggestions ?? []);
+      else set({ bodyHtml: data.result });
+    } catch {
+      setAiError('Noe gikk galt — prøv igjen');
+    } finally {
+      setAiBusy(false);
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -184,6 +227,43 @@ export function NodeConfigPanel({
               ))}
             </select>
           </div>
+
+          {aiConfigured && (
+            <div className="border-t border-gray-200 pt-3">
+              <label className={labelCls}>KI-hjelp</label>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => runAssist('subject_variants')} disabled={disabled || aiBusy}
+                  className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
+                  {aiBusy ? 'Jobber …' : 'Emneforslag'}
+                </button>
+                <select value={aiTone} onChange={(e) => setAiTone(e.target.value as 'formell' | 'vennlig' | 'kort')}
+                  disabled={disabled || aiBusy} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
+                  <option value="formell">Formell</option>
+                  <option value="vennlig">Vennlig</option>
+                  <option value="kort">Kort og direkte</option>
+                </select>
+                <button onClick={() => runAssist('tone')} disabled={disabled || aiBusy}
+                  className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
+                  Juster tone
+                </button>
+                <button onClick={() => runAssist('shorten')} disabled={disabled || aiBusy}
+                  className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
+                  Forkort
+                </button>
+              </div>
+              {aiError && <p className="mt-1 text-[11px] text-red-600">{aiError}</p>}
+              {subjectSuggestions.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {subjectSuggestions.map((s) => (
+                    <button key={s} onClick={() => { set({ subject: s }); setSubjectSuggestions([]); }}
+                      className="block w-full text-left text-sm border border-gray-200 rounded-md px-2 py-1 hover:bg-purple-50">
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="border-t border-gray-200 pt-3">
             <label className={labelCls}>Send test-e-post</label>
