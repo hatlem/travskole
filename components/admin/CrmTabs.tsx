@@ -11,6 +11,7 @@ const TABS = [
   { href: '/admin/crm/segmenter', label: 'Segmenter' },
   { href: '/admin/crm/hendelser', label: 'Hendelser' },
   { href: '/admin/crm/flyter', label: 'Flyter' },
+  { href: '/admin/crm/innsikt', label: 'Innsikt' },
   { href: '/admin/crm/import', label: 'Import' },
 ];
 
