@@ -238,6 +238,7 @@ async function processEnrollment(
           subject: plan.subject,
           bodyHtml: plan.bodyHtml,
           senderIdentityId: plan.senderIdentityId,
+          aiPersonalize: plan.aiPersonalize,
           isMarketing: enrollment.flow.isMarketing,
         });
         if (result === 'failed') {

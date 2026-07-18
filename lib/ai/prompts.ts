@@ -23,6 +23,10 @@ export function shortenPrompt(bodyHtml: string): string {
   return `Forkort denne e-postkroppen (HTML) — behold budskapet, HTML-strukturen, alle lenker og alle merge-tagger uendret. Svar kun med den forkortede HTML-en.\n\n${bodyHtml}`;
 }
 
+export function personalizePrompt(bodyHtml: string, contactContext: string): string {
+  return `Tilpass denne e-postkroppen (HTML) lett til mottakeren under — juster hilsen og tone, men behold budskap, HTML-struktur, alle lenker og alt faktainnhold NØYAKTIG som det er. Svar kun med den tilpassede HTML-en.\n\nOm mottakeren:\n${contactContext}\n\nE-post:\n${bodyHtml}`;
+}
+
 export function parseSubjectVariants(raw: string): string[] {
   return raw
     .split('\n')

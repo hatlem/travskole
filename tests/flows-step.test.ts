@@ -73,8 +73,38 @@ describe('planStep: email', () => {
       subject: 'Velkommen',
       bodyHtml: '<p>Hei!</p>',
       senderIdentityId: 7,
+      aiPersonalize: false,
       nextNodeId: 3,
     });
+  });
+
+  it('sets aiPersonalize true when config.aiPersonalize is true', () => {
+    const node = n(2, 'email', { ...config, aiPersonalize: true });
+    const edges = [e(1, 2, 3)];
+    expect(planStep(node, edges, makeCtx())).toEqual({
+      kind: 'send_email',
+      subject: 'Velkommen',
+      bodyHtml: '<p>Hei!</p>',
+      senderIdentityId: 7,
+      aiPersonalize: true,
+      nextNodeId: 3,
+    });
+  });
+
+  it('sets aiPersonalize false when the config key is absent', () => {
+    const node = n(2, 'email', config);
+    const edges = [e(1, 2, 3)];
+    const plan = planStep(node, edges, makeCtx());
+    expect(plan.kind).toBe('send_email');
+    expect((plan as { aiPersonalize: boolean }).aiPersonalize).toBe(false);
+  });
+
+  it('treats any non-true value for aiPersonalize as false', () => {
+    const node = n(2, 'email', { ...config, aiPersonalize: 'yes' });
+    const edges = [e(1, 2, 3)];
+    const plan = planStep(node, edges, makeCtx());
+    expect(plan.kind).toBe('send_email');
+    expect((plan as { aiPersonalize: boolean }).aiPersonalize).toBe(false);
   });
 
   it('fails when the outgoing edge is missing', () => {

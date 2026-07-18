@@ -229,6 +229,14 @@ export function NodeConfigPanel({
           </div>
 
           {aiConfigured && (
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={config.aiPersonalize === true}
+                onChange={(e) => set({ aiPersonalize: e.target.checked })} disabled={disabled} />
+              KI-personaliser denne e-posten per mottaker
+            </label>
+          )}
+
+          {aiConfigured && (
             <div className="border-t border-gray-200 pt-3">
               <label className={labelCls}>KI-hjelp</label>
               <div className="flex flex-wrap gap-2">

@@ -23,10 +23,13 @@ import { prisma } from '@/lib/prisma';
 import { sendMailAs } from '@/lib/mail';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
-import { normalizeEmail } from '@/lib/crm/normalize';
+import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { extractMessageIds } from '@/lib/tracking/reply-match';
+import { getLLMProvider } from '@/lib/ai/provider';
+import { validateAiRewrite } from '@/lib/ai/guardrails';
+import { personalizePrompt } from '@/lib/ai/prompts';
 import logger from '@/lib/logger';
 
 export type SendFlowEmailResult =
@@ -44,6 +47,7 @@ export interface SendFlowEmailInput {
   bodyHtml: string;
   senderIdentityId: number;
   isMarketing: boolean;
+  aiPersonalize?: boolean;
 }
 
 function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
@@ -135,7 +139,11 @@ async function recoverFromFailedSend(
 export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlowEmailResult> {
   const contact = await prisma.contact.findUnique({
     where: { id: input.contactId },
-    select: { email: true, name: true },
+    select: {
+      email: true, name: true, stage: true, tags: true,
+      organization: { select: { name: true } },
+      deals: { select: { eventType: true }, take: 3, orderBy: { createdAt: 'desc' } },
+    },
   });
   if (!contact?.email) return 'failed';
 
@@ -162,10 +170,42 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const mergeData = contactMergeTagData(contact);
   const subject = replaceMergeTags(input.subject, mergeData);
   const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
+
+  // KI-personalisering (opt-in per node): ren teksttransform FØR footer/
+  // sporing/dedupe-maskineriet — enhver feil/avvisning ⇒ original kropp,
+  // aldri blokkert sending. Kun navn/org/stage/tags/deal-typer sendes til
+  // LLM — aldri e-postadresse eller sensitive felter (GDPR, se spec).
+  let personalizedBody = renderedBody;
+  let aiPersonalized = false;
+  if (input.aiPersonalize && input.isMarketing) {
+    const provider = getLLMProvider();
+    if (provider) {
+      const context = [
+        `Navn: ${contact.name}`,
+        contact.organization?.name ? `Organisasjon: ${contact.organization.name}` : null,
+        `Stadium: ${contact.stage}`,
+        parseJsonArray(contact.tags).length ? `Tagger: ${parseJsonArray(contact.tags).join(', ')}` : null,
+        contact.deals.length ? `Tidligere arrangementer: ${contact.deals.map((d) => d.eventType).filter(Boolean).join(', ')}` : null,
+      ].filter(Boolean).join('\n');
+      const result = await provider.generateText(personalizePrompt(renderedBody, context), { maxTokens: 2000, temperature: 0.5 });
+      if (result) {
+        const verdict = validateAiRewrite(renderedBody, result.trim());
+        if (verdict.ok) {
+          personalizedBody = result.trim();
+          aiPersonalized = true;
+        } else {
+          logger.warn('KI-personalisering avvist av sikkerhetskontroll', { contactId: input.contactId, reason: verdict.reason });
+        }
+      } else {
+        logger.warn('KI-personalisering feilet — sender original', { contactId: input.contactId });
+      }
+    }
+  }
+
   const unsubToken = signUnsubscribeToken(input.contactId);
   const unsubUrl = unsubscribeUrl(unsubToken);
   const oneClickUrl = oneClickUnsubscribeUrl(unsubToken);
-  const html = wrapEmailHtml(renderedBody + unsubscribeFooter(unsubUrl), identity.displayName);
+  const html = wrapEmailHtml(personalizedBody + unsubscribeFooter(unsubUrl), identity.displayName);
 
   const baseUrl = getBaseUrl();
   let finalHtml = html;
@@ -193,6 +233,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         status: 'sent',
         dedupeKey,
         trackingToken: trackingToken,
+        aiPersonalized,
       },
     });
     messageSendId = messageSend.id;

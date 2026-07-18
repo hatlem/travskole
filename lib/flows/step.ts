@@ -18,7 +18,7 @@ export interface StepContext {
 }
 
 export type StepPlan =
-  | { kind: 'send_email'; subject: string; bodyHtml: string; senderIdentityId: number; nextNodeId: number }
+  | { kind: 'send_email'; subject: string; bodyHtml: string; senderIdentityId: number; aiPersonalize: boolean; nextNodeId: number }
   | { kind: 'sleep'; until: Date; nextNodeId: number }
   | { kind: 'advance'; nextNodeId: number } // condition/action fortsetter umiddelbart
   | { kind: 'act'; action: { kind: string; value?: string }; nextNodeId: number | null } // null ⇒ exit-terminal
@@ -46,7 +46,8 @@ function planEmail(node: GraphNode, edges: GraphEdge[]): StepPlan {
   }
   const edge = findEdgeByBranch(outgoingEdges(node, edges), null);
   if (!edge) return fail('E-post-noden mangler en utgående kobling.');
-  return { kind: 'send_email', subject, bodyHtml, senderIdentityId, nextNodeId: edge.toNodeId };
+  const aiPersonalize = node.config.aiPersonalize === true;
+  return { kind: 'send_email', subject, bodyHtml, senderIdentityId, aiPersonalize, nextNodeId: edge.toNodeId };
 }
 
 function planWait(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPlan {
