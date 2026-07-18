@@ -10,7 +10,9 @@ const DATE_RE = /(?:\d{1,2}\.\s?(?:januar|februar|mars|april|mai|juni|juli|augus
 const TAG_RE = /\{\{[a-z_]+\}\}/gi;
 
 function matches(re: RegExp, text: string): string[] {
-  return Array.from(text.matchAll(new RegExp(re.source, re.flags))).map((m) => m[0].trim().toLowerCase());
+  return Array.from(text.matchAll(new RegExp(re.source, re.flags))).map((m) =>
+    m[0].trim().replace(/[.,;:!?)\]]+$/, '').trim().toLowerCase(),
+  );
 }
 
 export function extractMergeTags(text: string): string[] {

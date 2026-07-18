@@ -82,4 +82,17 @@ describe('validateAiRewrite', () => {
     );
     expect(r.ok).toBe(true);
   });
+
+  it('samme pris med punktum-forskjell godtas (setningsgrense)', () => {
+    const r = validateAiRewrite('Det koster kr 500.', 'Prisen er fortsatt kr 500 for alle.');
+    expect(r.ok).toBe(true);
+  });
+  it('samme lenke med punktum-forskjell godtas (setningsgrense)', () => {
+    const r = validateAiRewrite('Se https://x.no/a for info.', 'Mer informasjon finner du her: https://x.no/a.');
+    expect(r.ok).toBe(true);
+  });
+  it('genuint ny pris avvises fortsatt etter normalisering', () => {
+    const r = validateAiRewrite('Det koster kr 500.', 'Det koster kr 500. Nå kun kr 99!');
+    expect(r).toEqual({ ok: false, reason: 'ny pris' });
+  });
 });
