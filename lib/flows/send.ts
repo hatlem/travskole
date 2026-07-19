@@ -189,7 +189,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       ].filter(Boolean).join('\n');
       const result = await provider.generateText(personalizePrompt(renderedBody, context), { maxTokens: 2000, temperature: 0.5 });
       if (result) {
-        const verdict = validateAiRewrite(renderedBody, result.trim());
+        const verdict = validateAiRewrite(renderedBody, result.trim(), { requireContentPreserved: true });
         if (verdict.ok) {
           personalizedBody = result.trim();
           aiPersonalized = true;

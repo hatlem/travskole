@@ -95,4 +95,50 @@ describe('validateAiRewrite', () => {
     const r = validateAiRewrite('Det koster kr 500.', 'Det koster kr 500. Nå kun kr 99!');
     expect(r).toEqual({ ok: false, reason: 'ny pris' });
   });
+
+  describe('requireContentPreserved (personalisering)', () => {
+    it('avviser fjernet lenke når requireContentPreserved er satt', () => {
+      const r = validateAiRewrite(
+        'Meld deg på her: https://registrering.bjerke.no/kurs for plass.',
+        'Meld deg på snart for plass!',
+        { requireContentPreserved: true },
+      );
+      expect(r).toEqual({ ok: false, reason: 'lenke fjernet' });
+    });
+
+    it('avviser fjernet pris når requireContentPreserved er satt', () => {
+      const r = validateAiRewrite(
+        'Kurset koster kr 500 og inkluderer alt utstyr.',
+        'Kurset inkluderer alt utstyr.',
+        { requireContentPreserved: true },
+      );
+      expect(r).toEqual({ ok: false, reason: 'pris fjernet' });
+    });
+
+    it('avviser fjernet dato når requireContentPreserved er satt', () => {
+      const r = validateAiRewrite(
+        'Kurset starter fredag med ny giv.',
+        'Kurset starter snart med ny giv.',
+        { requireContentPreserved: true },
+      );
+      expect(r).toEqual({ ok: false, reason: 'dato fjernet' });
+    });
+
+    it('godtar omskriving som beholder lenke/pris/dato når requireContentPreserved er satt', () => {
+      const r = validateAiRewrite(
+        'Meld deg på https://registrering.bjerke.no/kurs innen fredag. Pris kr 500.',
+        'Ikke gå glipp av dette! Meld deg på https://registrering.bjerke.no/kurs innen fredag — kun kr 500.',
+        { requireContentPreserved: true },
+      );
+      expect(r.ok).toBe(true);
+    });
+
+    it('uten flagget godtas fjernet lenke fortsatt (bakoverkompatibilitet)', () => {
+      const r = validateAiRewrite(
+        'Meld deg på her: https://registrering.bjerke.no/kurs for plass.',
+        'Meld deg på snart for plass!',
+      );
+      expect(r.ok).toBe(true);
+    });
+  });
 });

@@ -19,7 +19,15 @@ export function extractMergeTags(text: string): string[] {
   return Array.from(new Set(matches(TAG_RE, text)));
 }
 
-export interface ValidateOpts { allowedNewTags?: string[] }
+export interface ValidateOpts {
+  allowedNewTags?: string[];
+  /** Krever at all lenke/pris/dato-innhold i originalen overlever i omskrivingen
+   *  (i tillegg til at ingen nytt introduseres). Slås på for
+   *  per-mottaker-personalisering (lib/flows/send.ts), der en fjernet CTA-lenke
+   *  eller pris ville sendt en ødelagt markedsførings-e-post. Ikke satt for
+   *  editor-assist (admin.no gjennomgår selv før publisering). */
+  requireContentPreserved?: boolean;
+}
 
 export function validateAiRewrite(
   original: string,
@@ -32,18 +40,33 @@ export function validateAiRewrite(
   }
 
   const origUrls = new Set(matches(URL_RE, original));
-  for (const url of matches(URL_RE, rewritten)) {
+  const rewrittenUrls = new Set(matches(URL_RE, rewritten));
+  for (const url of rewrittenUrls) {
     if (!origUrls.has(url)) return { ok: false, reason: 'ny lenke' };
   }
 
   const origPrices = new Set(matches(PRICE_RE, original));
-  for (const price of matches(PRICE_RE, rewritten)) {
+  const rewrittenPrices = new Set(matches(PRICE_RE, rewritten));
+  for (const price of rewrittenPrices) {
     if (!origPrices.has(price)) return { ok: false, reason: 'ny pris' };
   }
 
   const origDates = new Set(matches(DATE_RE, original));
-  for (const date of matches(DATE_RE, rewritten)) {
+  const rewrittenDates = new Set(matches(DATE_RE, rewritten));
+  for (const date of rewrittenDates) {
     if (!origDates.has(date)) return { ok: false, reason: 'ny dato' };
+  }
+
+  if (opts.requireContentPreserved) {
+    for (const url of origUrls) {
+      if (!rewrittenUrls.has(url)) return { ok: false, reason: 'lenke fjernet' };
+    }
+    for (const price of origPrices) {
+      if (!rewrittenPrices.has(price)) return { ok: false, reason: 'pris fjernet' };
+    }
+    for (const date of origDates) {
+      if (!rewrittenDates.has(date)) return { ok: false, reason: 'dato fjernet' };
+    }
   }
 
   const origTags = new Set(extractMergeTags(original));
