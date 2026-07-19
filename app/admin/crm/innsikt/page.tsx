@@ -116,21 +116,28 @@ export default function InnsiktPage() {
 function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
   if (!flows) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
   const harSendinger = flows.perFlow.some((f) => f.sent > 0);
+  const harUkentligAktivitet = flows.weekly.some((w) => w.sent > 0 || w.opened > 0);
   return (
     <div className="space-y-8">
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Sendinger og åpninger per uke (12 uker)</h2>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={flows.weekly}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="sent" name="Sendt" stroke="#2563eb" />
-            <Line type="monotone" dataKey="opened" name="Åpnet" stroke="#16a34a" />
-          </LineChart>
-        </ResponsiveContainer>
+        {!harUkentligAktivitet ? (
+          <p className="text-gray-500">
+            Ingen sendinger ennå — <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">aktiver en flyt</Link> for å se aktivitet her.
+          </p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={flows.weekly}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="sent" name="Sendt" stroke="#2563eb" />
+              <Line type="monotone" dataKey="opened" name="Åpnet" stroke="#16a34a" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
         <h2 className="font-semibold p-4 pb-0">Per flyt (siste 30 dager)</h2>
@@ -201,15 +208,19 @@ function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Vunnet verdi per måned (6 mnd)</h2>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={pipeline.wonByMonth}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Bar dataKey="value" name="Vunnet verdi (kr)" fill="#16a34a" />
-          </BarChart>
-        </ResponsiveContainer>
+        {pipeline.wonByMonth.every((m) => m.value === 0) ? (
+          <p className="text-gray-500">Ingen vunne deals de siste 6 månedene.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <BarChart data={pipeline.wonByMonth}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Bar dataKey="value" name="Vunnet verdi (kr)" fill="#16a34a" />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );
@@ -217,6 +228,7 @@ function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
 
 function BesokFane({ visits }: { visits: InsightsData['visits'] }) {
   if (!visits) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  const harBesok = visits.weekly.some((w) => w.pageViews > 0 || w.courseViews > 0);
   return (
     <div className="space-y-8">
       <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-3">
@@ -224,17 +236,21 @@ function BesokFane({ visits }: { visits: InsightsData['visits'] }) {
       </p>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Visninger per uke (12 uker)</h2>
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={visits.weekly}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
-            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Legend />
-            <Line type="monotone" dataKey="pageViews" name="Sidevisninger" stroke="#2563eb" />
-            <Line type="monotone" dataKey="courseViews" name="Kursvisninger" stroke="#9333ea" />
-          </LineChart>
-        </ResponsiveContainer>
+        {!harBesok ? (
+          <p className="text-gray-500">Ingen registrerte besøk ennå — avhenger av samtykke (getcookies).</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={visits.weekly}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="pageViews" name="Sidevisninger" stroke="#2563eb" />
+              <Line type="monotone" dataKey="courseViews" name="Kursvisninger" stroke="#9333ea" />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Trakt (siste 30 dager)</h2>
