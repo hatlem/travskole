@@ -93,4 +93,12 @@ describe('mapVippsEvent', () => {
     const r = mapVippsEvent({ reference: 'reg-2-cd', name: 'REFUNDED', amount: { value: 250000 } });
     expect(r?.type).toBe('payment.refunded');
   });
+
+  it('Vipps partial og full REFUNDED gir distinkte eventId (bevarer begge tidslinje-innslag)', () => {
+    const partial = mapVippsEvent({ reference: 'r-dedupe', name: 'REFUNDED', amount: { value: 50000 }, transactionInfo: { refundedAmount: 50000, amount: 250000 } });
+    const full = mapVippsEvent({ reference: 'r-dedupe', name: 'REFUNDED', amount: { value: 250000 }, transactionInfo: { refundedAmount: 250000, amount: 250000 } });
+    expect(partial?.type).toBe('payment.partially_refunded');
+    expect(full?.type).toBe('payment.refunded');
+    expect(partial?.eventId).not.toBe(full?.eventId);
+  });
 });

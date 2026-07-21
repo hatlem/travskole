@@ -97,7 +97,7 @@ export function mapVippsEvent(body: Record<string, unknown>): PaymentEventInput 
       type: isPartial ? 'payment.partially_refunded' : 'payment.refunded',
       provider: 'vipps', ref: reference, refKind: 'paymentRef',
       amountKr: amountValue !== null ? amountValue / 100 : null,
-      eventId: `${reference}:${name}`,
+      eventId: `${reference}:${name}:${isPartial ? 'partial' : 'full'}`,
     };
   }
   const type = VIPPS_MAP[name];

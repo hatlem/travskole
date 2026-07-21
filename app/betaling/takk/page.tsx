@@ -136,7 +136,31 @@ export default async function TakkPage({
             />
           )}
 
-          {(status !== 'paid' && status !== 'pending' && status !== 'refunded') && (
+          {status === 'expired' && (
+            <StatusBox
+              title="Betalingslenken er utløpt"
+              message="Betalingen ble ikke fullført i tide. Start påmeldingen på nytt for å prøve igjen, eller gå til dashboard for å se statusen."
+              color="gray"
+            />
+          )}
+
+          {status === 'failed' && (
+            <StatusBox
+              title="Betalingen mislyktes"
+              message="Noe gikk galt med betalingen. Prøv igjen, eller kontakt oss hvis problemet vedvarer."
+              color="orange"
+            />
+          )}
+
+          {status === 'partially_refunded' && (
+            <StatusBox
+              title="Delvis refundert"
+              message="Deler av betalingen er refundert. Kontakt oss hvis du har spørsmål."
+              color="orange"
+            />
+          )}
+
+          {(status !== 'paid' && status !== 'pending' && status !== 'refunded' && status !== 'failed' && status !== 'expired' && status !== 'partially_refunded') && (
             <StatusBox
               title="Vi fant ikke betalingsstatusen"
               message="Vi kunne ikke finne informasjon om betalingen. Gå til dashboard for å se statusen på din registrering."
