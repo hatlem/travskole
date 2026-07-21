@@ -6,6 +6,7 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { Skeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
+import { paymentStatusBadge } from '@/lib/payments/badge';
 
 interface DealCard {
   id: number;
@@ -16,6 +17,8 @@ interface DealCard {
   status: string;
   contact: { id: number; name: string } | null;
   organization: { id: number; name: string } | null;
+  paymentStatus?: string | null;
+  paymentProvider?: string | null;
 }
 
 interface StageCol {
@@ -221,6 +224,9 @@ export default function PipelinePage() {
                     >
                       <p className="font-medium leading-snug">{deal.title}</p>
                       <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-gray-500">
+                        {(() => { const b = paymentStatusBadge(deal.paymentStatus); return b ? (
+                          <span className={`font-semibold rounded-full px-2 py-0.5 ${b.className}`}>{b.label}</span>
+                        ) : null; })()}
                         {deal.eventType && <span className="bg-gray-100 px-1.5 py-0.5 rounded">{deal.eventType}</span>}
                         {deal.eventDate && <span>{new Date(deal.eventDate).toLocaleDateString('nb-NO')}</span>}
                         {deal.value !== null && <span>{deal.value.toLocaleString('nb-NO')} kr</span>}
