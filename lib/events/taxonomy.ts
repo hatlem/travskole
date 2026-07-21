@@ -27,6 +27,8 @@ export const PAYMENT_EVENT_TYPES = [
   'payment.succeeded',
   'payment.failed',
   'payment.refunded',
+  'payment.expired',
+  'payment.partially_refunded',
 ] as const;
 
 export const EVENT_TYPES = [
@@ -90,6 +92,10 @@ export function timelineTitle(type: EventType, meta: Record<string, unknown>): s
       return 'Betaling feilet';
     case 'payment.refunded':
       return amount !== null ? `Betaling refundert (${amount} kr)` : 'Betaling refundert';
+    case 'payment.expired':
+      return 'Betaling utløpt';
+    case 'payment.partially_refunded':
+      return amount !== null ? `Delvis refundert (${amount} kr)` : 'Delvis refundert';
     case 'email.opened':
       return 'Åpnet e-post';
     case 'email.clicked':

@@ -70,4 +70,14 @@ describe('taxonomy', () => {
     expect(timelineTitle('email.replied', {})).toBe('Svarte på e-post');
     expect(timelineTitle('email.bounced', {})).toBe('E-post kom i retur');
   });
+
+  it('payment.expired and payment.partially_refunded are registered', () => {
+    expect(isEventType('payment.expired')).toBe(true);
+    expect(isEventType('payment.partially_refunded')).toBe(true);
+    expect(timelineTitle('payment.expired', {})).toBe('Betaling utløpt');
+    expect(timelineTitle('payment.partially_refunded', { amountKr: 500 })).toBe(
+      'Delvis refundert (500 kr)'
+    );
+    expect(timelineTitle('payment.partially_refunded', {})).toBe('Delvis refundert');
+  });
 });
