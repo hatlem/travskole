@@ -1,5 +1,5 @@
 export interface PaymentEventInput {
-  type: 'payment.succeeded' | 'payment.failed' | 'payment.refunded';
+  type: 'payment.succeeded' | 'payment.failed' | 'payment.refunded' | 'payment.expired' | 'payment.partially_refunded';
   provider: 'stripe' | 'vipps';
   ref: string;
   refKind: 'paymentRef' | 'metadata';
@@ -43,13 +43,27 @@ export function mapStripeEvent(event: { id: string; type: string; data: { object
       eventId: event.id,
     };
   }
-  if (event.type === 'charge.refunded') {
-    const amount = num(o.amount_refunded);
-    if (typeof o.payment_intent !== 'string') return null;
+  if (event.type === 'checkout.session.expired') {
     return {
-      type: 'payment.refunded', provider: 'stripe',
-      ref: o.payment_intent, refKind: 'paymentRef',
-      amountKr: amount !== null ? amount / 100 : null,
+      type: 'payment.expired', provider: 'stripe',
+      ref: String(o.id), refKind: 'paymentRef',
+      registrationId: idFromMeta(o.metadata, 'registrationId'),
+      bookingRequestId: idFromMeta(o.metadata, 'bookingRequestId'),
+      amountKr: null,
+      eventId: event.id,
+    };
+  }
+  if (event.type === 'charge.refunded') {
+    if (typeof o.payment_intent !== 'string') return null;
+    const refunded = num(o.amount_refunded);
+    const total = num(o.amount); // charge-total; kan mangle
+    // Del vs full: kun når vi HAR totalen og refundert < total er det delvis.
+    // Mangler totalen ⇒ konservativt full refunded (dagens oppførsel).
+    const isPartial = total !== null && refunded !== null && refunded < total;
+    return {
+      type: isPartial ? 'payment.partially_refunded' : 'payment.refunded',
+      provider: 'stripe', ref: o.payment_intent, refKind: 'paymentRef',
+      amountKr: refunded !== null ? refunded / 100 : null,
       eventId: event.id,
     };
   }
@@ -63,16 +77,31 @@ const VIPPS_MAP: Record<string, PaymentEventInput['type']> = {
   EXPIRED: 'payment.failed',
   CANCELLED: 'payment.failed',
   TERMINATED: 'payment.failed',
-  REFUNDED: 'payment.refunded',
+  // REFUNDED håndteres spesielt i mapVippsEvent (del vs full).
 };
 
 export function mapVippsEvent(body: Record<string, unknown>): PaymentEventInput | null {
   const reference = typeof body.reference === 'string' ? body.reference : null;
   const name = typeof body.name === 'string' ? body.name : typeof body.eventName === 'string' ? body.eventName : null;
   if (!reference || !name) return null;
+  const amountValue = typeof body.amount === 'object' && body.amount !== null ? num((body.amount as Record<string, unknown>).value) : null;
+  // Vipps-refusjon: skill del vs full når payloaden bærer både refundert beløp
+  // og opprinnelig total (transactionInfo). Mangler totalen ⇒ konservativ full.
+  if (name === 'REFUNDED') {
+    const ti = typeof body.transactionInfo === 'object' && body.transactionInfo !== null
+      ? (body.transactionInfo as Record<string, unknown>) : null;
+    const refunded = ti ? num(ti.refundedAmount) : null;
+    const total = ti ? num(ti.amount) : null;
+    const isPartial = total !== null && refunded !== null && refunded < total;
+    return {
+      type: isPartial ? 'payment.partially_refunded' : 'payment.refunded',
+      provider: 'vipps', ref: reference, refKind: 'paymentRef',
+      amountKr: amountValue !== null ? amountValue / 100 : null,
+      eventId: `${reference}:${name}`,
+    };
+  }
   const type = VIPPS_MAP[name];
   if (!type) return null;
-  const amountValue = typeof body.amount === 'object' && body.amount !== null ? num((body.amount as Record<string, unknown>).value) : null;
   return {
     type, provider: 'vipps', ref: reference, refKind: 'paymentRef',
     amountKr: amountValue !== null ? amountValue / 100 : null,

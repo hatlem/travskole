@@ -23,6 +23,8 @@ const STATUS_MAP: Record<PaymentEventInput['type'], string> = {
   'payment.succeeded': 'paid',
   'payment.failed': 'failed',
   'payment.refunded': 'refunded',
+  'payment.expired': 'expired',
+  'payment.partially_refunded': 'partially_refunded',
 };
 
 type ResolvedRow =
