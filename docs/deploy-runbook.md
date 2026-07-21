@@ -55,6 +55,7 @@ Begge webhook-endepunktene finnes nå: `/api/webhooks/stripe` og `/api/webhooks/
 - Registrer webhook-URL i **Stripe dashboard** → Developers → Webhooks → `https://registrering.bjerke.no/api/webhooks/stripe`; sett resulterende signing secret som `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_WEBHOOK_SECRET_TEST` for testmodus) i Azure.
 - Registrer webhook via **Vipps webhook-API** → `https://registrering.bjerke.no/api/webhooks/vipps`; sett secret som `VIPPS_WEBHOOK_SECRET`.
 - ⚠️ **Valider Vipps webhook-secret som rå-bytes ÉN gang mot Vipps MT (testmiljø)** før go-live — koden antar rå-streng-bytes i HMAC-nøkkelen; bekreft mot en faktisk Vipps-signert webhook.
+- ⚠️ **Valider Vipps REFUNDED-payloaden mot en ekte MT-refusjon** (delprosjekt 7): bekreft at `transactionInfo.refundedAmount` + `transactionInfo.amount` finnes og at `body.amount.value` er refundert beløp (ikke opprinnelig total) — del/full-avgjørelsen leser `refundedAmount` vs `transactionInfo.amount`, mens vist «Delvis refundert (X kr)» bruker `body.amount.value`. Ved avvik: juster `mapVippsEvent`. Partial vs full REFUNDED får nå distinkte `eventId` (`:partial`/`:full`) så begge tidslinje-innslag bevares.
 - Vipps betalings-env-vars (CLIENT_ID/SECRET/SUBSCRIPTION_KEY/MSN + `_TEST`) er ALLEREDE korrekt provisjonert av Basefarm (dual-sett) — ikke rør dem.
 
 ## Steg 5 — Microsoft Graph (svar-stopp/bounce) — VALGFRITT, config-gated
