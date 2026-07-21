@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { ensureDefaultPipeline } from '@/lib/crm/pipeline';
+import { resolveDealPayment } from '@/lib/crm/deal-payment';
 
 export async function GET() {
   const session = await requireAdmin();
@@ -67,16 +68,11 @@ export async function GET() {
     stages: p.stages.map((s) => ({
       ...s,
       deals: s.deals.map((d) => {
-        const pay = d.bookingRequestId != null
-          ? bookingMap.get(d.bookingRequestId)
-          : d.registrationId != null
-            ? registrationMap.get(d.registrationId)
-            : undefined;
-        return {
-          ...d,
-          paymentStatus: pay?.paymentStatus ?? null,
-          paymentProvider: pay?.paymentProvider ?? null,
-        };
+        // Destructure-to-omit: drop internal FK ids from the response, they
+        // only exist on `d` to feed resolveDealPayment below.
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { bookingRequestId, registrationId, ...rest } = d;
+        return { ...rest, ...resolveDealPayment(d, bookingMap, registrationMap) };
       }),
     })),
   }));
