@@ -6,6 +6,7 @@ import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { TableSkeleton } from '@/components/admin/Skeleton';
+import { paymentStatusBadge } from '@/lib/payments/badge';
 
 interface Registration {
   id: number;
@@ -49,15 +50,8 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-800',
 };
 
-const PAYMENT_STATUS_BADGES: Record<string, { label: string; className: string }> = {
-  paid: { label: 'Betalt', className: 'bg-green-100 text-green-800' },
-  pending: { label: 'Venter', className: 'bg-amber-100 text-amber-800' },
-  failed: { label: 'Feilet', className: 'bg-red-100 text-red-800' },
-  refunded: { label: 'Refundert', className: 'bg-gray-100 text-gray-600' },
-};
-
 function PaymentBadge({ status }: { status?: string }) {
-  const badge = status ? PAYMENT_STATUS_BADGES[status] : undefined;
+  const badge = paymentStatusBadge(status);
   if (!badge) return null;
   return (
     <span className={`text-xs font-semibold rounded-full px-3 py-1 ${badge.className}`}>
