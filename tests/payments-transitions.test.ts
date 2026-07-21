@@ -54,3 +54,27 @@ describe('planStatusTransition — named scenarios', () => {
     expect(planStatusTransition('paid', 'paid')).toEqual({ write: false, downgrade: false });
   });
 });
+
+describe('utvidet rank (expired / partially_refunded)', () => {
+  it('rank-rekkefølge', () => {
+    expect(STATUS_RANK).toEqual({ none: 0, pending: 1, expired: 2, failed: 3, paid: 4, partially_refunded: 5, refunded: 6 });
+  });
+  it('pending → expired skriver', () => {
+    expect(planStatusTransition('pending', 'expired')).toEqual({ write: true, downgrade: false });
+  });
+  it('expired → paid skriver (re-checkout vinner)', () => {
+    expect(planStatusTransition('expired', 'paid')).toEqual({ write: true, downgrade: false });
+  });
+  it('paid → partially_refunded skriver', () => {
+    expect(planStatusTransition('paid', 'partially_refunded')).toEqual({ write: true, downgrade: false });
+  });
+  it('partially_refunded → refunded skriver (full etter delvis)', () => {
+    expect(planStatusTransition('partially_refunded', 'refunded')).toEqual({ write: true, downgrade: false });
+  });
+  it('omspilt paid etter partially_refunded degraderer ikke', () => {
+    expect(planStatusTransition('partially_refunded', 'paid')).toEqual({ write: false, downgrade: true });
+  });
+  it('omspilt partially_refunded etter refunded degraderer ikke', () => {
+    expect(planStatusTransition('refunded', 'partially_refunded')).toEqual({ write: false, downgrade: true });
+  });
+});

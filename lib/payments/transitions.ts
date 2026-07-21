@@ -9,9 +9,12 @@
  * payment_intent.payment_failed etter at betalingen allerede lyktes skal
  * ALDRI overskrive 'paid' med 'failed'. Kun strengt økende overganger
  * skriver ny status (se apply.ts sitt kall til planStatusTransition).
+ *
+ * Etter utvidelse: `expired` (forlatt checkout) og `partially_refunded` (delvis
+ * refusjon) er lagt til, med samme monotone garantier.
  */
 
-export const STATUS_RANK = { none: 0, pending: 1, failed: 2, paid: 3, refunded: 4 } as const;
+export const STATUS_RANK = { none: 0, pending: 1, expired: 2, failed: 3, paid: 4, partially_refunded: 5, refunded: 6 } as const;
 
 export type PaymentStatus = keyof typeof STATUS_RANK;
 
