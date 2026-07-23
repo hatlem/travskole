@@ -16,7 +16,7 @@ export async function resolveCourseMergeContext(registrationId: number): Promise
     where: { id: registrationId },
     select: {
       child: { select: { name: true, allergies: true } },
-      parent: { select: { name: true, user: { select: { email: true } } } },
+      parent: { select: { name: true } },
       course: { select: { name: true, startDate: true, endDate: true } },
     },
   });

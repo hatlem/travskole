@@ -28,6 +28,12 @@ function isDuplicateEnrollment(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
 
+// NB: denne sjekker (flowId, contactId) uten å scope på registration_id, mens
+// den bakende partielle indeksen `flow_enrollments_one_active` gjør det (WHERE
+// registration_id IS NULL). Det er trygt fordi en flyt er enkeltformåls — en gitt
+// flyts enrollments er ENTEN markedsføring (registrationId null) ELLER kurs-forankret
+// (registrationId satt), aldri blandet — så null/ikke-null-mengdene møtes aldri
+// innen samme flyt. Kurs-forankret enroll bruker hasActiveRegistrationEnrollment.
 async function hasActiveEnrollment(flowId: number, contactId: number): Promise<boolean> {
   const existing = await prisma.flowEnrollment.findFirst({
     where: { flowId, contactId, status: 'active' },
