@@ -155,14 +155,22 @@ export async function enrollFromEvent(input: {
 
     const triggers = await prisma.flowTrigger.findMany({
       where: { flow: { status: 'active' } },
-      select: { flowId: true, eventType: true, filter: true },
+      select: { flowId: true, eventType: true, filter: true, flow: { select: { anchorMode: true } } },
     });
 
+    const anchorByFlow = new Map(triggers.map((t) => [t.flowId, t.flow.anchorMode]));
     const event: EventLike = { type: input.type, meta: input.meta };
     const matchedFlowIds = matchTriggers(event, triggers);
 
+    const registrationId = typeof input.meta.registrationId === 'number' ? input.meta.registrationId : null;
+    const courseId = typeof input.meta.courseId === 'number' ? input.meta.courseId : null;
+
     for (const flowId of matchedFlowIds) {
-      await enrollContact(flowId, contactId);
+      if (anchorByFlow.get(flowId) === 'course' && registrationId !== null && courseId !== null) {
+        await enrollCourseRegistration(flowId, contactId, courseId, registrationId);
+      } else {
+        await enrollContact(flowId, contactId);
+      }
     }
   } catch (error) {
     logger.error('enrollFromEvent feilet', error);
