@@ -52,6 +52,7 @@ type ClaimedEnrollment = {
   flowId: number;
   contactId: number;
   currentNodeId: number | null;
+  registrationId: number | null;
   flow: { status: string; isMarketing: boolean };
 };
 
@@ -137,6 +138,17 @@ async function loadLastSendOpened(enrollmentId: number): Promise<boolean | null>
     select: { openedAt: true },
   });
   return send ? send.openedAt !== null : null;
+}
+
+/** Live kursdatoer for en enrollment, eller null om den ikke er kurs-forankret. */
+async function loadCourseDates(registrationId: number | null): Promise<{ startDate: Date | null; endDate: Date | null } | null> {
+  if (registrationId == null) return null;
+  const reg = await prisma.registration.findUnique({
+    where: { id: registrationId },
+    select: { course: { select: { startDate: true, endDate: true } } },
+  });
+  if (!reg) return null;
+  return { startDate: reg.course.startDate, endDate: reg.course.endDate };
 }
 
 /** Applies an `act` step's side effect. Mutates `contact` in place so later
@@ -226,7 +238,8 @@ async function processEnrollment(
 
     const needsLastSendOpened = node.type === 'condition' && node.config.kind === 'opened_email';
     const lastSendOpened = needsLastSendOpened ? await loadLastSendOpened(enrollment.id) : null;
-    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, lastSendOpened, now };
+    const courseDates = node.type === 'schedule' ? await loadCourseDates(enrollment.registrationId) : null;
+    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, lastSendOpened, now, courseDates };
     const plan = planStep(node, graph.edges, ctx);
 
     switch (plan.kind) {
@@ -235,6 +248,7 @@ async function processEnrollment(
           enrollmentId: enrollment.id,
           nodeId: node.id,
           contactId: enrollment.contactId,
+          registrationId: enrollment.registrationId,
           subject: plan.subject,
           bodyHtml: plan.bodyHtml,
           senderIdentityId: plan.senderIdentityId,
@@ -265,6 +279,9 @@ async function processEnrollment(
       case 'act': {
         await applyAction(plan.action, contact);
         if (plan.nextNodeId === null) {
+          if (plan.action.kind === 'exit' && plan.action.value) {
+            logger.info('Flyt-enrollment avsluttet', { enrollmentId: enrollment.id, reason: plan.action.value });
+          }
           await prisma.flowEnrollment.update({
             where: { id: enrollment.id },
             data: { status: 'exited', finishedAt: now, currentNodeId: node.id },
