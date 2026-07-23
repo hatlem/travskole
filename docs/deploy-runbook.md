@@ -22,6 +22,7 @@ Kjør mot prod-Postgres, i rekkefølge (hver bygger på forrige):
 4. `scripts/flow-engine-migration.sql`  ⚠️ **inneholder den partielle unike indeksen `flow_enrollments_one_active` som IKKE finnes i schema.prisma** — den MÅ med, ellers kan samtidige enrollments dobbelt-sende.
 5. `scripts/email-tracking-migration.sql`
 6. `scripts/ai-layer-migration.sql`
+7. `scripts/course-flows-migration.sql`  ⚠️ **inneholder TO partielle unike indekser** (`flow_enrollments_one_active` reskopet til `WHERE registration_id IS NULL`, + ny `flow_enrollments_one_active_reg` på `(flow_id, registration_id) WHERE registration_id IS NOT NULL`) som IKKE finnes i schema.prisma — de MÅ med. Additiv: to nye nullbare kolonner (`course_id`/`registration_id`) på `flow_enrollments` + FK-er (delprosjekt A — dato-forankret kurs-flyt-planlegging).
 
 Alle er idempotent-vennlige tilleggsmigreringer. Verifiser etter hver at den
 gikk uten feil. (Prisma-skjemaet matcher summen av disse.)
