@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { planStep, type StepContext, type StepPlan } from '@/lib/flows/step';
+import { osloDayStartUtc } from '@/lib/flows/schedule';
 import type { GraphNode, GraphEdge, FlowNodeType } from '@/lib/flows/graph';
 import type { SegmentContact } from '@/lib/crm/segments';
 
@@ -271,5 +272,35 @@ describe('planStep: unknown node type', () => {
   it('fails defensively', () => {
     const node = { id: 9, type: 'bogus' as unknown as FlowNodeType, config: {} };
     expect(planStep(node, [], makeCtx()).kind).toBe('fail');
+  });
+});
+
+const baseCtx = (over: Partial<StepContext> = {}): StepContext => ({
+  contact: { stage: null, source: 'manual', email: 'a@b.no', organizationId: null, lastActivityAt: null, tags: [], deals: [] } as never,
+  segmentRulesById: {},
+  lastSendOpened: null,
+  now: new Date('2026-05-01T00:00:00Z'),
+  ...over,
+});
+
+const scheduleNode: GraphNode = { id: 2, type: 'schedule', config: { anchor: 'course_start', offsetDays: -3 } };
+const scheduleEdges: GraphEdge[] = [{ id: 1, fromNodeId: 2, toNodeId: 3, branch: null }];
+
+describe('planStep: schedule', () => {
+  it('beregner sleep til ankerdato når kursdatoer finnes', () => {
+    const ctx = baseCtx({ courseDates: { startDate: new Date('2026-06-01T10:00:00Z'), endDate: new Date('2026-06-11T10:00:00Z') } });
+    const plan = planStep(scheduleNode, scheduleEdges, ctx);
+    expect(plan).toEqual({ kind: 'sleep', until: osloDayStartUtc('2026-05-29'), nextNodeId: 3 });
+  });
+  it('rolig exit når kursdatoer mangler (course_start uten startDate)', () => {
+    const ctx = baseCtx({ courseDates: { startDate: null, endDate: null } });
+    const plan = planStep(scheduleNode, scheduleEdges, ctx);
+    expect(plan.kind).toBe('act');
+    if (plan.kind === 'act') { expect(plan.action.kind).toBe('exit'); expect(plan.nextNodeId).toBeNull(); }
+  });
+  it('rolig exit når enrollment ikke har kurs-anker (courseDates udefinert)', () => {
+    const plan = planStep(scheduleNode, scheduleEdges, baseCtx());
+    expect(plan.kind).toBe('act');
+    if (plan.kind === 'act') expect(plan.nextNodeId).toBeNull();
   });
 });

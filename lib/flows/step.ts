@@ -9,12 +9,14 @@
 
 import type { GraphEdge, GraphNode } from './graph';
 import { contactMatchesSegment, parseSegmentRules, type SegmentContact } from '@/lib/crm/segments';
+import { computeAnchorDay, osloDayStartUtc, type ScheduleAnchor } from './schedule';
 
 export interface StepContext {
   contact: SegmentContact & { stage: string | null; tags: string[] };
   segmentRulesById: Record<number, string>; // segmentId → raw rules-JSON (for in_segment)
   lastSendOpened: boolean | null; // most recent tracked email-node send's openedAt !== null in THIS enrollment; null = no prior tracked send exists
   now: Date;
+  courseDates?: { startDate: Date | null; endDate: Date | null } | null; // fra enrollmentens registrering; undefined/null = ingen kurs-anker
 }
 
 export type StepPlan =
@@ -107,6 +109,23 @@ function planAction(node: GraphNode, edges: GraphEdge[]): StepPlan {
   return { kind: 'act', action: { kind, value }, nextNodeId: edge.toNodeId };
 }
 
+function planSchedule(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPlan {
+  const edge = findEdgeByBranch(outgoingEdges(node, edges), null);
+  if (!edge) return fail('Planleggings-noden mangler en utgående kobling.');
+  const anchor = node.config.anchor;
+  if (anchor !== 'course_start' && anchor !== 'course_end' && anchor !== 'course_midway') {
+    return fail('Planleggings-noden har et ugyldig anker.');
+  }
+  const offsetDays = typeof node.config.offsetDays === 'number' ? node.config.offsetDays : 0;
+  const dates = ctx.courseDates ?? null;
+  const graceExit = (reason: string): StepPlan =>
+    ({ kind: 'act', action: { kind: 'exit', value: reason }, nextNodeId: null });
+  if (!dates) return graceExit('schedule: enrollment mangler kurs-anker');
+  const day = computeAnchorDay(anchor as ScheduleAnchor, offsetDays, dates.startDate, dates.endDate);
+  if (day === null) return graceExit(`schedule: kurs mangler dato for anker ${anchor}`);
+  return { kind: 'sleep', until: osloDayStartUtc(day), nextNodeId: edge.toNodeId };
+}
+
 export function planStep(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPlan {
   switch (node.type) {
     case 'start':
@@ -119,6 +138,8 @@ export function planStep(node: GraphNode, edges: GraphEdge[], ctx: StepContext):
       return planCondition(node, edges, ctx);
     case 'action':
       return planAction(node, edges);
+    case 'schedule':
+      return planSchedule(node, edges, ctx);
     case 'end':
       return { kind: 'complete' };
     default:
