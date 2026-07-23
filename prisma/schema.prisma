@@ -152,6 +152,7 @@ model Course {
   registrations   Registration[]
   emailTriggers   EmailTrigger[]
   bookingRequests BookingRequest[]
+  flowEnrollments FlowEnrollment[]
 
   @@unique([type, slug])
   @@index([status, startDate])
@@ -233,10 +234,11 @@ model Registration {
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 
-  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  child     Child?     @relation(fields: [childId], references: [id], onDelete: Cascade)
-  parent    Parent     @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  emailLogs EmailLog[]
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  child           Child?           @relation(fields: [childId], references: [id], onDelete: Cascade)
+  parent          Parent           @relation(fields: [parentId], references: [id], onDelete: Cascade)
+  emailLogs       EmailLog[]
+  flowEnrollments FlowEnrollment[]
 
   @@index([courseId, status])
   @@index([childId])
@@ -653,28 +655,38 @@ model FlowTrigger {
 }
 
 model FlowEnrollment {
-  id            Int       @id @default(autoincrement())
-  flowId        Int       @map("flow_id")
-  flow          Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
-  contactId     Int       @map("contact_id")
-  contact       Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  currentNodeId Int?      @map("current_node_id") // null før første tick (står på start)
-  status        String    @default("active") // active | completed | exited | failed
-  nextRunAt     DateTime  @default(now()) @map("next_run_at")
-  enteredAt     DateTime  @default(now()) @map("entered_at")
-  finishedAt    DateTime? @map("finished_at")
-  failReason    String?   @map("fail_reason")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id             Int       @id @default(autoincrement())
+  flowId         Int       @map("flow_id")
+  flow           Flow      @relation(fields: [flowId], references: [id], onDelete: Cascade)
+  contactId      Int       @map("contact_id")
+  contact        Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  courseId       Int?      @map("course_id")
+  registrationId Int?      @map("registration_id")
+  currentNodeId  Int?      @map("current_node_id") // null før første tick (står på start)
+  status         String    @default("active") // active | completed | exited | failed
+  nextRunAt      DateTime  @default(now()) @map("next_run_at")
+  enteredAt      DateTime  @default(now()) @map("entered_at")
+  finishedAt     DateTime? @map("finished_at")
+  failReason     String?   @map("fail_reason")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  course       Course?       @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  registration Registration? @relation(fields: [registrationId], references: [id], onDelete: Cascade)
 
   @@index([status, nextRunAt]) // runnerens arbeidskø
-  // NB: maks-én-aktiv-håndheving er IKKE bare "i kode" — den håndheves også av en
-  // partial unique index (`flow_enrollments_one_active` på (flow_id, contact_id)
-  // WHERE status = 'active') som Prisma-skjemaet ikke kan uttrykke (partial index).
-  // Se scripts/flow-engine-migration.sql. lib/flows/enroll.ts fanger P2002 fra
-  // denne indeksen som fallback dersom kode-sjekken (hasActiveEnrollment) skulle
-  // tape et race.
+  // NB: maks-én-aktiv-håndheving er IKKE bare "i kode" — den håndheves også av TO
+  // partial unique indexes som Prisma-skjemaet ikke kan uttrykke (partial index):
+  // `flow_enrollments_one_active` på (flow_id, contact_id) WHERE registration_id
+  // IS NULL AND status = 'active' (markedsføring), og
+  // `flow_enrollments_one_active_reg` på (flow_id, registration_id) WHERE
+  // registration_id IS NOT NULL AND status = 'active' (kurs-flyter).
+  // Se scripts/course-flows-migration.sql (og scripts/flow-engine-migration.sql).
+  // lib/flows/enroll.ts fanger P2002 fra disse indeksene som fallback dersom
+  // kode-sjekken (hasActiveEnrollment) skulle tape et race.
   @@index([flowId, contactId, status]) // maks-én-aktiv-håndheving i kode
+  @@index([registrationId])
+  @@index([courseId])
   @@map("flow_enrollments")
 }
 
