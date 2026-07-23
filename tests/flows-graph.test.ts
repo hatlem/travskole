@@ -277,4 +277,37 @@ describe('validateFlow', () => {
     const edges = [e(1, 1, 2), e(2, 2, 3)];
     expect(codes(validateFlow(nodes, edges))).toContain('end_with_edge');
   });
+
+  // Schedule node validation
+  const scheduleFlow = (config: Record<string, unknown>): [GraphNode[], GraphEdge[]] => {
+    const nodes: GraphNode[] = [
+      n(1, 'start'),
+      n(2, 'schedule', config),
+      n(3, 'end'),
+    ];
+    const edges: GraphEdge[] = [
+      e(1, 1, 2),
+      e(2, 2, 3),
+    ];
+    return [nodes, edges];
+  };
+
+  describe('validateFlow: schedule-node', () => {
+    it('godtar gyldig anker + offset', () => {
+      const [nodes, edges] = scheduleFlow({ anchor: 'course_start', offsetDays: -3 });
+      expect(validateFlow(nodes, edges)).toEqual([]);
+    });
+    it('godtar manglende offsetDays (default 0)', () => {
+      const [nodes, edges] = scheduleFlow({ anchor: 'course_midway' });
+      expect(validateFlow(nodes, edges)).toEqual([]);
+    });
+    it('avviser ugyldig anker', () => {
+      const [nodes, edges] = scheduleFlow({ anchor: 'tull', offsetDays: 0 });
+      expect(validateFlow(nodes, edges).some((x) => x.code === 'schedule_config')).toBe(true);
+    });
+    it('avviser ikke-heltalls offsetDays', () => {
+      const [nodes, edges] = scheduleFlow({ anchor: 'course_start', offsetDays: 1.5 });
+      expect(validateFlow(nodes, edges).some((x) => x.code === 'schedule_config')).toBe(true);
+    });
+  });
 });

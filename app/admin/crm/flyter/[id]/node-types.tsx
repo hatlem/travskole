@@ -12,7 +12,7 @@ export interface FlowNodeData extends Record<string, unknown> {
 
 export type FlowRFNode = Node<FlowNodeData, FlowNodeType>;
 
-export const NODE_TYPE_ORDER: FlowNodeType[] = ['start', 'email', 'wait', 'condition', 'action', 'end'];
+export const NODE_TYPE_ORDER: FlowNodeType[] = ['start', 'email', 'wait', 'condition', 'action', 'schedule', 'end'];
 
 export const NODE_LABELS: Record<FlowNodeType, string> = {
   start: 'Start',
@@ -20,6 +20,7 @@ export const NODE_LABELS: Record<FlowNodeType, string> = {
   wait: 'Vent',
   condition: 'Betingelse',
   action: 'Handling',
+  schedule: 'Planlegg',
   end: 'Slutt',
 };
 
@@ -29,6 +30,7 @@ const NODE_ICONS: Record<FlowNodeType, string> = {
   wait: '⏱️',
   condition: '\u{1F500}',
   action: '⚙️',
+  schedule: '📅',
   end: '⏹️',
 };
 
@@ -38,6 +40,7 @@ const NODE_ACCENTS: Record<FlowNodeType, string> = {
   wait: 'border-t-amber-500',
   condition: 'border-t-purple-500',
   action: 'border-t-slate-500',
+  schedule: 'border-t-cyan-500',
   end: 'border-t-gray-500',
 };
 
@@ -149,6 +152,16 @@ export function ActionNode({ data, selected }: NodeProps<FlowRFNode>) {
   );
 }
 
+export function ScheduleNode({ data, selected }: NodeProps<FlowRFNode>) {
+  const anchor = typeof data.config.anchor === 'string' ? data.config.anchor : undefined;
+  return (
+    <Card nodeType="schedule" selected={selected} hasError={data.hasError} subtitle={anchor}>
+      <Handle type="target" position={Position.Top} />
+      <Handle type="source" position={Position.Bottom} />
+    </Card>
+  );
+}
+
 export function EndNode({ data, selected }: NodeProps<FlowRFNode>) {
   return (
     <Card nodeType="end" selected={selected} hasError={data.hasError}>
@@ -163,5 +176,6 @@ export const nodeTypes: NodeTypes = {
   wait: WaitNode,
   condition: ConditionNode,
   action: ActionNode,
+  schedule: ScheduleNode,
   end: EndNode,
 };

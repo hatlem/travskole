@@ -6,7 +6,7 @@
  * flow gates on `validateFlow` returning an empty array.
  */
 
-export type FlowNodeType = 'start' | 'email' | 'wait' | 'condition' | 'action' | 'end';
+export type FlowNodeType = 'start' | 'email' | 'wait' | 'condition' | 'action' | 'end' | 'schedule';
 
 export interface GraphNode {
   id: number;
@@ -41,6 +41,7 @@ export function parseNodeConfig(raw: string): Record<string, unknown> {
 const CONDITION_KINDS = ['in_segment', 'stage_is', 'deal_status', 'opened_email'] as const;
 const ACTION_KINDS = ['add_tag', 'remove_tag', 'set_stage', 'notify_admin', 'exit'] as const;
 const ACTION_KINDS_REQUIRING_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);
+const SCHEDULE_ANCHORS = ['course_start', 'course_end', 'course_midway'] as const;
 
 const isNonEmptyString = (v: unknown): v is string => typeof v === 'string' && v.trim().length > 0;
 const isInteger = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v);
@@ -99,6 +100,18 @@ function validateActionConfig(node: GraphNode): ValidationError | null {
   }
   if (ACTION_KINDS_REQUIRING_VALUE.has(kind as string) && !hasValue(value)) {
     return err(node.id, 'action_config', 'Handlings-noden mangler en verdi.');
+  }
+  return null;
+}
+
+function validateScheduleConfig(node: GraphNode): ValidationError | null {
+  const { anchor, offsetDays } = node.config;
+  const validAnchor = typeof anchor === 'string' && (SCHEDULE_ANCHORS as readonly string[]).includes(anchor);
+  if (!validAnchor) {
+    return err(node.id, 'schedule_config', 'Planleggings-noden mangler et gyldig anker.');
+  }
+  if (offsetDays !== undefined && !isInteger(offsetDays)) {
+    return err(node.id, 'schedule_config', 'Planleggings-noden har en ugyldig forskyvning.');
   }
   return null;
 }
@@ -251,7 +264,9 @@ function validateConfigs(nodes: GraphNode[]): ValidationError[] {
             ? validateConditionConfig(node)
             : node.type === 'action'
               ? validateActionConfig(node)
-              : null;
+              : node.type === 'schedule'
+                ? validateScheduleConfig(node)
+                : null;
     if (configError) errors.push(configError);
   }
   return errors;
