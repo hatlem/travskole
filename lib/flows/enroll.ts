@@ -60,6 +60,39 @@ export async function enrollContact(flowId: number, contactId: number): Promise<
   }
 }
 
+async function hasActiveRegistrationEnrollment(flowId: number, registrationId: number): Promise<boolean> {
+  const existing = await prisma.flowEnrollment.findFirst({
+    where: { flowId, registrationId, status: 'active' },
+    select: { id: true },
+  });
+  return existing !== null;
+}
+
+/**
+ * Melder en kontakts kurs-registrering inn i en flyt, ankret til kurset.
+ * Maks-én-aktiv per (flyt, registrering) — kode-sjekk + P2002-fallback fra
+ * den partielle indeksen `flow_enrollments_one_active_reg`. Returnerer om en
+ * ny enrollment ble opprettet. (Selve «ved registrering → kall denne»-wiringen
+ * er delprosjekt B.)
+ */
+export async function enrollCourseRegistration(
+  flowId: number,
+  contactId: number,
+  courseId: number,
+  registrationId: number,
+): Promise<boolean> {
+  if (await hasActiveRegistrationEnrollment(flowId, registrationId)) return false;
+  try {
+    await prisma.flowEnrollment.create({
+      data: { flowId, contactId, courseId, registrationId, currentNodeId: null, status: 'active', nextRunAt: new Date() },
+    });
+    return true;
+  } catch (error) {
+    if (isDuplicateEnrollment(error)) return false;
+    throw error;
+  }
+}
+
 /**
  * Evaluates a segment's rules against all contacts and enrolls the matches
  * into the given flow (same active-enrollment guard as `enrollContact`).
