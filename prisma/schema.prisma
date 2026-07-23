@@ -601,6 +601,7 @@ model Flow {
   description   String?
   status        String           @default("draft") // draft | active | paused | archived
   isMarketing   Boolean          @default(true) @map("is_marketing") // markedsføring krever samtykke ved send
+  anchorMode    String           @default("contact") @map("anchor_mode") // contact | course (kurs-forankret enrollment)
   nodes         FlowNode[]
   edges         FlowEdge[]
   triggers      FlowTrigger[]
