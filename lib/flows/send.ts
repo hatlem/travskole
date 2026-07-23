@@ -23,6 +23,7 @@ import { prisma } from '@/lib/prisma';
 import { sendMailAs } from '@/lib/mail';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
+import { resolveCourseMergeContext } from './course-merge';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
@@ -48,6 +49,7 @@ export interface SendFlowEmailInput {
   senderIdentityId: number;
   isMarketing: boolean;
   aiPersonalize?: boolean;
+  registrationId?: number | null;
 }
 
 function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
@@ -167,7 +169,11 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const identity = await prisma.senderIdentity.findUnique({ where: { id: input.senderIdentityId } });
   if (!identity?.active) return 'failed';
 
-  const mergeData = contactMergeTagData(contact);
+  let mergeData = contactMergeTagData(contact);
+  if (input.registrationId != null) {
+    const courseCtx = await resolveCourseMergeContext(input.registrationId);
+    if (courseCtx) mergeData = { ...mergeData, ...courseCtx };
+  }
   const subject = replaceMergeTags(input.subject, mergeData);
   const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
 

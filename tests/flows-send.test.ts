@@ -26,13 +26,16 @@ const { prisma } = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/mail', () => ({ sendMailAs: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getLLMProvider: vi.fn(() => null) }));
+vi.mock('@/lib/flows/course-merge', () => ({ resolveCourseMergeContext: vi.fn() }));
 
 import { sendFlowEmail, type SendFlowEmailInput } from '@/lib/flows/send';
 import { sendMailAs } from '@/lib/mail';
 import { getLLMProvider } from '@/lib/ai/provider';
+import { resolveCourseMergeContext } from '@/lib/flows/course-merge';
 
 const mockedSendMailAs = vi.mocked(sendMailAs);
 const mockedGetLLMProvider = vi.mocked(getLLMProvider);
+const mockedResolveCourseMergeContext = vi.mocked(resolveCourseMergeContext);
 
 const baseInput: SendFlowEmailInput = {
   enrollmentId: 1,
@@ -298,6 +301,25 @@ describe('sendFlowEmail', () => {
     const createArg = prisma.messageSend.create.mock.calls[0][0];
     expect(createArg.data.trackingToken).toBeUndefined();
     expect(prisma.messageLink.createMany).not.toHaveBeenCalled();
+  });
+
+  it('9. merges course context into merge tags when registrationId is set', async () => {
+    mockedResolveCourseMergeContext.mockResolvedValue({
+      forelder_navn: 'Kari', barnets_navn: 'Ola', kurs_navn: 'Ponni',
+      kurs_startdato: '01.06.2026', kurs_sluttdato: '11.06.2026', allergier: 'Ingen', kontakt_epost: 'post@bjerke.no',
+    });
+
+    const result = await sendFlowEmail({
+      ...baseInput,
+      bodyHtml: '<p>Hei {{barnets_navn}} på {{kurs_navn}}</p>',
+      registrationId: 42,
+    });
+
+    expect(result).toBe('sent');
+    const created = prisma.messageSend.create.mock.calls.at(-1)?.[0]?.data?.bodyHtml as string;
+    expect(created).toContain('Ola');
+    expect(created).toContain('Ponni');
+    expect(resolveCourseMergeContext).toHaveBeenCalledWith(42);
   });
 
   describe('defensive failure paths', () => {
