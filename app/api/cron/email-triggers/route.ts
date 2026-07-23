@@ -39,6 +39,22 @@ function addDays(date: Date, days: number): Date {
   return result;
 }
 
+/**
+ * WHERE for registreringer som er «forfalt» for en dato-basert trigger.
+ * `flowEnrollments: { none: {} }` er parallelldrift-vakten (delprosjekt B):
+ * en registrering som er meldt inn i en kurs-livssyklus-flyt eies av flyten —
+ * legacy-cronen hopper over den, slik at ingen registrering får en dato-basert
+ * e-post fra BÅDE legacy og flyt. Se docs/superpowers/specs/2026-07-23-course-lifecycle-flows-design.md §4.
+ */
+export function dueRegistrationsWhere(trigger: { id: number; courseId: number }) {
+  return {
+    courseId: trigger.courseId,
+    status: { in: ['pending', 'confirmed'] },
+    emailLogs: { none: { triggerId: trigger.id } },
+    flowEnrollments: { none: {} },
+  };
+}
+
 function computeSendDate(
   triggerType: string,
   offsetDays: number,
@@ -129,13 +145,7 @@ export async function GET(request: NextRequest) {
       processed++;
 
       const registrations = await prisma.registration.findMany({
-        where: {
-          courseId: trigger.courseId,
-          status: { in: ['pending', 'confirmed'] },
-          emailLogs: {
-            none: { triggerId: trigger.id },
-          },
-        },
+        where: dueRegistrationsWhere(trigger),
         include: {
           child: true,
           parent: {
