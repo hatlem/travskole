@@ -50,6 +50,12 @@ const ACTION_KIND_OPTIONS = [
 
 const ACTION_KINDS_WITH_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);
 
+const SCHEDULE_ANCHOR_OPTIONS = [
+  { value: 'course_start', label: 'Kursstart' },
+  { value: 'course_midway', label: 'Halvveis' },
+  { value: 'course_end', label: 'Kursslutt' },
+];
+
 const inputCls =
   'w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm disabled:opacity-50 disabled:bg-gray-50';
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1';
@@ -171,9 +177,11 @@ export function NodeConfigPanel({
                 ? 'Betingelse'
                 : node.type === 'action'
                   ? 'Handling'
-                  : node.type === 'start'
-                    ? 'Start'
-                    : 'Slutt'}
+                  : node.type === 'schedule'
+                    ? 'Planlegg'
+                    : node.type === 'start'
+                      ? 'Start'
+                      : 'Slutt'}
         </h3>
         {!disabled && (
           <button
@@ -430,6 +438,36 @@ export function NodeConfigPanel({
               />
             </div>
           )}
+        </div>
+      )}
+
+      {node.type === 'schedule' && (
+        <div className="space-y-3">
+          <div>
+            <label className={labelCls}>Anker (kursdato)</label>
+            <select
+              value={typeof config.anchor === 'string' ? config.anchor : ''}
+              onChange={(e) => set({ anchor: e.target.value })}
+              disabled={disabled}
+              className={inputCls}
+            >
+              <option value="">Velg anker …</option>
+              {SCHEDULE_ANCHOR_OPTIONS.map((a) => (
+                <option key={a.value} value={a.value}>{a.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>Forskyvning (dager)</label>
+            <input
+              type="number"
+              value={typeof config.offsetDays === 'number' ? config.offsetDays : 0}
+              onChange={(e) => set({ offsetDays: Math.trunc(Number(e.target.value)) || 0 })}
+              disabled={disabled}
+              className={inputCls}
+            />
+            <p className="mt-1 text-[11px] text-gray-500">Negativt = før ankeret, positivt = etter. F.eks. Kursstart med −3 = tre dager før kursstart.</p>
+          </div>
         </div>
       )}
 

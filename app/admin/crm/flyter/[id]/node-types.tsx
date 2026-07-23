@@ -12,7 +12,7 @@ export interface FlowNodeData extends Record<string, unknown> {
 
 export type FlowRFNode = Node<FlowNodeData, FlowNodeType>;
 
-export const NODE_TYPE_ORDER: FlowNodeType[] = ['start', 'email', 'wait', 'condition', 'action', 'end'];
+export const NODE_TYPE_ORDER: FlowNodeType[] = ['start', 'email', 'wait', 'condition', 'action', 'schedule', 'end'];
 
 export const NODE_LABELS: Record<FlowNodeType, string> = {
   start: 'Start',
@@ -152,6 +152,18 @@ export function ActionNode({ data, selected }: NodeProps<FlowRFNode>) {
   );
 }
 
+export function ScheduleNode({ data, selected }: NodeProps<FlowRFNode>) {
+  const anchor = typeof data.config.anchor === 'string' ? data.config.anchor : undefined;
+  const off = typeof data.config.offsetDays === 'number' ? data.config.offsetDays : undefined;
+  const subtitle = anchor ? `${anchor}${off ? ` ${off > 0 ? '+' : ''}${off}d` : ''}` : undefined;
+  return (
+    <Card nodeType="schedule" selected={selected} hasError={data.hasError} subtitle={subtitle}>
+      <Handle type="target" position={Position.Top} />
+      <Handle type="source" position={Position.Bottom} />
+    </Card>
+  );
+}
+
 export function EndNode({ data, selected }: NodeProps<FlowRFNode>) {
   return (
     <Card nodeType="end" selected={selected} hasError={data.hasError}>
@@ -166,5 +178,6 @@ export const nodeTypes: NodeTypes = {
   wait: WaitNode,
   condition: ConditionNode,
   action: ActionNode,
+  schedule: ScheduleNode,
   end: EndNode,
 };
