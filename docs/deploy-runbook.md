@@ -23,8 +23,23 @@ Kjør mot prod-Postgres, i rekkefølge (hver bygger på forrige):
 5. `scripts/email-tracking-migration.sql`
 6. `scripts/ai-layer-migration.sql`
 7. `scripts/course-flows-migration.sql`  ⚠️ **inneholder TO partielle unike indekser** (`flow_enrollments_one_active` reskopet til `WHERE registration_id IS NULL`, + ny `flow_enrollments_one_active_reg` på `(flow_id, registration_id) WHERE registration_id IS NOT NULL`) som IKKE finnes i schema.prisma — de MÅ med. Additiv: to nye nullbare kolonner (`course_id`/`registration_id`) på `flow_enrollments` + FK-er (delprosjekt A — dato-forankret kurs-flyt-planlegging).
+8. `scripts/course-lifecycle-migration.sql`  (additiv — `anchor_mode`-kolonne på `flows`, default `'contact'`; delprosjekt B — kurs-livssyklus-flyter).
 
-Alle er idempotent-vennlige tilleggsmigreringer. Verifiser etter hver at den
+Alle er idempotent-vennlige tilleggsmigreringer.
+
+## Steg 1b — Seed kurs-livssyklus-flyten (delprosjekt B)
+
+Etter migreringene, kjør seeden ÉN gang (idempotent — no-op hvis flyten finnes):
+`npx tsx scripts/seed-course-lifecycle-flow.ts`
+
+Den oppretter «Kurs-livssyklus»-flyten som **draft** (schedule→e-post-kjede: påminnelse −3d,
+velkomst, halvveis, etter-slutt +1d). Krever minst én aktiv `SenderIdentity` (finnes fra
+flow-engine-seeden). **Aktivér flyten i admin (`/admin/crm/flyter`) FØRST når dere er klare**
+til å la den overta dato-baserte kurs-e-poster. Fra aktivering eier flyten NYE påmeldinger
+(`registration.created` → kurs-forankret enrollment) og legacy-cronen hopper automatisk over
+dem (`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-send). Legacy
+fullfører påmeldinger fra før aktivering. `registration_confirmed` sendes fortsatt inline
+(uendret). Verifiser paritet før delprosjekt C fjerner legacy-EmailTrigger. Verifiser etter hver at den
 gikk uten feil. (Prisma-skjemaet matcher summen av disse.)
 
 ## Steg 2 — Deploy koden
