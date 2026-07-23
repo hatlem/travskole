@@ -34,6 +34,12 @@ const NODE_ICONS: Record<FlowNodeType, string> = {
   end: '⏹️',
 };
 
+const SCHEDULE_ANCHOR_LABELS: Record<string, string> = {
+  course_start: 'Kursstart',
+  course_midway: 'Halvveis',
+  course_end: 'Kursslutt',
+};
+
 const NODE_ACCENTS: Record<FlowNodeType, string> = {
   start: 'border-t-emerald-500',
   email: 'border-t-blue-500',
@@ -155,7 +161,8 @@ export function ActionNode({ data, selected }: NodeProps<FlowRFNode>) {
 export function ScheduleNode({ data, selected }: NodeProps<FlowRFNode>) {
   const anchor = typeof data.config.anchor === 'string' ? data.config.anchor : undefined;
   const off = typeof data.config.offsetDays === 'number' ? data.config.offsetDays : undefined;
-  const subtitle = anchor ? `${anchor}${off ? ` ${off > 0 ? '+' : ''}${off}d` : ''}` : undefined;
+  const label = anchor ? SCHEDULE_ANCHOR_LABELS[anchor] ?? anchor : undefined;
+  const subtitle = label ? `${label}${off ? ` ${off > 0 ? '+' : ''}${off}d` : ''}` : undefined;
   return (
     <Card nodeType="schedule" selected={selected} hasError={data.hasError} subtitle={subtitle}>
       <Handle type="target" position={Position.Top} />

@@ -6,6 +6,7 @@ const prisma = vi.hoisted(() => ({
   flowNode: { create: vi.fn(), findMany: vi.fn() },
   flowEdge: { createMany: vi.fn() },
   flowTrigger: { create: vi.fn() },
+  $transaction: vi.fn(async (cb: (tx: unknown) => unknown) => cb(prisma)),
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
 
