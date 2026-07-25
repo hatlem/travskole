@@ -150,7 +150,6 @@ model Course {
   updatedAt                DateTime  @updatedAt @map("updated_at")
 
   registrations   Registration[]
-  emailTriggers   EmailTrigger[]
   bookingRequests BookingRequest[]
   flowEnrollments FlowEnrollment[]
 
@@ -237,62 +236,12 @@ model Registration {
   course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
   child           Child?           @relation(fields: [childId], references: [id], onDelete: Cascade)
   parent          Parent           @relation(fields: [parentId], references: [id], onDelete: Cascade)
-  emailLogs       EmailLog[]
   flowEnrollments FlowEnrollment[]
 
   @@index([courseId, status])
   @@index([childId])
   @@index([parentId])
   @@map("registrations")
-}
-
-// Email template system
-model EmailTemplate {
-  id        Int      @id @default(autoincrement())
-  name      String
-  subject   String
-  body      String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  triggers EmailTrigger[]
-
-  @@map("email_templates")
-}
-
-model EmailTrigger {
-  id          Int      @id @default(autoincrement())
-  courseId    Int      @map("course_id")
-  templateId  Int?     @map("template_id")
-  triggerType String   @map("trigger_type")
-  offsetDays  Int      @default(0) @map("offset_days")
-  enabled     Boolean  @default(false)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
-
-  course   Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  template EmailTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  logs     EmailLog[]
-
-  @@index([courseId])
-  @@index([templateId])
-  @@map("email_triggers")
-}
-
-model EmailLog {
-  id             Int      @id @default(autoincrement())
-  triggerId      Int      @map("trigger_id")
-  registrationId Int      @map("registration_id")
-  recipientEmail String   @map("recipient_email")
-  status         String   @default("sent")
-  sentAt         DateTime @default(now()) @map("sent_at")
-
-  trigger      EmailTrigger @relation(fields: [triggerId], references: [id], onDelete: Cascade)
-  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
-
-  @@unique([triggerId, registrationId])
-  @@index([registrationId])
-  @@map("email_logs")
 }
 
 // ═══════════════════════════════════════════════════════════════════════
