@@ -42,39 +42,26 @@ dem (`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-
 fullfører påmeldinger fra før aktivering. `registration_confirmed` sendes fortsatt inline
 (uendret). Verifiser paritet i prod FØR delprosjekt C rulles ut (neste steg).
 
-## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED, holdes på egen gren
+## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED, kjøres SIST
 
-**Delprosjekt C** (fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog` + admin-API/UI + den
-dato-baserte sende-delen av cron-en; `registration_confirmed` blir alltid hardkodet) er
-bevisst IKKE på `main` — den ligger på grenen **`retire-legacy-emailtrigger`** for å unngå
-for tidlig utrulling. C **må ikke deployes** før: (1) livssyklus-flyten (Steg 1b) er aktivert
-i prod, og (2) paritet er bevist. Deployes C mens flyten er `draft`, står prod uten
-dato-baserte kurs-e-poster fra noen av systemene (drop-send).
+**Denne grenen (`retire-legacy-emailtrigger`) fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog`
++ admin-API/UI + den dato-baserte sende-delen av cron-en.** `registration_confirmed` blir alltid
+hardkodet (waitlist-bevisst). **Deploy KUN når: (1) livssyklus-flyten (Steg 1b) er aktivert i prod,
+og (2) paritet er bevist** — ellers står prod uten dato-baserte kurs-e-poster fra noen av systemene
+(drop-send). Rekkefølge: aktiver flyt → bevis paritet → merge denne grenen til `main` → deploy.
 
-Når du er klar: merge `retire-legacy-emailtrigger` til `main` og deploy. Den grenen har sitt
-eget runbook-tillegg med detaljene, inkludert:
-- Cron-ruta er omdøpt til `/api/cron/gdpr-retention` (kjører nå KUN GDPR-passene). **Oppdater
-  Function-appens `CRON_TARGET_URL` til den nye URL-en HVIS den er satt** (ellers bruker
-  Azure-funksjonen den nye in-repo-standarden automatisk ved deploy).
-- **Aller sist, irreversibelt:** `scripts/course-legacy-drop.sql` (`DROP TABLE` av de tre
-  e-post-tabellene) — kjøres separat, kun når e-posthistorikken er arkivert/unødvendig.
+Ved deploy av C:
+- **Cron-ruta er omdøpt** `/api/cron/email-triggers` → **`/api/cron/gdpr-retention`** (kjører nå KUN
+  GDPR-passene: barn-anonymisering + anonym-besøks-purge). Azure-funksjonen heter fortsatt
+  `cron-email-triggers` (timer-identitet beholdt) men peker på den nye ruta via oppdatert in-repo-standard.
+  ⚠️ **HVIS `CRON_TARGET_URL` er satt på Function-appen, oppdater den til `.../api/cron/gdpr-retention`**
+  (ellers 404 → GDPR-cronen slutter å kjøre). Er den ikke satt, brukes den nye standarden automatisk.
+- Cron-responsen er nå `{ anonymized }` (uten e-post-tellere). Timer/schedule uendret.
 
-## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED
-
-**Koden for delprosjekt C (fjerning av `EmailTrigger`/`EmailTemplate`/`EmailLog` + den dato-baserte
-sende-delen av `cron-email-triggers`) må IKKE deployes til prod før kurs-livssyklus-flyten (Steg 1b)
-er AKTIVERT i prod og paritet er bevist.** Deployes C mens flyten fortsatt er `draft`, står prod uten
-dato-baserte kurs-e-poster fra noen av systemene (drop-send). Rekkefølge: (1) aktiver flyten, (2) bevis
-paritet, (3) DERETTER deploy C-koden.
-
-Etter C-koden er deployet og stabil kjører cron-ruta `cron-email-triggers` KUN GDPR-passene
-(barn-anonymisering + anonym-besøks-purge). URL/Azure-timer er uendret — ikke rør timeren.
-
-**Til ALLER SIST — irreversibel opprydding (`scripts/course-legacy-drop.sql`):** `DROP TABLE`
-av `email_logs`/`email_triggers`/`email_templates`. Kjøres SEPARAT fra kode-deployen, av Basefarm,
-KUN når: livssyklus-flyten er aktiv, paritet bevist, OG e-posthistorikken (`email_logs`) er arkivert
-eller ikke lenger nødvendig. Dette kan aldri angres. Inntil da lever tabellene som inert historikk
-(koden refererer dem ikke lenger).
+**Til ALLER SIST — irreversibelt (`scripts/course-legacy-drop.sql`):** `DROP TABLE` av
+`email_logs`/`email_triggers`/`email_templates` (FK-rekkefølge). Kjøres SEPARAT fra kode-deployen,
+KUN når livssyklus-flyten er aktiv, paritet bevist, OG e-posthistorikken er arkivert/unødvendig.
+Kan aldri angres. Inntil da lever tabellene som inert historikk (koden refererer dem ikke lenger).
 
 ## Steg 2 — Deploy koden
 
