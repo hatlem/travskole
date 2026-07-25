@@ -169,6 +169,47 @@ async function main() {
   });
   console.log('Default settings seeded');
 
+  // Seed default email templates
+  const templateCount = await prisma.emailTemplate.count();
+  if (templateCount === 0) {
+    await prisma.emailTemplate.create({
+      data: {
+        name: 'Påmelding bekreftet',
+        subject: 'Påmelding mottatt — {{kurs_navn}}',
+        body: '<h2>Hei {{forelder_navn}}!</h2>\n<p>Takk for påmeldingen til <strong>{{kurs_navn}}</strong>.</p>\n<p><strong>Barn:</strong> {{barnets_navn}}</p>\n<p><strong>Kursperiode:</strong> {{kurs_startdato}} — {{kurs_sluttdato}}</p>\n<p>Vi vil sende deg en bekreftelse så snart vi har behandlet påmeldingen.</p>\n<p>Spørsmål? Ta kontakt på <a href="mailto:{{kontakt_epost}}">{{kontakt_epost}}</a></p>',
+      },
+    });
+    await prisma.emailTemplate.create({
+      data: {
+        name: 'Påminnelse før kursstart',
+        subject: 'Påminnelse: {{kurs_navn}} starter snart!',
+        body: '<h2>Hei {{forelder_navn}}!</h2>\n<p>Vi minner om at <strong>{{kurs_navn}}</strong> starter <strong>{{kurs_startdato}}</strong>.</p>\n<p><strong>Barn:</strong> {{barnets_navn}}</p>\n<p>Husk å ta med passende klær og sko for uteaktiviteter. Vi anbefaler lange bukser og sko med hæl for sikker ridning.</p>\n<p>Vi gleder oss til å se {{barnets_navn}}!</p>\n<p>Spørsmål? Ta kontakt på <a href="mailto:{{kontakt_epost}}">{{kontakt_epost}}</a></p>',
+      },
+    });
+    await prisma.emailTemplate.create({
+      data: {
+        name: 'Velkommen til kursstart',
+        subject: 'Velkommen til {{kurs_navn}}!',
+        body: '<h2>Velkommen, {{forelder_navn}}!</h2>\n<p>I dag starter <strong>{{kurs_navn}}</strong>, og vi gleder oss til å ta imot {{barnets_navn}}!</p>\n<p><strong>Kursperiode:</strong> {{kurs_startdato}} — {{kurs_sluttdato}}</p>\n<p><strong>Hva bør barnet ha med:</strong></p>\n<ul>\n<li>Lange bukser og sko med liten hæl</li>\n<li>Klær etter vær</li>\n<li>Drikke og eventuelt matpakke</li>\n</ul>\n<p>Vi møtes ved stallen. Velkommen!</p>\n<p>Spørsmål? Ta kontakt på <a href="mailto:{{kontakt_epost}}">{{kontakt_epost}}</a></p>',
+      },
+    });
+    await prisma.emailTemplate.create({
+      data: {
+        name: 'Midtveis-oppdatering',
+        subject: 'Halvveis i {{kurs_navn}}!',
+        body: '<h2>Hei {{forelder_navn}}!</h2>\n<p>Vi er halvveis i <strong>{{kurs_navn}}</strong>, og {{barnets_navn}} gjør det flott!</p>\n<p><strong>Gjenværende kursperiode:</strong> frem til {{kurs_sluttdato}}</p>\n<p>Vi har hatt mange fine dager med hestene, og barna utvikler seg godt. Husk at det fortsatt er viktig med passende klær og sko til hver økt.</p>\n<p>Spørsmål eller tilbakemeldinger? Ta kontakt på <a href="mailto:{{kontakt_epost}}">{{kontakt_epost}}</a></p>',
+      },
+    });
+    await prisma.emailTemplate.create({
+      data: {
+        name: 'Takk for deltakelsen',
+        subject: 'Takk for deltakelsen på {{kurs_navn}}!',
+        body: '<h2>Hei {{forelder_navn}}!</h2>\n<p>Tusen takk for at {{barnets_navn}} deltok på <strong>{{kurs_navn}}</strong>!</p>\n<p><strong>Kursperiode:</strong> {{kurs_startdato}} — {{kurs_sluttdato}}</p>\n<p>Vi håper {{barnets_navn}} hadde en fin opplevelse og lærte mye. Vi setter stor pris på tilbakemeldinger — svar gjerne på denne e-posten med dine tanker.</p>\n<p>Følg med på nettsiden vår for kommende kurs og leirer. Vi håper å se {{barnets_navn}} igjen snart!</p>\n<p>Med vennlig hilsen,<br>Teamet hos Bjerke Ponniskole</p>',
+      },
+    });
+    console.log('Default email templates seeded');
+  }
+
   console.log('Seed completed!');
   const counts = {
     users: await prisma.user.count(),

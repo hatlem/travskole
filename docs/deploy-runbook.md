@@ -42,23 +42,6 @@ fullfører påmeldinger fra før aktivering. `registration_confirmed` sendes for
 (uendret). Verifiser paritet før delprosjekt C fjerner legacy-EmailTrigger. Verifiser etter hver at den
 gikk uten feil. (Prisma-skjemaet matcher summen av disse.)
 
-## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED
-
-**Koden for delprosjekt C (fjerning av `EmailTrigger`/`EmailTemplate`/`EmailLog` + den dato-baserte
-sende-delen av `cron-email-triggers`) må IKKE deployes til prod før kurs-livssyklus-flyten (Steg 1b)
-er AKTIVERT i prod og paritet er bevist.** Deployes C mens flyten fortsatt er `draft`, står prod uten
-dato-baserte kurs-e-poster fra noen av systemene (drop-send). Rekkefølge: (1) aktiver flyten, (2) bevis
-paritet, (3) DERETTER deploy C-koden.
-
-Etter C-koden er deployet og stabil kjører cron-ruta `cron-email-triggers` KUN GDPR-passene
-(barn-anonymisering + anonym-besøks-purge). URL/Azure-timer er uendret — ikke rør timeren.
-
-**Til ALLER SIST — irreversibel opprydding (`scripts/course-legacy-drop.sql`):** `DROP TABLE`
-av `email_logs`/`email_triggers`/`email_templates`. Kjøres SEPARAT fra kode-deployen, av Basefarm,
-KUN når: livssyklus-flyten er aktiv, paritet bevist, OG e-posthistorikken (`email_logs`) er arkivert
-eller ikke lenger nødvendig. Dette kan aldri angres. Inntil da lever tabellene som inert historikk
-(koden refererer dem ikke lenger).
-
 ## Steg 2 — Deploy koden
 
 Deploy `main` (siste commit) til Azure App Service som vanlig. Dette bringer

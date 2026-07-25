@@ -7,7 +7,7 @@ import logger, { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
-import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
+import { sendRegistrationConfirmation, sendRegistrationAdminNotification, sendTemplatedEmail } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
 import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
@@ -398,12 +398,52 @@ export async function POST(request: NextRequest) {
       isWaitlist: isWaitlistRegistration,
     };
 
-    // Påmeldingsbekreftelse (hardkodet, waitlist-bevisst) + admin-varsel.
-    // Redigerbare livssyklus-e-poster håndteres nå av kurs-livssyklus-flyten.
-    await Promise.all([
-      sendRegistrationConfirmation(emailData),
-      sendRegistrationAdminNotification(emailData),
-    ]).catch(() => {});
+    // Check for template-based registration_confirmed trigger
+    const trigger = await prisma.emailTrigger.findFirst({
+      where: {
+        courseId: course.id,
+        triggerType: 'registration_confirmed',
+        enabled: true,
+        templateId: { not: null },
+      },
+      include: { template: true },
+    });
+
+    if (trigger?.template) {
+      const startDate = course.startDate ? new Date(course.startDate).toLocaleDateString('nb-NO') : '';
+      const endDate = course.endDate ? new Date(course.endDate).toLocaleDateString('nb-NO') : '';
+      const contactEmail = await getSetting('contact_email');
+      await Promise.all([
+        sendTemplatedEmail(
+          { subject: trigger.template.subject, body: trigger.template.body },
+          {
+            forelder_navn: data.parentName,
+            barnets_navn: childName ?? data.parentName,
+            kurs_navn: course.name,
+            kurs_startdato: startDate,
+            kurs_sluttdato: endDate,
+            allergier: childAllergies || 'Ingen',
+            kontakt_epost: contactEmail,
+          },
+          data.parentEmail,
+        ),
+        sendRegistrationAdminNotification(emailData),
+        prisma.emailLog.create({
+          data: {
+            triggerId: trigger.id,
+            registrationId: registration.id,
+            recipientEmail: data.parentEmail,
+            status: 'sent',
+          },
+        }),
+      ]).catch(() => {});
+    } else {
+      // Fallback to hardcoded templates
+      await Promise.all([
+        sendRegistrationConfirmation(emailData),
+        sendRegistrationAdminNotification(emailData),
+      ]).catch(() => {});
+    }
 
     // Anonym påmelding (ingen sesjon) er hovedstrømmen for foresatte, men
     // /api/payments/checkout krever normalt sesjon + e-postmatch for eierskap.

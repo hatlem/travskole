@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import { getSetting, getSettings } from '@/lib/settings';
 import { makeT } from '@/lib/strings';
+import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import logger from '@/lib/logger';
 import { getBaseUrl } from '@/lib/site';
 import { BRAND } from '@/lib/brand';
@@ -323,3 +324,13 @@ export async function sendAdminEmail(to: string, subject: string, htmlBody: stri
   await sendMail(to, subject, htmlBody);
 }
 
+export async function sendTemplatedEmail(
+  template: { subject: string; body: string },
+  data: MergeTagData,
+  recipientEmail: string,
+) {
+  const siteName = await getSiteName();
+  const subject = replaceMergeTags(template.subject, data);
+  const body = wrapEmailHtml(replaceMergeTags(template.body, data), siteName);
+  await sendMail(recipientEmail, subject, body);
+}
