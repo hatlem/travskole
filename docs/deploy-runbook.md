@@ -25,7 +25,8 @@ Kjør mot prod-Postgres, i rekkefølge (hver bygger på forrige):
 7. `scripts/course-flows-migration.sql`  ⚠️ **inneholder TO partielle unike indekser** (`flow_enrollments_one_active` reskopet til `WHERE registration_id IS NULL`, + ny `flow_enrollments_one_active_reg` på `(flow_id, registration_id) WHERE registration_id IS NOT NULL`) som IKKE finnes i schema.prisma — de MÅ med. Additiv: to nye nullbare kolonner (`course_id`/`registration_id`) på `flow_enrollments` + FK-er (delprosjekt A — dato-forankret kurs-flyt-planlegging).
 8. `scripts/course-lifecycle-migration.sql`  (additiv — `anchor_mode`-kolonne på `flows`, default `'contact'`; delprosjekt B — kurs-livssyklus-flyter).
 
-Alle er idempotent-vennlige tilleggsmigreringer.
+Alle er idempotent-vennlige tilleggsmigreringer. Verifiser etter hver at
+migreringen gikk uten feil (Prisma-skjemaet matcher summen av dem).
 
 ## Steg 1b — Seed kurs-livssyklus-flyten (delprosjekt B)
 
@@ -39,8 +40,24 @@ til å la den overta dato-baserte kurs-e-poster. Fra aktivering eier flyten NYE 
 (`registration.created` → kurs-forankret enrollment) og legacy-cronen hopper automatisk over
 dem (`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-send). Legacy
 fullfører påmeldinger fra før aktivering. `registration_confirmed` sendes fortsatt inline
-(uendret). Verifiser paritet før delprosjekt C fjerner legacy-EmailTrigger. Verifiser etter hver at den
-gikk uten feil. (Prisma-skjemaet matcher summen av disse.)
+(uendret). Verifiser paritet i prod FØR delprosjekt C rulles ut (neste steg).
+
+## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED, holdes på egen gren
+
+**Delprosjekt C** (fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog` + admin-API/UI + den
+dato-baserte sende-delen av cron-en; `registration_confirmed` blir alltid hardkodet) er
+bevisst IKKE på `main` — den ligger på grenen **`retire-legacy-emailtrigger`** for å unngå
+for tidlig utrulling. C **må ikke deployes** før: (1) livssyklus-flyten (Steg 1b) er aktivert
+i prod, og (2) paritet er bevist. Deployes C mens flyten er `draft`, står prod uten
+dato-baserte kurs-e-poster fra noen av systemene (drop-send).
+
+Når du er klar: merge `retire-legacy-emailtrigger` til `main` og deploy. Den grenen har sitt
+eget runbook-tillegg med detaljene, inkludert:
+- Cron-ruta er omdøpt til `/api/cron/gdpr-retention` (kjører nå KUN GDPR-passene). **Oppdater
+  Function-appens `CRON_TARGET_URL` til den nye URL-en HVIS den er satt** (ellers bruker
+  Azure-funksjonen den nye in-repo-standarden automatisk ved deploy).
+- **Aller sist, irreversibelt:** `scripts/course-legacy-drop.sql` (`DROP TABLE` av de tre
+  e-post-tabellene) — kjøres separat, kun når e-posthistorikken er arkivert/unødvendig.
 
 ## Steg 2 — Deploy koden
 
