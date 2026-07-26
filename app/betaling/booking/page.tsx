@@ -48,7 +48,7 @@ export default async function BookingBetalPage({ searchParams }: { searchParams:
             <tr><td className="pr-6 py-1 text-gray-500">Deltakere</td><td>{booking.participants}</td></tr>
             {amountKr != null && <tr><td className="pr-6 py-1 text-gray-500">Beløp</td><td className="font-semibold">{amountKr.toLocaleString('nb-NO')} kr</td></tr>}
           </tbody></table>
-          {providers.length > 0 && amountKr != null
+          {providers.length > 0 && amountKr != null && amountKr > 0
             ? <BookingCheckout bookingRequestId={booking.id} providers={providers} token={token} />
             : <p className="text-sm text-gray-600">Dette arrangementet har ingen online betaling. Vi tar kontakt om det praktiske.</p>}
         </div>

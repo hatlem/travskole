@@ -51,7 +51,7 @@ export default async function MineBookingerPage() {
             const canPay =
               b.status === 'confirmed' &&
               providers.length > 0 &&
-              amountKr != null &&
+              amountKr != null && amountKr > 0 &&
               (b.paymentStatus === 'none' || b.paymentStatus === 'pending');
             return (
               <li key={b.id} className="rounded-lg border border-gray-200 bg-white p-4">
