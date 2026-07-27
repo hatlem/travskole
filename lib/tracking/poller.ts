@@ -118,9 +118,10 @@ async function fetchDsnDetailText(mailbox: string, messageId: string, token: str
     if (!res.ok) return null;
     const json = (await res.json()) as { value?: GraphAttachment[] };
     const attachments = json.value ?? [];
-    const dsnPart = attachments.find(
-      (a) => (a.contentType ?? '').toLowerCase() === 'message/delivery-status',
-    );
+    const dsnPart = attachments.find((a) => {
+      const ct = (a.contentType ?? '').toLowerCase();
+      return ct.startsWith('message/delivery-status') || ct.startsWith('message/global-delivery-status');
+    });
     if (!dsnPart?.contentBytes) return null;
     return Buffer.from(dsnPart.contentBytes, 'base64').toString('utf-8');
   } catch (error) {
@@ -139,6 +140,44 @@ function findHeader(message: GraphMessage, name: string): string | null {
   return header?.value ?? null;
 }
 
+/**
+ * Normalizes a raw DSN recipient address token: trims surrounding
+ * whitespace, strips wrapping `<>` (RFC 3464 mailbox angle brackets), takes
+ * the first whitespace-delimited token (some MTAs append a trailing comment
+ * like "(comment)" after the address), strips any stray leftover `<>`, then
+ * requires the result to look like an address (contains "@") before
+ * lowercasing it. Returns null if nothing usable remains.
+ */
+function normalizeDsnRecipient(raw: string): string | null {
+  const trimmed = raw.trim();
+  const unwrapped =
+    trimmed.startsWith('<') && trimmed.endsWith('>') ? trimmed.slice(1, -1).trim() : trimmed;
+  const firstToken = unwrapped.split(/\s+/)[0] ?? '';
+  const stripped = firstToken.replace(/^<+/, '').replace(/>+$/, '');
+  if (!stripped.includes('@')) return null;
+  return stripped.toLowerCase();
+}
+
+/**
+ * Extracts the Status and (Final-Recipient, falling back to
+ * Original-Recipient) fields from an RFC 3464 machine-readable DSN body.
+ * Pure and tolerant of real-world MTA variants: missing address-type
+ * prefix ("rfc822;"), missing whitespace after the prefix's semicolon,
+ * angle-bracketed/mixed-case addresses, and trailing comments after the
+ * address. Header names are matched case-insensitively.
+ */
+export function parseDsnFields(bodyText: string): { dsnStatus?: string; failedRecipient: string | null } {
+  const statusMatch = /^Status:\s*(\d{1,3}\.\d{1,3}\.\d{1,3})/im.exec(bodyText);
+  const rcptRaw =
+    /^Final-Recipient:\s*(?:[A-Za-z0-9-]+\s*;)?\s*(.+?)\s*$/im.exec(bodyText)?.[1] ??
+    /^Original-Recipient:\s*(?:[A-Za-z0-9-]+\s*;)?\s*(.+?)\s*$/im.exec(bodyText)?.[1] ??
+    null;
+  return {
+    dsnStatus: statusMatch?.[1],
+    failedRecipient: rcptRaw != null ? normalizeDsnRecipient(rcptRaw) : null,
+  };
+}
+
 async function toInboundMessageLike(
   message: GraphMessage,
   mailbox: string,
@@ -150,16 +189,15 @@ async function toInboundMessageLike(
   if (isDsn) {
     const dsnDetailText = message.id ? await fetchDsnDetailText(mailbox, message.id, token) : null;
     const bodyText = dsnDetailText ?? message.body?.content ?? '';
-    const statusMatch = /^Status:\s*(\d\.\d{1,3}\.\d{1,3})/im.exec(bodyText);
-    const recipientMatch = /^Final-Recipient:\s*rfc822;\s*(\S+)/im.exec(bodyText);
+    const { dsnStatus, failedRecipient } = parseDsnFields(bodyText);
     return {
       inReplyTo: null,
       references: [],
       from: message.from?.emailAddress?.address ?? null,
       subject: message.subject ?? '',
       isDsn: true,
-      dsnStatus: statusMatch?.[1],
-      failedRecipient: recipientMatch?.[1] ?? null,
+      dsnStatus,
+      failedRecipient,
     };
   }
 
