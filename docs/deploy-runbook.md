@@ -128,6 +128,10 @@ gjøres uten prod-tilgang):
 - `/api/cron/flows` med riktig secret → 200 med `poller`+`suggestions` i responsen.
 
 ## Kjente ikke-blokkerende follow-ups (etter go-live)
-- Migrere eksisterende kurs-`EmailTrigger`/cron inn i flyter (motoren er nå bevist).
-- kanban-betalingsbadge (pipelines-API mangler paymentStatus), booking-side checkout-UI, `checkout.session.expired`-håndtering, delrefusjon-radstatus.
+
+**FERDIG siden opprinnelig liste** (ikke lenger follow-ups): kurs-`EmailTrigger`→flyter-migreringen (delprosjekt A+B merget; C klar på gren `retire-legacy-emailtrigger`, gated — se Fase 8–10 i go-live-sjekklisten); kanban-betalingsbadge + `checkout.session.expired` + delrefusjon-radstatus (delprosjekt 7); booking-side checkout-UI (merget); Graph-DSN-parsing-hardening (merget).
+
+**Gjenstår (ikke-blokkerende):**
+- SMS/push-kanaler i flyt-motoren (krever leverandør-valg + env/kostnad — ikke startet).
+- Multi-mottaker-DSN: `parseDsnFields` parer Status/Final-Recipient over hele DSN-kroppen, ikke per RFC 3464 per-mottaker-blokk (lav risiko; sjelden i praksis).
 - getcookies-repoets unpushede `feat/widget-event-api`-branch (venter på eiers gjennomgang).
