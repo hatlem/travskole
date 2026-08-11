@@ -255,6 +255,53 @@ export async function sendBookingConfirmation(data: BookingEmail) {
   );
 }
 
+export async function sendBookingApprovedPayEmail(
+  data: BookingEmail & { amountKr: number; payUrl: string },
+) {
+  const settings = await getSettings();
+  const adminEmail = settings.contact_email;
+  const siteName = settings.site_name;
+  await sendMail(
+    data.email,
+    `Booking godkjent — fullfør betaling for ${data.courseName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Hei ${escapeHtml(data.name)}!</h2>
+      <p>Bookingen din for <strong>${escapeHtml(data.courseName)}</strong> er godkjent. Fullfør betalingen for å sikre plassen.</p>
+      <table style="border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Deltakere:</td><td>${data.participants}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Beløp:</td><td><strong>${data.amountKr.toLocaleString('nb-NO')} kr</strong></td></tr>
+        ${data.preferredDate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Ønsket dato:</td><td>${escapeHtml(new Date(data.preferredDate).toLocaleDateString('nb-NO'))}</td></tr>` : ''}
+      </table>
+      <p style="margin:24px 0">
+        <a href="${escapeHtml(data.payUrl)}" style="background:#1d4ed8;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Betal nå</a>
+      </p>
+      <p style="color:#666;font-size:13px">Lenken er gyldig i 14 dager. Er du innlogget, kan du også betale under «Mine bookinger».</p>
+      <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+    </div>`,
+  );
+}
+
+export async function sendBookingApprovedEmail(data: BookingEmail) {
+  const settings = await getSettings();
+  const adminEmail = settings.contact_email;
+  const siteName = settings.site_name;
+  await sendMail(
+    data.email,
+    `Booking godkjent — ${data.courseName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Hei ${escapeHtml(data.name)}!</h2>
+      <p>Bookingen din for <strong>${escapeHtml(data.courseName)}</strong> er godkjent. Vi tar kontakt om det praktiske; eventuell faktura sendes separat.</p>
+      <table style="border-collapse:collapse;margin:16px 0">
+        <tr><td style="padding:4px 12px 4px 0;color:#666">Deltakere:</td><td>${data.participants}</td></tr>
+        ${data.preferredDate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Ønsket dato:</td><td>${escapeHtml(new Date(data.preferredDate).toLocaleDateString('nb-NO'))}</td></tr>` : ''}
+      </table>
+      <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+    </div>`,
+  );
+}
+
 export async function sendPasswordResetEmail(email: string, token: string) {
   const siteName = await getSiteName();
   const baseUrl = getBaseUrl();

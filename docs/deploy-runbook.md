@@ -35,20 +35,23 @@ Etter migreringene, kjør seeden ÉN gang (idempotent — no-op hvis flyten finn
 
 Den oppretter «Kurs-livssyklus»-flyten som **draft** (schedule→e-post-kjede: påminnelse −3d,
 velkomst, halvveis, etter-slutt +1d). Krever minst én aktiv `SenderIdentity` (finnes fra
-flow-engine-seeden). **Aktivér flyten i admin (`/admin/crm/flyter`) FØRST når dere er klare**
-til å la den overta dato-baserte kurs-e-poster. Fra aktivering eier flyten NYE påmeldinger
-(`registration.created` → kurs-forankret enrollment) og legacy-cronen hopper automatisk over
-dem (`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-send). Legacy
+flow-engine-seeden). **Aktivér flyten i admin (`/admin/crm/flyter`)** for å la den overta
+dato-baserte kurs-e-poster. Fra aktivering eier flyten NYE påmeldinger (`registration.created`
+→ kurs-forankret enrollment) og legacy-cronen hopper automatisk over dem
+(`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-send). Legacy
 fullfører påmeldinger fra før aktivering. `registration_confirmed` sendes fortsatt inline
-(uendret). Verifiser paritet i prod FØR delprosjekt C rulles ut (neste steg).
+(uendret).
 
-## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED, kjøres SIST
+**Ingen ventetid nødvendig før neste steg** — plattformen har ingen reelle brukere ennå, så
+det er ingen prod-avhengighet å bevise paritet mot over tid. Aktivering + legacy-fjerning
+gjøres i samme utrulling.
+
+## Steg 1c — Delprosjekt C (legacy-fjerning), samme økt
 
 **Denne grenen (`retire-legacy-emailtrigger`) fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog`
 + admin-API/UI + den dato-baserte sende-delen av cron-en.** `registration_confirmed` blir alltid
-hardkodet (waitlist-bevisst). **Deploy KUN når: (1) livssyklus-flyten (Steg 1b) er aktivert i prod,
-og (2) paritet er bevist** — ellers står prod uten dato-baserte kurs-e-poster fra noen av systemene
-(drop-send). Rekkefølge: aktiver flyt → bevis paritet → merge denne grenen til `main` → deploy.
+hardkodet (waitlist-bevisst). Rekkefølge: aktiver flyt (Steg 1b) → merge denne grenen til `main`
+→ deploy — ingen separat gate, ingen ventetid.
 
 Ved deploy av C:
 - **Cron-ruta er omdøpt** `/api/cron/email-triggers` → **`/api/cron/gdpr-retention`** (kjører nå KUN
@@ -58,10 +61,11 @@ Ved deploy av C:
   (ellers 404 → GDPR-cronen slutter å kjøre). Er den ikke satt, brukes den nye standarden automatisk.
 - Cron-responsen er nå `{ anonymized }` (uten e-post-tellere). Timer/schedule uendret.
 
-**Til ALLER SIST — irreversibelt (`scripts/course-legacy-drop.sql`):** `DROP TABLE` av
-`email_logs`/`email_triggers`/`email_templates` (FK-rekkefølge). Kjøres SEPARAT fra kode-deployen,
-KUN når livssyklus-flyten er aktiv, paritet bevist, OG e-posthistorikken er arkivert/unødvendig.
-Kan aldri angres. Inntil da lever tabellene som inert historikk (koden refererer dem ikke lenger).
+**Aller sist i samme utrulling, irreversibelt (`scripts/course-legacy-drop.sql`):** `DROP TABLE` av
+`email_logs`/`email_triggers`/`email_templates` (FK-rekkefølge). Ingen reell e-posthistorikk å
+arkivere ennå (plattformen er ikke live), så ingen grunn til å vente — men kjøres som eget,
+bevisst steg siden det er en `DROP TABLE` uten angrefunksjon. Inntil da lever tabellene som inert
+historikk (koden refererer dem ikke lenger).
 
 ## Steg 2 — Deploy koden
 
@@ -132,6 +136,10 @@ gjøres uten prod-tilgang):
 - `/api/cron/flows` med riktig secret → 200 med `poller`+`suggestions` i responsen.
 
 ## Kjente ikke-blokkerende follow-ups (etter go-live)
-- Migrere eksisterende kurs-`EmailTrigger`/cron inn i flyter (motoren er nå bevist).
-- kanban-betalingsbadge (pipelines-API mangler paymentStatus), booking-side checkout-UI, `checkout.session.expired`-håndtering, delrefusjon-radstatus.
+
+**FERDIG siden opprinnelig liste** (ikke lenger follow-ups): kurs-`EmailTrigger`→flyter-migreringen (delprosjekt A+B merget; C klar på gren `retire-legacy-emailtrigger`, gated — se Fase 8–10 i go-live-sjekklisten); kanban-betalingsbadge + `checkout.session.expired` + delrefusjon-radstatus (delprosjekt 7); booking-side checkout-UI (merget); Graph-DSN-parsing-hardening (merget).
+
+**Gjenstår (ikke-blokkerende):**
+- SMS/push-kanaler i flyt-motoren (krever leverandør-valg + env/kostnad — ikke startet).
+- Multi-mottaker-DSN: `parseDsnFields` parer Status/Final-Recipient over hele DSN-kroppen, ikke per RFC 3464 per-mottaker-blokk (lav risiko; sjelden i praksis).
 - getcookies-repoets unpushede `feat/widget-event-api`-branch (venter på eiers gjennomgang).

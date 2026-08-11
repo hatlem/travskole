@@ -354,6 +354,14 @@ function DashboardContent() {
           )}
 
           <Link
+            href="/mine-bookinger"
+            className="block bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:border-bjerke-blue transition"
+          >
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">Mine bookinger</h3>
+            <p className="text-gray-500">Se status og betal for dine bookingforespørsler</p>
+          </Link>
+
+          <Link
             href="/arrangementer"
             className="block bg-bjerke-blue text-white rounded-lg p-6 hover:bg-bjerke-blue-dark transition"
           >
