@@ -4,7 +4,9 @@
 
 **Kontekst:** prod kjører i dag en build fra FØR plattformarbeidet. Alle SQL-migreringene under er RENT ADDITIVE (kun `CREATE`/`ADD`) og trygge uten nedetid. **Kjør SQL FØR koden deployes.**
 
-**Hva som allerede er deploy-klart uten særskilte steg** (følger med en ordinær `main`-deploy): delprosjekt 1–7 + migrerings-A/B + betalings-hardening + **booking-side checkout-UI** (ingen migrering/env). Det eneste med egen gating er **delprosjekt C** (Fase 8–10).
+**Hva som allerede er deploy-klart uten særskilte steg** (følger med en ordinær `main`-deploy): delprosjekt 1–7 + migrerings-A/B + betalings-hardening + **booking-side checkout-UI** (ingen migrering/env).
+
+**Ingen gating:** plattformen har ingen reelle brukere ennå, så det er ingen prod-avhengighet å bevise paritet mot over tid. Fase 8–10 (aktiver livssyklus-flyten + fjern legacy-e-post + irreversibel opprydding) kjøres derfor rett etter Fase 7, i samme utrulling — ikke som et separat, senere steg.
 
 ---
 
@@ -70,23 +72,22 @@ Kjør mot prod-Postgres. Verifiser etter hver at den gikk uten feil.
 
 ---
 
-## Fase 8 — ⚠️ GATE: aktiver livssyklus-flyten + bevis paritet
+## Fase 8 — Aktiver livssyklus-flyten
 
-- [ ] Aktiver «Kurs-livssyklus»-flyten i admin (`/admin/crm/flyter`). Fra nå eier flyten NYE påmeldinger; legacy-cronen hopper automatisk over flyt-eide registreringer (per-registrering XOR, null dobbel-send).
-- [ ] **Bevis paritet:** følg nye påmeldinger gjennom flyten (sporing/`MessageSend`/tidslinje) og bekreft at riktige dato-baserte e-poster sendes. Legacy fullfører påmeldinger fra før aktivering.
-- [ ] IKKE gå videre til Fase 9 før paritet er bekreftet.
+- [ ] Aktiver «Kurs-livssyklus»-flyten i admin (`/admin/crm/flyter`). Fra nå eier flyten NYE påmeldinger; legacy-cronen hopper automatisk over flyt-eide registreringer (per-registrering XOR, null dobbel-send). Legacy fullfører påmeldinger fra før aktivering.
+- [ ] Gå rett videre til Fase 9 — ingen ventetid, ingen brukere avhenger av legacy-systemet ennå.
 
-## Fase 9 — ⚠️ GATED: deploy delprosjekt C (legacy-fjerning)
+## Fase 9 — Deploy delprosjekt C (legacy-fjerning), samme økt
 
-Utføres KUN etter Fase 8. Fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog` + admin-API/UI + dato-baserte cron-sending; `registration_confirmed` blir hardkodet.
+Fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog` + admin-API/UI + dato-baserte cron-sending; `registration_confirmed` blir hardkodet.
 
 - [ ] Merge grenen **`retire-legacy-emailtrigger`** → `main`, deploy.
 - [ ] ⚠️ Cron-ruta er omdøpt `/api/cron/email-triggers` → `/api/cron/gdpr-retention`. **HVIS `CRON_TARGET_URL` er satt på Function-appen, oppdater den til den nye URL-en** (ellers 404 → GDPR-cronen stopper). Er den ikke satt, brukes ny in-repo-standard automatisk.
 - [ ] Verifiser: `/api/cron/gdpr-retention` med secret → 200 `{ anonymized }`; en reell påmelding gir fortsatt bekreftelse (hardkodet).
 
-## Fase 10 — ⚠️ ALLER SIST: irreversibel opprydding
+## Fase 10 — Irreversibel opprydding, samme økt
 
-- [ ] Kjør `scripts/course-legacy-drop.sql` (`DROP TABLE email_logs/email_triggers/email_templates`) — SEPARAT fra kode-deployen, KUN når livssyklus-flyten er stabil, paritet bevist, OG e-posthistorikken (`email_logs`) er arkivert/ikke lenger nødvendig. **Kan aldri angres.**
+- [ ] Kjør `scripts/course-legacy-drop.sql` (`DROP TABLE email_logs/email_triggers/email_templates`) som eget, bevisst steg rett etter Fase 9. Ingen reell e-posthistorikk å arkivere (ikke live ennå). **Kan aldri angres.**
 
 ---
 

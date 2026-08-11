@@ -30,7 +30,7 @@ Verifiser etter hver at den gikk uten feil:
 
 ## Steg 2 — Seed én gang
 Kjør (idempotent, no-op ved ny kjøring): `npx tsx scripts/seed-course-lifecycle-flow.ts`
-Den oppretter «Kurs-livssyklus»-flyten som **draft** (den skal IKKE aktiveres nå — det gjør vi manuelt senere).
+Den oppretter «Kurs-livssyklus»-flyten som **draft** — den aktiverer Andreas manuelt i steg 8, rett etter røyktesten.
 
 ## Steg 3 — Deploy koden
 Deploy `main` (siste commit) til Azure App Service som vanlig.
@@ -53,14 +53,14 @@ Deploy `main` (siste commit) til Azure App Service som vanlig.
 ## Steg 7 — Post-deploy røyktest
 Vi verifiserer sammen: offentlige sider 200, en reell påmelding gir bekreftelses-epost med prod-lenker, admin/CRM laster, `/api/cron/flows` svarer 200.
 
----
+## Steg 8 — Aktiver livssyklus-flyten
+Andreas aktiverer «Kurs-livssyklus»-flyten i admin (`/admin/crm/flyter`). Fra da eier flyten nye påmeldinger; det gamle epost-systemet hopper automatisk over dem (ingen dobbelt-sending). Ingen ventetid nødvendig her — plattformen har ingen reelle brukere ennå, så vi går rett videre.
 
-## ⚠️ VIKTIG — dette kommer SENERE, ikke nå (gated)
-Etter at plattformen er live og stabil gjør **Andreas** to ting manuelt: (1) aktiverer «Kurs-livssyklus»-flyten i admin, og (2) verifiserer at de automatiske kurs-epostene sendes riktig (paritet). **Først når det er bekreftet** ber vi dere om:
-- Deploy av grenen `retire-legacy-emailtrigger` (fjerner det gamle epost-systemet). ⚠️ Da omdøpes cron-ruta til `/api/cron/gdpr-retention` — hvis `CRON_TARGET_URL` er satt på Function-appen må den oppdateres til den nye URL-en (ellers stopper GDPR-cronen).
-- **Aller sist, som eget steg:** `scripts/course-legacy-drop.sql` (`DROP TABLE` av tre gamle epost-tabeller) — **irreversibelt**, kjøres kun når vi bekrefter at epost-historikken er arkivert.
+## Steg 9 — Fjern det gamle epost-systemet (samme økt)
+Merge grenen `retire-legacy-emailtrigger` → `main`, deploy. ⚠️ Cron-ruta omdøpes da til `/api/cron/gdpr-retention` — hvis `CRON_TARGET_URL` er satt på Function-appen må den oppdateres til den nye URL-en (ellers stopper GDPR-cronen).
 
-**Gjør IKKE noe av det som står under «VIKTIG» før dere får eksplisitt klarsignal fra oss.**
+## Steg 10 — Irreversibel opprydding (samme økt, som eget steg)
+Kjør `scripts/course-legacy-drop.sql` (`DROP TABLE` av de tre gamle epost-tabellene). Dette kan ikke angres, så vi kjører det som et bevisst, separat siste steg — men ingen grunn til å vente, siden det ikke finnes reell epost-historikk å ta vare på ennå.
 
 Si ifra om noe er uklart, så tar vi en gjennomgang.
 

@@ -35,29 +35,33 @@ Etter migreringene, kjør seeden ÉN gang (idempotent — no-op hvis flyten finn
 
 Den oppretter «Kurs-livssyklus»-flyten som **draft** (schedule→e-post-kjede: påminnelse −3d,
 velkomst, halvveis, etter-slutt +1d). Krever minst én aktiv `SenderIdentity` (finnes fra
-flow-engine-seeden). **Aktivér flyten i admin (`/admin/crm/flyter`) FØRST når dere er klare**
-til å la den overta dato-baserte kurs-e-poster. Fra aktivering eier flyten NYE påmeldinger
-(`registration.created` → kurs-forankret enrollment) og legacy-cronen hopper automatisk over
-dem (`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-send). Legacy
+flow-engine-seeden). **Aktivér flyten i admin (`/admin/crm/flyter`)** for å la den overta
+dato-baserte kurs-e-poster. Fra aktivering eier flyten NYE påmeldinger (`registration.created`
+→ kurs-forankret enrollment) og legacy-cronen hopper automatisk over dem
+(`flowEnrollments: { none: {} }` — per-registrering-eierskap, null dobbel-send). Legacy
 fullfører påmeldinger fra før aktivering. `registration_confirmed` sendes fortsatt inline
-(uendret). Verifiser paritet i prod FØR delprosjekt C rulles ut (neste steg).
+(uendret).
 
-## Steg 1c — ⚠️ Delprosjekt C (legacy-fjerning) — GATED, holdes på egen gren
+**Ingen ventetid nødvendig før neste steg** — plattformen har ingen reelle brukere ennå, så
+det er ingen prod-avhengighet å bevise paritet mot over tid. Aktivering + legacy-fjerning
+(neste steg) gjøres i samme utrulling.
+
+## Steg 1c — Delprosjekt C (legacy-fjerning), samme økt
 
 **Delprosjekt C** (fjerner `EmailTrigger`/`EmailTemplate`/`EmailLog` + admin-API/UI + den
-dato-baserte sende-delen av cron-en; `registration_confirmed` blir alltid hardkodet) er
-bevisst IKKE på `main` — den ligger på grenen **`retire-legacy-emailtrigger`** for å unngå
-for tidlig utrulling. C **må ikke deployes** før: (1) livssyklus-flyten (Steg 1b) er aktivert
-i prod, og (2) paritet er bevist. Deployes C mens flyten er `draft`, står prod uten
-dato-baserte kurs-e-poster fra noen av systemene (drop-send).
+dato-baserte sende-delen av cron-en; `registration_confirmed` blir alltid hardkodet) ligger
+på grenen **`retire-legacy-emailtrigger`**. Merges inn og deployes rett etter at
+livssyklus-flyten er aktivert (Steg 1b) — ingen separat gate, ingen ventetid.
 
-Når du er klar: merge `retire-legacy-emailtrigger` til `main` og deploy. Den grenen har sitt
+Merge `retire-legacy-emailtrigger` til `main` og deploy. Den grenen har sitt
 eget runbook-tillegg med detaljene, inkludert:
 - Cron-ruta er omdøpt til `/api/cron/gdpr-retention` (kjører nå KUN GDPR-passene). **Oppdater
   Function-appens `CRON_TARGET_URL` til den nye URL-en HVIS den er satt** (ellers bruker
   Azure-funksjonen den nye in-repo-standarden automatisk ved deploy).
-- **Aller sist, irreversibelt:** `scripts/course-legacy-drop.sql` (`DROP TABLE` av de tre
-  e-post-tabellene) — kjøres separat, kun når e-posthistorikken er arkivert/unødvendig.
+- **Aller sist i samme utrulling, irreversibelt:** `scripts/course-legacy-drop.sql`
+  (`DROP TABLE` av de tre e-post-tabellene). Ingen reell e-posthistorikk å arkivere
+  ennå (plattformen er ikke live), så ingen grunn til å vente — men kjøres som eget,
+  bevisst steg siden det er en `DROP TABLE` uten angrefunksjon.
 
 ## Steg 2 — Deploy koden
 
