@@ -15,12 +15,7 @@ const BOOTSTRAP_ADMINS = [
   'hilde.apneseth@bjerke.no',
 ];
 
-async function bootstrapAdmin(email: string) {
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) return { email, created: false };
-
-  await prisma.user.create({ data: { email, role: 'admin' } });
-
+async function sendLoginLink(email: string) {
   const identifier = MAGIC_LINK_PREFIX + email;
   const rawToken = crypto.randomUUID();
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
@@ -28,8 +23,26 @@ async function bootstrapAdmin(email: string) {
     data: { identifier, token: tokenHash, expires: new Date(Date.now() + 15 * 60 * 1000) },
   });
   await sendMagicLinkEmail(email, rawToken);
+}
 
-  return { email, created: true };
+async function bootstrapAdmin(email: string) {
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true } });
+
+  if (!existing) {
+    await prisma.user.create({ data: { email, role: 'admin' } });
+    await sendLoginLink(email);
+    return { email, created: true, role: 'admin', upgraded: false };
+  }
+
+  // Bruker fantes fra før (f.eks. registrert som forelder med samme e-post) —
+  // ikke degrader en superadmin, men løft 'parent' til 'admin' som bedt om.
+  if (existing.role === 'parent') {
+    await prisma.user.update({ where: { id: existing.id }, data: { role: 'admin' } });
+    await sendLoginLink(email);
+    return { email, created: false, role: 'admin', upgraded: true };
+  }
+
+  return { email, created: false, role: existing.role, upgraded: false };
 }
 
 /**
