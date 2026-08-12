@@ -38,6 +38,7 @@
   8. `scripts/course-lifecycle-migration.sql` — additiv `anchor_mode`-kolonne på `flows`.
 - [ ] Samme kall kjører deretter `seedCourseLifecycleFlow()` — oppretter «Kurs-livssyklus»-flyten som **draft**. Krever ≥1 aktiv `SenderIdentity` (finnes fra flow-engine-seeden).
 - [ ] Bekreft responsen: `applied` viser alle 8 migreringer + `seed.flowId`. Bekreft at flyten er `draft` i admin (IKKE aktiver ennå — det skjer i Fase 7).
+- [ ] Samme kall oppretter tre admin-brukere (rolle `admin`, idempotent) + sender magic-link: `hege.karin.arverud@bjerke.no`, `stine.rasmussen@bjerke.no`, `hilde.apneseth@bjerke.no`. Bekreft `admins` i responsen og at alle tre kan logge inn via lenken (15 min gyldighet — be dem sjekke mailen raskt, eller be om ny lenke via innloggingssiden).
 
 ## Fase 3 — Azure-timere
 
