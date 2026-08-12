@@ -62,6 +62,12 @@ på "already exists", ikke skadelig. Responsen viser `applied: [{ migration,
 statements }]` per fil + seed-resultatet, så en delvis feil er lett å se
 nøyaktig hvor stoppet.
 
+Samme kall oppretter deretter tre admin-brukere for Bjerke Travbane (rolle
+`admin`, idempotent — skippes hvis e-posten allerede finnes) og sender hver
+en magic-link-e-post (samme mekanisme som `/api/admin/users`, 15 min
+gyldighet): `hege.karin.arverud@bjerke.no`, `stine.rasmussen@bjerke.no`,
+`hilde.apneseth@bjerke.no`. Responsen viser `admins: [{ email, created }]`.
+
 ## Steg 3 — Azure-timer for flyt-motoren (`cron-flows`)
 
 Flyt-enrollments beveger seg IKKE uten denne. Andreas deployer selv

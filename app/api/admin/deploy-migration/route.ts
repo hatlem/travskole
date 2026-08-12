@@ -1,8 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { seedCourseLifecycleFlow } from '@/lib/flows/seed-lifecycle';
 import { MIGRATIONS } from '@/lib/deploy/generated-migrations';
+import { sendMagicLinkEmail } from '@/lib/mail';
+import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
+
+// Go-live-admins (Bjerke Travbane). Idempotent: skippes hvis brukeren allerede finnes.
+const BOOTSTRAP_ADMINS = [
+  'hege.karin.arverud@bjerke.no',
+  'stine.rasmussen@bjerke.no',
+  'hilde.apneseth@bjerke.no',
+];
+
+async function bootstrapAdmin(email: string) {
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) return { email, created: false };
+
+  await prisma.user.create({ data: { email, role: 'admin' } });
+
+  const identifier = MAGIC_LINK_PREFIX + email;
+  const rawToken = crypto.randomUUID();
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  await prisma.verificationToken.create({
+    data: { identifier, token: tokenHash, expires: new Date(Date.now() + 15 * 60 * 1000) },
+  });
+  await sendMagicLinkEmail(email, rawToken);
+
+  return { email, created: true };
+}
 
 /**
  * Engangs go-live-migrering: kjører de 8 produksjons-SQL-filene (scripts/*.sql)
@@ -40,7 +67,12 @@ export async function POST(request: NextRequest) {
 
     const seedResult = await seedCourseLifecycleFlow();
 
-    return NextResponse.json({ ok: true, applied, seed: seedResult });
+    const admins = [];
+    for (const email of BOOTSTRAP_ADMINS) {
+      admins.push(await bootstrapAdmin(email));
+    }
+
+    return NextResponse.json({ ok: true, applied, seed: seedResult, admins });
   } catch (error) {
     logger.error('Deploy migration failed', { error, applied });
     return NextResponse.json(
