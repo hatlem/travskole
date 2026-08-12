@@ -6,6 +6,7 @@ import { seedCourseLifecycleFlow } from '@/lib/flows/seed-lifecycle';
 import { MIGRATIONS } from '@/lib/deploy/generated-migrations';
 import { sendMagicLinkEmail } from '@/lib/mail';
 import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
+import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 
 // Go-live-admins (Bjerke Travbane). Idempotent: skippes hvis brukeren allerede finnes.
 const BOOTSTRAP_ADMINS = [
@@ -39,8 +40,10 @@ async function bootstrapAdmin(email: string) {
  * app-ens egen DB-tilkobling i stedet for psql/prisma utenfra — samme mønster
  * som /api/migrate. Beskyttet av SEED_SECRET. Statement-ene er ikke alle
  * idempotente (de fleste er CREATE TABLE/CREATE INDEX, ment å kjøres nøyaktig
- * én gang), så et gjentatt kall etter suksess feiler forventet på "already
- * exists" — det er ikke skadelig, bare unødvendig.
+ * én gang) — et gjentatt kall skipper statements som feiler på "already
+ * exists" (safe retry), så resten av sekvensen (sender-identiteter, flyt-seed,
+ * admin-bootstrap) alltid kan fullføres selv om et tidligere kall stoppet
+ * delvis gjennom.
  *
  * Kall: POST /api/admin/deploy-migration  { "secret": "<SEED_SECRET>" }
  */
@@ -54,16 +57,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const applied: { migration: string; statements: number }[] = [];
+  const applied: { migration: string; statements: number; skipped: number }[] = [];
 
   try {
     for (const migration of MIGRATIONS) {
+      let skipped = 0;
       for (const statement of migration.statements) {
-        await prisma.$executeRawUnsafe(statement);
+        try {
+          await prisma.$executeRawUnsafe(statement);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (!message.includes('already exists')) throw error;
+          skipped += 1;
+        }
       }
-      applied.push({ migration: migration.name, statements: migration.statements.length });
-      logger.info('Migration applied', { migration: migration.name });
+      applied.push({ migration: migration.name, statements: migration.statements.length, skipped });
+      logger.info('Migration applied', { migration: migration.name, skipped });
     }
+
+    await ensureSenderIdentitiesSeeded();
 
     const seedResult = await seedCourseLifecycleFlow();
 
