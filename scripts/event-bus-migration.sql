@@ -19,7 +19,8 @@
 --     --to-schema-datamodel prisma/schema.prisma \
 --     --script
 --
--- Trygt å kjøre direkte mot produksjonsdatabasen (Basefarm). Ingen nedetid
+-- Trygt å kjøre via /api/admin/deploy-migration (SEED_SECRET, DB-en er
+-- brannmurslåst utenfra). Ingen nedetid
 -- eller låsing av eksisterende tabeller forventes — kun CREATE TABLE/INDEX og
 -- ALTER TABLE ... ADD CONSTRAINT på de to nye tabellene.
 -- ============================================================================

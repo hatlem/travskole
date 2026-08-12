@@ -39,7 +39,8 @@
 -- ingen faktisk kolonne/type/default ble endret, så basisen for denne
 -- migreringen er uendret og trygg.
 --
--- Trygt å kjøre direkte mot produksjonsdatabasen (Basefarm) uten nedetid —
+-- Trygt å kjøre via /api/admin/deploy-migration (SEED_SECRET, DB-en er
+-- brannmurslåst utenfra) uten nedetid —
 -- kun CREATE TABLE / CREATE INDEX / ALTER TABLE ... ADD CONSTRAINT.
 -- ============================================================================
 

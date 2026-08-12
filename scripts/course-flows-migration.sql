@@ -1,20 +1,20 @@
 -- Delprosjekt A: kurs-anker på flow_enrollments (additiv).
--- Kjøres av Basefarm mot prod FØR koden deployes. Idempotent-vennlig.
+-- Kjøres FØR koden deployes, via /api/admin/deploy-migration (SEED_SECRET) —
+-- DB-en er brannmurslåst utenfra, så vi kjører migreringen fra app-en selv,
+-- ikke via ekstern SQL-tilgang. Idempotent-vennlig.
 
 ALTER TABLE flow_enrollments ADD COLUMN IF NOT EXISTS course_id INT NULL;
 ALTER TABLE flow_enrollments ADD COLUMN IF NOT EXISTS registration_id INT NULL;
 
-DO $$ BEGIN
-  ALTER TABLE flow_enrollments
-    ADD CONSTRAINT flow_enrollments_course_id_fkey
-    FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE SET NULL;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+ALTER TABLE flow_enrollments DROP CONSTRAINT IF EXISTS flow_enrollments_course_id_fkey;
+ALTER TABLE flow_enrollments
+  ADD CONSTRAINT flow_enrollments_course_id_fkey
+  FOREIGN KEY (course_id) REFERENCES courses(id) ON DELETE SET NULL;
 
-DO $$ BEGIN
-  ALTER TABLE flow_enrollments
-    ADD CONSTRAINT flow_enrollments_registration_id_fkey
-    FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE;
-EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+ALTER TABLE flow_enrollments DROP CONSTRAINT IF EXISTS flow_enrollments_registration_id_fkey;
+ALTER TABLE flow_enrollments
+  ADD CONSTRAINT flow_enrollments_registration_id_fkey
+  FOREIGN KEY (registration_id) REFERENCES registrations(id) ON DELETE CASCADE;
 
 CREATE INDEX IF NOT EXISTS flow_enrollments_registration_id_idx ON flow_enrollments (registration_id);
 CREATE INDEX IF NOT EXISTS flow_enrollments_course_id_idx ON flow_enrollments (course_id);
