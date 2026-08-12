@@ -41,7 +41,8 @@
 -- prisma/schema.prisma). Diffen over fanger derfor nøyaktig og utelukkende
 -- Task 3 sine skjematillegg — ingenting mer, ingenting mindre.
 --
--- Trygt å kjøre direkte mot produksjonsdatabasen (Basefarm) uten nedetid:
+-- Trygt å kjøre via /api/admin/deploy-migration (SEED_SECRET, DB-en er
+-- brannmurslåst utenfra) uten nedetid:
 --   - Alle operasjoner er ALTER TABLE ... ADD COLUMN / CREATE TABLE /
 --     CREATE INDEX / ALTER TABLE ... ADD CONSTRAINT — ingen omskriving av
 --     eksisterende data, ingen låser utover de korte metadata-låsene Postgres
