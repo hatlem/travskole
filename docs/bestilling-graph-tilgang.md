@@ -37,13 +37,12 @@ Vi trenger en Entra (Azure AD) app-registrering med:
 
 ## Samtidig — en liten påminnelse
 
-`STRIPE_WEBHOOK_SECRET`/`STRIPE_WEBHOOK_SECRET_TEST`-runden ble tidligere
-utsatt "til webhook-endepunktet finnes". Begge webhook-endepunktene finnes nå
-og er live:
+Begge webhook-endepunktene finnes nå og er live (verifisert: 401 uten gyldig
+signatur, som forventet):
 
 - `/api/webhooks/stripe`
 - `/api/webhooks/vipps`
 
-Kan denne runden fullføres nå — registrer webhook-URL-ene i Stripe-dashboardet
-og i Vipps' webhook-API, og lever de resulterende signeringshemmelighetene på
-samme sikre måte som over.
+Vi registrerer selv webhook-URL-ene i Stripe-dashboardet og i Vipps' webhook-API
+når vi er klare — kommer tilbake med de resulterende signeringshemmelighetene
+via sikker lenke da. Ingen handling fra dere før det.
