@@ -134,3 +134,45 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+
+/**
+ * Read-only diagnostic for the go-live-drop precondition check (Steg 10 /
+ * scripts/course-legacy-drop.sql): are email_logs/email_triggers/
+ * email_templates actually empty? These tables have no Prisma model anymore
+ * (removed by delprosjekt C), so this uses raw SQL against the still-present
+ * underlying tables. Never writes anything.
+ *
+ * Kall: GET /api/admin/deploy-migration?secret=<SEED_SECRET>
+ */
+export async function GET(request: NextRequest) {
+  if (!process.env.SEED_SECRET) {
+    return NextResponse.json({ error: 'Not configured' }, { status: 403 });
+  }
+  const secret = request.nextUrl.searchParams.get('secret');
+  if (secret !== process.env.SEED_SECRET) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const [logs, triggers, templates] = await Promise.all([
+      prisma.$queryRawUnsafe<{ count: bigint; min_sent: Date | null; max_sent: Date | null }[]>(
+        'SELECT COUNT(*) as count, MIN(sent_at) as min_sent, MAX(sent_at) as max_sent FROM email_logs'
+      ),
+      prisma.$queryRawUnsafe<{ count: bigint }[]>('SELECT COUNT(*) as count FROM email_triggers'),
+      prisma.$queryRawUnsafe<{ count: bigint }[]>('SELECT COUNT(*) as count FROM email_templates'),
+    ]);
+    const toNum = (rows: { count: bigint }[]) => Number(rows[0]?.count ?? 0);
+
+    return NextResponse.json({
+      email_logs: { count: toNum(logs), min_sent: logs[0]?.min_sent, max_sent: logs[0]?.max_sent },
+      email_triggers: { count: toNum(triggers) },
+      email_templates: { count: toNum(templates) },
+    });
+  } catch (error) {
+    logger.error('Legacy data check failed', { error });
+    return NextResponse.json(
+      { error: 'Check failed', message: error instanceof Error ? error.message : String(error) },
+      { status: 500 }
+    );
+  }
+}
