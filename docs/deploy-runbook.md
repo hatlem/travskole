@@ -153,12 +153,28 @@ Den grenen har sitt eget runbook-tillegg med detaljene, inkludert:
 - Verifiser: `/api/cron/gdpr-retention` med secret → 200 `{ anonymized }`; en reell
   påmelding gir fortsatt bekreftelse (hardkodet).
 
-## Steg 10 — Irreversibel opprydding, samme økt
+## Steg 10 — Irreversibel opprydding — UTSATT PÅ UBESTEMT TID (bevisst valg)
 
-Kjør `scripts/course-legacy-drop.sql` (`DROP TABLE` av de tre e-post-tabellene) som
-eget, bevisst steg rett etter Steg 9. Ingen reell e-posthistorikk å arkivere ennå
-(plattformen er ikke live), så ingen grunn til å vente — men kjøres separat siden det
-er en `DROP TABLE` uten angrefunksjon. **Kan aldri angres.**
+`scripts/course-legacy-drop.sql` (`DROP TABLE` av `email_logs`/`email_triggers`/
+`email_templates`) kjøres IKKE. Etter Steg 9 (delprosjekt C deployet 2026-08-13)
+refererer koden ikke lenger disse tabellene i det hele tatt — de ligger som helt
+inerte, uskadelige levninger. Å droppe dem er ren opprydding, aldri et krav, så det
+er ingen grunn til å ta en irreversibel handling for et rent kosmetisk formål.
+
+Sjekket via `/api/admin/deploy-migration?secret=<SEED_SECRET>` (GET, read-only
+diagnostikk) rett etter Steg 9-deploy:
+- `email_logs`: **0 rader** — ingen reell sendehistorikk å miste.
+- `email_triggers`: 5 rader, alle for `course_id=4`, alle `enabled: false` (allerede
+  inaktive før C — cutover til hardkodet `registration_confirmed` endret ingenting
+  i praksis for dette kurset).
+- `email_templates`: 5 rader — **ekte, hånd­skrevet norsk tekst** for et ponnikurs
+  (opprettet 2026-06-22/07-02, signert «Teamet hos Bjerke Ponniskole»), tydelig
+  rikere enn dagens generiske plassholdertekst i `lib/flows/seed-lifecycle.ts`.
+  IKKE testjølk — verdt å vurdere for gjenbruk i den nye livssyklus-flytens
+  node-innhold før noen noensinne vurderer en drop.
+
+Hvis dette noen gang blir aktuelt igjen: les innholdet, vurder gjenbruk, og bare da
+— kjør droppet som et helt eget, bevisst steg (aldri samme økt som en kode-deploy).
 
 ---
 
