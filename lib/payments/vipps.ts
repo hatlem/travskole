@@ -20,6 +20,11 @@ const FIVE_MINUTES_MS = 5 * 60 * 1000;
 const PROD_WEBHOOK_HOST = 'registrering.bjerke.no';
 const PROD_WEBHOOK_PATH = '/api/webhooks/vipps';
 
+/** Full callback URL for the production Vipps webhook (used at registration time). */
+export function vippsWebhookUrl(): string {
+  return `https://${PROD_WEBHOOK_HOST}${PROD_WEBHOOK_PATH}`;
+}
+
 export interface VippsEnv {
   clientId?: string;
   clientSecret?: string;
@@ -62,7 +67,7 @@ export function vippsBaseUrl(testMode: boolean): string {
 }
 
 /** Henter access token fra Vipps. Aldri throw — null ved feil (logget). */
-async function getVippsAccessToken(testMode: boolean): Promise<string | null> {
+export async function getVippsAccessToken(testMode: boolean): Promise<string | null> {
   try {
     const env = vippsEnv(testMode);
     const res = await fetch(`${vippsBaseUrl(testMode)}/accesstoken/get`, {
