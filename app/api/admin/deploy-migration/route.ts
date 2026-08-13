@@ -7,6 +7,8 @@ import { MIGRATIONS } from '@/lib/deploy/generated-migrations';
 import { sendMagicLinkEmail } from '@/lib/mail';
 import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
 import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
+import { logActivity } from '@/lib/activity';
+import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 
 // Go-live-admins (Bjerke Travbane). Idempotent: skippes hvis brukeren allerede finnes.
 const BOOTSTRAP_ADMINS = [
@@ -45,6 +47,25 @@ async function bootstrapAdmin(email: string) {
   return { email, created: false, role: existing.role, upgraded: false };
 }
 
+// Speiler app/api/admin/crm/flows/[id]/activate/route.ts sin logikk nøyaktig
+// (draft-only, graf-validering, activity-logg), minus requireAdmin()-sjekken
+// siden dette kalles uten sesjon. Kun kjørt når "activateFlow" eksplisitt bes
+// om — aldri et sideeffekt av en rutinemessig migrerings-retry.
+async function activateFlow(flowId: number) {
+  const flow = await prisma.flow.findUnique({ where: { id: flowId }, include: { nodes: true, edges: true } });
+  if (!flow) return { flowId, activated: false, reason: 'not_found' as const };
+  if (flow.status !== 'draft') return { flowId, activated: false, reason: 'not_draft' as const, status: flow.status };
+
+  const graphNodes: GraphNode[] = flow.nodes.map((n) => ({ id: n.id, type: n.type as GraphNode['type'], config: parseNodeConfig(n.config) }));
+  const graphEdges: GraphEdge[] = flow.edges.map((e) => ({ id: e.id, fromNodeId: e.fromNodeId, toNodeId: e.toNodeId, branch: e.branch }));
+  const errors = validateFlow(graphNodes, graphEdges);
+  if (errors.length > 0) return { flowId, activated: false, reason: 'invalid_graph' as const, errors };
+
+  await prisma.flow.update({ where: { id: flowId }, data: { status: 'active' } });
+  logActivity({ action: 'activate', entity: 'flow', entityId: flowId, userEmail: 'system:deploy-migration' }).catch(() => {});
+  return { flowId, activated: true };
+}
+
 /**
  * Engangs go-live-migrering: kjører de 8 produksjons-SQL-filene (scripts/*.sql)
  * pluss livssyklus-flyt-seeden, fra app-en selv.
@@ -59,13 +80,15 @@ async function bootstrapAdmin(email: string) {
  * delvis gjennom.
  *
  * Kall: POST /api/admin/deploy-migration  { "secret": "<SEED_SECRET>" }
+ * Valgfritt: { "activateFlow": <flowId> } aktiverer en draft-flyt i samme kall
+ * (speiler /api/admin/crm/flows/[id]/activate — draft-only, graf-validert).
  */
 export async function POST(request: NextRequest) {
   if (!process.env.SEED_SECRET) {
     return NextResponse.json({ error: 'Not configured' }, { status: 403 });
   }
 
-  const { secret } = await request.json().catch(() => ({}));
+  const { secret, activateFlow: activateFlowId } = await request.json().catch(() => ({}));
   if (secret !== process.env.SEED_SECRET) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
@@ -97,7 +120,12 @@ export async function POST(request: NextRequest) {
       admins.push(await bootstrapAdmin(email));
     }
 
-    return NextResponse.json({ ok: true, applied, seed: seedResult, admins });
+    let activation = null;
+    if (typeof activateFlowId === 'number') {
+      activation = await activateFlow(activateFlowId);
+    }
+
+    return NextResponse.json({ ok: true, applied, seed: seedResult, admins, activation });
   } catch (error) {
     logger.error('Deploy migration failed', { error, applied });
     return NextResponse.json(
