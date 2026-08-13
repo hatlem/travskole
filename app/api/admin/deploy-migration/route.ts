@@ -158,15 +158,14 @@ export async function GET(request: NextRequest) {
       prisma.$queryRawUnsafe<{ count: bigint; min_sent: Date | null; max_sent: Date | null }[]>(
         'SELECT COUNT(*) as count, MIN(sent_at) as min_sent, MAX(sent_at) as max_sent FROM email_logs'
       ),
-      prisma.$queryRawUnsafe<{ count: bigint }[]>('SELECT COUNT(*) as count FROM email_triggers'),
-      prisma.$queryRawUnsafe<{ count: bigint }[]>('SELECT COUNT(*) as count FROM email_templates'),
+      prisma.$queryRawUnsafe<Record<string, unknown>[]>('SELECT * FROM email_triggers ORDER BY id'),
+      prisma.$queryRawUnsafe<Record<string, unknown>[]>('SELECT * FROM email_templates ORDER BY id'),
     ]);
-    const toNum = (rows: { count: bigint }[]) => Number(rows[0]?.count ?? 0);
 
     return NextResponse.json({
-      email_logs: { count: toNum(logs), min_sent: logs[0]?.min_sent, max_sent: logs[0]?.max_sent },
-      email_triggers: { count: toNum(triggers) },
-      email_templates: { count: toNum(templates) },
+      email_logs: { count: Number(logs[0]?.count ?? 0), min_sent: logs[0]?.min_sent, max_sent: logs[0]?.max_sent },
+      email_triggers: { count: triggers.length, rows: triggers },
+      email_templates: { count: templates.length, rows: templates },
     });
   } catch (error) {
     logger.error('Legacy data check failed', { error });
