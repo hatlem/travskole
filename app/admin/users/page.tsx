@@ -31,7 +31,7 @@ interface User {
     address: string | null;
     _count: { children: number; registrations: number };
     children: { id: number; name: string; birthdate: string | null; allergies: string | null }[];
-    registrations: { id: number; status: string; createdAt: string; course: { id: number; name: string }; child: { name: string } }[];
+    registrations: { id: number; status: string; createdAt: string; course: { id: number; name: string }; child: { name: string } | null }[];
   } | null;
 }
 
@@ -474,7 +474,7 @@ export default function AdminUsersPage() {
                                             </span>
                                           </div>
                                           <div className="flex gap-x-4 text-xs text-gray-500 mt-0.5">
-                                            <span>{reg.child.name}</span>
+                                            <span>{reg.child?.name ?? 'Voksen deltaker'}</span>
                                             <span>{new Date(reg.createdAt).toLocaleDateString('nb-NO')}</span>
                                           </div>
                                         </div>

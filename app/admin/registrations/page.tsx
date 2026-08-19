@@ -17,7 +17,8 @@ interface Registration {
   consentRisk: boolean;
   createdAt: string;
   course: { id: number; name: string };
-  child: { id: number; name: string };
+  // null for voksen-arrangementer — deltakeren er parent selv (se schema.prisma childId)
+  child: { id: number; name: string } | null;
   parent: { id: number; name: string; phone: string; user: { email: string } };
 }
 
@@ -290,7 +291,7 @@ export default function AdminRegistrationsPage() {
         const query = searchQuery.toLowerCase();
         return (
           reg.course.name.toLowerCase().includes(query) ||
-          reg.child.name.toLowerCase().includes(query) ||
+          reg.child?.name.toLowerCase().includes(query) ||
           reg.parent.name.toLowerCase().includes(query) ||
           reg.parent.user?.email?.toLowerCase().includes(query)
         );
@@ -724,7 +725,7 @@ export default function AdminRegistrationsPage() {
                         {reg.course.name}
                       </Link>
                     </td>
-                    <td className="px-4 py-3.5 text-gray-700">{reg.child.name}</td>
+                    <td className="px-4 py-3.5 text-gray-700">{reg.child?.name ?? `${reg.parent.name} (voksen)`}</td>
                     <td className="px-4 py-3.5 text-gray-700">{reg.parent.name}</td>
                     <td className="px-4 py-3.5 text-gray-500 text-xs">{reg.parent.user?.email}</td>
                     <td className="px-4 py-3.5 text-gray-500 text-xs">{reg.parent.phone}</td>
