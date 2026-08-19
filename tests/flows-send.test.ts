@@ -162,7 +162,10 @@ describe('sendFlowEmail', () => {
     expect(mockedSendMailAs).toHaveBeenCalledTimes(1);
     const mailArg = mockedSendMailAs.mock.calls[0][0];
     expect(mailArg.from).toBe('"Bjerke Travbane" <send@bjerke.no>');
-    expect(mailArg.replyTo).toBe('send@bjerke.no');
+    // Reply-To sentraliseres alltid til fellespostboksen (minste-privilegium
+    // for Graph-pollingen) — uavhengig av avsenderidentiteten i From.
+    expect(mailArg.replyTo).toBe('registrering@bjerke.no');
+    expect(mailArg.headers?.['List-Unsubscribe']).toContain('mailto:registrering@bjerke.no');
     expect(mailArg.to).toBe('kari@example.com');
     expect(mailArg.headers?.['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click');
 

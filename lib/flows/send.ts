@@ -27,6 +27,14 @@ import { resolveCourseMergeContext } from './course-merge';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
+
+/**
+ * Fellespostboksen alle automatiske utsendelser ber om svar til, uavhengig av
+ * avsenderidentitet (From beholder den personlige identiteten). Gjør at
+ * Graph-lesetilgangen for svar-/bounce-deteksjon kan scopes til kun denne
+ * ene postboksen (GRAPH_MAILBOXES) — se lib/tracking/poller.ts.
+ */
+export const REPLY_MAILBOX = 'registrering@bjerke.no';
 import { extractMessageIds } from '@/lib/tracking/reply-match';
 import { getLLMProvider } from '@/lib/ai/provider';
 import { validateAiRewrite } from '@/lib/ai/guardrails';
@@ -274,12 +282,16 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   try {
     const { messageId } = await sendMailAs({
       from: `"${identity.displayName}" <${identity.email}>`,
-      replyTo: identity.email,
+      // Reply-To sentraliseres til fellespostboksen uansett avsenderidentitet:
+      // svar-/bounce-pollingen (Graph) trenger da kun lesetilgang til ÉN
+      // postboks (registrering@) i stedet for alle syv avsenderpostboksene —
+      // minste-privilegium avtalt med DNT/Basefarm 2026-08-19.
+      replyTo: REPLY_MAILBOX,
       to: contact.email,
       subject,
       html: finalHtml,
       headers: {
-        'List-Unsubscribe': `<mailto:${identity.email}>, <${oneClickUrl}>`,
+        'List-Unsubscribe': `<mailto:${REPLY_MAILBOX}>, <${oneClickUrl}>`,
         'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
       },
     });
