@@ -1,7 +1,16 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
+import { getServerSession } from '@/lib/auth';
+import { isSuperAdmin } from '@/lib/settings';
+import { getPendingAdminNotices } from '@/lib/admin-notices';
+import SuperadminNoticesDialog from '@/components/admin/SuperadminNoticesDialog';
 
 export default async function AdminDashboard() {
+  // Superadmin-oppgaver (vilkårstekst m.m.) — vises som dialog til de er utført.
+  const session = await getServerSession();
+  const notices =
+    session && isSuperAdmin(session.user.role) ? await getPendingAdminNotices() : [];
+
   const now = new Date();
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
@@ -112,6 +121,7 @@ export default async function AdminDashboard() {
 
   return (
     <div>
+      <SuperadminNoticesDialog notices={notices} />
       <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
 
       {/* Stats cards */}
