@@ -24,8 +24,8 @@ Vi trenger en Entra (Azure AD) app-registrering med:
 - Levering av `tenant ID`, `client ID` og `client secret` (eller et
   sertifikat, om det foretrekkes) via en sikker/hemmelig kanal (ikke e-post i
   klartekst). Appen setter selv miljøvariabelen `GRAPH_MAILBOXES`
-  (kommaseparert liste over de 7 adressene under), så du trenger ikke oppgi
-  den — kun de tre hemmelighetene over.
+  (= `registrering@bjerke.no`), så du trenger ikke oppgi den — kun de tre
+  hemmelighetene over.
 
 ## Postboksen som skal scopes
 
@@ -46,14 +46,3 @@ Ingen meldingstekst, emner, vedlegg eller avsenderinnhold lagres. Kun:
 tidsstempel «svart»/«bounce» på vår egen utsendte melding, og ved permanent
 leveringsfeil mottakeradressen i en suppresjonsliste (adresse + årsak).
 
-## Samtidig — en liten påminnelse
-
-Begge webhook-endepunktene finnes nå og er live (verifisert: 401 uten gyldig
-signatur, som forventet):
-
-- `/api/webhooks/stripe`
-- `/api/webhooks/vipps`
-
-Vi registrerer selv webhook-URL-ene i Stripe-dashboardet og i Vipps' webhook-API
-når vi er klare — kommer tilbake med de resulterende signeringshemmelighetene
-via sikker lenke da. Ingen handling fra dere før det.
