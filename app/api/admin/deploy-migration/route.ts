@@ -17,10 +17,15 @@ const BOOTSTRAP_ADMINS = [
   'hilde.apneseth@bjerke.no',
 ];
 
-// Test-superadmin for E2E-verifisering i prod (innboks via GetMailer). Trenger
-// superadmin for å teste innstillinger (payment_test_mode) og rolleforskjeller.
-// Kan fjernes etter endt testrunde uten sideeffekter.
-const BOOTSTRAP_SUPERADMINS = ['travskole-admin@getia.no'];
+// E2E-testdata fra go-live-testrunden 2026-08-19. Ryddes idempotent ved hvert
+// kall — deleteMany/delete på rader som ikke finnes er no-op, så listen kan
+// stå til den fjernes i en senere opprydding av selve ruta.
+const CLEANUP_TEST_EMAILS = [
+  'travskole-admin@getia.no',
+  'travskole-kjoper@getia.no',
+  'travskole-medadmin@getia.no',
+  'travskole-import@getia.no',
+];
 
 async function sendLoginLink(email: string) {
   const identifier = MAGIC_LINK_PREFIX + email;
@@ -52,22 +57,6 @@ async function bootstrapAdmin(email: string) {
   return { email, created: false, role: existing.role, upgraded: false };
 }
 
-async function bootstrapSuperadmin(email: string) {
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true } });
-
-  if (!existing) {
-    await prisma.user.create({ data: { email, role: 'superadmin' } });
-    await sendLoginLink(email);
-    return { email, created: true, role: 'superadmin', upgraded: false };
-  }
-
-  if (existing.role !== 'superadmin') {
-    await prisma.user.update({ where: { id: existing.id }, data: { role: 'superadmin' } });
-    return { email, created: false, role: 'superadmin', upgraded: true };
-  }
-
-  return { email, created: false, role: 'superadmin', upgraded: false };
-}
 
 // Speiler app/api/admin/crm/flows/[id]/activate/route.ts sin logikk nøyaktig
 // (draft-only, graf-validering, activity-logg), minus requireAdmin()-sjekken
@@ -141,16 +130,32 @@ export async function POST(request: NextRequest) {
     for (const email of BOOTSTRAP_ADMINS) {
       admins.push(await bootstrapAdmin(email));
     }
-    for (const email of BOOTSTRAP_SUPERADMINS) {
-      admins.push(await bootstrapSuperadmin(email));
-    }
+    // Opprydding av E2E-testdata (idempotent). Rekkefølge: deals → events →
+    // kontakter → brukere (kontakt-sletting SetNull-er deals, derfor deals først).
+    const testContacts = await prisma.contact.findMany({
+      where: { email: { in: CLEANUP_TEST_EMAILS } },
+      select: { id: true },
+    });
+    const contactIds = testContacts.map((c) => c.id);
+    const cleanup = {
+      deals: contactIds.length
+        ? (await prisma.deal.deleteMany({ where: { contactId: { in: contactIds } } })).count
+        : 0,
+      events: contactIds.length
+        ? (await prisma.appEvent.deleteMany({ where: { contactId: { in: contactIds } } })).count
+        : 0,
+      contacts: contactIds.length
+        ? (await prisma.contact.deleteMany({ where: { id: { in: contactIds } } })).count
+        : 0,
+      users: (await prisma.user.deleteMany({ where: { email: { in: CLEANUP_TEST_EMAILS } } })).count,
+    };
 
     let activation = null;
     if (typeof activateFlowId === 'number') {
       activation = await activateFlow(activateFlowId);
     }
 
-    return NextResponse.json({ ok: true, applied, seed: seedResult, admins, activation });
+    return NextResponse.json({ ok: true, applied, seed: seedResult, admins, cleanup, activation });
   } catch (error) {
     logger.error('Deploy migration failed', { error, applied });
     return NextResponse.json(
