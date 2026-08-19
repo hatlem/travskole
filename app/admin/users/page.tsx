@@ -366,7 +366,13 @@ export default function AdminUsersPage() {
                             >
                               <option value="parent">Forelder</option>
                               <option value="admin">Admin</option>
-                              {isSuperAdmin && <option value="superadmin">Superadmin</option>}
+                              {/* Vis alltid Superadmin-opsjonen når brukeren HAR rollen —
+                                  ellers faller select tilbake til «Forelder» og viser feil
+                                  rolle for admin-innloggede. Tildeling er fortsatt sperret
+                                  (disabled via manageable). */}
+                              {(isSuperAdmin || user.role === 'superadmin') && (
+                                <option value="superadmin">Superadmin</option>
+                              )}
                             </select>
                           </td>
                           <td className="px-6 py-4">
