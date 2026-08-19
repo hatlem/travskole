@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { toCourseCardProps, compareForListing } from '@/lib/course-card';
+import { toCourseCardProps, compareForListing, isUpcomingOrOngoing } from '@/lib/course-card';
 import type { Course } from '@prisma/client';
 
 const base = {
@@ -36,5 +36,30 @@ describe('compareForListing', () => {
       .sort(compareForListing)
       .map((c) => c.id);
     expect(sorted).toEqual([1, 2, 3]);
+  });
+});
+
+describe('isUpcomingOrOngoing', () => {
+  const now = new Date('2026-08-19T10:00:00Z');
+  const c = (startDate: Date | null, endDate: Date | null) => ({ startDate, endDate });
+
+  it('skjuler kurs med sluttdato i fortiden', () => {
+    expect(isUpcomingOrOngoing(c(new Date('2026-07-02'), new Date('2026-07-04')), now)).toBe(false);
+  });
+
+  it('viser kurs som pågår eller slutter i dag (ut dagen)', () => {
+    expect(isUpcomingOrOngoing(c(new Date('2026-08-18'), new Date('2026-08-19')), now)).toBe(true);
+  });
+
+  it('viser kurs med startdato i fremtiden', () => {
+    expect(isUpcomingOrOngoing(c(new Date('2026-09-01'), null), now)).toBe(true);
+  });
+
+  it('skjuler kurs med kun startdato i fortiden', () => {
+    expect(isUpcomingOrOngoing(c(new Date('2026-07-01'), null), now)).toBe(false);
+  });
+
+  it('viser alltid udaterte kurs (avtal tid)', () => {
+    expect(isUpcomingOrOngoing(c(null, null), now)).toBe(true);
   });
 });

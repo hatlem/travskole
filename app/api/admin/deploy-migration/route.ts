@@ -15,10 +15,12 @@ const BOOTSTRAP_ADMINS = [
   'hege.karin.arverud@bjerke.no',
   'stine.rasmussen@bjerke.no',
   'hilde.apneseth@bjerke.no',
-  // Test-admin for E2E-verifisering i prod (innboks via GetMailer). Kan fjernes
-  // etter endt testrunde uten sideeffekter.
-  'travskole-admin@getia.no',
 ];
+
+// Test-superadmin for E2E-verifisering i prod (innboks via GetMailer). Trenger
+// superadmin for å teste innstillinger (payment_test_mode) og rolleforskjeller.
+// Kan fjernes etter endt testrunde uten sideeffekter.
+const BOOTSTRAP_SUPERADMINS = ['travskole-admin@getia.no'];
 
 async function sendLoginLink(email: string) {
   const identifier = MAGIC_LINK_PREFIX + email;
@@ -48,6 +50,23 @@ async function bootstrapAdmin(email: string) {
   }
 
   return { email, created: false, role: existing.role, upgraded: false };
+}
+
+async function bootstrapSuperadmin(email: string) {
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true } });
+
+  if (!existing) {
+    await prisma.user.create({ data: { email, role: 'superadmin' } });
+    await sendLoginLink(email);
+    return { email, created: true, role: 'superadmin', upgraded: false };
+  }
+
+  if (existing.role !== 'superadmin') {
+    await prisma.user.update({ where: { id: existing.id }, data: { role: 'superadmin' } });
+    return { email, created: false, role: 'superadmin', upgraded: true };
+  }
+
+  return { email, created: false, role: 'superadmin', upgraded: false };
 }
 
 // Speiler app/api/admin/crm/flows/[id]/activate/route.ts sin logikk nøyaktig
@@ -121,6 +140,9 @@ export async function POST(request: NextRequest) {
     const admins = [];
     for (const email of BOOTSTRAP_ADMINS) {
       admins.push(await bootstrapAdmin(email));
+    }
+    for (const email of BOOTSTRAP_SUPERADMINS) {
+      admins.push(await bootstrapSuperadmin(email));
     }
 
     let activation = null;

@@ -3,7 +3,7 @@ import CourseCard, { Course } from '@/components/CourseCard';
 import Link from 'next/link';
 import Image from 'next/image';
 import { prisma } from '@/lib/prisma';
-import { toCourseCardProps, compareForListing } from '@/lib/course-card';
+import { toCourseCardProps, compareForListing, isUpcomingOrOngoing } from '@/lib/course-card';
 import { getSettings, settingToList } from '@/lib/settings';
 import { makeT } from '@/lib/strings';
 
@@ -12,7 +12,11 @@ export const dynamic = 'force-dynamic';
 async function getUpcomingCourses(): Promise<Course[]> {
   try {
     const dbCourses = await prisma.course.findMany({ where: { status: 'open' } });
-    return dbCourses.sort(compareForListing).slice(0, 3).map(toCourseCardProps);
+    return dbCourses
+      .filter((c) => isUpcomingOrOngoing(c))
+      .sort(compareForListing)
+      .slice(0, 3)
+      .map(toCourseCardProps);
   } catch {
     return [];
   }

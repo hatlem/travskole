@@ -20,6 +20,22 @@ export interface CourseCardProps {
   image_url?: string | null;
 }
 
+/**
+ * Skal kurset vises i offentlige lister? Daterte kurs skjules etter sluttdato
+ * (eller startdato når sluttdato mangler) — vises ut dagen de slutter.
+ * Udaterte kurs («avtal tid»-arrangementer) vises alltid.
+ */
+export function isUpcomingOrOngoing(
+  c: Pick<Course, 'startDate' | 'endDate'>,
+  now: Date = new Date()
+): boolean {
+  const last = c.endDate ?? c.startDate;
+  if (!last) return true;
+  const cutoff = new Date(last);
+  cutoff.setHours(23, 59, 59, 999);
+  return cutoff >= now;
+}
+
 export function toCourseCardProps(c: Course): CourseCardProps {
   return {
     id: String(c.id),
