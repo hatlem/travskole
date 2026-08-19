@@ -15,6 +15,9 @@ const BOOTSTRAP_ADMINS = [
   'hege.karin.arverud@bjerke.no',
   'stine.rasmussen@bjerke.no',
   'hilde.apneseth@bjerke.no',
+  // Test-admin for E2E-verifisering i prod (innboks via GetMailer). Kan fjernes
+  // etter endt testrunde uten sideeffekter.
+  'travskole-admin@getia.no',
 ];
 
 async function sendLoginLink(email: string) {
