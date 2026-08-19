@@ -17,23 +17,34 @@ Vi trenger en Entra (Azure AD) app-registrering med:
 - **Admin-samtykke** (admin consent) gitt for denne permission.
 - En **`ApplicationAccessPolicy`** (via Exchange Online PowerShell,
   `New-ApplicationAccessPolicy`) som scoper appens `Mail.Read`-tilgang til
-  KUN de 7 avsenderpostboksene under — ikke hele organisasjonens postbokser
-  (minste-privilegium).
+  KUN fellespostboksen `registrering@bjerke.no` — ikke hele organisasjonens
+  postbokser (minste-privilegium). Appen setter Reply-To på alle automatiske
+  utsendelser til denne postboksen (uansett avsenderidentitet), så svar og
+  leveringsfeilmeldinger lander kun der.
 - Levering av `tenant ID`, `client ID` og `client secret` (eller et
   sertifikat, om det foretrekkes) via en sikker/hemmelig kanal (ikke e-post i
   klartekst). Appen setter selv miljøvariabelen `GRAPH_MAILBOXES`
   (kommaseparert liste over de 7 adressene under), så du trenger ikke oppgi
   den — kun de tre hemmelighetene over.
 
-## De 7 postboksene som skal scopes
+## Postboksen som skal scopes
 
-- registrering@bjerke.no
-- hilde.apneseth@bjerke.no
-- andre.ringelien@bjerke.no
-- hege.karin.arverud@bjerke.no
-- stine.rasmussen@bjerke.no
-- bjerke@bjerke.no
-- arild.engebretsen@bjerke.no
+- registrering@bjerke.no (kun denne — redusert fra 7 etter DNT/Basefarms
+  minste-privilegium-innspill 2026-08-19; Reply-To sentraliseres i appen)
+
+## Hvorfor Mail.Read og ikke Mail.ReadBasic
+
+Vi trenger ikke menneskelig meldingsinnhold, men `Mail.ReadBasic` ekskluderer
+også `internetMessageHeaders` (In-Reply-To/References — selve svar-matchingen)
+og vedlegg (den maskinlesbare `message/delivery-status`-delen i
+leveringsfeilmeldinger, RFC 3464). Graph har ikke et nivå mellom ReadBasic og
+Read som dekker disse, derfor Mail.Read — kompensert med én-postboks-scoping.
+
+## Hva lagres
+
+Ingen meldingstekst, emner, vedlegg eller avsenderinnhold lagres. Kun:
+tidsstempel «svart»/«bounce» på vår egen utsendte melding, og ved permanent
+leveringsfeil mottakeradressen i en suppresjonsliste (adresse + årsak).
 
 ## Samtidig — en liten påminnelse
 
