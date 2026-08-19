@@ -51,7 +51,7 @@
 
 ## Fase 5 — Valgfritt (config-gated, ikke-blokkerende) ⏳ GJENSTÅR
 
-- [ ] Microsoft Graph (svar-stopp/bounce): bestilling sendt 2026-08-19, men VEDLEGGET falt ut — send `docs/bestilling-graph-tilgang.md` på nytt (Patryk etterspurte det 10:33). Basefarm setter `GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET/MAILBOXES`. Uten disse er polling no-op (trygt).
+- [ ] Microsoft Graph (svar-stopp/bounce): full bestilling sendt Patryk 2026-08-19 (innhold rett i mailen, inkl. at Basefarm setter GRAPH_* i Azure selv). Venter på utførelse — ingen hast (pappaperm til ult. september). Basefarm setter `GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET/MAILBOXES`. Uten disse er polling no-op (trygt).
 - [ ] KI-lag: sett `AI_PROVIDER` + nøkler KUN etter inngått databehandleravtale med LLM-leverandøren.
 - [x] getcookies: ingen handling nødvendig — lastes via bjerke.no GTM.
 
