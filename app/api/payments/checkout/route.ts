@@ -22,6 +22,7 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { getSetting } from '@/lib/settings';
+import { getBaseUrl } from '@/lib/site';
 import { parsePaymentMethods, isTestMode, isStripeConfigured } from '@/lib/payments';
 import { createStripeCheckout } from '@/lib/payments/stripe';
 import { isVippsConfigured, createVippsPayment } from '@/lib/payments/vipps';
@@ -147,7 +148,10 @@ export async function POST(request: NextRequest) {
   }
   const amountKr = target.amountKr;
 
-  const origin = request.nextUrl.origin;
+  // VIKTIG: bruk kanonisk base-URL, ikke request.nextUrl.origin — bak Azures
+  // proxy er origin den interne container-hosten (f.eks. http://<id>:8080),
+  // som ville gitt Stripe/Vipps ubrukelige success-/cancel-URL-er.
+  const origin = getBaseUrl();
   const testMode = isTestMode(await getSetting('payment_test_mode'));
 
   let providerResult: { url: string; ref: string } | null;
