@@ -40,18 +40,18 @@
 - [x] `/api/cron/flows` verifisert direkte (200, korrekt respons-form).
 - [x] `/api/cron/email-triggers` (nå erstattet av `/api/cron/gdpr-retention`, se Fase 8) verifisert i sin tid.
 
-## Fase 4 — Stripe/Vipps webhook-secrets ⏳ GJENSTÅR
+## Fase 4 — Stripe/Vipps webhook-secrets ✅ FULLFØRT 2026-08-19
 
-- [ ] Andreas registrerer Stripe-webhook → `.../api/webhooks/stripe` i Stripe-dashboardet.
-- [ ] Andreas registrerer Vipps-webhook → `.../api/webhooks/vipps`.
-- [ ] Basefarm setter `STRIPE_WEBHOOK_SECRET` (+ `STRIPE_WEBHOOK_SECRET_TEST`) og `VIPPS_WEBHOOK_SECRET` i Azure (verdiene sendes via sikker lenke).
+- [x] Stripe-webhook registrert (selvbetjent rute, rotert 2026-08-19 — endepunkt `we_1U5mYn…`).
+- [x] Vipps-webhook registrert via Webhooks API (selvbetjent rute, rotert 2026-08-19 — id `62353f69…`).
+- [x] Basefarm satte `STRIPE_WEBHOOK_SECRET` og `VIPPS_WEBHOOK_SECRET` i Azure — bekreftet av Patryk 2026-08-19 kl. 10:33 (via OTS-lenker). Merk: `STRIPE_WEBHOOK_SECRET_TEST` er IKKE satt — testmodus-webhooks verifiserer ikke; irrelevant så lenge payment_test_mode er AV (live siden 2026-08-19).
 - [ ] ⚠️ Valider Vipps webhook-secret som rå-bytes ÉN gang mot Vipps MT (testmiljø) før go-live.
 - [ ] ⚠️ Valider Vipps REFUNDED-payload mot en ekte MT-refusjon (delprosjekt 7): bekreft `transactionInfo.refundedAmount`/`.amount` finnes + at `body.amount.value` er refundert beløp; ved avvik juster `mapVippsEvent`.
 - [ ] Vipps betalings-env-vars (CLIENT_ID/SECRET/… + `_TEST`) er ALLEREDE provisjonert av Basefarm — ikke rør.
 
 ## Fase 5 — Valgfritt (config-gated, ikke-blokkerende) ⏳ GJENSTÅR
 
-- [ ] Microsoft Graph (svar-stopp/bounce): send `docs/bestilling-graph-tilgang.md` til Patryk (han har bekreftet han er klar til å ta imot). Basefarm setter `GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET/MAILBOXES`. Uten disse er polling no-op (trygt).
+- [ ] Microsoft Graph (svar-stopp/bounce): bestilling sendt 2026-08-19, men VEDLEGGET falt ut — send `docs/bestilling-graph-tilgang.md` på nytt (Patryk etterspurte det 10:33). Basefarm setter `GRAPH_TENANT_ID/CLIENT_ID/CLIENT_SECRET/MAILBOXES`. Uten disse er polling no-op (trygt).
 - [ ] KI-lag: sett `AI_PROVIDER` + nøkler KUN etter inngått databehandleravtale med LLM-leverandøren.
 - [x] getcookies: ingen handling nødvendig — lastes via bjerke.no GTM.
 
@@ -74,7 +74,7 @@
 
 - [x] `retire-legacy-emailtrigger` re-synket mot main (var 2 commits bak — inneholdt Fase 2-fiksene) og fast-forward-merget inn i `main`.
 - [x] Deployet (`./scripts/deploy-app.sh`). Verifisert: gammel `/api/cron/email-triggers` → 404 (forventet), ny `/api/cron/gdpr-retention` → 200 `{anonymized:0}`. Ingen gjenværende `prisma.emailTrigger/emailTemplate/emailLog`-referanser i koden (grep-bekreftet).
-- [ ] ⚠️ **Basefarm-oppfølging sendt, ikke bekreftet:** be dem oppdatere `CRON_TARGET_URL` på Function-appen fra `/api/cron/email-triggers` til `/api/cron/gdpr-retention`. Inntil da 404-er GDPR-jobben trygt (ingen krasj) — ikke-blokkerende siden det ikke finnes reell brukerdata å anonymisere ennå.
+- [x] `CRON_TARGET_URL` oppdatert til `/api/cron/gdpr-retention` — bekreftet av Patryk 2026-08-19 kl. 10:33.
 
 ## Fase 9 — Irreversibel opprydding — DROPPET (bevisst valg, 2026-08-13)
 
