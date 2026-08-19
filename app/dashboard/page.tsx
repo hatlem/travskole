@@ -30,6 +30,9 @@ interface DashboardData {
     courseStartDate: string | null;
     courseEndDate: string | null;
     childName: string | null;
+    paymentStatus: string;
+    priceKr: number | null;
+    payableMethods: string[];
   }[];
 }
 
@@ -58,6 +61,28 @@ function DashboardContent() {
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<number | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
+
+  const payNow = async (registrationId: number, provider: string) => {
+    setPayingId(registrationId);
+    setPayError(null);
+    try {
+      const res = await fetch('/api/payments/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registrationId, provider }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok || !body.url) {
+        throw new Error(body.error ?? 'Kunne ikke starte betaling');
+      }
+      window.location.href = body.url;
+    } catch (err) {
+      setPayError(err instanceof Error ? err.message : 'Kunne ikke starte betaling');
+      setPayingId(null);
+    }
+  };
   const [editForm, setEditForm] = useState({ name: '', phone: '', address: '' });
 
   useEffect(() => {
@@ -158,6 +183,11 @@ function DashboardContent() {
         <div className="space-y-8">
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('dash.registrations_heading')}</h2>
+            {payError && (
+              <div role="alert" className="mb-3 bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-2">
+                {payError}
+              </div>
+            )}
             {data && data.registrations.length > 0 ? (
               <div className="space-y-3">
                 {data.registrations.map((r) => {
@@ -175,9 +205,37 @@ function DashboardContent() {
                           {r.courseEndDate && ` – ${formatDate(r.courseEndDate)}`}
                         </p>
                       </div>
-                      <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${badgeStyle}`}>
-                        {badgeLabel}
-                      </span>
+                      <div className="flex items-center gap-3">
+                        {r.priceKr !== null &&
+                          r.priceKr > 0 &&
+                          r.payableMethods.length > 0 &&
+                          r.status !== 'cancelled' &&
+                          ['none', 'pending', 'failed'].includes(r.paymentStatus) && (
+                            <div className="flex gap-2">
+                              {r.payableMethods.includes('stripe') && (
+                                <button
+                                  onClick={() => payNow(r.id, 'stripe')}
+                                  disabled={payingId === r.id}
+                                  className="text-xs font-medium bg-bjerke-blue text-white px-3 py-1.5 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
+                                >
+                                  {payingId === r.id ? 'Starter…' : `Betal ${r.priceKr} kr med kort`}
+                                </button>
+                              )}
+                              {r.payableMethods.includes('vipps') && (
+                                <button
+                                  onClick={() => payNow(r.id, 'vipps')}
+                                  disabled={payingId === r.id}
+                                  className="text-xs font-medium bg-[#ff5b24] text-white px-3 py-1.5 rounded-lg hover:opacity-90 transition disabled:opacity-50"
+                                >
+                                  Vipps
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${badgeStyle}`}>
+                          {badgeLabel}
+                        </span>
+                      </div>
                     </div>
                   );
                 })}

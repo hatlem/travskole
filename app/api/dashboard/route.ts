@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { parsePaymentMethods } from '@/lib/payments';
 
 export async function PUT(request: NextRequest) {
   const session = await getServerSession();
@@ -127,6 +128,10 @@ export async function GET() {
       courseStartDate: r.course.startDate?.toISOString() ?? null,
       courseEndDate: r.course.endDate?.toISOString() ?? null,
       childName: r.child?.name ?? null,
+      paymentStatus: r.paymentStatus,
+      priceKr: r.course.price,
+      // Kun online-betalbare metoder — faktura krever ingen handling fra brukeren.
+      payableMethods: parsePaymentMethods(r.course.paymentMethods).filter((m) => m !== 'faktura'),
     })),
   });
 }
