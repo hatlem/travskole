@@ -7,6 +7,7 @@ import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { paymentStatusBadge } from '@/lib/payments/badge';
+import { RegistrationEditModal, type EditableRegistration } from './RegistrationEditModal';
 
 interface Registration {
   id: number;
@@ -18,8 +19,8 @@ interface Registration {
   createdAt: string;
   course: { id: number; name: string };
   // null for voksen-arrangementer — deltakeren er parent selv (se schema.prisma childId)
-  child: { id: number; name: string } | null;
-  parent: { id: number; name: string; phone: string; user: { email: string } };
+  child: { id: number; name: string; birthdate: string | null; allergies: string | null } | null;
+  parent: { id: number; name: string; phone: string; address: string | null; user: { email: string } };
 }
 
 interface Course {
@@ -81,6 +82,7 @@ export default function AdminRegistrationsPage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [deletingReg, setDeletingReg] = useState(false);
+  const [editTarget, setEditTarget] = useState<Registration | null>(null);
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkTargetStatus, setBulkTargetStatus] = useState<string>("");
   const courseDropdownRef = useRef<HTMLDivElement>(null);
@@ -282,6 +284,27 @@ export default function AdminRegistrationsPage() {
     }
     return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
   }, [registrations]);
+
+  /** Skriver den oppdaterte påmeldingen tilbake i tabellen uten full refetch. */
+  function applyEditedRegistration(updated: EditableRegistration, message: string) {
+    setRegistrations((prev) =>
+      prev.map((r) =>
+        r.id === updated.id
+          ? {
+              ...r,
+              child: updated.child,
+              parent: {
+                ...r.parent,
+                name: updated.parent.name,
+                phone: updated.parent.phone,
+                address: updated.parent.address,
+              },
+            }
+          : r
+      )
+    );
+    toast(message, 'success');
+  }
 
   const filteredRegistrations = useMemo(() => {
     return registrations.filter((reg) => {
@@ -751,12 +774,20 @@ export default function AdminRegistrationsPage() {
                       {new Date(reg.createdAt).toLocaleDateString('nb-NO')}
                     </td>
                     <td className="px-4 py-3.5">
-                      <button
-                        onClick={() => requestDeleteRegistration(reg.id)}
-                        className="text-red-500 hover:text-red-700 text-xs font-medium transition-colors"
-                      >
-                        Slett
-                      </button>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => setEditTarget(reg)}
+                          className="text-bjerke-blue hover:underline text-xs font-medium transition-colors"
+                        >
+                          Rediger
+                        </button>
+                        <button
+                          onClick={() => requestDeleteRegistration(reg.id)}
+                          className="text-red-500 hover:text-red-700 text-xs font-medium transition-colors"
+                        >
+                          Slett
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -773,6 +804,15 @@ export default function AdminRegistrationsPage() {
           <Pagination total={filteredRegistrations.length} page={page} perPage={perPage} onChange={setPage} />
         </div>
       )}
+      {editTarget && (
+        <RegistrationEditModal
+          key={editTarget.id}
+          registration={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={applyEditedRegistration}
+        />
+      )}
+
       {/* Delete confirmation modal */}
       <ConfirmModal
         open={showDeleteModal}

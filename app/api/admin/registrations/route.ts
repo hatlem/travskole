@@ -140,12 +140,15 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       include: {
         course: { select: { id: true, name: true } },
-        child: { select: { id: true, name: true } },
+        // birthdate/allergies er med fordi admin kan rette dem inline (PATCH
+        // /api/admin/registrations/[id]).
+        child: { select: { id: true, name: true, birthdate: true, allergies: true } },
         parent: {
           select: {
             id: true,
             name: true,
             phone: true,
+            address: true,
             user: { select: { email: true } },
           },
         },

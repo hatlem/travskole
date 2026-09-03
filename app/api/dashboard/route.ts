@@ -1,8 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
+import DOMPurify from 'isomorphic-dompurify';
 import { getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { parsePaymentMethods } from '@/lib/payments';
+import { validateProfileInput } from '@/lib/profile';
+import { serializeChild } from '@/lib/children';
 
+/**
+ * Oppretter eller oppdaterer forelderprofilen til den innloggede brukeren.
+ *
+ * Brukere som er opprettet av en admin (eller via magic link) har ingen
+ * Parent-rad før de har meldt på noen. Da opprettes profilen her, slik at de
+ * kan fylle den ut selv i stedet for å måtte melde på et kurs først.
+ */
 export async function PUT(request: NextRequest) {
   const session = await getServerSession();
 
@@ -10,28 +20,12 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
+  const body = await request.json().catch(() => ({}));
   const { name, phone, address } = body;
 
-  if (!name || typeof name !== 'string' || name.trim().length < 2) {
-    return NextResponse.json(
-      { error: 'Navn må være minst 2 tegn' },
-      { status: 400 }
-    );
-  }
-
-  if (!phone || typeof phone !== 'string' || phone.trim().length < 8 || phone.length > 20) {
-    return NextResponse.json(
-      { error: 'Telefonnummer må være minst 8 tegn' },
-      { status: 400 }
-    );
-  }
-
-  if (name.length > 100 || (typeof address === 'string' && address.length > 200)) {
-    return NextResponse.json(
-      { error: 'Feltet er for langt' },
-      { status: 400 }
-    );
+  const validationError = validateProfileInput({ name, phone, address });
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   const user = await prisma.user.findUnique({
@@ -39,25 +33,31 @@ export async function PUT(request: NextRequest) {
     include: { parent: true },
   });
 
-  if (!user || !user.parent) {
+  if (!user) {
     return NextResponse.json({ error: 'Profil ikke funnet' }, { status: 404 });
   }
 
-  const updatedParent = await prisma.parent.update({
-    where: { id: user.parent.id },
-    data: {
-      name: name.trim(),
-      phone: phone.trim(),
-      address: address?.trim() || null,
-    },
-  });
+  const data = {
+    name: DOMPurify.sanitize(name.trim()),
+    phone: phone.trim(),
+    address: typeof address === 'string' && address.trim() ? DOMPurify.sanitize(address.trim()) : null,
+  };
+
+  const parent = user.parent
+    ? await prisma.parent.update({
+        where: { id: user.parent.id },
+        // Var profilen soft-slettet, gjenopprettes den med de nye opplysningene
+        // i stedet for å lage en ny rad (Parent.userId er unik).
+        data: user.parent.deletedAt ? { ...data, deletedAt: null } : data,
+      })
+    : await prisma.parent.create({ data: { ...data, userId: user.id } });
 
   return NextResponse.json({
     profile: {
-      name: updatedParent.name,
+      name: parent.name,
       email: user.email,
-      phone: updatedParent.phone,
-      address: updatedParent.address,
+      phone: parent.phone,
+      address: parent.address,
     },
   });
 }
@@ -94,12 +94,19 @@ export async function GET() {
     return NextResponse.json({ error: 'User not found' }, { status: 404 });
   }
 
-  if (!user.parent) {
+  // hasPassword styrer om passord-seksjonen ber om det nåværende passordet:
+  // magic-link-kontoer setter sitt første passord uten.
+  const hasPassword = Boolean(user.passwordHash);
+
+  // GDPR-slettede profiler behandles som «ingen profil» — brukeren kan fylle ut
+  // en ny via PUT ovenfor.
+  if (!user.parent || user.parent.deletedAt) {
     return NextResponse.json({
       profile: null,
       children: [],
       registrations: [],
       role: user.role,
+      hasPassword,
     });
   }
 
@@ -107,18 +114,14 @@ export async function GET() {
 
   return NextResponse.json({
     role: user.role,
+    hasPassword,
     profile: {
       name: parent.name,
       email: user.email,
       phone: parent.phone,
       address: parent.address,
     },
-    children: parent.children.map((c) => ({
-      id: c.id,
-      name: c.name,
-      birthdate: c.birthdate?.toISOString() ?? null,
-      allergies: c.allergies,
-    })),
+    children: parent.children.map(serializeChild),
     registrations: parent.registrations.map((r) => ({
       id: r.id,
       status: r.status,

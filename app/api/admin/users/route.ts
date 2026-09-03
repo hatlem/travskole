@@ -1,13 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import crypto from 'crypto';
 import DOMPurify from 'isomorphic-dompurify';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-import { sendMagicLinkEmail } from '@/lib/mail';
 import { assignableRoles } from '@/lib/user-admin';
-import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
+import { issueMagicLink } from '@/lib/magic-link';
 import logger from '@/lib/logger';
 
 export async function GET() {
@@ -132,14 +130,7 @@ export async function POST(request: NextRequest) {
     // som /api/auth/magic-link).
     if (body.sendMagicLink) {
       try {
-        const identifier = MAGIC_LINK_PREFIX + email;
-        await prisma.verificationToken.deleteMany({ where: { identifier } });
-        const rawToken = crypto.randomUUID();
-        const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-        await prisma.verificationToken.create({
-          data: { identifier, token: tokenHash, expires: new Date(Date.now() + 15 * 60 * 1000) },
-        });
-        await sendMagicLinkEmail(email, rawToken);
+        await issueMagicLink(email);
       } catch (mailError) {
         logger.error('[users:create] magic link send failed', { mailError });
         // Ikke feil hele opprettelsen om e-posten feiler.

@@ -5,7 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth';
 import { loginLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logFailedLogin } from '@/lib/logger';
-import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
+import { MAGIC_LINK_PREFIX } from '@/lib/magic-link';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 

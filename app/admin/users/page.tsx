@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
@@ -8,6 +8,7 @@ import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { canManageUser } from '@/lib/user-admin';
 import { UserFormModal, type EditableUser } from './UserFormModal';
+import { ChildrenEditor, type AdminChild } from './ChildrenEditor';
 
 type AccountStatus = 'active' | 'deactivated' | 'anonymized';
 
@@ -30,7 +31,7 @@ interface User {
     phone: string;
     address: string | null;
     _count: { children: number; registrations: number };
-    children: { id: number; name: string; birthdate: string | null; allergies: string | null }[];
+    children: AdminChild[];
     registrations: { id: number; status: string; createdAt: string; course: { id: number; name: string }; child: { name: string } | null }[];
   } | null;
 }
@@ -86,6 +87,7 @@ export default function AdminUsersPage() {
   const [formModal, setFormModal] = useState<{ mode: 'create' | 'edit'; user: EditableUser | null } | null>(null);
   const [confirm, setConfirm] = useState<{ user: User; action: 'deactivate' | 'reactivate' | 'anonymize' } | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [magicLinkId, setMagicLinkId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | AccountStatus>('all');
 
   const fetchUsers = useCallback(async () => {
@@ -124,6 +126,39 @@ export default function AdminUsersPage() {
     } finally {
       setUpdatingId(null);
     }
+  }
+
+  /** Sender en fersk innloggingslenke til en bruker som ikke kommer seg inn. */
+  async function sendMagicLink(user: User) {
+    setMagicLinkId(user.id);
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}/magic-link`, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Kunne ikke sende innloggingslenke');
+      toast(`Innloggingslenke sendt til ${user.email}`, 'success');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setMagicLinkId(null);
+    }
+  }
+
+  /** Speiler barneendringer inn i tabellen uten en full refetch. */
+  function applyChildren(userId: number, children: AdminChild[]) {
+    setUsers((prev) =>
+      prev.map((u) =>
+        u.id === userId && u.parent
+          ? {
+              ...u,
+              parent: {
+                ...u.parent,
+                children,
+                _count: { ...u.parent._count, children: children.length },
+              },
+            }
+          : u
+      )
+    );
   }
 
   function openEdit(u: User) {
@@ -317,9 +352,8 @@ export default function AdminUsersPage() {
                     const status = userStatus(user);
                     const manageable = canManageUser(currentRole, user.role) && status !== 'anonymized';
                     return (
-                      <>
+                      <Fragment key={user.id}>
                         <tr
-                          key={user.id}
                           onClick={() => toggleExpanded(user.id)}
                           className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                         >
@@ -400,6 +434,16 @@ export default function AdminUsersPage() {
                                 >
                                   Rediger
                                 </button>
+                                {status === 'active' && (
+                                  <button
+                                    onClick={() => sendMagicLink(user)}
+                                    disabled={magicLinkId === user.id}
+                                    title="Send en fersk innloggingslenke på e-post"
+                                    className="text-xs font-medium text-gray-600 hover:underline disabled:opacity-50"
+                                  >
+                                    {magicLinkId === user.id ? 'Sender …' : 'Send lenke'}
+                                  </button>
+                                )}
                                 <button
                                   onClick={() =>
                                     setConfirm({ user, action: status === 'deactivated' ? 'reactivate' : 'deactivate' })
@@ -423,7 +467,7 @@ export default function AdminUsersPage() {
 
                         {/* Expanded detail row */}
                         {isExpanded && (
-                          <tr key={`${user.id}-detail`} className="bg-blue-50/50">
+                          <tr className="bg-blue-50/50">
                             <td colSpan={8} className="px-6 py-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Address */}
@@ -435,34 +479,20 @@ export default function AdminUsersPage() {
                                 )}
 
                                 {/* Children */}
-                                <div>
-                                  <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                                    Barn ({user.parent?.children?.length ?? 0})
-                                  </p>
-                                  {user.parent?.children && user.parent.children.length > 0 ? (
-                                    <div className="space-y-2">
-                                      {user.parent.children.map((child) => (
-                                        <div key={child.id} className="bg-white rounded-lg border border-gray-200 px-3 py-2">
-                                          <p className="font-medium text-sm text-gray-900">{child.name}</p>
-                                          <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-gray-500 mt-0.5">
-                                            {child.birthdate && (
-                                              <span>
-                                                Fodt: {new Date(child.birthdate).toLocaleDateString('nb-NO')}
-                                              </span>
-                                            )}
-                                            {child.allergies && (
-                                              <span className="text-orange-600">
-                                                Allergier: {child.allergies}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  ) : (
-                                    <p className="text-sm text-gray-400">Ingen barn registrert</p>
-                                  )}
-                                </div>
+                                {user.parent ? (
+                                  <ChildrenEditor
+                                    userId={user.id}
+                                    items={user.parent.children ?? []}
+                                    onChange={(children) => applyChildren(user.id, children)}
+                                  />
+                                ) : (
+                                  <div>
+                                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Barn</p>
+                                    <p className="text-sm text-gray-400">
+                                      Brukeren har ingen profil ennå. Legg inn navn og telefon under «Rediger» først.
+                                    </p>
+                                  </div>
+                                )}
 
                                 {/* Recent registrations */}
                                 <div>
@@ -494,7 +524,7 @@ export default function AdminUsersPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </Fragment>
                     );
                   })}
                 </tbody>

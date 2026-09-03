@@ -4,37 +4,12 @@ import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Suspense, useEffect, useState } from 'react';
 import { useStrings } from '@/components/SettingsProvider';
+import { ProfileSection } from './ProfileSection';
+import { ChildrenSection } from './ChildrenSection';
+import { PasswordSection } from './PasswordSection';
+import type { DashboardChild, DashboardData, DashboardProfile } from './types';
 
 export const dynamic = 'force-dynamic';
-
-interface DashboardData {
-  role?: string;
-  profile: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string | null;
-  } | null;
-  children: {
-    id: number;
-    name: string;
-    birthdate: string | null;
-    allergies: string | null;
-  }[];
-  registrations: {
-    id: number;
-    status: string;
-    createdAt: string;
-    courseName: string;
-    courseType: string;
-    courseStartDate: string | null;
-    courseEndDate: string | null;
-    childName: string | null;
-    paymentStatus: string;
-    priceKr: number | null;
-    payableMethods: string[];
-  }[];
-}
 
 const statusStyles: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -58,9 +33,6 @@ function DashboardContent() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editing, setEditing] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [editError, setEditError] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<number | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
 
@@ -83,7 +55,6 @@ function DashboardContent() {
       setPayingId(null);
     }
   };
-  const [editForm, setEditForm] = useState({ name: '', phone: '', address: '' });
 
   useEffect(() => {
     fetch('/api/dashboard')
@@ -125,6 +96,11 @@ function DashboardContent() {
   const noProfile = !data?.profile;
   const isAdmin = data?.role === 'admin' || data?.role === 'superadmin';
 
+  const setProfile = (profile: DashboardProfile) =>
+    setData((prev) => (prev ? { ...prev, profile } : prev));
+  const setChildren = (children: DashboardChild[]) =>
+    setData((prev) => (prev ? { ...prev, children } : prev));
+
   return (
     <div className="min-h-screen bg-gray-50 py-16">
       <div className="max-w-4xl mx-auto px-4">
@@ -165,21 +141,6 @@ function DashboardContent() {
           </div>
         )}
 
-        {noProfile && !isAdmin && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-8">
-            <h2 className="text-lg font-semibold text-blue-800 mb-2">{t('dash.no_profile_heading')}</h2>
-            <p className="text-blue-700">
-              {t('dash.no_profile_text')}
-            </p>
-            <Link
-              href="/arrangementer"
-              className="inline-block mt-4 bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition"
-            >
-              Se alle kurs
-            </Link>
-          </div>
-        )}
-
         <div className="space-y-8">
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('dash.registrations_heading')}</h2>
@@ -201,7 +162,7 @@ function DashboardContent() {
                       <div>
                         <p className="font-medium text-gray-900">{r.courseName}</p>
                         <p className="text-sm text-gray-500">
-                          {r.childName ? `${r.childName} \u00b7 ` : ''}{r.courseStartDate ? formatDate(r.courseStartDate) : 'Avtal tid'}
+                          {r.childName ? `${r.childName} · ` : ''}{r.courseStartDate ? formatDate(r.courseStartDate) : 'Avtal tid'}
                           {r.courseEndDate && ` – ${formatDate(r.courseEndDate)}`}
                         </p>
                       </div>
@@ -247,169 +208,27 @@ function DashboardContent() {
             )}
           </section>
 
-          <section>
-            <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('dash.children_heading')}</h2>
-            {data && data.children.length > 0 ? (
-              <div className="grid sm:grid-cols-2 gap-4">
-                {data.children.map((c) => (
-                  <div
-                    key={c.id}
-                    className="bg-white rounded-lg shadow-sm border border-gray-200 p-5"
-                  >
-                    <p className="font-medium text-gray-900">{c.name}</p>
-                    {c.birthdate && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        {t('dash.born')} {formatDate(c.birthdate)}
-                      </p>
-                    )}
-                    {c.allergies && (
-                      <p className="text-sm text-gray-500 mt-1">
-                        {t('dash.allergies_label')} {c.allergies}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 text-gray-500">
-                {t('dash.no_children')}
-              </div>
-            )}
-          </section>
-
-          {data?.profile && (
-            <section>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-semibold text-gray-900">{t('dash.profile_heading')}</h2>
-                {!editing && (
-                  <button
-                    onClick={() => {
-                      setEditForm({
-                        name: data.profile!.name,
-                        phone: data.profile!.phone,
-                        address: data.profile!.address ?? '',
-                      });
-                      setEditError(null);
-                      setEditing(true);
-                    }}
-                    className="text-sm text-bjerke-blue hover:underline font-medium"
-                  >
-                    {t('dash.edit')}
-                  </button>
-                )}
-              </div>
-              {editing ? (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-4">
-                  {editError && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
-                      {editError}
-                    </div>
-                  )}
-                  <div>
-                    <label htmlFor="edit-name" className="block text-sm text-gray-500 mb-1">
-                      {t('dash.name_label')}
-                    </label>
-                    <input
-                      id="edit-name"
-                      type="text"
-                      required
-                      value={editForm.name}
-                      onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="edit-phone" className="block text-sm text-gray-500 mb-1">
-                      {t('dash.phone_label')}
-                    </label>
-                    <input
-                      id="edit-phone"
-                      type="tel"
-                      required
-                      value={editForm.phone}
-                      onChange={(e) => setEditForm((f) => ({ ...f, phone: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="edit-address" className="block text-sm text-gray-500 mb-1">
-                      {t('dash.address_label')}
-                    </label>
-                    <input
-                      id="edit-address"
-                      type="text"
-                      value={editForm.address}
-                      onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))}
-                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
-                    />
-                  </div>
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      disabled={saving}
-                      onClick={async () => {
-                        setEditError(null);
-                        setSaving(true);
-                        try {
-                          const res = await fetch('/api/dashboard', {
-                            method: 'PUT',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(editForm),
-                          });
-                          const result = await res.json();
-                          if (!res.ok) {
-                            setEditError(result.error || 'Kunne ikke lagre endringer');
-                            return;
-                          }
-                          setData((prev) =>
-                            prev ? { ...prev, profile: result.profile } : prev
-                          );
-                          setEditing(false);
-                        } catch {
-                          setEditError('Noe gikk galt. Prøv igjen.');
-                        } finally {
-                          setSaving(false);
-                        }
-                      }}
-                      className="bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
-                    >
-                      {saving ? t('dash.saving') : t('dash.save')}
-                    </button>
-                    <button
-                      disabled={saving}
-                      onClick={() => {
-                        setEditing(false);
-                        setEditError(null);
-                      }}
-                      className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
-                    >
-                      {t('dash.cancel')}
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 space-y-2">
-                  <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">{t('dash.name_label')}:</span>{' '}
-                    {data.profile.name}
-                  </p>
-                  <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">{t('dash.email_label')}:</span>{' '}
-                    {data.profile.email}
-                  </p>
-                  <p className="text-gray-900">
-                    <span className="text-sm text-gray-500">{t('dash.phone_label')}:</span>{' '}
-                    {data.profile.phone}
-                  </p>
-                  {data.profile.address && (
-                    <p className="text-gray-900">
-                      <span className="text-sm text-gray-500">{t('dash.address_label')}:</span>{' '}
-                      {data.profile.address}
-                    </p>
-                  )}
-                </div>
-              )}
-            </section>
+          {/* Admin uten forelderprofil har ingen barn å vise — de bruker admin-panelet. */}
+          {!(noProfile && isAdmin) && (
+            <ChildrenSection
+              items={data?.children ?? []}
+              hasProfile={!noProfile}
+              onChange={setChildren}
+            />
           )}
+
+          {!(noProfile && isAdmin) && (
+            <ProfileSection
+              profile={data?.profile ?? null}
+              email={data?.profile?.email ?? ''}
+              onSaved={setProfile}
+            />
+          )}
+
+          <PasswordSection
+            hasPassword={data?.hasPassword ?? false}
+            onChanged={() => setData((prev) => (prev ? { ...prev, hasPassword: true } : prev))}
+          />
 
           <Link
             href="/mine-bookinger"

@@ -5,7 +5,7 @@ import logger from '@/lib/logger';
 import { seedCourseLifecycleFlow } from '@/lib/flows/seed-lifecycle';
 import { MIGRATIONS } from '@/lib/deploy/generated-migrations';
 import { sendMagicLinkEmail } from '@/lib/mail';
-import { MAGIC_LINK_PREFIX } from '@/app/api/auth/magic-link/route';
+import { MAGIC_LINK_PREFIX } from '@/lib/magic-link';
 import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 import { logActivity } from '@/lib/activity';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
