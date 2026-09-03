@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { parsePaymentMethods } from '@/lib/payments';
 import { validateProfileInput } from '@/lib/profile';
 import { serializeChild } from '@/lib/children';
+import { selfCancelRegistrationError } from '@/lib/registrations/cancel-rules';
 
 /**
  * Oppretter eller oppdaterer forelderprofilen til den innloggede brukeren.
@@ -106,6 +107,8 @@ export async function GET() {
       children: [],
       registrations: [],
       role: user.role,
+      // E-posten er kontoens, ikke profilens — den finnes også uten Parent-rad.
+      email: user.email,
       hasPassword,
     });
   }
@@ -114,6 +117,7 @@ export async function GET() {
 
   return NextResponse.json({
     role: user.role,
+    email: user.email,
     hasPassword,
     profile: {
       name: parent.name,
@@ -135,6 +139,14 @@ export async function GET() {
       priceKr: r.course.price,
       // Kun online-betalbare metoder — faktura krever ingen handling fra brukeren.
       payableMethods: parsePaymentMethods(r.course.paymentMethods).filter((m) => m !== 'faktura'),
+      // Reglene for selvbetjent avbestilling bor ett sted; klienten viser bare
+      // knappen når serveren sier at den ville godtatt den.
+      cancellable:
+        selfCancelRegistrationError({
+          status: r.status,
+          paymentStatus: r.paymentStatus,
+          courseStart: r.course.startDate ?? r.course.endDate,
+        }) === null,
     })),
   });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useState, useEffect, useMemo, useCallback } from 'react';
+import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
@@ -71,15 +71,24 @@ function statusColor(status: string): string {
   }
 }
 
+const PER_PAGE = 25;
+/** Ventetid før et tastetrykk i søkefeltet blir en spørring mot serveren. */
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function AdminUsersPage() {
   const { data: session } = useSession();
   const [users, setUsers] = useState<User[]>([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({ total: 0, parents: 0, admins: 0 });
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const { toast } = useToast();
   const [page, setPage] = useState(1);
-  const perPage = 25;
+  const perPage = PER_PAGE;
+  // searchInput er det man ser i feltet; searchQuery er det serveren har fått.
+  const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [roleFilter, setRoleFilter] = useState<string>('all');
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const isSuperAdmin = session?.user?.role === 'superadmin';
@@ -89,23 +98,43 @@ export default function AdminUsersPage() {
   const [actionLoading, setActionLoading] = useState(false);
   const [magicLinkId, setMagicLinkId] = useState<number | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | AccountStatus>('all');
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkAction, setBulkAction] = useState<'deactivate' | 'reactivate' | null>(null);
+  const [bulkLoading, setBulkLoading] = useState(false);
 
   const fetchUsers = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/users');
+      const params = new URLSearchParams({ page: String(page), perPage: String(PER_PAGE) });
+      if (searchQuery) params.set('q', searchQuery);
+      if (roleFilter !== 'all') params.set('role', roleFilter);
+      if (statusFilter !== 'all') params.set('status', statusFilter);
+
+      const res = await fetch(`/api/admin/users?${params}`);
       if (!res.ok) throw new Error('Kunne ikke hente brukere');
       const data = await res.json();
       setUsers(data.users);
+      setTotal(data.total ?? data.users.length);
+      if (data.stats) setStats(data.stats);
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setLoading(false);
     }
-  }, [toast]);
+  }, [toast, page, searchQuery, roleFilter, statusFilter]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  /** Debouncet søk: skriv fritt, serveren spørres når man tar en pause. */
+  function onSearchChange(value: string) {
+    setSearchInput(value);
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => {
+      setPage(1);
+      setSearchQuery(value.trim());
+    }, SEARCH_DEBOUNCE_MS);
+  }
 
   async function updateRole(id: number, role: string) {
     setUpdatingId(id);
@@ -219,31 +248,66 @@ export default function AdminUsersPage() {
     });
   }
 
-  const filteredUsers = useMemo(() => {
-    return users.filter((user) => {
-      if (roleFilter !== 'all' && user.role !== roleFilter) return false;
-      if (statusFilter !== 'all' && userStatus(user) !== statusFilter) return false;
-      if (!searchQuery) return true;
-      const query = searchQuery.toLowerCase();
-      return (
-        user.email.toLowerCase().includes(query) ||
-        (user.parent?.name?.toLowerCase().includes(query) ?? false) ||
-        (user.parent?.phone?.includes(query) ?? false)
-      );
+  /** Radene som kan bulk-håndteres på denne siden. */
+  const selectableUsers = users.filter(
+    (u) => canManageUser(currentRole, u.role) && userStatus(u) !== 'anonymized'
+  );
+  const allVisibleSelected =
+    selectableUsers.length > 0 && selectableUsers.every((u) => selectedIds.has(u.id));
+
+  function toggleSelected(id: number) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
-  }, [users, searchQuery, roleFilter, statusFilter]);
+  }
 
-  // Reset page when filters change
-  useEffect(() => setPage(1), [searchQuery, roleFilter, statusFilter]);
+  function toggleSelectAll() {
+    setSelectedIds((prev) => {
+      if (allVisibleSelected) {
+        const next = new Set(prev);
+        selectableUsers.forEach((u) => next.delete(u.id));
+        return next;
+      }
+      return new Set([...prev, ...selectableUsers.map((u) => u.id)]);
+    });
+  }
 
-  const paginatedUsers = filteredUsers.slice((page - 1) * perPage, page * perPage);
+  /**
+   * Kjører bulk-handlingen. Serveren sjekker hver bruker for seg og forteller
+   * hvilke den hoppet over — de rapporteres samlet i stedet for å stoppe alt.
+   */
+  async function runBulkAction() {
+    if (!bulkAction) return;
+    setBulkLoading(true);
+    try {
+      const res = await fetch('/api/admin/users/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: Array.from(selectedIds), action: bulkAction }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Handlingen feilet');
 
-  const stats = useMemo(() => {
-    const total = users.length;
-    const parents = users.filter((u) => u.role === 'parent').length;
-    const admins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin').length;
-    return { total, parents, admins };
-  }, [users]);
+      const verb = bulkAction === 'deactivate' ? 'deaktivert' : 'reaktivert';
+      const skipped = data.skipped?.length ?? 0;
+      toast(
+        skipped > 0
+          ? `${data.updated} ${verb}, ${skipped} hoppet over: ${data.skipped[0].error}`
+          : `${data.updated} bruker(e) ${verb}`,
+        skipped > 0 ? 'error' : 'success'
+      );
+      setSelectedIds(new Set());
+      setBulkAction(null);
+      fetchUsers();
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setBulkLoading(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -290,7 +354,7 @@ export default function AdminUsersPage() {
         </div>
       </div>
 
-      {users.length === 0 ? (
+      {users.length === 0 && !searchQuery && roleFilter === 'all' && statusFilter === 'all' ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <p className="text-gray-500">Ingen brukere funnet.</p>
         </div>
@@ -300,14 +364,17 @@ export default function AdminUsersPage() {
           <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              value={searchInput}
+              onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Sok etter e-post, navn eller telefon..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
             />
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setRoleFilter(e.target.value);
+              }}
               className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
             >
               <option value="all">Alle roller</option>
@@ -317,7 +384,10 @@ export default function AdminUsersPage() {
             </select>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'all' | AccountStatus)}
+              onChange={(e) => {
+                setPage(1);
+                setStatusFilter(e.target.value as 'all' | AccountStatus);
+              }}
               className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
             >
               <option value="all">Alle statuser</option>
@@ -327,14 +397,50 @@ export default function AdminUsersPage() {
             </select>
           </div>
           <p className="text-sm text-gray-500 mb-4">
-            Viser {filteredUsers.length} av {users.length} brukere
+            Viser {users.length} av {total} treff
           </p>
+
+          {selectedIds.size > 0 && (
+            <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-bjerke-blue/30 bg-blue-50 px-4 py-3">
+              <span className="text-sm font-medium text-gray-700">
+                {selectedIds.size} valgt
+              </span>
+              <button
+                onClick={() => setBulkAction('deactivate')}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Deaktiver
+              </button>
+              <button
+                onClick={() => setBulkAction('reactivate')}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Reaktiver
+              </button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-xs font-medium text-gray-500 hover:underline"
+              >
+                Fjern valg
+              </button>
+            </div>
+          )}
 
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                   <tr>
+                    <th className="px-6 py-3 text-left w-10">
+                      <input
+                        type="checkbox"
+                        checked={allVisibleSelected}
+                        onChange={toggleSelectAll}
+                        disabled={selectableUsers.length === 0}
+                        aria-label="Velg alle på siden"
+                        className="h-4 w-4 cursor-pointer rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue"
+                      />
+                    </th>
                     <th className="px-6 py-3 text-left">Bruker</th>
                     <th className="px-6 py-3 text-left">Kontakt</th>
                     <th className="px-6 py-3 text-left">Barn</th>
@@ -346,7 +452,7 @@ export default function AdminUsersPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paginatedUsers.map((user) => {
+                  {users.map((user) => {
                     const isExpanded = expandedIds.has(user.id);
                     const initials = getInitials(user.parent?.name);
                     const status = userStatus(user);
@@ -357,6 +463,16 @@ export default function AdminUsersPage() {
                           onClick={() => toggleExpanded(user.id)}
                           className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                         >
+                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(user.id)}
+                              onChange={() => toggleSelected(user.id)}
+                              disabled={!manageable}
+                              aria-label={`Velg ${user.email}`}
+                              className="h-4 w-4 cursor-pointer rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue disabled:cursor-not-allowed disabled:opacity-40"
+                            />
+                          </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
                               <div className="h-9 w-9 rounded-full bg-bjerke-blue flex items-center justify-center text-white text-xs font-bold shrink-0">
@@ -468,7 +584,7 @@ export default function AdminUsersPage() {
                         {/* Expanded detail row */}
                         {isExpanded && (
                           <tr className="bg-blue-50/50">
-                            <td colSpan={8} className="px-6 py-4">
+                            <td colSpan={9} className="px-6 py-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Address */}
                                 {user.parent?.address && (
@@ -527,11 +643,18 @@ export default function AdminUsersPage() {
                       </Fragment>
                     );
                   })}
+                  {users.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="px-6 py-12 text-center text-gray-400">
+                        Ingen brukere matcher filteret.
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
-          <Pagination total={filteredUsers.length} page={page} perPage={perPage} onChange={setPage} />
+          <Pagination total={total} page={page} perPage={perPage} onChange={setPage} />
         </>
       )}
 
@@ -546,6 +669,23 @@ export default function AdminUsersPage() {
             toast(msg, 'success');
             fetchUsers();
           }}
+        />
+      )}
+
+      {bulkAction && (
+        <ConfirmModal
+          open
+          loading={bulkLoading}
+          variant={bulkAction === 'deactivate' ? 'warning' : 'info'}
+          title={bulkAction === 'deactivate' ? 'Deaktiver valgte brukere?' : 'Reaktiver valgte brukere?'}
+          message={
+            bulkAction === 'deactivate'
+              ? `${selectedIds.size} bruker(e) kan ikke logge inn før kontoene reaktiveres. All data beholdes.`
+              : `${selectedIds.size} bruker(e) kan logge inn igjen.`
+          }
+          confirmLabel={bulkAction === 'deactivate' ? 'Deaktiver' : 'Reaktiver'}
+          onConfirm={runBulkAction}
+          onCancel={() => setBulkAction(null)}
         />
       )}
 

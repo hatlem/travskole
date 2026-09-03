@@ -7,6 +7,8 @@ import { useStrings } from '@/components/SettingsProvider';
 import { ProfileSection } from './ProfileSection';
 import { ChildrenSection } from './ChildrenSection';
 import { PasswordSection } from './PasswordSection';
+import { EmailSection } from './EmailSection';
+import { DeleteAccountSection } from './DeleteAccountSection';
 import type { DashboardChild, DashboardData, DashboardProfile } from './types';
 
 export const dynamic = 'force-dynamic';
@@ -35,6 +37,8 @@ function DashboardContent() {
   const [error, setError] = useState<string | null>(null);
   const [payingId, setPayingId] = useState<number | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const payNow = async (registrationId: number, provider: string) => {
     setPayingId(registrationId);
@@ -53,6 +57,33 @@ function DashboardContent() {
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Kunne ikke starte betaling');
       setPayingId(null);
+    }
+  };
+
+  const cancelRegistration = async (registrationId: number, courseName: string) => {
+    if (!window.confirm(t('dash.cancel_registration_confirm', { kurs: courseName }))) return;
+    setCancellingId(registrationId);
+    setCancelError(null);
+    try {
+      const res = await fetch(`/api/dashboard/registrations/${registrationId}/cancel`, {
+        method: 'POST',
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error ?? 'Kunne ikke avbestille');
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              registrations: prev.registrations.map((r) =>
+                r.id === registrationId ? { ...r, status: 'cancelled', cancellable: false } : r
+              ),
+            }
+          : prev
+      );
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : 'Kunne ikke avbestille');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -144,9 +175,9 @@ function DashboardContent() {
         <div className="space-y-8">
           <section>
             <h2 className="text-xl font-semibold text-gray-900 mb-4">{t('dash.registrations_heading')}</h2>
-            {payError && (
+            {(payError || cancelError) && (
               <div role="alert" className="mb-3 bg-red-50 border border-red-200 text-red-800 text-sm rounded-lg px-4 py-2">
-                {payError}
+                {payError ?? cancelError}
               </div>
             )}
             {data && data.registrations.length > 0 ? (
@@ -193,6 +224,15 @@ function DashboardContent() {
                               )}
                             </div>
                           )}
+                        {r.cancellable && (
+                          <button
+                            onClick={() => cancelRegistration(r.id, r.courseName)}
+                            disabled={cancellingId === r.id}
+                            className="text-xs font-medium text-gray-600 hover:text-red-600 hover:underline disabled:opacity-50"
+                          >
+                            {cancellingId === r.id ? 'Avbestiller…' : t('dash.cancel_registration')}
+                          </button>
+                        )}
                         <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${badgeStyle}`}>
                           {badgeLabel}
                         </span>
@@ -220,7 +260,7 @@ function DashboardContent() {
           {!(noProfile && isAdmin) && (
             <ProfileSection
               profile={data?.profile ?? null}
-              email={data?.profile?.email ?? ''}
+              email={data?.email ?? ''}
               onSaved={setProfile}
             />
           )}
@@ -228,6 +268,11 @@ function DashboardContent() {
           <PasswordSection
             hasPassword={data?.hasPassword ?? false}
             onChanged={() => setData((prev) => (prev ? { ...prev, hasPassword: true } : prev))}
+          />
+
+          <EmailSection
+            email={data?.email ?? ''}
+            hasPassword={data?.hasPassword ?? false}
           />
 
           <Link
@@ -245,6 +290,8 @@ function DashboardContent() {
             <h3 className="text-xl font-semibold mb-2">{t('dash.see_all_courses')}</h3>
             <p className="text-blue-100">{t('dash.see_all_courses_sub')}</p>
           </Link>
+
+          <DeleteAccountSection hasPassword={data?.hasPassword ?? false} />
         </div>
       </div>
     </div>

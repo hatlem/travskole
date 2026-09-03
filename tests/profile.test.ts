@@ -4,6 +4,7 @@ import {
   validateProfileInput,
   validatePasswordChange,
   childDeleteBlockedError,
+  validateEmailChange,
 } from '@/lib/profile';
 
 const NOW = new Date('2026-09-03T12:00:00Z');
@@ -121,5 +122,37 @@ describe('childDeleteBlockedError', () => {
   });
   it('allows removal without active registrations', () => {
     expect(childDeleteBlockedError(0)).toBeNull();
+  });
+});
+
+describe('validateEmailChange', () => {
+  const base = { currentEmail: 'gammel@example.com', hasPassword: false };
+
+  it('accepts a new address', () => {
+    expect(validateEmailChange({ ...base, newEmail: 'ny@example.com' })).toBeNull();
+  });
+
+  it('rejects a malformed address', () => {
+    expect(validateEmailChange({ ...base, newEmail: 'ikke-en-epost' })).toBe('Ugyldig e-postadresse');
+  });
+
+  it('rejects the address the account already has, ignoring case and spacing', () => {
+    expect(validateEmailChange({ ...base, newEmail: '  GAMMEL@example.com ' })).toBe(
+      'Dette er allerede e-postadressen din'
+    );
+  });
+
+  it('requires the password when the account has one', () => {
+    expect(
+      validateEmailChange({ ...base, hasPassword: true, newEmail: 'ny@example.com' })
+    ).toBe('Du må oppgi passordet ditt');
+    expect(
+      validateEmailChange({
+        ...base,
+        hasPassword: true,
+        currentPassword: 'hemmelig1',
+        newEmail: 'ny@example.com',
+      })
+    ).toBeNull();
   });
 });

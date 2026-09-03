@@ -106,6 +106,33 @@ export function validatePasswordChange(input: PasswordChangeInput): string | nul
   return null;
 }
 
+export interface EmailChangeInput {
+  currentEmail: string;
+  newEmail: string;
+  /** Har kontoen et passord? Da må det oppgis for å bytte adresse. */
+  hasPassword: boolean;
+  currentPassword?: string;
+}
+
+/** Enkel formatsjekk — den virkelige verifiseringen er bekreftelseslenken. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Validerer en forespørsel om ny innloggingsadresse. At adressen er ledig
+ * sjekkes mot databasen i ruten.
+ */
+export function validateEmailChange(input: EmailChangeInput): string | null {
+  const next = (input.newEmail ?? '').trim().toLowerCase();
+  const current = (input.currentEmail ?? '').trim().toLowerCase();
+
+  if (!EMAIL_PATTERN.test(next)) return 'Ugyldig e-postadresse';
+  if (next.length > 200) return 'E-postadressen er for lang';
+  if (next === current) return 'Dette er allerede e-postadressen din';
+  if (input.hasPassword && !input.currentPassword) return 'Du må oppgi passordet ditt';
+
+  return null;
+}
+
 /**
  * Barn med aktive påmeldinger kan ikke fjernes — påmeldingshistorikken ville
  * mistet deltakeren. Kanseller påmeldingene først.

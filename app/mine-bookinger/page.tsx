@@ -7,6 +7,8 @@ import { bookingOwnershipWhere } from '@/lib/bookings/ownership';
 import { parsePaymentMethods } from '@/lib/payments';
 import { paymentStatusBadge } from '@/lib/payments/badge';
 import { BookingCheckout } from '@/components/BookingCheckout';
+import { BookingCancel } from '@/components/BookingCancel';
+import { selfCancelBookingError } from '@/lib/registrations/cancel-rules';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Mine bookinger' };
@@ -53,6 +55,8 @@ export default async function MineBookingerPage() {
               providers.length > 0 &&
               amountKr != null && amountKr > 0 &&
               (b.paymentStatus === 'none' || b.paymentStatus === 'pending');
+            // Samme regel som avbestillings-endepunktet bruker.
+            const canCancel = selfCancelBookingError(b) === null;
             return (
               <li key={b.id} className="rounded-lg border border-gray-200 bg-white p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -73,6 +77,11 @@ export default async function MineBookingerPage() {
                 {canPay && (
                   <div className="mt-3">
                     <BookingCheckout bookingRequestId={b.id} providers={providers} />
+                  </div>
+                )}
+                {canCancel && (
+                  <div className="mt-3">
+                    <BookingCancel bookingRequestId={b.id} />
                   </div>
                 )}
               </li>

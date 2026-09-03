@@ -3,8 +3,10 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import logger from '@/lib/logger';
-import { emitEvent } from '@/lib/events/bus';
-import { normalizeEmail } from '@/lib/crm/normalize';
+import {
+  emitRegistrationStatusEvent,
+  promoteFromWaitlist,
+} from '@/lib/registrations/cancel';
 import DOMPurify from 'isomorphic-dompurify';
 import { validateProfileInput } from '@/lib/profile';
 import { updateChildForParent } from '@/lib/children';
@@ -40,82 +42,12 @@ export async function PUT(
 
     // Hendelsesbuss: registrering bekreftet/kansellert (fire-safe)
     if (status === 'confirmed' || status === 'cancelled') {
-      (async () => {
-        // Registration har ingen egen e-post — den ligger på parent.user, som i CRM-broen.
-        const regWithParent = await prisma.registration.findUnique({
-          where: { id: registration.id },
-          select: { parent: { select: { user: { select: { email: true } } } } },
-        });
-        const email = normalizeEmail(regWithParent?.parent.user.email);
-        const contact = email
-          ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
-          : null;
-        // Ingen dedupeKey her: statusendringer er tilsiktet append-only — samme
-        // status kan settes flere ganger og skal hver gang gi et eget hendelses-innslag.
-        await emitEvent({
-          type: status === 'confirmed' ? 'registration.confirmed' : 'registration.cancelled',
-          source: 'server',
-          contactId: contact?.id ?? null,
-          meta: { registrationId: registration.id, courseId: registration.courseId },
-        });
-      })().catch(() => {});
+      emitRegistrationStatusEvent(registration.id, registration.courseId, status).catch(() => {});
     }
 
-    // If a registration was cancelled, check for waitlist entries
+    // Ved kansellering: rykk opp fra venteliste og gjenåpne kurset ved behov.
     if (status === 'cancelled') {
-      const cancelledReg = await prisma.registration.findUnique({
-        where: { id: Number(id) },
-        include: { course: true },
-      });
-
-      if (cancelledReg) {
-        const course = cancelledReg.course;
-        // Count active registrations
-        const activeCount = await prisma.registration.count({
-          where: {
-            courseId: course.id,
-            status: { in: ['pending', 'confirmed'] },
-          },
-        });
-
-        // If now under maxParticipants, promote first waitlist entry
-        if (course.maxParticipants && activeCount < course.maxParticipants) {
-          const firstWaitlist = await prisma.registration.findFirst({
-            where: { courseId: course.id, status: 'waitlist' },
-            orderBy: { createdAt: 'asc' },
-            include: {
-              parent: { include: { user: true } },
-              child: true,
-              course: true,
-            },
-          });
-
-          if (firstWaitlist) {
-            // Promote to pending
-            await prisma.registration.update({
-              where: { id: firstWaitlist.id },
-              data: { status: 'pending' },
-            });
-
-            // Send notification email
-            const { sendWaitlistPromotionEmail } = await import('@/lib/mail');
-            await sendWaitlistPromotionEmail({
-              parentName: firstWaitlist.parent.name,
-              parentEmail: firstWaitlist.parent.user.email,
-              childName: firstWaitlist.child?.name ?? firstWaitlist.parent.name,
-              courseName: firstWaitlist.course.name,
-            }).catch(() => {});
-          }
-
-          // If course was "full", re-open it
-          if (course.status === 'full') {
-            await prisma.course.update({
-              where: { id: course.id },
-              data: { status: 'open' },
-            });
-          }
-        }
-      }
+      await promoteFromWaitlist(Number(id));
     }
 
     return NextResponse.json({ registration });

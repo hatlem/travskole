@@ -24,10 +24,13 @@ export interface DashboardRegistration {
   paymentStatus: string;
   priceKr: number | null;
   payableMethods: string[];
+  cancellable: boolean;
 }
 
 export interface DashboardData {
   role?: string;
+  /** Kontoens innloggingsadresse — finnes også for brukere uten profil. */
+  email?: string;
   hasPassword?: boolean;
   profile: DashboardProfile | null;
   children: DashboardChild[];

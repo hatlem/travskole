@@ -345,6 +345,52 @@ export async function sendMagicLinkEmail(email: string, token: string) {
   );
 }
 
+/**
+ * Bekreftelseslenke til den NYE adressen ved e-postbytte. Byttet skjer først
+ * når mottakeren klikker — slik kan ingen flytte kontoen sin til en adresse de
+ * ikke kontrollerer.
+ */
+export async function sendEmailChangeVerification(newEmail: string, token: string) {
+  const siteName = await getSiteName();
+  const baseUrl = getBaseUrl();
+  const url = `${baseUrl}/bekreft-epost?token=${encodeURIComponent(token)}`;
+  await sendMail(
+    newEmail,
+    `Bekreft ny e-postadresse — ${siteName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Bekreft ny e-postadresse</h2>
+      <p>Du har bedt om å bruke denne adressen til å logge inn hos ${escapeHtml(siteName)}.</p>
+      <p style="margin:24px 0">
+        <a href="${url}" style="background:${BRAND.blue};color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">
+          Bekreft e-postadressen
+        </a>
+      </p>
+      <p style="color:#666;font-size:14px">Lenken utløper om 30 minutter. Hvis du ikke ba om dette, kan du ignorere denne e-posten — adressen din blir ikke endret.</p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+    </div>`,
+  );
+}
+
+/**
+ * Varsel til den GAMLE adressen om at et bytte er bedt om. Går ut selv om byttet
+ * aldri bekreftes, så eieren av kontoen oppdager et forsøk.
+ */
+export async function sendEmailChangeNotice(oldEmail: string, newEmail: string) {
+  const siteName = await getSiteName();
+  const contactEmail = await getAdminEmail();
+  await sendMail(
+    oldEmail,
+    `E-postadressen din er i ferd med å byttes — ${siteName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Forespørsel om ny e-postadresse</h2>
+      <p>Vi har mottatt en forespørsel om å bytte innloggingsadressen på kontoen din til <strong>${escapeHtml(newEmail)}</strong>.</p>
+      <p>Byttet skjer først når den nye adressen er bekreftet.</p>
+      <p style="color:#666;font-size:14px">Var ikke dette deg? Ta kontakt med oss${contactEmail ? ` på ${escapeHtml(contactEmail)}` : ''} med én gang.</p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+    </div>`,
+  );
+}
+
 export async function sendBookingAdminNotification(data: BookingEmail) {
   const adminEmail = await getAdminEmail();
   const date = data.preferredDate ? new Date(data.preferredDate).toLocaleDateString('nb-NO') : 'Ikke spesifisert';

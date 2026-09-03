@@ -10,13 +10,7 @@ import {
   validateRoleChange,
   validateAccountAction,
 } from '@/lib/user-admin';
-
-/** Antall superadmins som fortsatt kan logge inn (for siste-superadmin-vern). */
-function countActiveSuperadmins() {
-  return prisma.user.count({
-    where: { role: 'superadmin', deactivatedAt: null, anonymizedAt: null },
-  });
-}
+import { anonymizeAccount, countActiveSuperadmins } from '@/lib/account-anonymize';
 
 const patchSchema = z.object({
   role: z.enum(['parent', 'admin', 'superadmin']).optional(),
@@ -228,29 +222,7 @@ export async function DELETE(
     );
     if (err) return NextResponse.json({ error: err }, { status: 403 });
 
-    const now = new Date();
-    await prisma.$transaction(async (tx) => {
-      if (target.parent) {
-        await tx.child.updateMany({
-          where: { parentId: target.parent.id, deletedAt: null },
-          data: { name: '[slettet]', birthdate: null, allergies: null, deletedAt: now },
-        });
-        await tx.parent.update({
-          where: { id: target.parent.id },
-          data: { name: '[slettet]', phone: '', address: null, deletedAt: now },
-        });
-      }
-      // Frigjør e-posten og fjern innloggingsmulighet.
-      await tx.user.update({
-        where: { id },
-        data: {
-          email: `anonymisert-${id}@slettet.local`,
-          passwordHash: null,
-          anonymizedAt: now,
-          deactivatedAt: now,
-        },
-      });
-    });
+    await anonymizeAccount(id);
 
     logActivity({
       action: 'delete',

@@ -6,63 +6,102 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { assignableRoles } from '@/lib/user-admin';
 import { issueMagicLink } from '@/lib/magic-link';
+import {
+  buildUserWhere,
+  normalizePaging,
+  type AccountStatusFilter,
+} from '@/lib/user-query';
 import logger from '@/lib/logger';
 
-export async function GET() {
+/**
+ * Brukerlista, filtrert og sidedelt i databasen.
+ *
+ * Hentet tidligere alle brukere med barn og påmeldinger i én slurk og filtrerte
+ * i klienten — greit på hundre brukere, ikke på tusen. Nå kommer bare den siden
+ * som vises; statistikklinja telles med egne count-spørringer, så den viser
+ * fortsatt totaler og ikke bare det som er på skjermen.
+ */
+export async function GET(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
   try {
-    const users = await prisma.user.findMany({
-      orderBy: { createdAt: 'desc' },
-      select: {
-        id: true,
-        email: true,
-        role: true,
-        createdAt: true,
-        deactivatedAt: true,
-        anonymizedAt: true,
-        parent: {
-          where: { deletedAt: null },
-          select: {
-            id: true,
-            name: true,
-            phone: true,
-            address: true,
-            _count: {
-              select: {
-                children: true,
-                registrations: true,
+    const { searchParams } = new URL(request.url);
+    const where = buildUserWhere({
+      q: searchParams.get('q') ?? undefined,
+      role: searchParams.get('role') ?? undefined,
+      status: (searchParams.get('status') as AccountStatusFilter) ?? undefined,
+    });
+    const { page, perPage, skip } = normalizePaging(
+      searchParams.get('page'),
+      searchParams.get('perPage')
+    );
+
+    const [users, total, allUsers, parents, admins] = await prisma.$transaction([
+      prisma.user.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: perPage,
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          createdAt: true,
+          deactivatedAt: true,
+          anonymizedAt: true,
+          parent: {
+            where: { deletedAt: null },
+            select: {
+              id: true,
+              name: true,
+              phone: true,
+              address: true,
+              _count: {
+                select: {
+                  children: true,
+                  registrations: true,
+                },
               },
-            },
-            children: {
-              where: { deletedAt: null },
-              select: {
-                id: true,
-                name: true,
-                birthdate: true,
-                allergies: true,
+              children: {
+                where: { deletedAt: null },
+                select: {
+                  id: true,
+                  name: true,
+                  birthdate: true,
+                  allergies: true,
+                },
               },
-            },
-            registrations: {
-              select: {
-                id: true,
-                status: true,
-                createdAt: true,
-                course: { select: { id: true, name: true } },
-                child: { select: { name: true } },
+              registrations: {
+                select: {
+                  id: true,
+                  status: true,
+                  createdAt: true,
+                  course: { select: { id: true, name: true } },
+                  child: { select: { name: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+                take: 10,
               },
-              orderBy: { createdAt: 'desc' },
-              take: 10,
             },
           },
         },
-      },
-    });
+      }),
+      prisma.user.count({ where }),
+      prisma.user.count(),
+      prisma.user.count({ where: { role: 'parent' } }),
+      prisma.user.count({ where: { role: { in: ['admin', 'superadmin'] } } }),
+    ]);
 
-    return NextResponse.json({ users });
+    return NextResponse.json({
+      users,
+      total,
+      page,
+      perPage,
+      stats: { total: allUsers, parents, admins },
+    });
   } catch (error) {
     logger.error('Error fetching users', { error });
     return NextResponse.json({ error: 'Intern feil' }, { status: 500 });
