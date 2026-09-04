@@ -20,6 +20,7 @@ export default function MagicLinkClient() {
     const token = searchParams.get('token');
 
     if (!email || !token) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- innlogging med engangstoken må skje etter montering
       setError('Ugyldig innloggingslenke.');
       return;
     }

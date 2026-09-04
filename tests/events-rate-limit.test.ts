@@ -3,7 +3,7 @@ import { createRateLimiter } from '@/lib/events/rate-limit';
 
 describe('createRateLimiter', () => {
   it('allows up to limit within the window, then blocks', () => {
-    let t = 1_000_000;
+    const t = 1_000_000;
     const rl = createRateLimiter({ limit: 3, windowMs: 60_000, now: () => t });
     expect(rl.allow('a')).toBe(true);
     expect(rl.allow('a')).toBe(true);

@@ -45,6 +45,7 @@ export default function AdminTeksterPage() {
       router.push('/admin');
       return;
     }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
     fetchOverrides();
   }, [session, router, fetchOverrides]);
 

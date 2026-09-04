@@ -2,15 +2,17 @@
 
 import { FeedbackForm } from "@/components/FeedbackForm";
 import { useStrings } from "@/components/SettingsProvider";
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 export default function FeedbackPage() {
   const t = useStrings();
-  const [pageUrl, setPageUrl] = useState("");
-
-  useEffect(() => {
-    setPageUrl(window.location.href);
-  }, []);
+  // window finnes ikke under server-rendering; useSyncExternalStore gir tom
+  // streng der og den ekte adressen i nettleseren, uten en state-settende effekt.
+  const pageUrl = useSyncExternalStore(
+    () => () => {},
+    () => window.location.href,
+    () => "",
+  );
 
   return (
     <main className="min-h-screen bg-gray-50 py-16 px-4">

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 export interface EditableUser {
   id: number;
@@ -24,36 +24,18 @@ const inputClass =
   'w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent';
 
 export function UserFormModal({ open, mode, user, isSuperAdmin, onClose, onSaved }: UserFormModalProps) {
-  const [email, setEmail] = useState('');
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
-  const [address, setAddress] = useState('');
-  const [role, setRole] = useState('parent');
-  const [sendMagicLink, setSendMagicLink] = useState(true);
+  // Feltene fylles fra brukeren ved montering. Kall-stedet monterer modalen med
+  // en key som endrer seg per bruker/modus, så en ny bruker gir en ny instans
+  // med ferske verdier — tidligere gjorde en effekt den jobben ved hver åpning.
+  const editing = mode === 'edit' && user;
+  const [email, setEmail] = useState(editing ? user.email : '');
+  const [name, setName] = useState(editing ? user.name ?? '' : '');
+  const [phone, setPhone] = useState(editing ? user.phone ?? '' : '');
+  const [address, setAddress] = useState(editing ? user.address ?? '' : '');
+  const [role, setRole] = useState(editing ? user.role : 'parent');
+  const [sendMagicLink, setSendMagicLink] = useState(!editing);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-
-  // (Re)initialiser feltene hver gang modalen åpnes.
-  useEffect(() => {
-    if (!open) return;
-    setError(null);
-    setSaving(false);
-    if (mode === 'edit' && user) {
-      setEmail(user.email);
-      setName(user.name ?? '');
-      setPhone(user.phone ?? '');
-      setAddress(user.address ?? '');
-      setRole(user.role);
-      setSendMagicLink(false);
-    } else {
-      setEmail('');
-      setName('');
-      setPhone('');
-      setAddress('');
-      setRole('parent');
-      setSendMagicLink(true);
-    }
-  }, [open, mode, user]);
 
   if (!open) return null;
 

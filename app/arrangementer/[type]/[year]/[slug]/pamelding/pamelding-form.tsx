@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { useSession } from 'next-auth/react';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { trackClientEvent } from '@/components/Tracker';
+import { pushDataLayerEvent } from '@/lib/gtm';
 
 const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requireTerms: boolean) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
@@ -192,15 +193,11 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
   };
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
-      w.dataLayer = w.dataLayer || [];
-      w.dataLayer.push({
-        event: 'pamelding_startet',
-        course_name: courseName,
-        course_type: type,
-      });
-    }
+    pushDataLayerEvent({
+      event: 'pamelding_startet',
+      course_name: courseName,
+      course_type: type,
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -240,15 +237,11 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
 
   const onInvalid = () => {
     setConsentOpen(true);
-    if (typeof window !== 'undefined') {
-      const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
-      w.dataLayer = w.dataLayer || [];
-      w.dataLayer.push({
-        event: 'pamelding_skjemafeil',
-        course_name: courseName,
-        course_type: type,
-      });
-    }
+    pushDataLayerEvent({
+      event: 'pamelding_skjemafeil',
+      course_name: courseName,
+      course_type: type,
+    });
   };
 
   const onSubmit = async (data: RegistrationFormData) => {
@@ -281,16 +274,12 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
       const newCheckoutToken: string | undefined = responseBody?.checkoutToken;
 
       // GTM-konvertering: fullført påmelding (GA4-tag i container fyrer på dette eventet)
-      if (typeof window !== 'undefined') {
-        const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
-        w.dataLayer = w.dataLayer || [];
-        w.dataLayer.push({
-          event: 'pamelding_fullfort',
-          course_name: courseName,
-          course_type: type,
-          waitlist: isWaitlist,
-        });
-      }
+      pushDataLayerEvent({
+        event: 'pamelding_fullfort',
+        course_name: courseName,
+        course_type: type,
+        waitlist: isWaitlist,
+      });
 
       // Faktura-only, eller ukjent registrerings-id (bør ikke skje): uendret dashboard-redirect.
       if (!newRegistrationId || payableMethods.length === 0) {

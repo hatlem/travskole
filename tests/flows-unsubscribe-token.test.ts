@@ -101,10 +101,10 @@ describe('unsubscribe token', () => {
     });
 
     it('should never throw, even with invalid input', () => {
-      expect(() => verifyUnsubscribeToken(null as any)).not.toThrow();
-      expect(() => verifyUnsubscribeToken(undefined as any)).not.toThrow();
-      expect(() => verifyUnsubscribeToken(123 as any)).not.toThrow();
-      expect(() => verifyUnsubscribeToken({} as any)).not.toThrow();
+      expect(() => verifyUnsubscribeToken(null as unknown as string)).not.toThrow();
+      expect(() => verifyUnsubscribeToken(undefined as unknown as string)).not.toThrow();
+      expect(() => verifyUnsubscribeToken(123 as unknown as string)).not.toThrow();
+      expect(() => verifyUnsubscribeToken({} as unknown as string)).not.toThrow();
     });
 
     it('should use env secret when no param provided', () => {

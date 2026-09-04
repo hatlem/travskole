@@ -115,6 +115,7 @@ export default function AdminRegistrationsPage() {
   }, [toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
     fetchRegistrations();
   }, [fetchRegistrations]);
 
@@ -322,9 +323,6 @@ export default function AdminRegistrationsPage() {
       return true;
     });
   }, [registrations, statusFilter, courseFilter, searchQuery]);
-
-  // Reset page when filters change
-  useEffect(() => setPage(1), [searchQuery, statusFilter, courseFilter]);
 
   const paginatedRegistrations = filteredRegistrations.slice((page - 1) * perPage, page * perPage);
 
@@ -622,14 +620,20 @@ export default function AdminRegistrationsPage() {
           <input
             type="text"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setPage(1);
+              setSearchQuery(e.target.value);
+            }}
             placeholder="Søk etter kurs, barn, forelder eller e-post..."
             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
           />
         </div>
         <select
           value={courseFilter}
-          onChange={(e) => setCourseFilter(e.target.value)}
+          onChange={(e) => {
+            setPage(1);
+            setCourseFilter(e.target.value);
+          }}
           className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
         >
           <option value="all">Alle kurs</option>
@@ -641,7 +645,10 @@ export default function AdminRegistrationsPage() {
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
+          onChange={(e) => {
+            setPage(1);
+            setStatusFilter(e.target.value);
+          }}
           className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
         >
           <option value="all">Alle statuser</option>

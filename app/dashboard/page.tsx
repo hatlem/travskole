@@ -53,7 +53,7 @@ function DashboardContent() {
       if (!res.ok || !body.url) {
         throw new Error(body.error ?? 'Kunne ikke starte betaling');
       }
-      window.location.href = body.url;
+      window.location.assign(body.url);
     } catch (err) {
       setPayError(err instanceof Error ? err.message : 'Kunne ikke starte betaling');
       setPayingId(null);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 
 interface SettingGroup {
@@ -127,11 +127,7 @@ export default function AdminSettingsPage() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  async function fetchSettings() {
+  const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/settings');
       if (!res.ok) throw new Error('Kunne ikke hente innstillinger');
@@ -142,7 +138,12 @@ export default function AdminSettingsPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
+    fetchSettings();
+  }, [fetchSettings]);
 
   async function handleSave() {
     setSaving(true);

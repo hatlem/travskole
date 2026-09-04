@@ -3,7 +3,7 @@ import {
   buildAnthropicRequest, parseAnthropicResponse, createAnthropicProvider,
 } from '@/lib/ai/anthropic';
 import {
-  buildOpenAiRequest, parseOpenAiResponse, createOpenAiProvider,
+  buildOpenAiRequest, parseOpenAiResponse,
 } from '@/lib/ai/openai';
 import { getLLMProvider, isAiConfigured } from '@/lib/ai/provider';
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import type { AdminNotice } from '@/lib/admin-notices';
 
@@ -10,23 +10,29 @@ import type { AdminNotice } from '@/lib/admin-notices';
  * demper kun for resten av nettleserøkten, så oppgaven ikke glemmes.
  */
 export default function SuperadminNoticesDialog({ notices }: { notices: AdminNotice[] }) {
-  const [open, setOpen] = useState(false);
+  const [dismissedNow, setDismissedNow] = useState(false);
 
   // Sesjonsnøkkelen inkluderer varsel-id-ene: dukker et NYTT varsel opp senere
   // i samme økt, vises dialogen igjen selv om tidligere varsler ble dempet.
   const dismissKey = `superadmin-notices-dismissed:${notices.map((n) => n.id).sort().join(',')}`;
 
-  useEffect(() => {
-    if (notices.length === 0) return;
-    try {
-      if (sessionStorage.getItem(dismissKey)) return;
-    } catch {
-      // sessionStorage utilgjengelig (f.eks. private mode-varianter): vis dialogen.
-    }
-    setOpen(true);
-  }, [notices.length, dismissKey]);
+  // sessionStorage finnes ikke under server-rendering. Server-snapshotet sier
+  // «dempet», så dialogen dukker først opp etter hydrering — samme oppførsel som
+  // den gamle monterings-effekten, men uten å sette state fra en effekt.
+  const dismissedEarlier = useSyncExternalStore(
+    () => () => {},
+    () => {
+      try {
+        return sessionStorage.getItem(dismissKey) !== null;
+      } catch {
+        // sessionStorage utilgjengelig (f.eks. private mode-varianter): vis dialogen.
+        return false;
+      }
+    },
+    () => true,
+  );
 
-  if (notices.length === 0 || !open) return null;
+  if (notices.length === 0 || dismissedEarlier || dismissedNow) return null;
 
   const dismiss = () => {
     try {
@@ -34,7 +40,7 @@ export default function SuperadminNoticesDialog({ notices }: { notices: AdminNot
     } catch {
       // Ignorer — dialogen vises da igjen ved neste besøk, som er trygt.
     }
-    setOpen(false);
+    setDismissedNow(true);
   };
 
   return (

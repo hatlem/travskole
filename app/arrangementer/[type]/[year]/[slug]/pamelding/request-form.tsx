@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSettings } from '@/components/SettingsProvider';
+import { pushDataLayerEvent } from '@/lib/gtm';
 
 interface RequestFormProps {
   courseId: number;
@@ -69,11 +70,7 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
         const data = await res.json();
         throw new Error(data.error || 'Noe gikk galt');
       }
-      if (typeof window !== 'undefined') {
-        const w = window as unknown as { dataLayer?: Record<string, unknown>[] };
-        w.dataLayer = w.dataLayer || [];
-        w.dataLayer.push({ event: 'foresporsel_sendt', course_name: courseName, course_type: courseType });
-      }
+      pushDataLayerEvent({ event: 'foresporsel_sendt', course_name: courseName, course_type: courseType });
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');

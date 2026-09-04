@@ -165,6 +165,7 @@ export default function AdminCoursesPage() {
   };
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
     fetchCourses();
   }, []);
 
@@ -216,9 +217,6 @@ export default function AdminCoursesPage() {
 
     return list;
   }, [courses, search, typeFilter, statusFilter, sortField, sortDir]);
-
-  // Reset page when filters change
-  useEffect(() => setPage(1), [search, typeFilter, statusFilter]);
 
   const paginatedCourses = filtered.slice((page - 1) * perPage, page * perPage);
 
@@ -325,13 +323,19 @@ export default function AdminCoursesPage() {
             type="text"
             placeholder="Søk etter kurs..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setPage(1);
+              setSearch(e.target.value);
+            }}
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
           />
         </div>
         <select
           value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+          onChange={(e) => {
+            setPage(1);
+            setTypeFilter(e.target.value as TypeFilter);
+          }}
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
         >
           <option value="alle">Alle typer</option>
@@ -341,7 +345,10 @@ export default function AdminCoursesPage() {
         </select>
         <select
           value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          onChange={(e) => {
+            setPage(1);
+            setStatusFilter(e.target.value as StatusFilter);
+          }}
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
         >
           <option value="alle">Alle statuser</option>

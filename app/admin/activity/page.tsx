@@ -75,9 +75,13 @@ export default function AdminActivityPage() {
   const [searchDebounced, setSearchDebounced] = useState('');
   const { toast } = useToast();
 
-  // Debounce search
+  // Debouncet søk. Et nytt søk gir et nytt treffsett, så vi hopper samtidig
+  // tilbake til side 1 — ellers ble man stående på en side som ikke finnes.
   useEffect(() => {
-    const t = setTimeout(() => setSearchDebounced(search), 300);
+    const t = setTimeout(() => {
+      setPage(1);
+      setSearchDebounced(search);
+    }, 300);
     return () => clearTimeout(t);
   }, [search]);
 
@@ -104,13 +108,9 @@ export default function AdminActivityPage() {
   }, [page, actionFilter, entityFilter, searchDebounced, toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
     fetchLogs();
   }, [fetchLogs]);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setPage(1);
-  }, [actionFilter, entityFilter, searchDebounced]);
 
   const totalPages = Math.ceil(total / PER_PAGE);
 
@@ -137,7 +137,10 @@ export default function AdminActivityPage() {
         </div>
         <select
           value={actionFilter}
-          onChange={e => setActionFilter(e.target.value)}
+          onChange={e => {
+            setPage(1);
+            setActionFilter(e.target.value);
+          }}
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="">Alle handlinger</option>
@@ -149,7 +152,10 @@ export default function AdminActivityPage() {
         </select>
         <select
           value={entityFilter}
-          onChange={e => setEntityFilter(e.target.value)}
+          onChange={e => {
+            setPage(1);
+            setEntityFilter(e.target.value);
+          }}
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="">Alle typer</option>

@@ -123,6 +123,7 @@ export default function AdminUsersPage() {
   }, [toast, page, searchQuery, roleFilter, statusFilter]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
     fetchUsers();
   }, [fetchUsers]);
 
@@ -660,6 +661,7 @@ export default function AdminUsersPage() {
 
       {formModal && (
         <UserFormModal
+          key={`${formModal.mode}-${formModal.user?.id ?? 'ny'}`}
           open
           mode={formModal.mode}
           user={formModal.user}

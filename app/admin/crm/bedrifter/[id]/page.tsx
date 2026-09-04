@@ -57,7 +57,6 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
   const { id } = use(params);
   const [org, setOrg] = useState<OrgDetail | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
-  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');
   const { toast } = useToast();
@@ -68,7 +67,6 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
     try {
       const res = await fetch(`/api/admin/crm/organizations/${id}`, { signal: controller.signal });
       if (!res.ok) throw new Error('Kunne ikke laste bedriftdetaljer');
@@ -82,13 +80,13 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       toast(err instanceof Error ? err.message : 'Kunne ikke laste bedriftdetaljer', 'error');
     } finally {
       if (abortRef.current === controller) {
-        setLoading(false);
         setInitialLoading(false);
       }
     }
   }, [id, toast]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- bevisst klientside lasting ved montering
     load();
   }, [load]);
 
