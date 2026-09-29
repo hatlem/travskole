@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { paymentStatusBadge } from '@/lib/payments/badge';
+import { StageEditor } from './StageEditor';
 
 interface DealCard {
   id: number;
@@ -43,15 +44,17 @@ export default function PipelinePage() {
   const [loadError, setLoadError] = useState(false);
   const [dragId, setDragId] = useState<number | null>(null);
   const [movingIds, setMovingIds] = useState<Set<number>>(new Set());
+  const [editingStages, setEditingStages] = useState(false);
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
+  // silent: oppdater tavla uten skjelett (brukes etter stadieredigering)
+  const load = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
 
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/admin/crm/pipelines', { signal: controller.signal });
       if (!res.ok) throw new Error('Kunne ikke laste pipeline');
@@ -61,8 +64,10 @@ export default function PipelinePage() {
       setLoadError(false);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
-      setLoadError(true);
-      setPipelines([]);
+      if (!silent) {
+        setLoadError(true);
+        setPipelines([]);
+      }
       toast(err instanceof Error ? err.message : 'Kunne ikke laste pipeline', 'error');
     } finally {
       if (abortRef.current === controller) {
@@ -72,7 +77,7 @@ export default function PipelinePage() {
   }, [toast]);
 
   useEffect(() => {
-    const t = setTimeout(load, 0);
+    const t = setTimeout(() => load(), 0);
     return () => clearTimeout(t);
   }, [load]);
 
@@ -189,6 +194,28 @@ export default function PipelinePage() {
         >
           {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
+      )}
+
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <h2 className="font-semibold text-gray-900">{pipeline.name}</h2>
+        <button
+          onClick={() => setEditingStages(true)}
+          className="border border-gray-300 bg-white text-gray-700 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50"
+        >
+          Rediger stadier
+        </button>
+      </div>
+
+      {editingStages && (
+        <StageEditor
+          pipelineId={pipeline.id}
+          pipelineName={pipeline.name}
+          stages={pipeline.stages.map((s) => ({
+            id: s.id, name: s.name, position: s.position, isWon: s.isWon, isLost: s.isLost, dealCount: s.deals.length,
+          }))}
+          onClose={() => setEditingStages(false)}
+          onChanged={() => load({ silent: true })}
+        />
       )}
 
       <div className="flex gap-4 overflow-x-auto pb-4">
