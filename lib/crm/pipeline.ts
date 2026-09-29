@@ -10,14 +10,18 @@ const DEFAULT_STAGES = [
   { name: 'Tapt', position: 5, isWon: false, isLost: true },
 ] as const;
 
-/**
- * Idempotent: returnerer første pipeline, eller oppretter standard-pipelinen
- * "Arrangementsbooking" med faste stadier ved første kall.
- */
 const PIPELINE_INCLUDE = {
-  stages: { orderBy: { position: 'asc' as const }, select: { id: true, name: true } },
+  stages: {
+    orderBy: [{ position: 'asc' as const }, { id: 'asc' as const }],
+    select: { id: true, name: true, position: true, isWon: true, isLost: true },
+  },
 };
 
+/**
+ * Idempotent: returnerer første pipeline, eller oppretter standard-pipelinen
+ * "Arrangementsbooking" med standardstadier ved første kall. Stadiene kan
+ * deretter redigeres av admin — broen finner dem via rolle, ikke navn.
+ */
 export async function ensureDefaultPipeline() {
   const existing = await prisma.pipeline.findFirst({
     orderBy: { id: 'asc' },
@@ -45,4 +49,13 @@ export async function ensureDefaultPipeline() {
     }
     throw error;
   }
+}
+
+/** Pipelinens stadier sortert etter posisjon, eller null hvis pipelinen ikke finnes. */
+export async function loadPipelineStages(pipelineId: number) {
+  const pipeline = await prisma.pipeline.findUnique({
+    where: { id: pipelineId },
+    include: PIPELINE_INCLUDE,
+  });
+  return pipeline?.stages ?? null;
 }
