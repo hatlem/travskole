@@ -89,6 +89,11 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Domener nye avsenderadresser må ligge på (må også verifiseres i ACS)
   sender_allowed_domains: 'bjerke.no',
   marketing_optin_text: 'Ja takk, jeg vil gjerne få tilbud og nyheter fra Bjerke Travbane på e-post. Du kan melde deg av når som helst.',
+  // KI-personalisering: hvilke historikkfelt som sendes til LLM (dataminimering)
+  // og hvor lenge et utkast venter på godkjenning før originalen sendes.
+  ai_context_include_history: 'true',
+  ai_context_include_value: 'false',
+  ai_review_timeout_hours: '48',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
@@ -125,6 +130,8 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'sender_allowed_domains',
   'marketing_allow_',
   'ai_analysis_last_',
+  'ai_context_',
+  'ai_review_',
   'data_retention_days',
 ];
 

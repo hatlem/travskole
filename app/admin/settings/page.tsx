@@ -144,6 +144,15 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'og_tags', label: 'Delingsbilde: emneknagger (én per linje)', type: 'textarea', placeholder: 'Kurs\nSommerleirer\nDobbeltsulky' },
     ],
   },
+  {
+    title: 'KI-personalisering',
+    description: 'Hvilke opplysninger om mottakeren som sendes til KI-leverandøren når en e-post personaliseres, og hvor lenge KI-utkast venter på godkjenning. Gjelder kun når KI er slått på på serveren.',
+    fields: [
+      { key: 'ai_context_include_history', label: 'Del mottakerens tidligere arrangementer og kurs med KI', type: 'toggle', help: 'Arrangementstype, dato, antall gjester og kursnavn/år — kun mottakerens egne, maks de fem siste. Av = KI ser bare navn og organisasjon.' },
+      { key: 'ai_context_include_value', label: 'Del verdien (kr) på tidligere arrangementer med KI', type: 'toggle', help: 'Av som standard. Slå bare på om e-postene faktisk skal kunne nevne beløp.' },
+      { key: 'ai_review_timeout_hours', label: 'Maks ventetid for godkjenning (timer)', type: 'text', placeholder: '48', help: 'Et KI-utkast som ikke er behandlet innen fristen, sendes automatisk som original (uten KI), så flyten aldri blir stående.' },
+    ],
+  },
 ];
 
 export default function AdminSettingsPage() {

@@ -24,7 +24,7 @@ import { sendMailAs } from '@/lib/mail';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
 import { resolveCourseMergeContext } from './course-merge';
-import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
+import { normalizeEmail } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
@@ -39,16 +39,28 @@ import { getSetting } from '@/lib/settings';
 export const REPLY_MAILBOX = 'registrering@bjerke.no';
 import { extractMessageIds } from '@/lib/tracking/reply-match';
 import { getLLMProvider } from '@/lib/ai/provider';
-import { validateAiRewrite } from '@/lib/ai/guardrails';
-import { personalizePrompt } from '@/lib/ai/prompts';
+import { personalizeForContact } from '@/lib/ai/personalize';
+import {
+  createPendingReview, findReview, parseReviewTimeoutHours, settleReview, type ReviewResolution,
+} from '@/lib/ai/review';
 import logger from '@/lib/logger';
+
+export type AiReviewMode = 'auto' | 'approve';
+
+/** KI-utkastet venter på godkjenning — runneren parkerer enrollmentet til `resumeAt`. */
+export interface PendingReviewResult {
+  kind: 'pending_review';
+  resumeAt: Date;
+}
 
 export type SendFlowEmailResult =
   | 'sent'
   | 'already_sent'
   | 'skipped_suppressed'
   | 'skipped_no_consent'
-  | 'failed';
+  | 'skipped_review'
+  | 'failed'
+  | PendingReviewResult;
 
 export interface SendFlowEmailInput {
   enrollmentId: number;
@@ -59,14 +71,18 @@ export interface SendFlowEmailInput {
   senderIdentityId: number;
   isMarketing: boolean;
   aiPersonalize?: boolean;
+  /** Mangler ⇒ 'auto' (eksisterende noder før godkjenningsmodus fantes). */
+  aiReview?: AiReviewMode;
+  flowId?: number;
   registrationId?: number | null;
+  now?: Date;
 }
 
 function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
   return `flow:${enrollmentId}:${nodeId}`;
 }
 
-function contactMergeTagData(contact: { name: string }): MergeTagData {
+export function contactMergeTagData(contact: { name: string }): MergeTagData {
   return {
     forelder_navn: contact.name,
     barnets_navn: '',
@@ -148,14 +164,78 @@ async function recoverFromFailedSend(
   });
 }
 
+type AiBodyResolution =
+  | { kind: 'send'; body: string; aiPersonalized: boolean }
+  | { kind: 'skip' }
+  | PendingReviewResult;
+
+function fromResolution(resolution: ReviewResolution, original: AiBodyResolution): AiBodyResolution {
+  switch (resolution.action) {
+    case 'wait': return { kind: 'pending_review', resumeAt: resolution.until };
+    case 'skip': return { kind: 'skip' };
+    case 'send_ai': return { kind: 'send', body: resolution.body, aiPersonalized: true };
+    default: return original;
+  }
+}
+
+/**
+ * KI-personalisering (opt-in per node, kun markedsføring): ren teksttransform
+ * FØR footer/sporing/dedupe. Et eksisterende godkjenningsutkast avgjør alltid
+ * utfallet (også om KI er slått av siden), så en beslutning aldri går tapt og
+ * modellen aldri kjøres to ganger for samme enrollment/node. Enhver
+ * KI-feil/avvisning ⇒ original kropp, aldri blokkert sending.
+ */
+async function resolveAiBody(
+  input: SendFlowEmailInput,
+  renderedBody: string,
+  subject: string,
+  contactName: string,
+): Promise<AiBodyResolution> {
+  const original: AiBodyResolution = { kind: 'send', body: renderedBody, aiPersonalized: false };
+  if (!input.isMarketing) return original;
+  const now = input.now ?? new Date();
+
+  const existing = await findReview(input.enrollmentId, input.nodeId);
+  if (existing) {
+    return fromResolution(await settleReview(input.enrollmentId, input.nodeId, existing, now), original);
+  }
+
+  if (!input.aiPersonalize) return original;
+  const provider = getLLMProvider();
+  if (!provider) return original;
+
+  const outcome = await personalizeForContact(provider, input.contactId, renderedBody);
+  if (!outcome.ok) {
+    logger.warn('KI-personalisering avvist eller feilet — sender original', {
+      contactId: input.contactId, reason: outcome.reason,
+    });
+    return original;
+  }
+
+  if (input.aiReview !== 'approve' || input.flowId === undefined) {
+    return { kind: 'send', body: outcome.body, aiPersonalized: true };
+  }
+
+  const review = await createPendingReview({
+    flowId: input.flowId,
+    enrollmentId: input.enrollmentId,
+    nodeId: input.nodeId,
+    contactId: input.contactId,
+    contactName,
+    subject,
+    originalBody: renderedBody,
+    aiBody: outcome.body,
+    factLines: outcome.factLines,
+    timeoutHours: parseReviewTimeoutHours(await getSetting('ai_review_timeout_hours')),
+    now,
+  });
+  return fromResolution(await settleReview(input.enrollmentId, input.nodeId, review, now), original);
+}
+
 export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlowEmailResult> {
   const contact = await prisma.contact.findUnique({
     where: { id: input.contactId },
-    select: {
-      email: true, name: true, stage: true, tags: true, organizationId: true,
-      organization: { select: { name: true } },
-      deals: { select: { eventType: true }, take: 3, orderBy: { createdAt: 'desc' } },
-    },
+    select: { email: true, name: true, organizationId: true },
   });
   if (!contact?.email) return 'failed';
 
@@ -193,36 +273,11 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const subject = replaceMergeTags(input.subject, mergeData);
   const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
 
-  // KI-personalisering (opt-in per node): ren teksttransform FØR footer/
-  // sporing/dedupe-maskineriet — enhver feil/avvisning ⇒ original kropp,
-  // aldri blokkert sending. Kun navn/org/stage/tags/deal-typer sendes til
-  // LLM — aldri e-postadresse eller sensitive felter (GDPR, se spec).
-  let personalizedBody = renderedBody;
-  let aiPersonalized = false;
-  if (input.aiPersonalize && input.isMarketing) {
-    const provider = getLLMProvider();
-    if (provider) {
-      const context = [
-        `Navn: ${contact.name}`,
-        contact.organization?.name ? `Organisasjon: ${contact.organization.name}` : null,
-        `Stadium: ${contact.stage}`,
-        parseJsonArray(contact.tags).length ? `Tagger: ${parseJsonArray(contact.tags).join(', ')}` : null,
-        contact.deals.length ? `Tidligere arrangementer: ${contact.deals.map((d) => d.eventType).filter(Boolean).join(', ')}` : null,
-      ].filter(Boolean).join('\n');
-      const result = await provider.generateText(personalizePrompt(renderedBody, context), { maxTokens: 2000, temperature: 0.5 });
-      if (result) {
-        const verdict = validateAiRewrite(renderedBody, result.trim(), { requireContentPreserved: true });
-        if (verdict.ok) {
-          personalizedBody = result.trim();
-          aiPersonalized = true;
-        } else {
-          logger.warn('KI-personalisering avvist av sikkerhetskontroll', { contactId: input.contactId, reason: verdict.reason });
-        }
-      } else {
-        logger.warn('KI-personalisering feilet — sender original', { contactId: input.contactId });
-      }
-    }
-  }
+  const ai = await resolveAiBody(input, renderedBody, subject, contact.name);
+  if (ai.kind === 'pending_review') return ai;
+  if (ai.kind === 'skip') return 'skipped_review';
+  const personalizedBody = ai.body;
+  const aiPersonalized = ai.aiPersonalized;
 
   const unsubToken = signUnsubscribeToken(input.contactId);
   const unsubUrl = unsubscribeUrl(unsubToken);

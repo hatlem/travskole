@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { REVIEW_KIND } from '@/lib/ai/review';
 
 const schema = z.object({ status: z.enum(['applied', 'dismissed']) });
 
@@ -33,7 +34,8 @@ export async function PATCH(
 
   try {
     const suggestion = await prisma.aiSuggestion.update({
-      where: { id: suggestionId },
+      // Godkjenningsutkast har egen tilstandsmaskin (api/admin/crm/ai/reviews).
+      where: { id: suggestionId, kind: { not: REVIEW_KIND } },
       data: { status: parsed.data.status },
     });
     logActivity({

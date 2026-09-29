@@ -292,6 +292,7 @@ async function processEnrollment(
       case 'send_email': {
         const result = await sendFlowEmail({
           enrollmentId: enrollment.id,
+          flowId: enrollment.flowId,
           nodeId: node.id,
           contactId: enrollment.contactId,
           registrationId: enrollment.registrationId,
@@ -299,13 +300,25 @@ async function processEnrollment(
           bodyHtml: plan.bodyHtml,
           senderIdentityId: plan.senderIdentityId,
           aiPersonalize: plan.aiPersonalize,
+          aiReview: plan.aiReview,
           isMarketing: enrollment.flow.isMarketing,
+          now,
         });
+        if (typeof result === 'object') {
+          // KI-utkast venter på godkjenning: parker PÅ e-post-noden til fristen.
+          // Neste tick (tidsavbrudd eller admin-vekking) treffer samme utkast via
+          // dedupeKey og sender/skipper uten å generere på nytt.
+          await prisma.flowEnrollment.update({
+            where: { id: enrollment.id },
+            data: { currentNodeId: node.id, nextRunAt: result.resumeAt },
+          });
+          return { sent, failed: false, completed: false };
+        }
         if (result === 'failed') {
           await failEnrollment(enrollment.id, 'send-failed', now, node.id);
           return { sent, failed: true, completed: false };
         }
-        // 'sent' | 'already_sent' | 'skipped_suppressed' | 'skipped_no_consent' all advance —
+        // 'sent' | 'already_sent' | 'skipped_*' all advance —
         // only an actual send/network failure halts the enrollment.
         if (result === 'sent') sent++;
         currentNodeId = plan.nextNodeId;
@@ -369,15 +382,21 @@ async function processEnrollment(
  * leased `nextRunAt` with the real value — the lease is just a placeholder
  * until then.
  */
-async function claimDueEnrollmentIds(now: Date): Promise<number[]> {
+async function claimDueEnrollmentIds(now: Date, onlyId?: number): Promise<number[]> {
   return prisma.$transaction(async (tx) => {
-    const rows = await tx.$queryRaw<{ id: number }[]>`
-      SELECT id FROM flow_enrollments
-      WHERE status = 'active' AND next_run_at <= ${now}
-      ORDER BY next_run_at ASC
-      LIMIT ${BATCH_SIZE}
-      FOR UPDATE SKIP LOCKED
-    `;
+    const rows = onlyId === undefined
+      ? await tx.$queryRaw<{ id: number }[]>`
+        SELECT id FROM flow_enrollments
+        WHERE status = 'active' AND next_run_at <= ${now}
+        ORDER BY next_run_at ASC
+        LIMIT ${BATCH_SIZE}
+        FOR UPDATE SKIP LOCKED
+      `
+      : await tx.$queryRaw<{ id: number }[]>`
+        SELECT id FROM flow_enrollments
+        WHERE id = ${onlyId} AND status = 'active' AND next_run_at <= ${now}
+        FOR UPDATE SKIP LOCKED
+      `;
     const ids = rows.map((row) => row.id);
     if (ids.length === 0) return ids;
 
@@ -390,15 +409,7 @@ async function claimDueEnrollmentIds(now: Date): Promise<number[]> {
   });
 }
 
-/**
- * Claims up to `BATCH_SIZE` due, active enrollments (see
- * `claimDueEnrollmentIds`) and ticks each one forward. Enrollments whose
- * flow is no longer 'active' (paused/archived) are left untouched beyond
- * the claim/lease — they'll be reconsidered once the lease expires (or
- * sooner, once the flow is reactivated and re-ticked).
- */
-export async function runFlowBatch(now: Date = new Date()): Promise<FlowBatchResult> {
-  const claimedIds = await claimDueEnrollmentIds(now);
+async function processClaimed(claimedIds: number[], now: Date): Promise<FlowBatchResult> {
   const result: FlowBatchResult = { processed: 0, sent: 0, failed: 0, completed: 0 };
   if (claimedIds.length === 0) return result;
 
@@ -435,4 +446,36 @@ export async function runFlowBatch(now: Date = new Date()): Promise<FlowBatchRes
   }
 
   return result;
+}
+
+/**
+ * Claims up to `BATCH_SIZE` due, active enrollments (see
+ * `claimDueEnrollmentIds`) and ticks each one forward. Enrollments whose
+ * flow is no longer 'active' (paused/archived) are left untouched beyond
+ * the claim/lease — they'll be reconsidered once the lease expires (or
+ * sooner, once the flow is reactivated and re-ticked).
+ */
+export async function runFlowBatch(now: Date = new Date()): Promise<FlowBatchResult> {
+  return processClaimed(await claimDueEnrollmentIds(now), now);
+}
+
+/**
+ * Vekker og kjører ett parkert enrollment nå (rett etter en beslutning i
+ * KI-godkjenningskøen), med samme claim/lease-garanti som cron-batchen.
+ * Vekkingen treffer kun hvis enrollmentet fortsatt står parkert på noden med
+ * nøyaktig `parkedUntil` — er det claimet av en pågående batch (lease) eller
+ * flyttet videre, gjør kallet ingenting og runneren tar det ved fristen.
+ */
+export async function runEnrollmentNow(
+  enrollmentId: number,
+  expectedNodeId: number,
+  parkedUntil: Date,
+  now: Date = new Date(),
+): Promise<FlowBatchResult> {
+  const { count } = await prisma.flowEnrollment.updateMany({
+    where: { id: enrollmentId, status: 'active', currentNodeId: expectedNodeId, nextRunAt: parkedUntil },
+    data: { nextRunAt: now },
+  });
+  if (count === 0) return { processed: 0, sent: 0, failed: 0, completed: 0 };
+  return processClaimed(await claimDueEnrollmentIds(now, enrollmentId), now);
 }

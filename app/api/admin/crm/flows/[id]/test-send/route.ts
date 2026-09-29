@@ -8,6 +8,8 @@ import { parseNodeConfig } from '@/lib/flows/graph';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { logActivity } from '@/lib/activity';
 import logger from '@/lib/logger';
+import { getLLMProvider } from '@/lib/ai/provider';
+import { previewPersonalization } from '@/lib/ai/preview';
 
 // Deliberately distinct from the "Kari Nordmann"-style preview sample in
 // email-templates.ts — every value here screams "placeholder" so a test
@@ -25,7 +27,16 @@ const TEST_MERGE_DATA: MergeTagData = {
 const TEST_BANNER =
   '<div style="background:#fef3c7;color:#92400e;padding:8px 16px;border-radius:6px;' +
   'font-size:13px;font-weight:600;margin-bottom:16px">' +
-  '[Testutsending] — dette er en test og teller ikke som en reell utsending.</div>';
+  '[Testutsending] — dette er en test og teller ikke som en reell utsending.';
+
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function testBanner(aiNote: string | null): string {
+  const note = aiNote ? `<br><span style="font-weight:400">${escapeHtml(aiNote)}</span>` : '';
+  return `${TEST_BANNER}${note}</div>`;
+}
 
 // `MessageSend.contactId` is a required FK — a test send has no real
 // recipient contact, so we attach it to a single dedicated system contact
@@ -53,6 +64,8 @@ async function ensureTestSendContactId(): Promise<number> {
 const testSendSchema = z.object({
   nodeId: z.number().int().positive(),
   toEmail: z.string().email('Ugyldig e-postadresse'),
+  /** Kontakten hvis historikk KI-personaliseringen skal bruke (aiPersonalize-noder). */
+  contactId: z.number().int().positive().optional(),
 });
 
 export async function POST(
@@ -85,7 +98,7 @@ export async function POST(
     return NextResponse.json({ error: 'Ugyldig e-postadresse' }, { status: 400 });
   }
 
-  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { id: true } });
+  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { id: true, isMarketing: true } });
   if (!flow) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
@@ -124,9 +137,35 @@ export async function POST(
     return NextResponse.json({ error: 'Adressen er suppressert' }, { status: 400 });
   }
 
-  const renderedSubject = replaceMergeTags(subject, TEST_MERGE_DATA);
-  const renderedBody = replaceMergeTags(bodyHtml, TEST_MERGE_DATA);
-  const html = wrapEmailHtml(TEST_BANNER + renderedBody, identity.displayName);
+  let renderedSubject = replaceMergeTags(subject, TEST_MERGE_DATA);
+  let renderedBody = replaceMergeTags(bodyHtml, TEST_MERGE_DATA);
+  let aiNote: string | null = null;
+  let aiPersonalized = false;
+
+  // Samme KI-vei som ekte utsending (kun markedsføringsflyter), så admin ser
+  // hva mottakeren faktisk får.
+  const provider = config.aiPersonalize === true && flow.isMarketing ? getLLMProvider() : null;
+  if (provider) {
+    if (parsed.data.contactId === undefined) {
+      aiNote = 'KI-personalisering er på, men ingen kontakt er valgt — dette er originalteksten.';
+    } else {
+      const preview = await previewPersonalization(provider, parsed.data.contactId, subject, bodyHtml);
+      if (!preview) {
+        return NextResponse.json({ error: 'Kontakten finnes ikke' }, { status: 404 });
+      }
+      renderedSubject = preview.subject;
+      if (preview.personalizedBody !== null) {
+        renderedBody = preview.personalizedBody;
+        aiPersonalized = true;
+        aiNote = `KI-personalisert for ${preview.contact.name}.`;
+      } else {
+        renderedBody = preview.originalBody;
+        const reason = preview.verdict.ok ? '' : ` (${preview.verdict.reason})`;
+        aiNote = `KI-utkastet for ${preview.contact.name} ble avvist${reason} — mottakeren ville fått originalteksten.`;
+      }
+    }
+  }
+  const html = wrapEmailHtml(testBanner(aiNote) + renderedBody, identity.displayName);
 
   const testContactId = await ensureTestSendContactId();
 
@@ -140,6 +179,7 @@ export async function POST(
       bodyHtml: html,
       status: 'test',
       dedupeKey: null,
+      aiPersonalized,
     },
   });
 
@@ -151,7 +191,7 @@ export async function POST(
       subject: renderedSubject,
       html,
     });
-    logActivity({ action: 'flow_test_send', entity: 'flow', entityId: flowId, details: JSON.stringify({ nodeId: node.id, toEmail }), userEmail: session.user.email }).catch(() => {});
+    logActivity({ action: 'flow_test_send', entity: 'flow', entityId: flowId, details: JSON.stringify({ nodeId: node.id, toEmail, contactId: parsed.data.contactId ?? null, aiPersonalized }), userEmail: session.user.email }).catch(() => {});
   } catch (error) {
     logger.error('Test-utsending feilet', {
       flowId,
@@ -165,5 +205,5 @@ export async function POST(
     return NextResponse.json({ error: 'Kunne ikke sende test-e-post' }, { status: 502 });
   }
 
-  return NextResponse.json({ sent: true });
+  return NextResponse.json({ sent: true, aiPersonalized, aiNote });
 }

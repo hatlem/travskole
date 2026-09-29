@@ -75,6 +75,7 @@ describe('planStep: email', () => {
       bodyHtml: '<p>Hei!</p>',
       senderIdentityId: 7,
       aiPersonalize: false,
+      aiReview: 'auto',
       nextNodeId: 3,
     });
   });
@@ -88,6 +89,7 @@ describe('planStep: email', () => {
       bodyHtml: '<p>Hei!</p>',
       senderIdentityId: 7,
       aiPersonalize: true,
+      aiReview: 'auto',
       nextNodeId: 3,
     });
   });
@@ -98,6 +100,16 @@ describe('planStep: email', () => {
     const plan = planStep(node, edges, makeCtx());
     expect(plan.kind).toBe('send_email');
     expect((plan as { aiPersonalize: boolean }).aiPersonalize).toBe(false);
+  });
+
+  it('aiReview: approve only when explicitly configured; missing/unknown ⇒ auto (legacy nodes never stall)', () => {
+    const edges = [e(1, 2, 3)];
+    const approve = planStep(n(2, 'email', { ...config, aiPersonalize: true, aiReview: 'approve' }), edges, makeCtx());
+    expect((approve as { aiReview: string }).aiReview).toBe('approve');
+    const legacy = planStep(n(2, 'email', { ...config, aiPersonalize: true }), edges, makeCtx());
+    expect((legacy as { aiReview: string }).aiReview).toBe('auto');
+    const bogus = planStep(n(2, 'email', { ...config, aiReview: 'yes' }), edges, makeCtx());
+    expect((bogus as { aiReview: string }).aiReview).toBe('auto');
   });
 
   it('treats any non-true value for aiPersonalize as false', () => {

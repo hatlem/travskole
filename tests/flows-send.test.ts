@@ -20,6 +20,10 @@ const { prisma } = vi.hoisted(() => ({
     senderIdentity: { findUnique: vi.fn() },
     messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
     messageLink: { createMany: vi.fn() },
+    aiSuggestion: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
+    deal: { findMany: vi.fn(async () => []) },
+    bookingRequest: { findMany: vi.fn(async () => []) },
+    registration: { findMany: vi.fn(async () => []) },
   },
 }));
 
