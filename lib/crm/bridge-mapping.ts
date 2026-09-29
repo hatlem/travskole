@@ -3,6 +3,8 @@
 
 import { normalizeEmail, emailDomain, isCompanyDomain, orgNameFromDomain } from '@/lib/crm/normalize';
 
+export type DealStatus = 'open' | 'won' | 'lost';
+
 export interface CourseForCrm {
   name: string;
   type: string;
@@ -44,8 +46,7 @@ export interface CrmSyncInput {
     eventType: string;
     eventDate: Date | null;
     value: number | null;
-    status: 'open' | 'won' | 'lost';
-    stageName: 'Ny' | 'Bekreftet' | 'Tapt';
+    status: DealStatus;
     source: 'booking' | 'registration';
     bookingRequestId: number | null;
     registrationId: number | null;
@@ -57,10 +58,11 @@ export interface CrmSyncInput {
   };
 }
 
-function statusToDeal(status: string): { status: 'open' | 'won' | 'lost'; stageName: 'Ny' | 'Bekreftet' | 'Tapt' } {
-  if (status === 'confirmed') return { status: 'won', stageName: 'Bekreftet' };
-  if (status === 'cancelled') return { status: 'lost', stageName: 'Tapt' };
-  return { status: 'open', stageName: 'Ny' }; // new | pending
+// Stadiet velges ut fra rollen (lib/crm/stages.ts), aldri ut fra navn.
+function statusToDeal(status: string): { status: DealStatus } {
+  if (status === 'confirmed') return { status: 'won' };
+  if (status === 'cancelled') return { status: 'lost' };
+  return { status: 'open' }; // new | pending | waitlist
 }
 
 export function bookingToCrm(booking: BookingForCrm, course: CourseForCrm): CrmSyncInput {
@@ -125,4 +127,50 @@ export function registrationToCrm(reg: RegistrationForCrm, course: CourseForCrm)
       occurredAt: reg.createdAt,
     },
   };
+}
+
+export interface ExistingDealForSync {
+  status: string;
+  title: string;
+  value: number | null;
+  closedAt: Date | null;
+}
+
+export interface DealUpdateOptions {
+  /** Stadiet med riktig rolle for den mappede statusen. */
+  targetStageId: number;
+  now: Date;
+  /**
+   * false: kilde-status «åpen» (ny/venter) gjenåpner aldri en lukket deal.
+   * Brukes av historikkimporten, så deals admin eller betaling har flyttet
+   * til vunnet/tapt ikke dras tilbake.
+   */
+  allowReopen?: boolean;
+}
+
+/**
+ * Hva en re-sync skal endre på en eksisterende deal. Admins manuelle
+ * CRM-endringer bevares: stadium flyttes kun når kildens status gir en annen
+ * deal-status enn dealen har, og tittel/verdi fylles bare når de mangler.
+ */
+export function computeDealUpdate(
+  existing: ExistingDealForSync,
+  mapped: Pick<CrmSyncInput['deal'], 'status' | 'title' | 'value'>,
+  { targetStageId, now, allowReopen = true }: DealUpdateOptions,
+): { stageId?: number; status?: DealStatus; closedAt?: Date | null; title?: string; value?: number } {
+  const update: ReturnType<typeof computeDealUpdate> = {};
+
+  const reopenBlocked = mapped.status === 'open' && !allowReopen;
+  if (mapped.status !== existing.status && !reopenBlocked) {
+    update.stageId = targetStageId;
+    update.status = mapped.status;
+    // closedAt: bevar første lukketidspunkt, nullstill ved gjenåpning.
+    if (mapped.status === 'open') update.closedAt = null;
+    else if (existing.closedAt === null) update.closedAt = now;
+  }
+
+  if (!existing.title.trim() && mapped.title) update.title = mapped.title;
+  if (existing.value === null && mapped.value !== null) update.value = mapped.value;
+
+  return update;
 }

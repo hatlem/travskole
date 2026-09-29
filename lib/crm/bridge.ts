@@ -1,17 +1,24 @@
 // Broen fra eksisterende booking-/påmeldingsflyt til CRM.
-// Kalles fire-and-forget fra publikums-API-ene og fra backfill-scriptet.
+// Kalles fire-and-forget fra publikums-/admin-API-ene og fra historikkimporten.
 // Idempotent: Deal.bookingRequestId/registrationId er @unique, kontakter
 // upsertes på normalisert e-post, organisasjoner på domene.
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
-import { bookingToCrm, registrationToCrm, type CrmSyncInput } from '@/lib/crm/bridge-mapping';
+import { bookingToCrm, registrationToCrm, computeDealUpdate, type CrmSyncInput } from '@/lib/crm/bridge-mapping';
 import { ensureDefaultPipeline } from '@/lib/crm/pipeline';
+import { resolveStageForStatus } from '@/lib/crm/stages';
 
-async function applySync(input: CrmSyncInput): Promise<void> {
+export interface CrmSyncOptions {
+  /** Se DealUpdateOptions.allowReopen. Standard true. */
+  allowReopen?: boolean;
+}
+
+async function applySync(input: CrmSyncInput, options: CrmSyncOptions = {}): Promise<void> {
   const pipeline = await ensureDefaultPipeline();
-  const stage = pipeline.stages.find((s) => s.name === input.deal.stageName) ?? pipeline.stages[0];
+  const stage = resolveStageForStatus(pipeline.stages, input.deal.status);
+  if (!stage) throw new Error(`Pipeline ${pipeline.id} har ingen stadier`);
 
   // 1) Organisasjon (kun bedriftsdomener)
   let organizationId: number | null = null;
@@ -68,36 +75,60 @@ async function applySync(input: CrmSyncInput): Promise<void> {
   const dealWhere = input.deal.bookingRequestId !== null
     ? { bookingRequestId: input.deal.bookingRequestId }
     : { registrationId: input.deal.registrationId! };
-  const dealData = {
-    title: input.deal.title,
-    pipelineId: pipeline.id,
-    stageId: stage.id,
-    contactId: contact.id,
-    organizationId,
-    value: input.deal.value,
-    eventType: input.deal.eventType,
-    eventDate: input.deal.eventDate,
-    status: input.deal.status,
-    source: input.deal.source,
-    bookingRequestId: input.deal.bookingRequestId,
-    registrationId: input.deal.registrationId,
-  };
-  const existingDeal = await prisma.deal.findUnique({ where: dealWhere });
+  const existingDeal = await prisma.deal.findUnique({
+    where: dealWhere,
+    include: { stage: { select: { name: true } } },
+  });
   if (existingDeal) {
-    // closedAt: bevar første lukketidspunkt. Sett kun ved overgang til
-    // won/lost (fra null), nullstill ved reåpning, ellers urørt.
-    const closedAt = input.deal.status === 'open'
-      ? null
-      : existingDeal.closedAt === null
-        ? new Date()
-        : undefined;
+    // Målstadiet må ligge i dealens egen pipeline.
+    const dealStages = existingDeal.pipelineId === pipeline.id
+      ? pipeline.stages
+      : await prisma.stage.findMany({ where: { pipelineId: existingDeal.pipelineId } });
+    const targetStage = resolveStageForStatus(dealStages, input.deal.status) ?? stage;
+    // Admins manuelle stadium/tittel/verdi bevares — se computeDealUpdate.
+    // Arrangementsdato/-type og kontakt-/bedriftskobling følger kilden.
+    const patch = computeDealUpdate(existingDeal, input.deal, {
+      targetStageId: targetStage.id,
+      now: new Date(),
+      allowReopen: options.allowReopen,
+    });
     await prisma.deal.update({
       where: { id: existingDeal.id },
-      data: { ...dealData, ...(closedAt !== undefined ? { closedAt } : {}) },
+      data: {
+        ...patch,
+        contactId: contact.id,
+        organizationId: organizationId ?? undefined,
+        eventType: input.deal.eventType,
+        eventDate: input.deal.eventDate,
+      },
     });
+    if (patch.stageId !== undefined && patch.stageId !== existingDeal.stageId) {
+      await prisma.contactActivity.create({
+        data: {
+          contactId: contact.id,
+          organizationId: organizationId ?? existingDeal.organizationId,
+          type: 'deal_change',
+          title: `${existingDeal.title}: ${existingDeal.stage.name} → ${targetStage.name}`,
+        },
+      }).catch(() => {});
+    }
   } else {
     await prisma.deal.create({
-      data: { ...dealData, closedAt: input.deal.status === 'open' ? null : new Date() },
+      data: {
+        title: input.deal.title,
+        pipelineId: pipeline.id,
+        stageId: stage.id,
+        contactId: contact.id,
+        organizationId,
+        value: input.deal.value,
+        eventType: input.deal.eventType,
+        eventDate: input.deal.eventDate,
+        status: input.deal.status,
+        source: input.deal.source,
+        bookingRequestId: input.deal.bookingRequestId,
+        registrationId: input.deal.registrationId,
+        closedAt: input.deal.status === 'open' ? null : new Date(),
+      },
     });
     // Tidslinje kun ved første sync — status-oppdateringer gir egne innslag senere
     await prisma.contactActivity.create({
@@ -119,21 +150,24 @@ async function applySync(input: CrmSyncInput): Promise<void> {
   }
 }
 
-export async function syncBookingToCrm(bookingId: number): Promise<void> {
+/** Returnerer false hvis synken feilet (feilen logges, kastes aldri). */
+export async function syncBookingToCrm(bookingId: number, options?: CrmSyncOptions): Promise<boolean> {
   try {
     const booking = await prisma.bookingRequest.findUnique({
       where: { id: bookingId },
       include: { course: { select: { name: true, type: true, price: true, startDate: true } } },
     });
-    if (!booking || !booking.course) return;
-    await applySync(bookingToCrm(booking, booking.course));
+    if (!booking || !booking.course) return true;
+    await applySync(bookingToCrm(booking, booking.course), options);
+    return true;
   } catch (error) {
     // CRM-sync får ALDRI velte publikums-flyten
     logger.error(`CRM sync failed for booking ${bookingId}`, { error });
+    return false;
   }
 }
 
-export async function syncRegistrationToCrm(registrationId: number): Promise<void> {
+export async function syncRegistrationToCrm(registrationId: number, options?: CrmSyncOptions): Promise<boolean> {
   try {
     const reg = await prisma.registration.findUnique({
       where: { id: registrationId },
@@ -142,9 +176,11 @@ export async function syncRegistrationToCrm(registrationId: number): Promise<voi
         parent: { include: { user: { select: { email: true } } } },
       },
     });
-    if (!reg) return;
-    await applySync(registrationToCrm(reg, reg.course));
+    if (!reg) return true;
+    await applySync(registrationToCrm(reg, reg.course), options);
+    return true;
   } catch (error) {
     logger.error(`CRM sync failed for registration ${registrationId}`, { error });
+    return false;
   }
 }

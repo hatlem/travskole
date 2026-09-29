@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import logger from '@/lib/logger';
 import {
   emitRegistrationStatusEvent,
@@ -39,6 +40,11 @@ export async function PUT(
     });
 
     logActivity({ action: 'status_change', entity: 'registration', entityId: Number(id), details: JSON.stringify({ from: oldStatus, to: status }), userEmail: session.user.email }).catch(() => {});
+
+    // CRM-bro: flytt dealen til vunnet/tapt-stadiet (fire-and-forget, logger selv).
+    if (status !== oldStatus) {
+      syncRegistrationToCrm(registration.id).catch(() => {});
+    }
 
     // Hendelsesbuss: registrering bekreftet/kansellert (fire-safe)
     if (status === 'confirmed' || status === 'cancelled') {

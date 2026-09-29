@@ -122,13 +122,18 @@ async function moveWonDeal(row: ResolvedRow): Promise<void> {
       closedAt: true,
       contactId: true,
       organizationId: true,
-      stage: { select: { name: true } },
+      stage: { select: { name: true, isWon: true } },
     },
   });
   if (!deal) return;
 
+  // Allerede i et vunnet-stadium (f.eks. «Gjennomført») — ingenting å gjøre.
+  if (deal.stage.isWon) return;
+
+  // Første vunnet-stadium etter posisjon, samme rolleoppslag som CRM-broen.
   const wonStage = await prisma.stage.findFirst({
     where: { pipelineId: deal.pipelineId, isWon: true },
+    orderBy: [{ position: 'asc' }, { id: 'asc' }],
   });
   if (!wonStage) {
     logger.warn('applyPaymentEvent: pipeline mangler vunnet-stadium', {
@@ -137,9 +142,6 @@ async function moveWonDeal(row: ResolvedRow): Promise<void> {
     });
     return;
   }
-
-  // Allerede i vunnet-stadiet — ingenting å gjøre (idempotent).
-  if (wonStage.id === deal.stageId) return;
 
   const updated = await prisma.deal.update({
     where: { id: deal.id },

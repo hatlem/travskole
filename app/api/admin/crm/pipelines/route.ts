@@ -16,7 +16,7 @@ export async function GET() {
     orderBy: { id: 'asc' },
     include: {
       stages: {
-        orderBy: { position: 'asc' },
+        orderBy: [{ position: 'asc' }, { id: 'asc' }],
         include: {
           deals: {
             orderBy: { updatedAt: 'desc' },
