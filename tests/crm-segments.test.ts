@@ -87,4 +87,58 @@ describe('contactMatchesSegment', () => {
       { all: [{ field: 'stage', op: 'unknown_op' as never, value: 'customer' }] },
     )).toBe(false);
   });
+  it('unknown deal field never matches', () => {
+    expect(contactMatchesSegment(contact(), { all: [{ field: 'deal.finnesIkke', op: 'not_null' }] })).toBe(false);
+  });
+});
+
+describe('contactMatchesSegment — deal rules apply to the SAME deal', () => {
+  // julebord i 2025 + kurs i 2026: ingen deal er «julebord i 2026»
+  const rules = {
+    all: [
+      { field: 'deal.eventType', op: 'eq' as const, value: 'julebord' },
+      { field: 'deal.eventDate', op: 'gt' as const, value: '2026-01-01' },
+    ],
+  };
+
+  it('does not combine fields from two different deals', () => {
+    expect(contactMatchesSegment(contact(), rules)).toBe(false);
+  });
+  it('matches when one deal satisfies all deal rules', () => {
+    expect(contactMatchesSegment(
+      contact({ deals: [
+        { eventType: 'kurs', eventDate: new Date('2026-03-01'), status: 'open' },
+        { eventType: 'julebord', eventDate: new Date('2026-12-10'), status: 'open' },
+      ] }),
+      rules,
+    )).toBe(true);
+  });
+  it('status + eventType must hold on the same deal', () => {
+    // julebord er vunnet, kurs er åpent — «åpent julebord» finnes ikke
+    expect(contactMatchesSegment(contact(), {
+      all: [
+        { field: 'deal.eventType', op: 'eq', value: 'julebord' },
+        { field: 'deal.status', op: 'eq', value: 'open' },
+      ],
+    })).toBe(false);
+  });
+  it('contact rules still AND with the deal match', () => {
+    const r = {
+      all: [
+        { field: 'stage', op: 'eq' as const, value: 'lead' },
+        { field: 'deal.eventType', op: 'eq' as const, value: 'julebord' },
+      ],
+    };
+    expect(contactMatchesSegment(contact(), r)).toBe(false);
+    expect(contactMatchesSegment(contact({ stage: 'lead' }), r)).toBe(true);
+  });
+  it('rule order does not matter', () => {
+    expect(contactMatchesSegment(contact(), {
+      all: [
+        { field: 'deal.eventDate', op: 'lt', value: '2026-01-01' },
+        { field: 'tags', op: 'contains', value: 'vip' },
+        { field: 'deal.eventType', op: 'eq', value: 'julebord' },
+      ],
+    })).toBe(true);
+  });
 });
