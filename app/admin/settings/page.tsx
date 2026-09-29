@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { TrackingInstallSnippet } from '@/components/admin/TrackingInstallSnippet';
 
 interface SettingGroup {
   title: string;
@@ -161,6 +162,13 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'ai_review_timeout_hours', label: 'Maks ventetid for godkjenning (timer)', type: 'text', placeholder: '48', help: 'Et KI-utkast som ikke er behandlet innen fristen, sendes automatisk som original (uten KI), så flyten aldri blir stående.' },
     ],
   },
+  {
+    title: 'Sporing på bjerke.no',
+    description: 'Registrer handlinger på bjerke.no (sidevisninger og klikk) i hendelsesloggen, med samme besøker-ID som her.',
+    fields: [
+      { key: 'tracking_allowed_origins', label: 'Nettsteder som får sende hendelser (kommaseparert)', type: 'text', placeholder: 'https://bjerke.no,https://www.bjerke.no', help: 'Fullstendige adresser uten sti, f.eks. https://bjerke.no. Andre nettsteder avvises, og tomt felt slår sporingen på bjerke.no av. Endringer gjelder innen ett minutt.' },
+    ],
+  },
 ];
 
 export default function AdminSettingsPage() {
@@ -305,6 +313,7 @@ export default function AdminSettingsPage() {
                 {graph.mailboxesEnvOverride && ' Postboksene er overstyrt av miljøvariabelen GRAPH_MAILBOXES, så feltet under har ingen effekt.'}
               </div>
             )}
+            {group.title === 'Sporing på bjerke.no' && <TrackingInstallSnippet />}
 
             <div className="space-y-5">
               {group.fields.map((field) => (

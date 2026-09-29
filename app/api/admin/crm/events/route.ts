@@ -19,7 +19,7 @@ export async function GET(request: NextRequest) {
 
   const where: Record<string, unknown> = {};
   if (type && isEventType(type)) where.type = type;
-  if (source && ['server', 'client', 'webhook'].includes(source)) where.source = source;
+  if (source && ['server', 'web', 'client', 'webhook'].includes(source)) where.source = source;
   if (contactIdRaw) {
     const contactId = Number(contactIdRaw);
     if (!Number.isInteger(contactId)) {

@@ -7,29 +7,34 @@ import { useEffect, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { hasAnalyticsConsent } from '@/lib/events/consent';
 import { VISITOR_COOKIE } from '@/lib/events/constants';
+import {
+  adoptSharedVisitorCookie,
+  buildVisitorCookie,
+  buildVisitorCookieDeletions,
+  isVisitorId,
+  readCookieValues,
+} from '@/lib/tracking/visitor-cookie';
+import { resolveCtaClick, type ClickTarget } from '@/lib/tracking/cta';
 
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 395; // ~13 måneder
-
-function readCookie(name: string): string | null {
-  const match = document.cookie.match(new RegExp(`(?:^|; )${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]) : null;
+function cookieOptions() {
+  return { host: location.hostname, https: location.protocol === 'https:' };
 }
 
-/** `Secure` only applies over HTTPS — setting it on plain HTTP silently drops the cookie. */
-function secureAttr(): string {
-  return location.protocol === 'https:' ? '; Secure' : '';
+function readVisitorId(): string | null {
+  return readCookieValues(document.cookie, VISITOR_COOKIE).find(isVisitorId) ?? null;
 }
 
+// Delt med bjerke.no (Domain=.bjerke.no) slik at historikken derfra kobles når besøkeren registrerer seg.
 function ensureVisitorId(): string {
-  const existing = readCookie(VISITOR_COOKIE);
+  const existing = adoptSharedVisitorCookie(document, cookieOptions());
   if (existing) return existing;
   const id = crypto.randomUUID();
-  document.cookie = `${VISITOR_COOKIE}=${id}; path=/; max-age=${COOKIE_MAX_AGE}; SameSite=Lax${secureAttr()}`;
+  document.cookie = buildVisitorCookie(id, cookieOptions());
   return id;
 }
 
 function deleteVisitorCookie(): void {
-  document.cookie = `${VISITOR_COOKIE}=; path=/; max-age=0; SameSite=Lax${secureAttr()}`;
+  for (const deletion of buildVisitorCookieDeletions(cookieOptions())) document.cookie = deletion;
 }
 
 function consentGranted(): boolean {
@@ -44,7 +49,7 @@ function detailGrantsAnalytics(detail: unknown): boolean {
 }
 
 function send(type: string, meta: Record<string, unknown>): void {
-  const publicId = readCookie(VISITOR_COOKIE);
+  const publicId = readVisitorId();
   if (!publicId) return;
   fetch('/api/track', {
     method: 'POST',
@@ -63,6 +68,15 @@ export function trackClientEvent(type: 'signup.started' | 'cta.clicked', meta: R
   send(type, meta);
 }
 
+// Ekte kurs-rute: app/arrangementer/[type]/[year]/[slug]/page.tsx (slug-basert, ikke id-basert).
+const COURSE_PATH_RE = /^\/arrangementer\/([^/]+)\/([^/]+)\/([^/]+)$/;
+
+function trackPage(path: string): void {
+  send('page.viewed', { path });
+  const courseMatch = path.match(COURSE_PATH_RE);
+  if (courseMatch) send('course.viewed', { path, courseSlug: courseMatch[3] });
+}
+
 export function Tracker() {
   const pathname = usePathname();
   const enabledRef = useRef(false);
@@ -76,7 +90,7 @@ export function Tracker() {
       ensureVisitorId();
       // Admin-sider spores aldri, heller ikke som første sidevisning ved samtykke/mount på /admin.
       if (!window.location.pathname.startsWith('/admin')) {
-        send('page.viewed', { path: window.location.pathname });
+        trackPage(window.location.pathname);
         lastPath.current = window.location.pathname;
       }
     };
@@ -92,13 +106,21 @@ export function Tracker() {
       if (consentGranted() || detailGrantsAnalytics(detail)) enable();
       else disable();
     };
+    const onClick = (e: MouseEvent) => {
+      if (!enabledRef.current || window.location.pathname.startsWith('/admin')) return;
+      const target = e.target instanceof Element ? (e.target as ClickTarget) : null;
+      const cta = resolveCtaClick(target, window.location.href);
+      if (cta) send('cta.clicked', { ...cta, path: window.location.pathname });
+    };
     window.addEventListener('getcookies:consent', onConsent);
     window.addEventListener('getcookies:consent-updated', onConsent);
     window.addEventListener('getcookies:loaded', onConsent);
+    document.addEventListener('click', onClick, true);
     return () => {
       window.removeEventListener('getcookies:consent', onConsent);
       window.removeEventListener('getcookies:consent-updated', onConsent);
       window.removeEventListener('getcookies:loaded', onConsent);
+      document.removeEventListener('click', onClick, true);
     };
   }, []);
 
@@ -108,10 +130,7 @@ export function Tracker() {
     if (pathname.startsWith('/admin')) return; // ikke spor admin
     if (lastPath.current === pathname) return;
     lastPath.current = pathname;
-    send('page.viewed', { path: pathname });
-    // Ekte kurs-rute: app/arrangementer/[type]/[year]/[slug]/page.tsx (slug-basert, ikke id-basert).
-    const courseMatch = pathname.match(/^\/arrangementer\/([^/]+)\/([^/]+)\/([^/]+)$/);
-    if (courseMatch) send('course.viewed', { path: pathname, courseSlug: courseMatch[3] });
+    trackPage(pathname);
   }, [pathname]);
 
   return null;

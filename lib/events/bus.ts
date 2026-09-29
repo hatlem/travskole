@@ -12,7 +12,8 @@ export { VISITOR_COOKIE };
 
 export interface EmitEventInput {
   type: string;
-  source: 'server' | 'client' | 'webhook';
+  // 'web' = nettleser-hendelser via /api/track; 'client' finnes i eldre rader.
+  source: 'server' | 'web' | 'client' | 'webhook';
   contactId?: number | null;
   visitorId?: number | null;
   meta?: Record<string, unknown>;

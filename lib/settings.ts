@@ -97,6 +97,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   ai_context_include_history: 'true',
   ai_context_include_value: 'false',
   ai_review_timeout_hours: '48',
+  // Sporing på bjerke.no — nettsteder som får sende hendelser til /api/track (kommaseparert)
+  tracking_allowed_origins: 'https://bjerke.no,https://www.bjerke.no',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
@@ -137,6 +139,7 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'ai_review_',
   'data_retention_days',
   'attribution_window_days',
+  'tracking_allowed_origins',
 ];
 
 export function toClientSettings(settings: SiteSettings): SiteSettings {
