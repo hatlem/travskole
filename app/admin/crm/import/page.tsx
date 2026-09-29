@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useSession } from 'next-auth/react';
 import { parseCsv } from '@/lib/crm/csv';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
+import { HistoryBackfillCard } from './HistoryBackfillCard';
 
 interface ImportPlanRow { row: number; name: string; email: string | null; phone: string | null; organizationName: string | null }
 interface ImportPlan { create: ImportPlanRow[]; update: ImportPlanRow[]; skip: { row: number; reason: string }[] }
@@ -28,6 +30,8 @@ export default function ImportPage() {
   const [result, setResult] = useState<{ created: number; updated: number; skipped: number } | null>(null);
   const [creatingList, setCreatingList] = useState(false);
   const { toast } = useToast();
+  const { data: session } = useSession();
+  const isSuperAdmin = session?.user.role === 'superadmin';
 
   const loadLists = useCallback(async () => {
     try {
@@ -157,6 +161,8 @@ export default function ImportPage() {
     <div>
       <CrmTabs />
       <div className="max-w-3xl space-y-6">
+        {isSuperAdmin && <HistoryBackfillCard />}
+
         <section>
           <h2 className="font-semibold mb-2">1. Velg CSV-fil</h2>
           <p className="text-sm text-gray-500 mb-2">Komma- eller semikolonseparert (norsk Excel), første rad må være kolonnenavn.</p>
