@@ -3,11 +3,13 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
+import { GjenbookingFane } from './GjenbookingFane';
+import { AttribusjonFane } from './AttribusjonFane';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
 
-type Fane = 'flyter' | 'pipeline' | 'besok' | 'ki';
+type Fane = 'flyter' | 'attribusjon' | 'gjenbooking' | 'pipeline' | 'besok' | 'ki';
 
 // (Typene speiler API-responsen fra /api/admin/crm/innsikt.)
 interface InsightsData {
@@ -77,6 +79,8 @@ export default function InnsiktPage() {
 
   const faner: { key: Fane; label: string }[] = [
     { key: 'flyter', label: 'Flyter' },
+    { key: 'attribusjon', label: 'E-post → booking' },
+    { key: 'gjenbooking', label: 'Gjenbooking' },
     { key: 'pipeline', label: 'Pipeline' },
     { key: 'besok', label: 'Besøk' },
     { key: 'ki', label: `KI-forslag${data?.suggestions?.length ? ` (${data.suggestions.length})` : ''}` },
@@ -91,7 +95,7 @@ export default function InnsiktPage() {
         <p className="text-gray-500">Laster …</p>
       ) : (
         <>
-          <div className="flex gap-1 border-b border-gray-200 mb-6">
+          <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
             {faner.map((f) => (
               <button key={f.key} onClick={() => setFane(f.key)}
                 className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px ${
@@ -102,6 +106,8 @@ export default function InnsiktPage() {
             ))}
           </div>
           {fane === 'flyter' && <FlyterFane flows={data?.flows ?? null} />}
+          {fane === 'attribusjon' && <AttribusjonFane />}
+          {fane === 'gjenbooking' && <GjenbookingFane />}
           {fane === 'pipeline' && <PipelineFane pipeline={data?.pipeline ?? null} />}
           {fane === 'besok' && <BesokFane visits={data?.visits ?? null} />}
           {fane === 'ki' && (

@@ -75,6 +75,7 @@ export const ADMIN_EDITABLE_SETTINGS: readonly string[] = [
   'registration_terms_required',
   'marketing_optin_enabled',
   'marketing_optin_text',
+  'attribution_window_days',
 ];
 
 const TOGGLE_SETTINGS: readonly string[] = [
@@ -118,6 +119,10 @@ export function validateSettingValue(key: string, value: string): string | null 
     case 'reply_task_due_days': {
       const n = Number(value);
       return Number.isInteger(n) && n >= 0 && n <= 365 ? null : 'Må være et heltall mellom 0 og 365';
+    }
+    case 'attribution_window_days': {
+      const n = Number(value);
+      return value.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 90 ? null : 'Må være et heltall mellom 1 og 90';
     }
     case 'marketing_optin_text':
       return value.trim() === '' ? 'Samtykketeksten kan ikke være tom' : null;

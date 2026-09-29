@@ -89,6 +89,9 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Domener nye avsenderadresser må ligge på (må også verifiseres i ACS)
   sender_allowed_domains: 'bjerke.no',
   marketing_optin_text: 'Ja takk, jeg vil gjerne få tilbud og nyheter fra Bjerke Travbane på e-post. Du kan melde deg av når som helst.',
+
+  // Innsikt: dager før en booking der åpning/klikk på en flyt-e-post gir flyten kreditt (1–90)
+  attribution_window_days: '14',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
@@ -126,6 +129,7 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'marketing_allow_',
   'ai_analysis_last_',
   'data_retention_days',
+  'attribution_window_days',
 ];
 
 export function toClientSettings(settings: SiteSettings): SiteSettings {

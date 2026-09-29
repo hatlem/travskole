@@ -34,6 +34,15 @@ describe('validateSettingValue', () => {
     expect(validateSettingValue('reply_task_due_days', '400')).not.toBeNull();
   });
 
+  it('bounds attribution_window_days to whole days 1-90', () => {
+    expect(validateSettingValue('attribution_window_days', '1')).toBeNull();
+    expect(validateSettingValue('attribution_window_days', '14')).toBeNull();
+    expect(validateSettingValue('attribution_window_days', '90')).toBeNull();
+    for (const bad of ['', ' ', '0', '91', '2.5', '-1', 'abc']) {
+      expect(validateSettingValue('attribution_window_days', bad)).not.toBeNull();
+    }
+  });
+
   it('rejects an empty opt-in text but accepts free text elsewhere', () => {
     expect(validateSettingValue('marketing_optin_text', '  ')).not.toBeNull();
     expect(validateSettingValue('site_name', '')).toBeNull();
@@ -46,5 +55,9 @@ describe('ADMIN_EDITABLE_SETTINGS', () => {
     expect(ADMIN_EDITABLE_SETTINGS).toContain('marketing_optin_text');
     expect(ADMIN_EDITABLE_SETTINGS).not.toContain('marketing_allow_legitimate_interest');
     expect(ADMIN_EDITABLE_SETTINGS).not.toContain('graph_mailboxes');
+  });
+
+  it('lets regular admins tune the insights attribution window', () => {
+    expect(ADMIN_EDITABLE_SETTINGS).toContain('attribution_window_days');
   });
 });

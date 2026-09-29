@@ -7,14 +7,16 @@ import { computeRates, bucketCountsByWeek, bucketSumByMonth } from '@/lib/crm/in
 export const dynamic = 'force-dynamic';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+// Maler er utgangspunkt for nye flyter, ikke egne flyter — holdes utenfor all innsikt.
+const NOT_TEMPLATE = { status: { not: 'template' } };
 
 async function flowsSection(now: Date) {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * DAY_MS);
   const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * DAY_MS);
 
   const [flows, enrollments, sends30, sends12w, activeCounts, statusCounts] = await Promise.all([
-    prisma.flow.findMany({ where: { status: { not: 'template' } }, select: { id: true, name: true, status: true } }),
-    prisma.flowEnrollment.findMany({ select: { id: true, flowId: true } }),
+    prisma.flow.findMany({ where: NOT_TEMPLATE, select: { id: true, name: true, status: true } }),
+    prisma.flowEnrollment.findMany({ where: { flow: NOT_TEMPLATE }, select: { id: true, flowId: true } }),
     prisma.messageSend.findMany({
       where: { dedupeKey: { not: null }, sentAt: { gte: thirtyDaysAgo } },
       select: { enrollmentId: true, openedAt: true, firstClickedAt: true, repliedAt: true, bouncedAt: true },
@@ -23,8 +25,8 @@ async function flowsSection(now: Date) {
       where: { dedupeKey: { not: null }, sentAt: { gte: twelveWeeksAgo } },
       select: { sentAt: true, openedAt: true },
     }),
-    prisma.flowEnrollment.groupBy({ by: ['flowId'], where: { status: 'active' }, _count: { _all: true } }),
-    prisma.flowEnrollment.groupBy({ by: ['status'], _count: { _all: true } }),
+    prisma.flowEnrollment.groupBy({ by: ['flowId'], where: { status: 'active', flow: NOT_TEMPLATE }, _count: { _all: true } }),
+    prisma.flowEnrollment.groupBy({ by: ['status'], where: { flow: NOT_TEMPLATE }, _count: { _all: true } }),
   ]);
 
   const flowIdByEnrollment = new Map(enrollments.map((e) => [e.id, e.flowId]));
@@ -139,7 +141,7 @@ async function visitsSection(now: Date) {
 
 async function suggestionsSection() {
   const rows = await prisma.aiSuggestion.findMany({
-    where: { status: 'open' },
+    where: { status: 'open', flow: NOT_TEMPLATE },
     orderBy: { createdAt: 'desc' },
     include: { flow: { select: { name: true } } },
   });

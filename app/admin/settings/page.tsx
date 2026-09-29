@@ -144,6 +144,14 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'og_tags', label: 'Delingsbilde: emneknagger (én per linje)', type: 'textarea', placeholder: 'Kurs\nSommerleirer\nDobbeltsulky' },
     ],
   },
+  {
+    title: 'Innsikt',
+    description: 'Hvordan CRM → Innsikt knytter bookinger til e-postflyter.',
+    adminEditable: true,
+    fields: [
+      { key: 'attribution_window_days', label: 'Attribusjonsvindu for e-post → booking (dager)', type: 'text', placeholder: '14', help: 'En booking, påmelding eller betaling krediteres flyten kontakten sist klikket i (eller åpnet, hvis ingen klikk) innen så mange dager før. Heltall fra 1 til 90.' },
+    ],
+  },
 ];
 
 export default function AdminSettingsPage() {
