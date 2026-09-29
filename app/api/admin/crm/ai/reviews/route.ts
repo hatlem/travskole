@@ -17,9 +17,9 @@ export async function GET(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  await markObsoleteReviews();
-
   const sp = request.nextUrl.searchParams;
+  // Fane-merket hentes på hver CRM-side — hold det til én count-spørring.
+  if (sp.get('count') !== '1') await markObsoleteReviews();
   if (sp.get('count') === '1') {
     const pending = await prisma.aiSuggestion.count({ where: { kind: REVIEW_KIND, status: 'pending' } });
     return NextResponse.json({ pending });

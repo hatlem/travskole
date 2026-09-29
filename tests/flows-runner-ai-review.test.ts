@@ -19,6 +19,7 @@ const { prisma, queryRaw } = vi.hoisted(() => {
       contact: { findUnique: vi.fn() },
       registration: { findUnique: vi.fn() },
       messageSend: { findFirst: vi.fn() },
+      aiSuggestion: { findUnique: vi.fn() },
     },
   };
 });
@@ -35,8 +36,14 @@ const mockedSend = vi.mocked(sendFlowEmail);
 const NOW = new Date('2026-10-01T10:00:00Z');
 const RESUME = new Date('2026-10-03T10:00:00Z');
 
+const PENDING_DETAIL = JSON.stringify({
+  enrollmentId: 1, nodeId: 11, contactId: 7, subject: 'S', originalBody: '<p>B</p>', aiBody: '<p>AI</p>',
+  factLines: [], expiresAt: '2026-10-03T10:00:00.000Z',
+});
+
 beforeEach(() => {
   vi.clearAllMocks();
+  prisma.aiSuggestion.findUnique.mockResolvedValue({ id: 1, kind: 'personalization_review', status: 'pending', detail: PENDING_DETAIL });
   prisma.contact.findUnique.mockResolvedValue({
     id: 7, name: 'Kari', email: 'k@example.invalid', stage: 'lead', source: 'manual',
     organizationId: null, lastActivityAt: null, tags: '[]', deals: [],
@@ -70,6 +77,15 @@ describe('runFlowBatch med KI-godkjenning', () => {
       where: { id: 1 }, data: { currentNodeId: 11, nextRunAt: RESUME },
     });
     expect(result).toMatchObject({ processed: 1, sent: 0, failed: 0, completed: 0 });
+  });
+
+  it('pending_review, men admin besluttet i mellomtiden ⇒ kjøres igjen straks, ikke ved fristen', async () => {
+    mockedSend.mockResolvedValue({ kind: 'pending_review', resumeAt: RESUME });
+    prisma.aiSuggestion.findUnique.mockResolvedValueOnce({ id: 1, kind: 'personalization_review', status: 'approved', detail: PENDING_DETAIL });
+    await runFlowBatch(NOW);
+    expect(prisma.flowEnrollment.update).toHaveBeenCalledWith({
+      where: { id: 1 }, data: { currentNodeId: 11, nextRunAt: NOW },
+    });
   });
 
   it('skipped_review ⇒ flyten går videre (her til slutt-noden)', async () => {

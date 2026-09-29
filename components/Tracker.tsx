@@ -48,6 +48,12 @@ function detailGrantsAnalytics(detail: unknown): boolean {
   return Array.isArray(categories) && categories.includes('analytics');
 }
 
+function detailWithdrawsAnalytics(detail: unknown): boolean {
+  if (typeof detail !== 'object' || detail === null) return false;
+  const categories = (detail as { categories?: unknown }).categories;
+  return Array.isArray(categories) && !categories.includes('analytics');
+}
+
 function send(type: string, meta: Record<string, unknown>): void {
   const publicId = readVisitorId();
   if (!publicId) return;
@@ -94,17 +100,16 @@ export function Tracker() {
         lastPath.current = window.location.pathname;
       }
     };
-    const disable = () => {
-      enabledRef.current = false;
-      deleteVisitorCookie();
-    };
 
     if (consentGranted()) enable();
 
+    // Cookien deles med bjerke.no (eget samtykke): manglende samtykke her betyr
+    // bare «ikke send»; kun et aktivt nei sletter cookien.
     const onConsent = (e: Event) => {
       const detail = (e as CustomEvent).detail;
-      if (consentGranted() || detailGrantsAnalytics(detail)) enable();
-      else disable();
+      if (consentGranted() || detailGrantsAnalytics(detail)) return enable();
+      enabledRef.current = false;
+      if (e.type !== 'getcookies:loaded' && detailWithdrawsAnalytics(detail)) deleteVisitorCookie();
     };
     const onClick = (e: MouseEvent) => {
       if (!enabledRef.current || window.location.pathname.startsWith('/admin')) return;

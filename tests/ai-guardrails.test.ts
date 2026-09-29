@@ -18,6 +18,23 @@ describe('validateAiRewrite', () => {
     const r = validateAiRewrite(base, base + ' Se også https://evil.example.com nå.');
     expect(r).toEqual({ ok: false, reason: 'ny lenke' });
   });
+  it('avviser nye lenker uten http(s)-skjema', () => {
+    const html = '<p>Hei {{forelder_navn}}! <a href="https://registrering.bjerke.no/kurs">Se kurs</a></p>';
+    for (const injected of [
+      '<a href="//evil.example">her</a>',
+      "<a href='www.evil.example'>her</a>",
+      '<img src=//evil.example/p.gif>',
+      '<a href="mailto:svindel@evil.example">skriv</a>',
+      '<a href="javascript:alert(1)">klikk</a>',
+      'besøk www.evil-example.no',
+    ]) {
+      expect(validateAiRewrite(html, html.replace('</p>', ` ${injected}</p>`))).toEqual({ ok: false, reason: 'ny lenke' });
+    }
+  });
+  it('godtar at eksisterende lenker beholdes', () => {
+    const html = '<p>Hei {{forelder_navn}}! <a href="https://registrering.bjerke.no/kurs">Se kurs</a></p>';
+    expect(validateAiRewrite(html, html.replace('Hei', 'Hei igjen')).ok).toBe(true);
+  });
   it('avviser ny pris', () => {
     const r = validateAiRewrite('Hei {{forelder_navn}}.', 'Hei {{forelder_navn}}. Kun kr 99!');
     expect(r).toEqual({ ok: false, reason: 'ny pris' });

@@ -17,6 +17,7 @@ import { parseJsonArray } from '@/lib/crm/normalize';
 import { ENGAGEMENT_CONDITION_KINDS, parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from './graph';
 import { planStep, type PlannedAction, type StepContext, type TaskActionPayload } from './step';
 import { sendFlowEmail } from './send';
+import { findReview } from '@/lib/ai/review';
 
 const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
@@ -323,9 +324,13 @@ async function processEnrollment(
           // KI-utkast venter på godkjenning: parker PÅ e-post-noden til fristen.
           // Neste tick (tidsavbrudd eller admin-vekking) treffer samme utkast via
           // dedupeKey og sender/skipper uten å generere på nytt.
+          // Admin kan ha besluttet i vinduet mellom oppslag og parkering —
+          // da ville vekkingen bommet, så kjør igjen straks i stedet for ved fristen.
+          const review = await findReview(enrollment.id, node.id);
+          const decided = review !== null && review.status !== 'pending';
           await prisma.flowEnrollment.update({
             where: { id: enrollment.id },
-            data: { currentNodeId: node.id, nextRunAt: result.resumeAt },
+            data: { currentNodeId: node.id, nextRunAt: decided ? now : result.resumeAt },
           });
           return { sent, failed: false, completed: false };
         }

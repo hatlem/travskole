@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
 import { shouldAnonymizeChild } from '@/lib/retention';
 import logger from '@/lib/logger';
-import { purgeDecidedReviewDrafts } from '@/lib/ai/review';
+import { markObsoleteReviews, purgeDecidedReviewDrafts } from '@/lib/ai/review';
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get('authorization') ?? '';
@@ -90,6 +90,7 @@ export async function GET(request: NextRequest) {
           `Retensjon: slettet ${deletedVisitors.count} anonyme besøkende og ${deletedEvents.count} hendelser`
         );
       }
+      await markObsoleteReviews();
       const purgedDrafts = await purgeDecidedReviewDrafts(new Date());
       if (purgedDrafts > 0) logger.info(`Retensjon: slettet ${purgedDrafts} behandlede KI-utkast`);
       // Fully orphaned anonymous events (neither contactId nor visitorId)

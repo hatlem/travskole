@@ -162,6 +162,16 @@ describe('t.js (bjerke.no-skriptet)', () => {
     expect(t.requests[0].body.publicId).toBe(id);
   });
 
+  it('manglende samtykke på dette nettstedet sletter ikke den delte cookien', () => {
+    const id = '44444444-4444-4444-8444-444444444444';
+    const t = setup();
+    t.jar.seed('bjerke_vid', id, '.bjerke.no');
+    t.fire('getcookies:loaded');
+    t.fire('getcookies:consent');
+    expect(t.jar.list().map((c) => c.value)).toEqual([id]);
+    expect(t.requests).toHaveLength(0);
+  });
+
   it('trukket samtykke sletter cookien og stopper sending', () => {
     const t = setup({ storedConsent: CONSENT });
     t.storage.getcookies_consent = NO_CONSENT;

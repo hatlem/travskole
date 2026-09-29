@@ -276,7 +276,8 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const ai = await resolveAiBody(input, renderedBody, subject, contact.name);
   if (ai.kind === 'pending_review') return ai;
   if (ai.kind === 'skip') return 'skipped_review';
-  const personalizedBody = ai.body;
+  // Admin-redigert/KI-tekst kan inneholde flettefelt som ikke var fylt inn.
+  const personalizedBody = ai.aiPersonalized ? replaceMergeTags(ai.body, mergeData) : ai.body;
   const aiPersonalized = ai.aiPersonalized;
 
   const unsubToken = signUnsubscribeToken(input.contactId);

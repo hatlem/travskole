@@ -223,27 +223,38 @@ export async function decideReview(
  * svarte, ble meldt ut, flyten ble nullstilt) — de ville ellers ligget i køen
  * for alltid, siden runneren aldri kommer tilbake til dem.
  */
-export async function markObsoleteReviews(): Promise<number> {
+// Et nytt utkast parkeres av runneren i løpet av samme tick; før det står
+// enrollmenten fortsatt på forrige node og må ikke tolkes som «gått videre».
+const PARK_GRACE_MS = 15 * 60 * 1000;
+
+/**
+ * Ventende utkast blir foreldet når mottakeren har forlatt flyten, eller er
+ * flyttet forbi noden (f.eks. sperret eller trukket samtykke før beslutning).
+ */
+export async function markObsoleteReviews(now: Date = new Date()): Promise<number> {
   const pending = await prisma.aiSuggestion.findMany({
     where: { kind: REVIEW_KIND, status: 'pending' },
-    select: { id: true, detail: true },
+    select: { id: true, detail: true, createdAt: true },
   });
-  const byEnrollment = new Map<number, number[]>();
-  for (const row of pending) {
+  const drafts = pending.flatMap((row) => {
     const detail = parseReviewDetail(row.detail);
-    if (!detail) continue;
-    byEnrollment.set(detail.enrollmentId, [...(byEnrollment.get(detail.enrollmentId) ?? []), row.id]);
-  }
-  if (byEnrollment.size === 0) return 0;
-
-  const active = await prisma.flowEnrollment.findMany({
-    where: { id: { in: [...byEnrollment.keys()] }, status: 'active' },
-    select: { id: true },
+    return detail ? [{ id: row.id, detail, createdAt: row.createdAt }] : [];
   });
-  const activeIds = new Set(active.map((e) => e.id));
-  const obsoleteIds = [...byEnrollment.entries()]
-    .filter(([enrollmentId]) => !activeIds.has(enrollmentId))
-    .flatMap(([, ids]) => ids);
+  if (drafts.length === 0) return 0;
+
+  const enrollments = await prisma.flowEnrollment.findMany({
+    where: { id: { in: [...new Set(drafts.map((d) => d.detail.enrollmentId))] } },
+    select: { id: true, status: true, currentNodeId: true },
+  });
+  const byId = new Map(enrollments.map((e) => [e.id, e]));
+  const obsoleteIds = drafts
+    .filter(({ detail, createdAt }) => {
+      const enrollment = byId.get(detail.enrollmentId);
+      if (!enrollment || enrollment.status !== 'active') return true;
+      const settled = now.getTime() - createdAt.getTime() > PARK_GRACE_MS;
+      return settled && enrollment.currentNodeId !== detail.nodeId;
+    })
+    .map((d) => d.id);
   if (obsoleteIds.length === 0) return 0;
 
   const { count } = await prisma.aiSuggestion.updateMany({

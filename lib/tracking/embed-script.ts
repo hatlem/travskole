@@ -147,14 +147,18 @@ const SOURCE = String.raw`(function (w, d) {
     send('page.viewed', pageMeta());
   }
 
-  function disable() {
-    enabled = false;
-    deleteVisitorCookie();
+  // Cookien deles med registrering.bjerke.no, som har eget samtykke. Manglende
+  // samtykke her betyr bare «ikke send»; kun et aktivt nei sletter cookien.
+  function detailWithdraws(detail) {
+    return !!detail && typeof detail === 'object' && Array.isArray(detail.categories) &&
+      detail.categories.indexOf('analytics') === -1;
   }
 
   function onConsent(e) {
-    if (storedConsent() || detailGrants(e && e.detail)) enable();
-    else disable();
+    var detail = e && e.detail;
+    if (storedConsent() || detailGrants(detail)) return enable();
+    enabled = false;
+    if (e && e.type !== 'getcookies:loaded' && detailWithdraws(detail)) deleteVisitorCookie();
   }
 
   function onClick(e) {

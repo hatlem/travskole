@@ -134,6 +134,13 @@ describe('godkjenningsmodus (aiReview=approve)', () => {
     expect(mockedSendMailAs.mock.calls[0][0].html).toContain('Redigert av admin');
   });
 
+  it('flettefelt admin skrev inn i den godkjente teksten fylles ut', async () => {
+    prisma.aiSuggestion.findUnique.mockResolvedValue(reviewRow('approved', { approvedBody: '<p>Hei {{forelder_navn}}!</p>' }));
+    expect(await sendFlowEmail(input)).toBe('sent');
+    const html = mockedSendMailAs.mock.calls[0][0].html;
+    expect(html).not.toContain('{{forelder_navn}}');
+  });
+
   it('«Send original» ⇒ sender originalen, aiPersonalized=false', async () => {
     prisma.aiSuggestion.findUnique.mockResolvedValue(reviewRow('send_original'));
     expect(await sendFlowEmail(input)).toBe('sent');

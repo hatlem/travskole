@@ -6,6 +6,14 @@
 // TDD'et i tests/ai-guardrails.test.ts.
 
 const URL_RE = /https?:\/\/[^\s"'<>)]+/gi;
+// Alle lenke-/ressursattributter, uansett skjema (//, www., mailto:, javascript:).
+const LINK_ATTR_RE = /\b(?:href|src|srcset|action|formaction|poster|background)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+
+function linkAttrs(html: string): string[] {
+  return Array.from(html.matchAll(new RegExp(LINK_ATTR_RE.source, LINK_ATTR_RE.flags))).map((m) =>
+    (m[1] ?? m[2] ?? m[3] ?? '').trim().toLowerCase(),
+  );
+}
 const AMOUNT = String.raw`\d{1,3}(?:[   .]\d{3})+(?:,(?:\d{1,2}|-))?|\d+(?:,(?:\d{1,2}|-))?`;
 const PRICE_RE = new RegExp(String.raw`(?:kr\.?|nok)\s*(?:${AMOUNT})|(?:${AMOUNT})\s*(?:kroner|kr|nok)\b`, 'gi');
 const DATE_RE = /(?:\d{1,2}\.\s?(?:januar|februar|mars|april|mai|juni|juli|august|september|oktober|november|desember)|\b(?:mandag|tirsdag|onsdag|torsdag|fredag|lørdag|søndag)\b|\d{1,2}\.\d{1,2}\.\d{2,4}|\d{4}-\d{2}-\d{2})/gi;
@@ -81,6 +89,14 @@ export function validateAiRewrite(
   const rewrittenUrls = new Set(matches(URL_RE, rewritten));
   for (const url of rewrittenUrls) {
     if (!origUrls.has(url)) return { ok: false, reason: 'ny lenke' };
+  }
+  const origAttrs = new Set(linkAttrs(original));
+  for (const attr of linkAttrs(rewritten)) {
+    if (!origAttrs.has(attr)) return { ok: false, reason: 'ny lenke' };
+  }
+  if (/\bwww\.[a-z0-9-]+\.[a-z]{2,}/i.test(rewritten.replace(URL_RE, ' ')) &&
+      !/\bwww\.[a-z0-9-]+\.[a-z]{2,}/i.test(original)) {
+    return { ok: false, reason: 'ny lenke' };
   }
 
   const origPrices = new Set(matches(PRICE_RE, original).map(canonicalPrice));

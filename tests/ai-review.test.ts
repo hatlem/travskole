@@ -177,26 +177,46 @@ describe('decideReview', () => {
 });
 
 describe('markObsoleteReviews', () => {
+  const OLD = new Date('2026-10-01T09:00:00Z'); // 1 t før NOW — forbi parkeringsvinduet
+  const FRESH = new Date('2026-10-01T09:55:00Z'); // 5 min før NOW
+
   it('markerer ventende utkast som utgått når enrollmentet ikke lenger er aktivt', async () => {
     prisma.aiSuggestion.findMany.mockResolvedValue([
-      { id: 7, detail: JSON.stringify({ ...DETAIL, enrollmentId: 1 }) },
-      { id: 8, detail: JSON.stringify({ ...DETAIL, enrollmentId: 2 }) },
-      { id: 9, detail: '{ødelagt' },
+      { id: 7, detail: JSON.stringify({ ...DETAIL, enrollmentId: 1 }), createdAt: OLD },
+      { id: 8, detail: JSON.stringify({ ...DETAIL, enrollmentId: 2 }), createdAt: OLD },
+      { id: 9, detail: '{ødelagt', createdAt: OLD },
     ]);
-    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 1 }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([
+      { id: 1, status: 'active', currentNodeId: DETAIL.nodeId },
+      { id: 2, status: 'completed', currentNodeId: null },
+    ]);
     prisma.aiSuggestion.updateMany.mockResolvedValue({ count: 1 });
 
-    expect(await markObsoleteReviews()).toBe(1);
-    expect(prisma.flowEnrollment.findMany.mock.calls[0][0].where).toEqual({ id: { in: [1, 2] }, status: 'active' });
+    expect(await markObsoleteReviews(NOW)).toBe(1);
+    expect(prisma.flowEnrollment.findMany.mock.calls[0][0].where).toEqual({ id: { in: [1, 2] } });
     expect(prisma.aiSuggestion.updateMany).toHaveBeenCalledWith({
       where: { id: { in: [8] }, kind: REVIEW_KIND, status: 'pending' }, data: { status: 'obsolete' },
     });
   });
 
-  it('gjør ingenting når alle ventende utkast hører til aktive enrollments', async () => {
-    prisma.aiSuggestion.findMany.mockResolvedValue([{ id: 7, detail: JSON.stringify(DETAIL) }]);
-    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 1 }]);
-    expect(await markObsoleteReviews()).toBe(0);
+  it('markerer utkast som utgått når aktiv enrollment har gått forbi noden', async () => {
+    prisma.aiSuggestion.findMany.mockResolvedValue([{ id: 7, detail: JSON.stringify(DETAIL), createdAt: OLD }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 1, status: 'active', currentNodeId: 99 }]);
+    prisma.aiSuggestion.updateMany.mockResolvedValue({ count: 1 });
+    expect(await markObsoleteReviews(NOW)).toBe(1);
+  });
+
+  it('lar ferske utkast være i fred selv om enrollmentet ennå ikke er parkert', async () => {
+    prisma.aiSuggestion.findMany.mockResolvedValue([{ id: 7, detail: JSON.stringify(DETAIL), createdAt: FRESH }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 1, status: 'active', currentNodeId: 99 }]);
+    expect(await markObsoleteReviews(NOW)).toBe(0);
+    expect(prisma.aiSuggestion.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('gjør ingenting når alle ventende utkast er parkert på sin node', async () => {
+    prisma.aiSuggestion.findMany.mockResolvedValue([{ id: 7, detail: JSON.stringify(DETAIL), createdAt: OLD }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 1, status: 'active', currentNodeId: DETAIL.nodeId }]);
+    expect(await markObsoleteReviews(NOW)).toBe(0);
     expect(prisma.aiSuggestion.updateMany).not.toHaveBeenCalled();
   });
 
