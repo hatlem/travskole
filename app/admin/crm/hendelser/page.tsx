@@ -20,7 +20,7 @@ interface EventRow {
   contact: { id: number; name: string } | null;
 }
 
-const SOURCES = ['server', 'client', 'webhook'] as const;
+const SOURCES = ['server', 'web', 'client', 'webhook'] as const;
 
 function EventDetails({ meta }: { meta: string }) {
   let formatted = meta;

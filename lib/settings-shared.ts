@@ -4,6 +4,8 @@
  * which re-exports everything here.
  */
 
+import { parseOriginEntry, splitOriginEntries } from '@/lib/tracking/origins';
+
 export type SiteSettings = Record<string, string>;
 
 /**
@@ -121,6 +123,12 @@ export function validateSettingValue(key: string, value: string): string | null 
     }
     case 'marketing_optin_text':
       return value.trim() === '' ? 'Samtykketeksten kan ikke være tom' : null;
+    case 'tracking_allowed_origins': {
+      const invalid = splitOriginEntries(value).find((entry) => !parseOriginEntry(entry));
+      return invalid
+        ? `Ugyldig nettsted: ${invalid} (bruk f.eks. https://bjerke.no — uten sti, ikke *)`
+        : null;
+    }
     default:
       return null;
   }
