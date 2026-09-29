@@ -3,12 +3,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
+import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
 import { DEFAULT_FLOW_SETTINGS, FlowSettingsFields, type FlowSettingsValues } from './flow-settings-fields';
 
 interface FlowRow {
@@ -62,6 +64,38 @@ function StatusBadge({ status }: { status: string }) {
 
 type ConfirmAction = { type: 'archive' | 'delete'; flow: FlowRow };
 
+type TemplateAction = 'standard' | 'legacy';
+
+type TemplateReport =
+  | { kind: 'standard'; result: InstallResult }
+  | { kind: 'legacy'; result: LegacyImportResult };
+
+const LIFECYCLE_SLOT_LABELS: Record<string, string> = {
+  reminder_before: 'Påminnelse før kursstart',
+  welcome_start: 'Velkommen ved kursstart',
+  midway: 'Halvveis i kurset',
+  after_end: 'Etter kursslutt',
+};
+
+const MATCH_VIA_LABELS: Record<string, string> = {
+  trigger: 'etter gammel utløser',
+  name: 'etter navn',
+  order: 'etter rekkefølge',
+};
+
+function legacyStatusMessage(result: LegacyImportResult): string {
+  switch (result.status) {
+    case 'created':
+      return 'Malen «Kurs-livssyklus (originaltekster)» er opprettet.';
+    case 'exists':
+      return 'Malen med originaltekstene finnes allerede — ingenting ble endret.';
+    case 'missing_table':
+      return 'Fant ingen gamle kursmaler i databasen (tabellen email_templates finnes ikke).';
+    case 'empty':
+      return 'Tabellen med gamle kursmaler er tom — ingenting å importere.';
+  }
+}
+
 const ANCHOR_LABELS: Record<string, string> = { contact: 'Kontakt', course: 'Kurs' };
 
 export default function FlyterPage() {
@@ -84,6 +118,12 @@ export default function FlyterPage() {
   const [pendingIds, setPendingIds] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [templateAction, setTemplateAction] = useState<TemplateAction | null>(null);
+  const [templateSenderId, setTemplateSenderId] = useState<number | ''>('');
+  const [templateBusy, setTemplateBusy] = useState(false);
+  const [templateReport, setTemplateReport] = useState<TemplateReport | null>(null);
+  const { data: session } = useSession();
+  const isSuperAdmin = session?.user.role === 'superadmin';
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
@@ -135,8 +175,9 @@ export default function FlyterPage() {
     return () => clearTimeout(t);
   }, []);
 
+  const needsSenders = showGenerate || templateAction !== null;
   useEffect(() => {
-    if (!showGenerate || senderIdentities.length > 0) return;
+    if (!needsSenders || senderIdentities.length > 0) return;
     const loadSenderIdentities = async () => {
       try {
         const res = await fetch('/api/admin/crm/sender-identities');
@@ -147,11 +188,12 @@ export default function FlyterPage() {
           : [];
         setSenderIdentities(identities);
         setSenderIdentityId((prev) => (prev === '' && identities.length > 0 ? identities[0].id : prev));
+        setTemplateSenderId((prev) => (prev === '' && identities.length > 0 ? identities[0].id : prev));
       } catch { /* håndteres ved innsending */ }
     };
     const t = setTimeout(loadSenderIdentities, 0);
     return () => clearTimeout(t);
-  }, [showGenerate, senderIdentities.length]);
+  }, [needsSenders, senderIdentities.length]);
 
   function withPending<T>(id: number, fn: () => Promise<T>): Promise<T> {
     setPendingIds((prev) => new Set(prev).add(id));
@@ -266,6 +308,43 @@ export default function FlyterPage() {
     }
   }
 
+  async function runTemplateAction() {
+    if (!templateAction || templateSenderId === '' || templateBusy) return;
+    const action = templateAction;
+    setTemplateBusy(true);
+    try {
+      const url = action === 'standard' ? '/api/admin/crm/flows/templates' : '/api/admin/crm/flows/templates/legacy';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ senderIdentityId: templateSenderId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error || 'Kunne ikke legge til maler', 'error');
+        return;
+      }
+      if (action === 'standard') {
+        const result = data as InstallResult;
+        setTemplateReport({ kind: 'standard', result });
+        toast(
+          result.created.length > 0 ? `${result.created.length} standardmaler lagt til` : 'Alle standardmalene finnes allerede',
+          'success',
+        );
+      } else {
+        const result = data as LegacyImportResult;
+        setTemplateReport({ kind: 'legacy', result });
+        toast(legacyStatusMessage(result), result.status === 'created' || result.status === 'exists' ? 'success' : 'error');
+      }
+      setTemplateAction(null);
+      load();
+    } catch {
+      toast('Kunne ikke legge til maler', 'error');
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
   async function toggleStatus(flow: FlowRow) {
     const nextStatus = flow.status === 'active' ? 'paused' : 'active';
     await withPending(flow.id, async () => {
@@ -352,7 +431,7 @@ export default function FlyterPage() {
           <button
             onClick={() => { setShowGenerate(false); setShowNew(false); setShowFromTemplate((v) => !v); }}
             disabled={templates.length === 0}
-            title={templates.length === 0 ? 'Lagre en flyt som mal fra flyt-editoren først' : undefined}
+            title={templates.length === 0 ? 'Lagre en flyt som mal fra flyt-editoren eller legg til standardmalene først' : undefined}
             className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
           >
             Ny flyt fra mal
@@ -586,10 +665,122 @@ export default function FlyterPage() {
           )}
 
           <section className="mt-8">
-            <h2 className="text-sm font-semibold text-gray-800">Maler</h2>
-            <p className="text-xs text-gray-500 mb-3">
-              Maler kan ikke aktiveres eller få påmeldinger. Lagre en flyt som mal fra flyt-editoren, og bruk «Ny flyt fra mal» for å starte en ny flyt fra den.
-            </p>
+            <div className="flex flex-wrap items-start gap-3 mb-3">
+              <div className="flex-1 min-w-[240px]">
+                <h2 className="text-sm font-semibold text-gray-800">Maler</h2>
+                <p className="text-xs text-gray-500">
+                  Maler kan ikke aktiveres eller få påmeldinger. Lagre en flyt som mal fra flyt-editoren, og bruk «Ny flyt fra mal» for å starte en ny flyt fra den.
+                </p>
+              </div>
+              {isSuperAdmin && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => { setTemplateReport(null); setTemplateAction((a) => (a === 'standard' ? null : 'standard')); }}
+                    className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
+                  >
+                    Legg til standardmaler
+                  </button>
+                  <button
+                    onClick={() => { setTemplateReport(null); setTemplateAction((a) => (a === 'legacy' ? null : 'legacy')); }}
+                    className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
+                  >
+                    Importer gamle kursmaler
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {templateAction && (
+              <div className="border border-gray-200 rounded-lg p-4 mb-3 bg-indigo-50">
+                <h3 className="text-sm font-semibold text-gray-800 mb-1">
+                  {templateAction === 'standard' ? 'Legg til standardmaler' : 'Importer gamle kursmaler'}
+                </h3>
+                <p className="text-xs text-gray-600 mb-3">
+                  {templateAction === 'standard'
+                    ? 'Legger til «Gjenbooking julebord/firmafest», «Oppfølging av forespørsel», «Etter arrangementet» og «Velkommen ny kontakt» som maler. Maler som allerede finnes, hoppes over.'
+                    : 'Lager malen «Kurs-livssyklus (originaltekster)» med de håndskrevne tekstene fra det gamle kursmal-systemet. Den eksisterende livssyklus-flyten endres ikke.'}
+                </p>
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className="text-sm">
+                    <span className="block text-gray-600 mb-1">Avsender for e-postene</span>
+                    <select
+                      value={templateSenderId}
+                      onChange={(e) => setTemplateSenderId(e.target.value ? Number(e.target.value) : '')}
+                      className="border border-gray-300 rounded-md px-3 py-2 text-sm bg-white"
+                    >
+                      <option value="">Velg avsender …</option>
+                      {senderIdentities.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.displayName} ({s.email})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <button
+                    onClick={runTemplateAction}
+                    disabled={templateSenderId === '' || templateBusy}
+                    className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {templateBusy ? 'Jobber …' : templateAction === 'standard' ? 'Legg til maler' : 'Importer'}
+                  </button>
+                  <button onClick={() => setTemplateAction(null)} className="text-sm text-gray-600 px-2 py-2">
+                    Avbryt
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {templateReport && (
+              <div className="border border-gray-200 rounded-lg p-4 mb-3 bg-white text-sm" role="status">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    {templateReport.kind === 'standard' ? (
+                      <>
+                        <p className="text-gray-800">
+                          {templateReport.result.created.length > 0
+                            ? `Lagt til: ${templateReport.result.created.map((f) => `«${f.name}»`).join(', ')}.`
+                            : 'Ingen nye maler lagt til.'}
+                        </p>
+                        {templateReport.result.skipped.length > 0 && (
+                          <p className="text-gray-500">
+                            Fantes fra før: {templateReport.result.skipped.map((n) => `«${n}»`).join(', ')}.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-gray-800">{legacyStatusMessage(templateReport.result)}</p>
+                        {templateReport.result.status === 'created' && templateReport.result.matched.length > 0 && (
+                          <ul className="text-gray-600 list-disc pl-5">
+                            {templateReport.result.matched.map((m) => (
+                              <li key={m.slot}>
+                                {LIFECYCLE_SLOT_LABELS[m.slot] ?? m.slot}: «{m.templateName}» ({MATCH_VIA_LABELS[m.via] ?? m.via})
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {templateReport.result.status === 'created' && templateReport.result.unmatched.length > 0 && (
+                          <div className="text-gray-500">
+                            <p>Ikke brukt:</p>
+                            <ul className="list-disc pl-5">
+                              {templateReport.result.unmatched.map((u) => (
+                                <li key={`${u.name}-${u.subject}`}>
+                                  «{u.name}» — {u.reason}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                  <button onClick={() => setTemplateReport(null)} className="text-gray-500 hover:text-gray-700">
+                    Lukk
+                  </button>
+                </div>
+              </div>
+            )}
+
             {templates.length === 0 ? (
               <p className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg px-4 py-6 text-center">
                 Ingen maler ennå.
