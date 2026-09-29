@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { paymentStatusBadge } from '@/lib/payments/badge';
 import { StageEditor } from './StageEditor';
+import { DealDialog } from '@/components/admin/crm/DealDialog';
 
 interface DealCard {
   id: number;
@@ -45,6 +46,7 @@ export default function PipelinePage() {
   const [dragId, setDragId] = useState<number | null>(null);
   const [movingIds, setMovingIds] = useState<Set<number>>(new Set());
   const [editingStages, setEditingStages] = useState(false);
+  const [dealDialog, setDealDialog] = useState<{ dealId: number | null; stageId?: number } | null>(null);
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -218,6 +220,17 @@ export default function PipelinePage() {
         />
       )}
 
+      {dealDialog && (
+        <DealDialog
+          open
+          dealId={dealDialog.dealId}
+          defaults={{ pipelineId: pipeline.id, stageId: dealDialog.stageId }}
+          onClose={() => setDealDialog(null)}
+          onSaved={() => { setDealDialog(null); load({ silent: true }); }}
+          onDeleted={() => { setDealDialog(null); load({ silent: true }); }}
+        />
+      )}
+
       <div className="flex gap-4 overflow-x-auto pb-4">
         {pipeline.stages.map((stage) => {
           const sum = stage.deals.reduce((acc, d) => acc + (d.value ?? 0), 0);
@@ -232,8 +245,16 @@ export default function PipelinePage() {
                 stage.isWon ? 'bg-green-50' : stage.isLost ? 'bg-red-50' : 'bg-gray-100'
               }`}>
                 <span className="font-semibold text-sm">{stage.name}</span>
-                <span className="text-xs text-gray-500">
+                <span className="flex items-center gap-2 text-xs text-gray-500">
                   {stage.deals.length}{sum > 0 && ` · ${sum.toLocaleString('nb-NO')} kr`}
+                  <button
+                    onClick={() => setDealDialog({ dealId: null, stageId: stage.id })}
+                    className="text-gray-500 hover:text-gray-900 text-base leading-none px-1"
+                    aria-label={`Ny deal i ${stage.name}`}
+                    title="Ny deal"
+                  >
+                    +
+                  </button>
                 </span>
               </div>
               <div className="p-2 space-y-2 min-h-24">
@@ -245,6 +266,10 @@ export default function PipelinePage() {
                       draggable={!isMoving}
                       onDragStart={() => setDragId(deal.id)}
                       onDragEnd={() => setDragId(null)}
+                      onClick={(e) => {
+                        if ((e.target as HTMLElement).closest('a')) return;
+                        if (!isMoving) setDealDialog({ dealId: deal.id });
+                      }}
                       className={`bg-white border border-gray-200 rounded-md p-3 text-sm shadow-sm ${
                         isMoving ? 'opacity-50 cursor-wait' : 'cursor-grab active:cursor-grabbing'
                       } ${dragId === deal.id ? 'opacity-50' : ''}`}

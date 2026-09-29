@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { isSuperAdmin } from '@/lib/settings-shared';
 import { logActivity } from '@/lib/activity';
 import { normalizeEmail } from '@/lib/crm/normalize';
 
@@ -66,6 +67,10 @@ export async function DELETE(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  // Å gjenåpne utsending til en sperret adresse er et personvernvalg — kun superadmin.
+  if (!isSuperAdmin(session.user.role)) {
+    return NextResponse.json({ error: 'Kun superadmin kan fjerne adresser fra ikke-kontakt-listen' }, { status: 403 });
   }
   const email = normalizeEmail(request.nextUrl.searchParams.get('email'));
   if (!email) {

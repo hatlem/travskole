@@ -6,6 +6,8 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { useSession } from 'next-auth/react';
+import { isSuperAdmin } from '@/lib/settings-shared';
 
 interface Segment { id: number; name: string; rules: string }
 interface List { id: number; name: string; memberCount: number }
@@ -56,6 +58,8 @@ export default function SegmenterPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const { toast } = useToast();
+  const { data: session } = useSession();
+  const canRemoveSuppression = isSuperAdmin(session?.user?.role);
   const abortRef = useRef<AbortController | null>(null);
 
   // Segmenter
@@ -608,13 +612,15 @@ export default function SegmenterPage() {
                 {suppressions.map((s) => (
                   <li key={s.id} className="flex items-center justify-between text-sm py-1 border-b border-gray-100">
                     <span>{s.email} <span className="text-gray-400 text-xs">({s.reason})</span></span>
-                    <button
-                      onClick={() => removeSuppression(s.email)}
-                      disabled={removingEmail === s.email}
-                      className="text-gray-400 hover:text-red-600 text-xs disabled:opacity-50"
-                    >
-                      {removingEmail === s.email ? 'Fjerner …' : 'Fjern'}
-                    </button>
+                    {canRemoveSuppression && (
+                      <button
+                        onClick={() => removeSuppression(s.email)}
+                        disabled={removingEmail === s.email}
+                        className="text-gray-400 hover:text-red-600 text-xs disabled:opacity-50"
+                      >
+                        {removingEmail === s.email ? 'Fjerner …' : 'Fjern'}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>
