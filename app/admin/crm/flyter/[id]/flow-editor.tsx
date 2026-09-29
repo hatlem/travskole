@@ -418,7 +418,7 @@ export function FlowEditor({
         onActivate={handleActivate}
         onPause={() => handleStatusChange('paused')}
         onResume={() => handleStatusChange('active')}
-        onEnroll={() => setEnrollOpen(true)}
+        onEnroll={flow.anchorMode === 'course' ? undefined : () => setEnrollOpen(true)}
         onSaveAsTemplate={handleSaveAsTemplate}
         savingTemplate={savingTemplate}
         enrollmentCounter={<EnrollmentPanel key={enrollmentsVersion} flowId={flow.id} />}
@@ -532,7 +532,6 @@ export function FlowEditor({
       {enrollOpen && (
         <EnrollModal
           flowId={flow.id}
-          anchorMode={flow.anchorMode}
           isMarketing={flow.isMarketing}
           onClose={() => setEnrollOpen(false)}
           onEnrolled={(result) => {

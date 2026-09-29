@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 
-interface FlowOption { id: number; name: string; status: string; isMarketing: boolean }
+interface FlowOption { id: number; name: string; status: string; isMarketing: boolean; anchorMode: string }
 
 interface AddToFlowProps {
   contactId: number;
@@ -33,7 +33,7 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }:
     const controller = new AbortController();
     fetch('/api/admin/crm/flows', { signal: controller.signal })
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error())))
-      .then((data) => setFlows((data.flows ?? []).filter((f: FlowOption) => f.status === 'active')))
+      .then((data) => setFlows((data.flows ?? []).filter((f: FlowOption) => f.status === 'active' && f.anchorMode !== 'course')))
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setFlows([]);
@@ -47,17 +47,15 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }:
     if (!selected || busy) return;
     setBusy(true);
     try {
-      let { res, data } = await postEnrollment(selected.id, { contactIds: [contactId] });
-      // Eldre API-versjon tar kun { contactId } — prøv den før vi gir opp.
-      if (res.status === 400) {
-        ({ res, data } = await postEnrollment(selected.id, { contactId }));
-      }
+      const { res, data } = await postEnrollment(selected.id, { contactIds: [contactId] });
       if (!res.ok) {
         toast(data.error || 'Kunne ikke legge til i flyten', 'error');
         return;
       }
-      const enrolled = typeof data.enrolled === 'number' ? data.enrolled : 1;
-      toast(enrolled > 0 ? `Lagt til i «${selected.name}»` : `Kontakten er allerede aktiv i «${selected.name}»`, enrolled > 0 ? 'success' : 'info');
+      const enrolled = typeof data.enrolled === 'number' ? data.enrolled : 0;
+      if (enrolled > 0) toast(`Lagt til i «${selected.name}»`, 'success');
+      else if (data.skippedSuppressed > 0) toast('Kontakten står på ikke-kontakt-listen og ble ikke lagt til', 'error');
+      else toast(`Kontakten er allerede aktiv i «${selected.name}»`, 'info');
       setFlowId('');
       if (enrolled > 0) onEnrolled?.();
     } catch {

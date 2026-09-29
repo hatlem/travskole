@@ -86,13 +86,29 @@ export async function recordReply(
 
   if (send.enrollmentId != null) {
     const enrollment = await prisma.flowEnrollment.findUnique({ where: { id: send.enrollmentId } });
-    if (enrollment && enrollment.status === 'active') {
+    // Et svar avslutter flyten — med mindre flyten selv forgrener på «svarte»,
+    // da må den fortsette for å nå ja-grenen.
+    if (enrollment && enrollment.status === 'active' && !(await flowBranchesOnReply(enrollment.flowId))) {
       await prisma.flowEnrollment.update({
         where: { id: send.enrollmentId },
         data: { status: 'exited', finishedAt: new Date() },
       });
     }
   }
+}
+
+async function flowBranchesOnReply(flowId: number): Promise<boolean> {
+  const conditions = await prisma.flowNode.findMany({
+    where: { flowId, type: 'condition' },
+    select: { config: true },
+  });
+  return conditions.some((node) => {
+    try {
+      return (JSON.parse(node.config) as { kind?: unknown }).kind === 'replied_email';
+    } catch {
+      return false;
+    }
+  });
 }
 
 export async function recordBounce(

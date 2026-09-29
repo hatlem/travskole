@@ -68,7 +68,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const router = useRouter();
   const { data: session } = useSession();
   const canUnsuppress = isSuperAdmin(session?.user?.role);
-  const { currentUserId } = useAssignees();
+  const { assignees, currentUserId } = useAssignees();
   const [contact, setContact] = useState<ContactDetail | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
@@ -124,8 +124,11 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
     return () => abortRef.current?.abort();
   }, []);
 
-  // Ny oppgave tildeles kontaktens ansvarlige, ellers meg — til admin velger selv.
-  const defaultTaskAssignee = contact?.ownerId ?? currentUserId;
+  // Ny oppgave/deal tildeles kontaktens ansvarlige (hvis fortsatt aktiv admin),
+  // ellers meg — til admin velger selv.
+  const activeOwnerId =
+    contact?.ownerId != null && assignees.some((a) => a.id === contact.ownerId) ? contact.ownerId : null;
+  const defaultTaskAssignee = activeOwnerId ?? currentUserId;
   const effectiveTaskAssignee = taskAssigneeTouched ? taskAssignee : defaultTaskAssignee;
 
   async function patch(body: Record<string, unknown>, okMsg: string): Promise<boolean> {
@@ -598,7 +601,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         defaults={{
           contact: { id: contact.id, name: contact.name },
           organization: contact.organization,
-          ownerId: contact.ownerId ?? currentUserId,
+          ownerId: activeOwnerId ?? currentUserId,
         }}
         onClose={() => setDealDialog(null)}
         onSaved={() => load()}

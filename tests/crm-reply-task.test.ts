@@ -4,6 +4,7 @@ const { prisma, settings, emitEvent } = vi.hoisted(() => ({
   prisma: {
     contact: { findUnique: vi.fn() },
     flowEnrollment: { findUnique: vi.fn(), update: vi.fn() },
+    flowNode: { findMany: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
     task: { create: vi.fn() },
@@ -141,5 +142,28 @@ describe('recordReply → task idempotency', () => {
     prisma.messageSend.updateMany.mockResolvedValue({ count: 0 });
     await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
     expect(prisma.task.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordReply → flow exit', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.messageSend.findFirst.mockResolvedValue({ ...SEND, sentAt: new Date() });
+    prisma.messageSend.updateMany.mockResolvedValue({ count: 0 });
+    prisma.flowEnrollment.findUnique.mockResolvedValue({ id: 5, flowId: 2, status: 'active' });
+  });
+
+  it('exits the enrollment when the flow does not branch on replies', async () => {
+    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'opened_email' }) }]);
+    await recordReply('<abc@bjerke.no>', {});
+    expect(prisma.flowEnrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 5 }, data: expect.objectContaining({ status: 'exited' }) }),
+    );
+  });
+
+  it('keeps the enrollment running so a replied_email condition can take its yes-branch', async () => {
+    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'replied_email' }) }]);
+    await recordReply('<abc@bjerke.no>', {});
+    expect(prisma.flowEnrollment.update).not.toHaveBeenCalled();
   });
 });

@@ -24,7 +24,6 @@ export interface EnrollResult {
 
 interface EnrollModalProps {
   flowId: number;
-  anchorMode: string;
   isMarketing: boolean;
   onClose: () => void;
   onEnrolled: (result: EnrollResult) => void;
@@ -34,7 +33,7 @@ type Mode = 'segment' | 'contacts';
 
 const SEGMENT_CAP = 500;
 
-export function EnrollModal({ flowId, anchorMode, isMarketing, onClose, onEnrolled }: EnrollModalProps) {
+export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: EnrollModalProps) {
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>('segment');
   const [segments, setSegments] = useState<SegmentOption[] | null>(null);
@@ -267,11 +266,6 @@ export function EnrollModal({ flowId, anchorMode, isMarketing, onClose, onEnroll
             <div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
               <p>Kontakter som allerede er aktive i flyten, eller som står på suppresjonslista, hoppes over.</p>
               {isMarketing && <p>Markedsføringsflyt: e-poster sendes bare til kontakter med markedsføringssamtykke.</p>}
-              {anchorMode === 'course' && (
-                <p className="text-amber-700">
-                  Dette er en kurs-forankret flyt. Manuelt innmeldte kontakter er ikke knyttet til et kurs, så «Planlegg»-noder avslutter løpet og kurs-flettefelt blir tomme.
-                </p>
-              )}
             </div>
 
             <div className="flex justify-end gap-2">

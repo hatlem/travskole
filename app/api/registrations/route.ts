@@ -354,6 +354,10 @@ export async function POST(request: NextRequest) {
     // Opt-in teller kun når avkrysningsboksen faktisk vises i skjemaet.
     const marketingOptIn =
       data.marketingOptIn === true && (await getSetting('marketing_optin_enabled')) === 'true';
+    // Kun innlogget innsender med samme e-post kan oppheve en tidligere avmelding.
+    const optInVerified =
+      marketingOptIn &&
+      normalizeEmail((await getServerSession())?.user?.email ?? '') === normalizeEmail(data.parentEmail);
     syncRegistrationToCrm(registration.id)
       .catch(() => {})
       .then(async () => {
@@ -361,7 +365,7 @@ export async function POST(request: NextRequest) {
         const contact = email
           ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
           : null;
-        if (contact && marketingOptIn) await recordMarketingOptIn(contact.id, 'registration_form');
+        if (contact && marketingOptIn) await recordMarketingOptIn(contact.id, 'registration_form', { verified: optInVerified });
         const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
         if (contact) await stitchVisitorToContact(publicId, contact.id);
         await emitEvent({

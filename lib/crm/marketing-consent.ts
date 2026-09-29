@@ -19,11 +19,14 @@ export interface MarketingBasisInput {
   allowLegitimateInterest: boolean;
 }
 
-/** Aktivt trukket: samtykke gitt og senere avslått, eller avmeldt via lenke. */
+/**
+ * Aktivt reservert. Consent-rader opprettes kun ved en eksplisitt handling
+ * (admin, avmeldingslenke, skjema-opt-in), så en rad med marketing=false betyr
+ * et bevisst nei — med mindre admin eksplisitt har satt berettiget interesse.
+ */
 export function hasWithdrawnMarketing(consent: ConsentLike | null): boolean {
   if (!consent || consent.marketing) return false;
-  if (consent.source === 'avmelding') return true;
-  return consent.lawfulBasis === 'consent' && consent.consentAt != null;
+  return consent.lawfulBasis !== 'legitimate_interest';
 }
 
 export function isMarketingAllowed({ consent, organizationId, allowLegitimateInterest }: MarketingBasisInput): boolean {
@@ -37,22 +40,40 @@ export type MarketingOptInSource = 'registration_form' | 'booking_form';
 /**
  * Lagrer et aktivt markedsføringssamtykke for kontakten. Kaster aldri —
  * offentlige skjemaer skal ikke feile på grunn av samtykkeskrivingen.
+ *
+ * `verified` = innsenderen er innlogget med kontaktens e-post. Uverifisert
+ * skjemainput kan aldri overstyre en tidligere avmelding/reservasjon — ellers
+ * kunne hvem som helst melde en tredjepart på igjen.
  */
-export async function recordMarketingOptIn(contactId: number, source: MarketingOptInSource): Promise<void> {
+export async function recordMarketingOptIn(
+  contactId: number,
+  source: MarketingOptInSource,
+  { verified }: { verified: boolean },
+): Promise<void> {
   try {
+    const existing = await prisma.contact.findUnique({
+      where: { id: contactId },
+      select: { email: true, consent: true },
+    });
+    if (!existing) return;
+    const unsubscribed = existing.email
+      ? await prisma.suppression.findFirst({ where: { email: existing.email, reason: 'unsubscribe' } })
+      : null;
+    if (!verified && (unsubscribed || hasWithdrawnMarketing(existing.consent))) {
+      logger.info('Uverifisert opt-in ignorert for kontakt som har reservert seg', { contactId, source });
+      return;
+    }
+
     const data = { marketing: true, lawfulBasis: 'consent', consentAt: new Date(), source };
-    const consent = await prisma.consent.upsert({
+    await prisma.consent.upsert({
       where: { contactId },
       create: { contactId, ...data },
       update: data,
-      select: { contact: { select: { email: true } } },
     });
-    // Et nytt, aktivt samtykke opphever en tidligere avmelding — men ikke
+    // Et verifisert nytt samtykke opphever en tidligere avmelding — men ikke
     // bounce/klage/manuell sperring, som gjelder adressen, ikke viljen.
-    if (consent.contact.email) {
-      await prisma.suppression.deleteMany({
-        where: { email: consent.contact.email, reason: 'unsubscribe' },
-      });
+    if (unsubscribed) {
+      await prisma.suppression.delete({ where: { id: unsubscribed.id } });
     }
     await emitEvent({
       type: 'consent.updated',

@@ -37,7 +37,8 @@ interface FlowToolbarProps {
   onActivate: () => void;
   onPause: () => void;
   onResume: () => void;
-  onEnroll: () => void;
+  /** Utelatt for kurs-forankrede flyter, som kun startes av påmeldinger. */
+  onEnroll?: () => void;
   onSaveAsTemplate: () => void;
   savingTemplate: boolean;
   enrollmentCounter: React.ReactNode;
@@ -83,7 +84,7 @@ export function FlowToolbar({
 
         <div className="flex flex-wrap items-center gap-2">
           {!isTemplate && enrollmentCounter}
-          {status === 'active' && (
+          {status === 'active' && onEnroll && (
             <button
               onClick={onEnroll}
               className="border border-blue-600 text-blue-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50"

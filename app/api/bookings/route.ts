@@ -66,6 +66,10 @@ export async function POST(request: NextRequest) {
   // Opt-in teller kun når avkrysningsboksen faktisk vises i skjemaet.
   const marketingOptIn =
     data.marketingOptIn === true && (await getSetting('marketing_optin_enabled')) === 'true';
+  // Kun innlogget innsender med samme e-post kan oppheve en tidligere avmelding.
+  const optInVerified =
+    marketingOptIn &&
+    normalizeEmail((await getServerSession())?.user?.email ?? '') === normalizeEmail(data.email);
 
   try {
     const booking = await prisma.bookingRequest.create({
@@ -99,7 +103,7 @@ export async function POST(request: NextRequest) {
           ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
           : null;
         const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
-        if (contact && marketingOptIn) await recordMarketingOptIn(contact.id, 'booking_form');
+        if (contact && marketingOptIn) await recordMarketingOptIn(contact.id, 'booking_form', { verified: optInVerified });
         if (contact) await stitchVisitorToContact(publicId, contact.id);
         await emitEvent({
           type: 'booking.created',

@@ -88,12 +88,23 @@ export async function POST(
   }
   const data = parsed.data;
 
-  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { id: true, status: true } });
+  const flow = await prisma.flow.findUnique({
+    where: { id: flowId },
+    select: { id: true, status: true, anchorMode: true },
+  });
   if (!flow) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
   if (isTemplateStatus(flow.status)) {
     return NextResponse.json({ error: 'Kan ikke melde inn i en mal.' }, { status: 409 });
+  }
+  // Kurs-forankrede løp må starte fra en påmelding — uten kursanker avslutter
+  // første «Planlegg»-node løpet stille.
+  if (flow.anchorMode === 'course') {
+    return NextResponse.json(
+      { error: 'Kurs-forankrede flyter startes av påmeldinger og kan ikke fylles manuelt.' },
+      { status: 409 },
+    );
   }
   if (!canEnrollIntoStatus(flow.status)) {
     return NextResponse.json(

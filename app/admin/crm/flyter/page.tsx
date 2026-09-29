@@ -200,7 +200,7 @@ export default function FlyterPage() {
         const res = await fetch(`/api/admin/crm/flows/${template.id}/clone`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target: 'draft', name: template.name }),
+          body: JSON.stringify({ target: 'draft', name: template.name.replace(/ \(mal\)$/, '') }),
         });
         const data = await res.json();
         if (!res.ok) {

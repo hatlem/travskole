@@ -66,7 +66,7 @@ const CONDITION_KIND_OPTIONS = [
 const ENGAGEMENT_HELP: Record<string, string> = {
   opened_email: 'Ja hvis siste e-post kontakten fikk i denne flyten er åpnet.',
   clicked_email: 'Ja hvis kontakten har klikket en lenke i siste e-post i denne flyten.',
-  replied_email: 'Ja hvis kontakten har svart på siste e-post i denne flyten.',
+  replied_email: 'Ja hvis kontakten har svart på siste e-post i denne flyten. Flyter med denne betingelsen fortsetter etter svar (ellers stopper et svar flyten automatisk). Krever at svarfanging (Microsoft Graph) er satt opp.',
 };
 
 const ACTION_KINDS_WITH_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);

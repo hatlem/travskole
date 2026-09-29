@@ -101,6 +101,13 @@ describe('innmelding', () => {
     expect(enrollContacts).toHaveBeenCalledWith(1, [1, 2]);
   });
 
+  it('avviser manuell innmelding i kurs-forankrede flyter', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 1, status: 'active', anchorMode: 'course' });
+    const res = await enroll(req('POST', { contactIds: [1] }), params);
+    expect(res.status).toBe(409);
+    expect(enrollContacts).not.toHaveBeenCalled();
+  });
+
   it('krever nøyaktig én kilde', async () => {
     const res = await enroll(req('POST', { contactIds: [1], segmentId: 2 }), params);
     expect(res.status).toBe(400);

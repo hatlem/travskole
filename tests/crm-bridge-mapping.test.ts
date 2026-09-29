@@ -100,6 +100,10 @@ describe('computeDealUpdate', () => {
     expect(computeDealUpdate(existing({ status: 'lost', closedAt: now }), mapped({ status: 'open' }), opts))
       .toEqual({ stageId: 99, status: 'open', closedAt: null });
   });
+  it('never reopens a won deal (e.g. paid, then moved to waitlist)', () => {
+    expect(computeDealUpdate(existing({ status: 'won', closedAt: now }), mapped({ status: 'open' }), opts))
+      .toEqual({});
+  });
   it('allowReopen=false never reopens a closed deal', () => {
     expect(computeDealUpdate(existing({ status: 'won', closedAt: now }), mapped(), { ...opts, allowReopen: false }))
       .toEqual({});

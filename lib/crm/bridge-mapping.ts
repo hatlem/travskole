@@ -160,7 +160,9 @@ export function computeDealUpdate(
 ): { stageId?: number; status?: DealStatus; closedAt?: Date | null; title?: string; value?: number } {
   const update: ReturnType<typeof computeDealUpdate> = {};
 
-  const reopenBlocked = mapped.status === 'open' && !allowReopen;
+  // En vunnet deal (bekreftet/betalt) gjenåpnes aldri av en kildestatus som
+  // «ny/venteliste» — kun en eksplisitt avlysning flytter den.
+  const reopenBlocked = mapped.status === 'open' && (!allowReopen || existing.status === 'won');
   if (mapped.status !== existing.status && !reopenBlocked) {
     update.stageId = targetStageId;
     update.status = mapped.status;
