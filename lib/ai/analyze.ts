@@ -16,10 +16,20 @@ function monthKey(now: Date): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 }
 
+const OSLO_HOUR = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', hour: '2-digit', hourCycle: 'h23' });
+
+/** Klokketime (0–23) i Europe/Oslo — forslagene vises som «kl XX» for norske admins. */
+export function osloHour(d: Date): number {
+  return Number(OSLO_HOUR.format(d));
+}
+
 function modalHour(dates: Date[]): number | null {
   if (dates.length === 0) return null;
   const counts = new Map<number, number>();
-  for (const d of dates) counts.set(d.getUTCHours(), (counts.get(d.getUTCHours()) ?? 0) + 1);
+  for (const d of dates) {
+    const hour = osloHour(d);
+    counts.set(hour, (counts.get(hour) ?? 0) + 1);
+  }
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
 }
 
@@ -41,7 +51,7 @@ export function analyzeFlowEngagement(input: FlowEngagementInput, now: Date): Su
   const opened = sends.filter((s): s is { sentAt: Date; openedAt: Date } => s.openedAt !== null);
   if (opened.length >= 10) {
     const bestHour = modalHour(opened.map((s) => s.openedAt))!;
-    const openShare = opened.filter((s) => s.openedAt.getUTCHours() === bestHour).length / opened.length;
+    const openShare = opened.filter((s) => osloHour(s.openedAt) === bestHour).length / opened.length;
     const sendHour = modalHour(sends.map((s) => s.sentAt));
     if (openShare >= 0.3 && sendHour !== null && bestHour !== sendHour) {
       out.push({

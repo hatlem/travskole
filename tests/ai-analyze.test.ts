@@ -1,13 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { analyzeFlowEngagement, type FlowEngagementInput } from '@/lib/ai/analyze';
+import { analyzeFlowEngagement, osloHour, type FlowEngagementInput } from '@/lib/ai/analyze';
 
 const NOW = new Date('2026-07-18T12:00:00Z');
 const FLOW_ID = 7;
 
-// Fikserte datoer (10. juli 2026) — kun timen (UTC) er relevant for reglene.
+// Fikserte datoer (10. juli 2026, sommertid UTC+2) — timene er Oslo-klokketimer.
+const OSLO_SUMMER_OFFSET = 2;
 function mkSend(sentHour: number, openedHour: number | null): { sentAt: Date; openedAt: Date | null } {
-  const sentAt = new Date(Date.UTC(2026, 6, 10, sentHour, 0, 0));
-  const openedAt = openedHour === null ? null : new Date(Date.UTC(2026, 6, 10, openedHour, 0, 0));
+  const sentAt = new Date(Date.UTC(2026, 6, 10, sentHour - OSLO_SUMMER_OFFSET, 0, 0));
+  const openedAt =
+    openedHour === null ? null : new Date(Date.UTC(2026, 6, 10, openedHour - OSLO_SUMMER_OFFSET, 0, 0));
   return { sentAt, openedAt };
 }
 
@@ -81,6 +83,17 @@ describe('analyzeFlowEngagement — send_timing', () => {
     expect(timing).toBeDefined();
     expect(timing?.detail).toEqual({ bestHour: 18, sendHour: 9, openShare: 0.8 });
     expect(timing?.dedupeKey).toBe('send_timing:7:2026-07');
+    expect(timing?.title).toContain('kl 18');
+  });
+
+  it('bruker Oslo-tid, ikke UTC: åpninger kl 16:30 UTC om vinteren er kl 17', () => {
+    const sends = Array.from({ length: 10 }, (_, i) => ({
+      sentAt: new Date(Date.UTC(2026, 0, 5 + i, 8, 0, 0)), // kl 09 Oslo
+      openedAt: new Date(Date.UTC(2026, 0, 5 + i, 16, 30, 0)), // kl 17 Oslo
+    }));
+    const timing = analyzeFlowEngagement(baseInput({ sends }), NOW).find((c) => c.kind === 'send_timing');
+    expect(timing?.detail).toMatchObject({ bestHour: 17, sendHour: 9 });
+    expect(timing?.title).toContain('kl 17');
   });
 
   it('fyrer ikke med bare 9 åpninger (under terskel på 10)', () => {
@@ -103,5 +116,17 @@ describe('analyzeFlowEngagement — tomt input', () => {
   it('gir tom liste uten utsendelser', () => {
     const result = analyzeFlowEngagement(baseInput({ sends: [] }), NOW);
     expect(result).toEqual([]);
+  });
+});
+
+describe('osloHour', () => {
+  it('sommertid: UTC+2', () => {
+    expect(osloHour(new Date('2026-07-10T07:15:00Z'))).toBe(9);
+  });
+  it('vintertid: UTC+1', () => {
+    expect(osloHour(new Date('2026-01-10T07:15:00Z'))).toBe(8);
+  });
+  it('midnatt gir 0, ikke 24', () => {
+    expect(osloHour(new Date('2026-07-10T22:30:00Z'))).toBe(0);
   });
 });
