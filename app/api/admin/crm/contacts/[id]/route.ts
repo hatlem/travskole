@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
+import { purgeReviewDraftsForContact } from '@/lib/ai/review';
 
 export async function GET(
   request: NextRequest,
@@ -144,6 +145,8 @@ export async function DELETE(
   }
 
   try {
+    // Før sletting: enrollments (og dermed koblingen til utkastene) forsvinner med kontakten.
+    await purgeReviewDraftsForContact(contactId);
     await prisma.contact.delete({ where: { id: contactId } });
     logActivity({ action: 'delete', entity: 'contact', entityId: contactId, userEmail: session.user.email }).catch(() => {});
     return NextResponse.json({ ok: true });

@@ -92,6 +92,11 @@ export const SETTING_DEFAULTS: Record<string, string> = {
 
   // Innsikt: dager før en booking der åpning/klikk på en flyt-e-post gir flyten kreditt (1–90)
   attribution_window_days: '14',
+  // KI-personalisering: hvilke historikkfelt som sendes til LLM (dataminimering)
+  // og hvor lenge et utkast venter på godkjenning før originalen sendes.
+  ai_context_include_history: 'true',
+  ai_context_include_value: 'false',
+  ai_review_timeout_hours: '48',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
@@ -128,6 +133,8 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'sender_allowed_domains',
   'marketing_allow_',
   'ai_analysis_last_',
+  'ai_context_',
+  'ai_review_',
   'data_retention_days',
   'attribution_window_days',
 ];

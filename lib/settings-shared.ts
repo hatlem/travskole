@@ -85,6 +85,8 @@ const TOGGLE_SETTINGS: readonly string[] = [
   'reply_create_task',
   'marketing_allow_legitimate_interest',
   'marketing_optin_enabled',
+  'ai_context_include_history',
+  'ai_context_include_value',
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -123,6 +125,10 @@ export function validateSettingValue(key: string, value: string): string | null 
     case 'attribution_window_days': {
       const n = Number(value);
       return value.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 90 ? null : 'Må være et heltall mellom 1 og 90';
+    }
+    case 'ai_review_timeout_hours': {
+      const n = Number(value);
+      return value.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 720 ? null : 'Må være et heltall mellom 1 og 720';
     }
     case 'marketing_optin_text':
       return value.trim() === '' ? 'Samtykketeksten kan ikke være tom' : null;

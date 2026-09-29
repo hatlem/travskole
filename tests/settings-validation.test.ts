@@ -34,6 +34,15 @@ describe('validateSettingValue', () => {
     expect(validateSettingValue('reply_task_due_days', '400')).not.toBeNull();
   });
 
+  it('bounds ai_review_timeout_hours to whole hours 1-720 and treats AI context flags as toggles', () => {
+    expect(validateSettingValue('ai_review_timeout_hours', '48')).toBeNull();
+    expect(validateSettingValue('ai_review_timeout_hours', '0')).not.toBeNull();
+    expect(validateSettingValue('ai_review_timeout_hours', '721')).not.toBeNull();
+    expect(validateSettingValue('ai_review_timeout_hours', '1.5')).not.toBeNull();
+    expect(validateSettingValue('ai_context_include_value', 'false')).toBeNull();
+    expect(validateSettingValue('ai_context_include_value', 'kanskje')).not.toBeNull();
+  });
+
   it('bounds attribution_window_days to whole days 1-90', () => {
     expect(validateSettingValue('attribution_window_days', '1')).toBeNull();
     expect(validateSettingValue('attribution_window_days', '14')).toBeNull();

@@ -3,7 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { MERGE_TAGS } from '@/lib/email-templates';
+import type { EntityRef } from '@/components/admin/crm/EntityPicker';
 import type { FlowRFNode } from './node-types';
+import { AiPersonalizationSection } from './ai-personalization-section';
 
 export interface SenderIdentityOption {
   id: number;
@@ -112,6 +114,7 @@ export function NodeConfigPanel({
   const [aiError, setAiError] = useState<string | null>(null);
   const [subjectSuggestions, setSubjectSuggestions] = useState<string[]>([]);
   const [aiTone, setAiTone] = useState<'formell' | 'vennlig' | 'kort'>('vennlig');
+  const [previewContact, setPreviewContact] = useState<EntityRef | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -151,14 +154,18 @@ export function NodeConfigPanel({
       const res = await fetch(`/api/admin/crm/flows/${flowId}/test-send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId: realNodeId, toEmail: testEmail.trim() }),
+        body: JSON.stringify({
+          nodeId: realNodeId,
+          toEmail: testEmail.trim(),
+          ...(previewContact ? { contactId: previewContact.id } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
         toast(data.error || 'Kunne ikke sende test-e-post', 'error');
         return;
       }
-      toast('Test-e-post sendt', 'success');
+      toast(data.aiPersonalized ? 'Test-e-post sendt (KI-personalisert)' : 'Test-e-post sendt', 'success');
     } catch {
       toast('Kunne ikke sende test-e-post', 'error');
     } finally {
@@ -262,11 +269,16 @@ export function NodeConfigPanel({
           </div>
 
           {aiConfigured && (
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={config.aiPersonalize === true}
-                onChange={(e) => set({ aiPersonalize: e.target.checked })} disabled={disabled} />
-              KI-personaliser denne e-posten per mottaker
-            </label>
+            <AiPersonalizationSection
+              key={node.id}
+              flowId={flowId}
+              config={config}
+              isMarketing={isMarketing}
+              disabled={disabled}
+              contact={previewContact}
+              onContactChange={setPreviewContact}
+              onChange={set}
+            />
           )}
 
           {aiConfigured && (
@@ -327,6 +339,13 @@ export function NodeConfigPanel({
             </div>
             {!isPersisted && (
               <p className="mt-1 text-[11px] text-gray-500">Lagre flyten før du sender en test-e-post.</p>
+            )}
+            {aiConfigured && config.aiPersonalize === true && (
+              <p className="mt-1 text-[11px] text-gray-500">
+                {previewContact
+                  ? `KI-personaliseres med historikken til ${previewContact.name}. Test-e-posten bruker den lagrede versjonen av noden.`
+                  : 'Velg en kontakt under «Forhåndsvis for kontakt» for å få KI-versjonen i test-e-posten.'}
+              </p>
             )}
           </div>
         </div>
