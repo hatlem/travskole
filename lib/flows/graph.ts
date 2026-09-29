@@ -38,8 +38,11 @@ export function parseNodeConfig(raw: string): Record<string, unknown> {
   }
 }
 
-const CONDITION_KINDS = ['in_segment', 'stage_is', 'deal_status', 'opened_email'] as const;
-const ACTION_KINDS = ['add_tag', 'remove_tag', 'set_stage', 'notify_admin', 'exit'] as const;
+export const CONDITION_KINDS = ['in_segment', 'stage_is', 'deal_status', 'opened_email', 'clicked_email', 'replied_email'] as const;
+export const ACTION_KINDS = ['add_tag', 'remove_tag', 'set_stage', 'notify_admin', 'create_task', 'exit'] as const;
+/** Betingelser som ser på siste e-post i enrollmentet og ikke trenger `value`. */
+export const ENGAGEMENT_CONDITION_KINDS: ReadonlySet<string> = new Set(['opened_email', 'clicked_email', 'replied_email']);
+export const TASK_DUE_DAYS_MAX = 365;
 const ACTION_KINDS_REQUIRING_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);
 const SCHEDULE_ANCHORS = ['course_start', 'course_end', 'course_midway'] as const;
 
@@ -86,7 +89,7 @@ function validateConditionConfig(node: GraphNode): ValidationError | null {
   if (!validKind) {
     return err(node.id, 'condition_config', 'Betingelses-noden mangler type eller verdi.');
   }
-  if (kind !== 'opened_email' && !hasValue(value)) {
+  if (!ENGAGEMENT_CONDITION_KINDS.has(kind) && !hasValue(value)) {
     return err(node.id, 'condition_config', 'Betingelses-noden mangler type eller verdi.');
   }
   return null;
@@ -100,6 +103,24 @@ function validateActionConfig(node: GraphNode): ValidationError | null {
   }
   if (ACTION_KINDS_REQUIRING_VALUE.has(kind as string) && !hasValue(value)) {
     return err(node.id, 'action_config', 'Handlings-noden mangler en verdi.');
+  }
+  if (kind === 'create_task') return validateCreateTaskConfig(node);
+  return null;
+}
+
+function validateCreateTaskConfig(node: GraphNode): ValidationError | null {
+  const { title, assigneeUserId, dueDays } = node.config;
+  if (!isNonEmptyString(title)) {
+    return err(node.id, 'action_config', 'Oppgave-handlingen mangler en tittel.');
+  }
+  if (title.length > 300) {
+    return err(node.id, 'action_config', 'Oppgavetittelen kan være maks 300 tegn.');
+  }
+  if (assigneeUserId !== undefined && assigneeUserId !== null && !(isInteger(assigneeUserId) && assigneeUserId > 0)) {
+    return err(node.id, 'action_config', 'Oppgave-handlingen har en ugyldig ansvarlig.');
+  }
+  if (dueDays !== undefined && dueDays !== null && !(isInteger(dueDays) && dueDays >= 0 && dueDays <= TASK_DUE_DAYS_MAX)) {
+    return err(node.id, 'action_config', `Frist må være et helt antall dager mellom 0 og ${TASK_DUE_DAYS_MAX}.`);
   }
   return null;
 }

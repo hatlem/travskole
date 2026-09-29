@@ -14,8 +14,8 @@ import logger from '@/lib/logger';
 import { getSetting } from '@/lib/settings';
 import { sendAdminEmail } from '@/lib/mail';
 import { parseJsonArray } from '@/lib/crm/normalize';
-import { parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from './graph';
-import { planStep, type StepContext } from './step';
+import { ENGAGEMENT_CONDITION_KINDS, parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from './graph';
+import { planStep, type PlannedAction, type StepContext, type TaskActionPayload } from './step';
 import { sendFlowEmail } from './send';
 
 const BATCH_SIZE = 50;
@@ -123,21 +123,30 @@ async function loadContactState(contactId: number): Promise<ContactState | null>
   };
 }
 
+interface LastSendEngagement {
+  opened: boolean;
+  clicked: boolean;
+  replied: boolean;
+}
+
 /**
- * Henter om kontaktens siste EKTE (dedupeKey-bærende) e-post i DENNE
- * enrollmentet ble åpnet — kun de faktisk sendte/forsøkte sendene har en
- * dedupeKey (skippede/re-opprettede feilrader etter en mislykket sending har
- * det aldri, se lib/flows/send.ts). `null` betyr «ingen tidligere sporet
- * sending i dette enrollmentet» — samme semantikk som opened_email-
- * betingelsens egen "nei"-standard for et manglende svar.
+ * Engasjement på kontaktens siste EKTE (dedupeKey-bærende) e-post i DENNE
+ * enrollmentet — kun faktisk sendte/forsøkte sendinger har en dedupeKey
+ * (skippede/re-opprettede feilrader har det aldri, se lib/flows/send.ts).
+ * `null` betyr «ingen tidligere sporet sending», som betingelsene tolker som «nei».
  */
-async function loadLastSendOpened(enrollmentId: number): Promise<boolean | null> {
+async function loadLastSendEngagement(enrollmentId: number): Promise<LastSendEngagement | null> {
   const send = await prisma.messageSend.findFirst({
     where: { enrollmentId, dedupeKey: { not: null } },
     orderBy: { sentAt: 'desc' },
-    select: { openedAt: true },
+    select: { openedAt: true, firstClickedAt: true, clickCount: true, repliedAt: true },
   });
-  return send ? send.openedAt !== null : null;
+  if (!send) return null;
+  return {
+    opened: send.openedAt !== null,
+    clicked: send.firstClickedAt !== null || send.clickCount > 0,
+    replied: send.repliedAt !== null,
+  };
 }
 
 /** Live kursdatoer for en enrollment, eller null om den ikke er kurs-forankret. */
@@ -154,8 +163,9 @@ async function loadCourseDates(registrationId: number | null): Promise<{ startDa
 /** Applies an `act` step's side effect. Mutates `contact` in place so later
  * hops in the same tick see the updated tags/stage without a re-fetch. */
 async function applyAction(
-  action: { kind: string; value?: string },
+  action: PlannedAction,
   contact: ContactState,
+  now: Date,
 ): Promise<void> {
   switch (action.kind) {
     case 'add_tag': {
@@ -184,11 +194,38 @@ async function applyAction(
       await sendAdminEmail(adminEmail, subject, body);
       return;
     }
+    case 'create_task': {
+      if (!action.task) return;
+      await createFlowTask(action.task, contact.id, now);
+      return;
+    }
     case 'exit':
       return; // terminal transition is handled by the caller (plan.nextNodeId === null)
     default:
       return;
   }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Oppretter en CRM-oppgave på kontakten. En slettet/degradert ansvarlig gir en ufordelt oppgave i stedet for en feilet enrollment. */
+async function createFlowTask(task: TaskActionPayload, contactId: number, now: Date): Promise<void> {
+  let assigneeId: number | null = null;
+  if (task.assigneeUserId !== null) {
+    const user = await prisma.user.findFirst({
+      where: { id: task.assigneeUserId, role: { in: ['admin', 'superadmin'] }, deactivatedAt: null },
+      select: { id: true },
+    });
+    assigneeId = user?.id ?? null;
+  }
+  await prisma.task.create({
+    data: {
+      title: task.title,
+      contactId,
+      assigneeId,
+      dueAt: task.dueDays !== null ? new Date(now.getTime() + task.dueDays * DAY_MS) : null,
+    },
+  });
 }
 
 async function failEnrollment(enrollmentId: number, reason: string, now: Date, nodeId?: number): Promise<void> {
@@ -236,10 +273,19 @@ async function processEnrollment(
       return { sent, failed: true, completed: false };
     }
 
-    const needsLastSendOpened = node.type === 'condition' && node.config.kind === 'opened_email';
-    const lastSendOpened = needsLastSendOpened ? await loadLastSendOpened(enrollment.id) : null;
+    const needsEngagement =
+      node.type === 'condition' && typeof node.config.kind === 'string' && ENGAGEMENT_CONDITION_KINDS.has(node.config.kind);
+    const engagement = needsEngagement ? await loadLastSendEngagement(enrollment.id) : null;
     const courseDates = node.type === 'schedule' ? await loadCourseDates(enrollment.registrationId) : null;
-    const ctx: StepContext = { contact: { ...contact }, segmentRulesById, lastSendOpened, now, courseDates };
+    const ctx: StepContext = {
+      contact: { ...contact },
+      segmentRulesById,
+      lastSendOpened: engagement ? engagement.opened : null,
+      lastSendClicked: engagement ? engagement.clicked : null,
+      lastSendReplied: engagement ? engagement.replied : null,
+      now,
+      courseDates,
+    };
     const plan = planStep(node, graph.edges, ctx);
 
     switch (plan.kind) {
@@ -277,7 +323,7 @@ async function processEnrollment(
         continue;
       }
       case 'act': {
-        await applyAction(plan.action, contact);
+        await applyAction(plan.action, contact, now);
         if (plan.nextNodeId === null) {
           if (plan.action.kind === 'exit' && plan.action.value) {
             logger.info('Flyt-enrollment avsluttet', { enrollmentId: enrollment.id, reason: plan.action.value });
