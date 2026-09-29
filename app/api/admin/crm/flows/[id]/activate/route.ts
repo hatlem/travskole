@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { isTemplateStatus } from '@/lib/flows/status';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 
 export async function POST(
@@ -28,6 +29,12 @@ export async function POST(
   // draft -> active is only legal through this endpoint (see PATCH's status
   // transition matrix); everything else (already active/paused/archived)
   // must go through PATCH or is simply not a valid activation target.
+  if (isTemplateStatus(flow.status)) {
+    return NextResponse.json(
+      { error: 'En mal kan ikke aktiveres — lag en ny flyt fra malen.' },
+      { status: 409 },
+    );
+  }
   if (flow.status !== 'draft') {
     return NextResponse.json(
       { error: 'Bare flyter med status kladd kan aktiveres her.' },

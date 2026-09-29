@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-import { enrollContact, enrollSegment } from '@/lib/flows/enroll';
+import { enrollContacts, enrollSegment, type EnrollSummary } from '@/lib/flows/enroll';
+import { canEnrollIntoStatus, isTemplateStatus } from '@/lib/flows/status';
 
 const PAGE_SIZE = 50;
 
@@ -42,15 +43,23 @@ export async function GET(
   return NextResponse.json({ enrollments, total, page, pageSize: PAGE_SIZE });
 }
 
-// Exactly one of contactId / segmentId — never both, never neither.
+const MAX_CONTACT_IDS = 500;
+
+// Nøyaktig én av contactId / contactIds / segmentId.
 const enrollSchema = z
   .object({
     contactId: z.number().int().positive().optional(),
+    contactIds: z
+      .array(z.number().int().positive())
+      .min(1, 'Velg minst én kontakt')
+      .max(MAX_CONTACT_IDS, `Maks ${MAX_CONTACT_IDS} kontakter per innmelding`)
+      .optional(),
     segmentId: z.number().int().positive().optional(),
   })
-  .refine((v) => (v.contactId !== undefined) !== (v.segmentId !== undefined), {
-    message: 'Oppgi enten contactId eller segmentId, ikke begge eller ingen',
-  });
+  .refine(
+    (v) => [v.contactId, v.contactIds, v.segmentId].filter((x) => x !== undefined).length === 1,
+    { message: 'Oppgi nøyaktig én av contactId, contactIds eller segmentId' },
+  );
 
 export async function POST(
   request: NextRequest,
@@ -79,48 +88,41 @@ export async function POST(
   }
   const data = parsed.data;
 
-  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { id: true } });
+  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { id: true, status: true } });
   if (!flow) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
+  if (isTemplateStatus(flow.status)) {
+    return NextResponse.json({ error: 'Kan ikke melde inn i en mal.' }, { status: 409 });
+  }
+  if (!canEnrollIntoStatus(flow.status)) {
+    return NextResponse.json(
+      { error: 'Flyten må være aktiv (eller pauset) for å melde inn kontakter.' },
+      { status: 409 },
+    );
+  }
 
-  if (data.contactId !== undefined) {
-    const contact = await prisma.contact.findUnique({
-      where: { id: data.contactId },
-      select: { id: true },
-    });
-    if (!contact) {
+  let summary: EnrollSummary;
+  if (data.segmentId !== undefined) {
+    const segment = await prisma.segment.findUnique({ where: { id: data.segmentId }, select: { id: true } });
+    if (!segment) {
+      return NextResponse.json({ error: 'Fant ingen segment med denne iden' }, { status: 404 });
+    }
+    summary = await enrollSegment(flowId, data.segmentId);
+  } else {
+    const ids = data.contactIds ?? [data.contactId as number];
+    summary = await enrollContacts(flowId, ids);
+    if (data.contactId !== undefined && summary.skippedMissing > 0) {
       return NextResponse.json({ error: 'Fant ingen kontakt med denne iden' }, { status: 404 });
     }
-
-    // enrollContact returns whether a NEW enrollment was created — an
-    // already-active enrollment for this (flow, contact) pair is a no-op,
-    // and we surface that honestly as `enrolled: 0` rather than claiming
-    // success either way.
-    const created = await enrollContact(flowId, data.contactId);
-
-    logActivity({
-      action: 'enroll',
-      entity: 'flow',
-      entityId: flowId,
-      userEmail: session.user.email,
-    }).catch(() => {});
-    return NextResponse.json({ enrolled: created ? 1 : 0 });
   }
-
-  const segmentId = data.segmentId as number;
-  const segment = await prisma.segment.findUnique({ where: { id: segmentId }, select: { id: true } });
-  if (!segment) {
-    return NextResponse.json({ error: 'Fant ingen segment med denne iden' }, { status: 404 });
-  }
-
-  const enrolled = await enrollSegment(flowId, segmentId);
 
   logActivity({
-    action: 'enroll_segment',
+    action: data.segmentId !== undefined ? 'enroll_segment' : 'enroll',
     entity: 'flow',
     entityId: flowId,
     userEmail: session.user.email,
+    details: JSON.stringify(summary),
   }).catch(() => {});
-  return NextResponse.json({ enrolled });
+  return NextResponse.json(summary);
 }
