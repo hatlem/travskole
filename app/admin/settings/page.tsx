@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
+import { TrackingInstallSnippet } from '@/components/admin/TrackingInstallSnippet';
 
 interface SettingGroup {
   title: string;
@@ -142,6 +143,13 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'gtm_id', label: 'Google Tag Manager ID (tomt = av)', type: 'text', placeholder: 'GTM-XXXXXXX' },
       { key: 'og_tags', label: 'Delingsbilde: emneknagger (én per linje)', type: 'textarea', placeholder: 'Kurs\nSommerleirer\nDobbeltsulky' },
+    ],
+  },
+  {
+    title: 'Sporing på bjerke.no',
+    description: 'Registrer handlinger på bjerke.no (sidevisninger og klikk) i hendelsesloggen, med samme besøker-ID som her.',
+    fields: [
+      { key: 'tracking_allowed_origins', label: 'Nettsteder som får sende hendelser (kommaseparert)', type: 'text', placeholder: 'https://bjerke.no,https://www.bjerke.no', help: 'Fullstendige adresser uten sti, f.eks. https://bjerke.no. Andre nettsteder avvises, og tomt felt slår sporingen på bjerke.no av. Endringer gjelder innen ett minutt.' },
     ],
   },
 ];
@@ -288,6 +296,7 @@ export default function AdminSettingsPage() {
                 {graph.mailboxesEnvOverride && ' Postboksene er overstyrt av miljøvariabelen GRAPH_MAILBOXES, så feltet under har ingen effekt.'}
               </div>
             )}
+            {group.title === 'Sporing på bjerke.no' && <TrackingInstallSnippet />}
 
             <div className="space-y-5">
               {group.fields.map((field) => (
