@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 
 export interface ValidationError {
   nodeId: number | null;
@@ -13,6 +14,7 @@ const STATUS_LABELS: Record<string, string> = {
   active: 'Aktiv',
   paused: 'Pauset',
   archived: 'Arkivert',
+  template: 'Mal',
 };
 
 const STATUS_STYLES: Record<string, string> = {
@@ -20,6 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
   active: 'bg-green-100 text-green-700',
   paused: 'bg-amber-100 text-amber-700',
   archived: 'bg-gray-100 text-gray-500',
+  template: 'bg-indigo-100 text-indigo-700',
 };
 
 interface FlowToolbarProps {
@@ -34,6 +37,9 @@ interface FlowToolbarProps {
   onActivate: () => void;
   onPause: () => void;
   onResume: () => void;
+  onEnroll: () => void;
+  onSaveAsTemplate: () => void;
+  savingTemplate: boolean;
   enrollmentCounter: React.ReactNode;
 }
 
@@ -49,9 +55,13 @@ export function FlowToolbar({
   onActivate,
   onPause,
   onResume,
+  onEnroll,
+  onSaveAsTemplate,
+  savingTemplate,
   enrollmentCounter,
 }: FlowToolbarProps) {
-  const editingDisabled = status !== 'draft' && status !== 'paused';
+  const editingDisabled = !isFlowEditable(status);
+  const isTemplate = isTemplateStatus(status);
 
   return (
     <>
@@ -72,7 +82,28 @@ export function FlowToolbar({
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {enrollmentCounter}
+          {!isTemplate && enrollmentCounter}
+          {status === 'active' && (
+            <button
+              onClick={onEnroll}
+              className="border border-blue-600 text-blue-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50"
+            >
+              Meld inn
+            </button>
+          )}
+          {!isTemplate && status !== 'archived' && (
+            <button
+              onClick={onSaveAsTemplate}
+              disabled={savingTemplate || dirty}
+              title={dirty ? 'Lagre endringene dine først' : 'Kopier flyten til en gjenbrukbar mal'}
+              className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+            >
+              {savingTemplate ? 'Lagrer mal …' : 'Lagre som mal'}
+            </button>
+          )}
+          {isTemplate && (
+            <span className="text-xs text-gray-500">Maler kan ikke aktiveres — bruk «Ny flyt fra mal» i flytlisten</span>
+          )}
           <button
             onClick={onSave}
             disabled={saving || !dirty || editingDisabled}

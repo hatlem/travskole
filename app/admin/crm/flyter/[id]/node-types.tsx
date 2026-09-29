@@ -40,6 +40,24 @@ const SCHEDULE_ANCHOR_LABELS: Record<string, string> = {
   course_end: 'Kursslutt',
 };
 
+const CONDITION_LABELS: Record<string, string> = {
+  in_segment: 'I segment',
+  stage_is: 'Stadium er',
+  deal_status: 'Deal-status er',
+  opened_email: 'Åpnet forrige e-post?',
+  clicked_email: 'Klikket i forrige e-post?',
+  replied_email: 'Svarte på forrige e-post?',
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  add_tag: 'Legg til tagg',
+  remove_tag: 'Fjern tagg',
+  set_stage: 'Sett stadium',
+  notify_admin: 'Varsle admin',
+  create_task: 'Opprett oppgave',
+  exit: 'Avslutt flyten',
+};
+
 const NODE_ACCENTS: Record<FlowNodeType, string> = {
   start: 'border-t-emerald-500',
   email: 'border-t-blue-500',
@@ -125,8 +143,14 @@ export function WaitNode({ data, selected }: NodeProps<FlowRFNode>) {
 }
 
 export function ConditionNode({ data, selected }: NodeProps<FlowRFNode>) {
+  const kind = typeof data.config.kind === 'string' ? data.config.kind : undefined;
   return (
-    <Card nodeType="condition" selected={selected} hasError={data.hasError}>
+    <Card
+      nodeType="condition"
+      selected={selected}
+      hasError={data.hasError}
+      subtitle={kind ? CONDITION_LABELS[kind] ?? kind : undefined}
+    >
       <Handle type="target" position={Position.Top} />
       <Handle
         type="source"
@@ -150,8 +174,15 @@ export function ConditionNode({ data, selected }: NodeProps<FlowRFNode>) {
 
 export function ActionNode({ data, selected }: NodeProps<FlowRFNode>) {
   const kind = typeof data.config.kind === 'string' ? data.config.kind : undefined;
+  const detail =
+    kind === 'create_task' && typeof data.config.title === 'string' && data.config.title.trim()
+      ? `: ${data.config.title.trim()}`
+      : typeof data.config.value === 'string' && data.config.value.trim()
+        ? `: ${data.config.value.trim()}`
+        : '';
+  const subtitle = kind ? `${ACTION_LABELS[kind] ?? kind}${detail}` : undefined;
   return (
-    <Card nodeType="action" selected={selected} hasError={data.hasError} subtitle={kind}>
+    <Card nodeType="action" selected={selected} hasError={data.hasError} subtitle={subtitle}>
       <Handle type="target" position={Position.Top} />
       {data.config.kind !== 'exit' && <Handle type="source" position={Position.Bottom} />}
     </Card>

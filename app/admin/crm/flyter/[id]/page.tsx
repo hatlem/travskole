@@ -28,7 +28,7 @@ export default async function FlyterEditorPage({
 
   await ensureSenderIdentitiesSeeded();
 
-  const [flow, senderIdentities, segments] = await Promise.all([
+  const [flow, senderIdentities, segments, courses, adminUsers, activeEnrollments] = await Promise.all([
     prisma.flow.findUnique({
       where: { id: flowId },
       include: {
@@ -39,6 +39,16 @@ export default async function FlyterEditorPage({
     }),
     prisma.senderIdentity.findMany({ where: { active: true }, orderBy: { id: 'asc' } }),
     prisma.segment.findMany({ orderBy: { name: 'asc' } }),
+    prisma.course.findMany({
+      orderBy: [{ startDate: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+      select: { id: true, name: true, slug: true, startDate: true },
+    }),
+    prisma.user.findMany({
+      where: { role: { in: ['admin', 'superadmin'] }, deactivatedAt: null, anonymizedAt: null },
+      orderBy: { email: 'asc' },
+      select: { id: true, email: true },
+    }),
+    prisma.flowEnrollment.count({ where: { flowId, status: 'active' } }),
   ]);
 
   if (!flow) {
@@ -53,6 +63,7 @@ export default async function FlyterEditorPage({
         description: flow.description,
         status: flow.status,
         isMarketing: flow.isMarketing,
+        anchorMode: flow.anchorMode,
       }}
       initialNodes={flow.nodes.map((node) => ({
         id: node.id,
@@ -78,6 +89,14 @@ export default async function FlyterEditorPage({
         displayName: identity.displayName,
       }))}
       segments={segments.map((segment) => ({ id: segment.id, name: segment.name }))}
+      courses={courses.map((course) => ({
+        id: course.id,
+        name: course.name,
+        slug: course.slug,
+        startDate: course.startDate ? course.startDate.toISOString() : null,
+      }))}
+      adminUsers={adminUsers}
+      initialActiveEnrollments={activeEnrollments}
     />
   );
 }
