@@ -4,16 +4,50 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await requireAdmin();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  const { id } = await params;
+  const dealId = Number(id);
+  if (!Number.isInteger(dealId)) {
+    return NextResponse.json({ error: 'Ugyldig id' }, { status: 400 });
+  }
+
+  const deal = await prisma.deal.findUnique({
+    where: { id: dealId },
+    select: {
+      id: true, title: true, pipelineId: true, stageId: true, ownerId: true,
+      value: true, eventType: true, eventDate: true, status: true, source: true,
+      contact: { select: { id: true, name: true, email: true } },
+      organization: { select: { id: true, name: true } },
+    },
+  });
+  if (!deal) {
+    return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
+  }
+  return NextResponse.json({ deal });
+}
 
 const patchSchema = z.object({
   title: z.string().min(1).max(300).optional(),
+  // Pipelinebytte krever at stageId oppgis og tilhører ny pipeline.
+  pipelineId: z.number().int().positive().optional(),
   stageId: z.number().int().positive().optional(),
   contactId: z.number().int().positive().nullable().optional(),
   organizationId: z.number().int().positive().nullable().optional(),
   ownerId: z.number().int().positive().nullable().optional(),
-  value: z.number().nonnegative().nullable().optional(),
-  eventType: z.string().max(50).nullable().optional(),
+  value: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
+  eventType: z.string().trim().max(50).nullable().optional(),
   eventDate: z.string().datetime().nullable().optional(),
+}).refine((v) => v.pipelineId === undefined || v.stageId !== undefined, {
+  message: 'Velg stadium i ny pipeline',
 });
 
 export async function PATCH(
@@ -43,6 +77,10 @@ export async function PATCH(
   }
   const data = parsed.data;
 
+  if (!(await isAssignableUser(data.ownerId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
+
   try {
     const existing = await prisma.deal.findUnique({
       where: { id: dealId },
@@ -55,9 +93,10 @@ export async function PATCH(
     // Stadiebytte styrer status/closedAt
     let statusPatch = {};
     let newStageName: string | null = null;
-    if (data.stageId !== undefined && data.stageId !== existing.stageId) {
+    const targetPipelineId = data.pipelineId ?? existing.pipelineId;
+    if (data.stageId !== undefined && (data.stageId !== existing.stageId || targetPipelineId !== existing.pipelineId)) {
       const stage = await prisma.stage.findUnique({ where: { id: data.stageId } });
-      if (!stage || stage.pipelineId !== existing.pipelineId) {
+      if (!stage || stage.pipelineId !== targetPipelineId) {
         return NextResponse.json({ error: 'Ugyldig stadium' }, { status: 400 });
       }
       newStageName = stage.name;
@@ -72,12 +111,13 @@ export async function PATCH(
       where: { id: dealId },
       data: {
         ...(data.title !== undefined && { title: data.title }),
+        ...(data.pipelineId !== undefined && { pipelineId: data.pipelineId }),
         ...(data.stageId !== undefined && { stageId: data.stageId }),
         ...(data.contactId !== undefined && { contactId: data.contactId }),
         ...(data.organizationId !== undefined && { organizationId: data.organizationId }),
         ...(data.ownerId !== undefined && { ownerId: data.ownerId }),
         ...(data.value !== undefined && { value: data.value }),
-        ...(data.eventType !== undefined && { eventType: data.eventType }),
+        ...(data.eventType !== undefined && { eventType: data.eventType || null }),
         ...(data.eventDate !== undefined && { eventDate: data.eventDate ? new Date(data.eventDate) : null }),
         ...statusPatch,
       },

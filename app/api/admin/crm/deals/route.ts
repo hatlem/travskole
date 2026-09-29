@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 
 const createSchema = z.object({
   title: z.string().min(1, 'Tittel er påkrevd').max(300),
@@ -11,8 +12,9 @@ const createSchema = z.object({
   stageId: z.number().int().positive(),
   contactId: z.number().int().positive().nullable().optional(),
   organizationId: z.number().int().positive().nullable().optional(),
-  value: z.number().nonnegative().nullable().optional(),
-  eventType: z.string().max(50).nullable().optional(),
+  ownerId: z.number().int().positive().nullable().optional(),
+  value: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
+  eventType: z.string().trim().max(50).nullable().optional(),
   eventDate: z.string().datetime().nullable().optional(),
 });
 
@@ -35,6 +37,10 @@ export async function POST(request: NextRequest) {
   }
   const data = parsed.data;
 
+  if (!(await isAssignableUser(data.ownerId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
+
   const stage = await prisma.stage.findUnique({ where: { id: data.stageId } });
   if (!stage || stage.pipelineId !== data.pipelineId) {
     return NextResponse.json({ error: 'Ugyldig stadium for valgt pipeline' }, { status: 400 });
@@ -48,8 +54,9 @@ export async function POST(request: NextRequest) {
         stageId: data.stageId,
         contactId: data.contactId ?? null,
         organizationId: data.organizationId ?? null,
+        ownerId: data.ownerId ?? null,
         value: data.value ?? null,
-        eventType: data.eventType ?? null,
+        eventType: data.eventType || null,
         eventDate: data.eventDate ? new Date(data.eventDate) : null,
         status: stage.isWon ? 'won' : stage.isLost ? 'lost' : 'open',
         closedAt: stage.isWon || stage.isLost ? new Date() : null,

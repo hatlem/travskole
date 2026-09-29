@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 
 export async function GET(
   request: NextRequest,
@@ -39,12 +40,20 @@ export async function GET(
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
 
-  return NextResponse.json({ contact: { ...contact, tags: parseJsonArray(contact.tags) } });
+  // Ikke-kontakt-listen er global og nøkles på normalisert e-post.
+  const suppression = contact.email
+    ? await prisma.suppression.findUnique({
+        where: { email: contact.email },
+        select: { reason: true, createdAt: true },
+      })
+    : null;
+
+  return NextResponse.json({ contact: { ...contact, tags: parseJsonArray(contact.tags), suppression } });
 }
 
 const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
-  email: z.string().email().nullable().optional(),
+  email: z.string().trim().email('Ugyldig e-postadresse').nullable().optional(),
   phone: z.string().max(20).nullable().optional(),
   organizationId: z.number().int().positive().nullable().optional(),
   ownerId: z.number().int().positive().nullable().optional(),
@@ -80,6 +89,10 @@ export async function PATCH(
   }
   const data = parsed.data;
 
+  if (!(await isAssignableUser(data.ownerId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
+
   const email = data.email !== undefined ? normalizeEmail(data.email) : undefined;
   if (email) {
     const existing = await prisma.contact.findUnique({ where: { email } });
@@ -108,6 +121,9 @@ export async function PATCH(
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === 'P2025' || error.code === 'P2003')) {
       return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
+    }
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      return NextResponse.json({ error: 'En annen kontakt har denne e-posten' }, { status: 409 });
     }
     throw error;
   }

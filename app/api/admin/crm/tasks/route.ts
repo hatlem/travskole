@@ -4,6 +4,8 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
+import { ownerFilterWhere, parseOwnerFilter } from '@/lib/crm/owner-filter';
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
@@ -13,12 +15,16 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams;
   const status = sp.get('status') ?? '';
-  const assigneeId = Number(sp.get('assigneeId')) || null;
+  // assignee: 'me' | 'none' | '<userId>'; assigneeId beholdes for bakoverkompatibilitet.
+  const assigneeFilter = parseOwnerFilter(
+    sp.get('assignee') ?? sp.get('assigneeId'),
+    Number(session.user.id) || null,
+  );
 
   const tasks = await prisma.task.findMany({
     where: {
       ...(status && { status }),
-      ...(assigneeId && { assigneeId }),
+      ...ownerFilterWhere(assigneeFilter, 'assigneeId'),
     },
     orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { id: 'desc' }],
     select: {
@@ -27,6 +33,8 @@ export async function GET(request: NextRequest) {
       dueAt: true,
       status: true,
       contact: { select: { id: true, name: true } },
+      organization: { select: { id: true, name: true } },
+      deal: { select: { id: true, title: true } },
       assignee: { select: { id: true, email: true } },
     },
   });
@@ -61,6 +69,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const data = parsed.data;
+
+  if (!(await isAssignableUser(data.assigneeId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
 
   try {
     const task = await prisma.task.create({

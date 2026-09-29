@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 
 const patchSchema = z.object({
   title: z.string().min(1).max(300).optional(),
@@ -38,6 +39,10 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const data = parsed.data;
+
+  if (!(await isAssignableUser(data.assigneeId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
 
   try {
     const task = await prisma.task.update({
