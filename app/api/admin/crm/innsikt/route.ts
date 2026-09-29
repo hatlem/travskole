@@ -13,7 +13,7 @@ async function flowsSection(now: Date) {
   const twelveWeeksAgo = new Date(now.getTime() - 12 * 7 * DAY_MS);
 
   const [flows, enrollments, sends30, sends12w, activeCounts, statusCounts] = await Promise.all([
-    prisma.flow.findMany({ select: { id: true, name: true, status: true } }),
+    prisma.flow.findMany({ where: { status: { not: 'template' } }, select: { id: true, name: true, status: true } }),
     prisma.flowEnrollment.findMany({ select: { id: true, flowId: true } }),
     prisma.messageSend.findMany({
       where: { dedupeKey: { not: null }, sentAt: { gte: thirtyDaysAgo } },
