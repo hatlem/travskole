@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { isAiConfigured } from '@/lib/ai/provider';
-import { REVIEW_KIND, parseReviewDetail } from '@/lib/ai/review';
+import { REVIEW_KIND, markObsoleteReviews, parseReviewDetail } from '@/lib/ai/review';
 import { sanitizeLegalHtml } from '@/lib/sanitize';
 
 export const dynamic = 'force-dynamic';
@@ -16,6 +16,8 @@ const HANDLED_LIMIT = 50;
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+  await markObsoleteReviews();
 
   const sp = request.nextUrl.searchParams;
   if (sp.get('count') === '1') {

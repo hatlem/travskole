@@ -5,14 +5,15 @@
  * nøyaktig én gang per enrollment/node, uansett hvor mange tick som passerer.
  *
  * Tilstander: pending → approved | send_original | skipped (admin) eller
- * expired (tidsavbrudd ⇒ original sendes). Kun pending kan endres.
+ * expired (tidsavbrudd ⇒ original sendes) eller obsolete (mottakeren forlot
+ * flyten før beslutning — ingenting sendes). Kun pending kan endres.
  */
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 
 export const REVIEW_KIND = 'personalization_review';
-export const REVIEW_STATUSES = ['pending', 'approved', 'send_original', 'skipped', 'expired'] as const;
+export const REVIEW_STATUSES = ['pending', 'approved', 'send_original', 'skipped', 'expired', 'obsolete'] as const;
 export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
 export type ReviewDecision = 'approve' | 'send_original' | 'skip';
 
@@ -215,4 +216,39 @@ export async function decideReview(
   return {
     ok: true, enrollmentId: detail.enrollmentId, nodeId: detail.nodeId, parkedUntil: new Date(detail.expiresAt),
   };
+}
+
+/**
+ * Rydder ventende utkast der enrollmentet ikke lenger er aktivt (kontakten
+ * svarte, ble meldt ut, flyten ble nullstilt) — de ville ellers ligget i køen
+ * for alltid, siden runneren aldri kommer tilbake til dem.
+ */
+export async function markObsoleteReviews(): Promise<number> {
+  const pending = await prisma.aiSuggestion.findMany({
+    where: { kind: REVIEW_KIND, status: 'pending' },
+    select: { id: true, detail: true },
+  });
+  const byEnrollment = new Map<number, number[]>();
+  for (const row of pending) {
+    const detail = parseReviewDetail(row.detail);
+    if (!detail) continue;
+    byEnrollment.set(detail.enrollmentId, [...(byEnrollment.get(detail.enrollmentId) ?? []), row.id]);
+  }
+  if (byEnrollment.size === 0) return 0;
+
+  const active = await prisma.flowEnrollment.findMany({
+    where: { id: { in: [...byEnrollment.keys()] }, status: 'active' },
+    select: { id: true },
+  });
+  const activeIds = new Set(active.map((e) => e.id));
+  const obsoleteIds = [...byEnrollment.entries()]
+    .filter(([enrollmentId]) => !activeIds.has(enrollmentId))
+    .flatMap(([, ids]) => ids);
+  if (obsoleteIds.length === 0) return 0;
+
+  const { count } = await prisma.aiSuggestion.updateMany({
+    where: { id: { in: obsoleteIds }, kind: REVIEW_KIND, status: 'pending' },
+    data: { status: 'obsolete' },
+  });
+  return count;
 }
