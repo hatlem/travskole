@@ -9,6 +9,8 @@ import logger from '@/lib/logger';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { recordMarketingOptIn } from '@/lib/crm/marketing-consent';
+import { getSetting } from '@/lib/settings';
 
 const bookingSchema = z.object({
   courseId: z.coerce.number().int().positive(),
@@ -22,6 +24,7 @@ const bookingSchema = z.object({
   consentTerms: z.boolean().default(false),
   consentMedia: z.boolean().default(false),
   consentActivities: z.boolean().default(false),
+  marketingOptIn: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -60,6 +63,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: consentErr }, { status: 400 });
   }
 
+  // Opt-in teller kun når avkrysningsboksen faktisk vises i skjemaet.
+  const marketingOptIn =
+    data.marketingOptIn === true && (await getSetting('marketing_optin_enabled')) === 'true';
+
   try {
     const booking = await prisma.bookingRequest.create({
       data: {
@@ -92,6 +99,7 @@ export async function POST(request: NextRequest) {
           ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
           : null;
         const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
+        if (contact && marketingOptIn) await recordMarketingOptIn(contact.id, 'booking_form');
         if (contact) await stitchVisitorToContact(publicId, contact.id);
         await emitEvent({
           type: 'booking.created',

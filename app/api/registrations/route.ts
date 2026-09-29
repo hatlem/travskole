@@ -13,6 +13,7 @@ import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { recordMarketingOptIn } from '@/lib/crm/marketing-consent';
 import { parsePaymentMethods } from '@/lib/payments';
 import { signCheckoutToken } from '@/lib/payments/checkout-token';
 
@@ -36,6 +37,7 @@ interface RegistrationData {
   consentRisk: boolean;
   consentTerms?: boolean;
   waitlist?: boolean;
+  marketingOptIn?: boolean;
 }
 
 /**
@@ -349,6 +351,9 @@ export async function POST(request: NextRequest) {
     // slår opp kontakten her — ellers finner findUnique intet for en helt ny e-post,
     // hendelsen lagres anonym, og stitchVisitorToContact får aldri kjørt. Fortsatt
     // helt frakoblet fra responsen (begge grener fanges).
+    // Opt-in teller kun når avkrysningsboksen faktisk vises i skjemaet.
+    const marketingOptIn =
+      data.marketingOptIn === true && (await getSetting('marketing_optin_enabled')) === 'true';
     syncRegistrationToCrm(registration.id)
       .catch(() => {})
       .then(async () => {
@@ -356,6 +361,7 @@ export async function POST(request: NextRequest) {
         const contact = email
           ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
           : null;
+        if (contact && marketingOptIn) await recordMarketingOptIn(contact.id, 'registration_form');
         const publicId = request.cookies.get(VISITOR_COOKIE)?.value;
         if (contact) await stitchVisitorToContact(publicId, contact.id);
         await emitEvent({
