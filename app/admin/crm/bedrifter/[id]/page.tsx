@@ -6,6 +6,9 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CardSkeleton } from '@/components/admin/Skeleton';
+import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
+import { useAssignees } from '@/components/admin/crm/useAssignees';
+import { DealDialog } from '@/components/admin/crm/DealDialog';
 
 interface OrgDetail {
   id: number;
@@ -16,6 +19,7 @@ interface OrgDetail {
   address: string | null;
   stage: string;
   tags: string[];
+  ownerId: number | null;
   contacts: {
     id: number;
     name: string;
@@ -59,6 +63,8 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');
+  const [dealDialog, setDealDialog] = useState<{ dealId: number | null } | null>(null);
+  const { currentUserId } = useAssignees();
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -94,19 +100,19 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
     return () => abortRef.current?.abort();
   }, []);
 
-  async function setStage(stage: string) {
+  async function patchOrg(body: Record<string, unknown>, okMsg: string) {
     try {
       const res = await fetch(`/api/admin/crm/organizations/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ stage }),
+        body: JSON.stringify(body),
       });
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         toast(data.error || 'Noe gikk galt', 'error');
         return;
       }
-      toast('Stadium oppdatert', 'success');
+      toast(okMsg, 'success');
       load();
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
@@ -192,20 +198,30 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
             Samlet verdi (åpne + vunnede deals): {totalValue.toLocaleString('nb-NO')} kr
           </p>
         </div>
-        <label className="text-sm text-gray-600">
-          Stadium:{' '}
-          <select
-            value={org.stage}
-            onChange={(e) => setStage(e.target.value)}
-            className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-          >
-            {STAGES.map((s) => (
-              <option key={s.value} value={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-gray-600">
+            Stadium:{' '}
+            <select
+              value={org.stage}
+              onChange={(e) => patchOrg({ stage: e.target.value }, 'Stadium oppdatert')}
+              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            >
+              {STAGES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm text-gray-600">
+            Ansvarlig:{' '}
+            <AssigneeSelect
+              value={org.ownerId}
+              onChange={(ownerId) => patchOrg({ ownerId }, 'Ansvarlig oppdatert')}
+              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
+            />
+          </label>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -235,26 +251,36 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
           </section>
 
           <section>
-            <h2 className="font-semibold mb-3">Bookinghistorikk ({org.deals.length})</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold">Bookinghistorikk ({org.deals.length})</h2>
+              <button onClick={() => setDealDialog({ dealId: null })} className="text-sm text-blue-700 hover:underline">
+                + Ny deal
+              </button>
+            </div>
             {org.deals.length === 0 ? (
               <p className="text-sm text-gray-500">Ingen deals ennå.</p>
             ) : (
               <ul className="space-y-2">
                 {org.deals.map((d) => (
-                  <li key={d.id} className="border border-gray-200 rounded-lg p-3 text-sm flex items-center justify-between">
-                    <div>
-                      <span className="font-medium">{d.title}</span>
-                      <span className="text-gray-500 ml-2">{d.stage.name}</span>
-                      {d.eventType && (
-                        <span className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded ml-2">
-                          {d.eventType}
-                        </span>
-                      )}
-                      {d.eventDate && <span className="text-gray-500 ml-2">{fmtDate(d.eventDate)}</span>}
-                    </div>
-                    <span className="text-gray-700">
-                      {d.value !== null ? `${d.value.toLocaleString('nb-NO')} kr` : ''}
-                    </span>
+                  <li key={d.id}>
+                    <button
+                      onClick={() => setDealDialog({ dealId: d.id })}
+                      className="w-full text-left border border-gray-200 rounded-lg p-3 text-sm flex items-center justify-between hover:border-blue-300 hover:bg-blue-50/40"
+                    >
+                      <div>
+                        <span className="font-medium">{d.title}</span>
+                        <span className="text-gray-500 ml-2">{d.stage.name}</span>
+                        {d.eventType && (
+                          <span className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded ml-2">
+                            {d.eventType}
+                          </span>
+                        )}
+                        {d.eventDate && <span className="text-gray-500 ml-2">{fmtDate(d.eventDate)}</span>}
+                      </div>
+                      <span className="text-gray-700">
+                        {d.value !== null ? `${d.value.toLocaleString('nb-NO')} kr` : ''}
+                      </span>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -303,6 +329,18 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
           </section>
         </div>
       </div>
+
+      <DealDialog
+        open={dealDialog !== null}
+        dealId={dealDialog?.dealId ?? null}
+        defaults={{
+          organization: { id: org.id, name: org.name },
+          ownerId: org.ownerId ?? currentUserId,
+        }}
+        onClose={() => setDealDialog(null)}
+        onSaved={() => load()}
+        onDeleted={() => load()}
+      />
     </div>
   );
 }

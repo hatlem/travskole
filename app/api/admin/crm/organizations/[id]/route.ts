@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { parseJsonArray } from '@/lib/crm/normalize';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 
 export async function GET(
   request: NextRequest,
@@ -87,6 +88,10 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const data = parsed.data;
+
+  if (!(await isAssignableUser(data.ownerId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
 
   // Pre-check domain uniqueness if being set to a non-null value
   if (data.domain !== undefined && data.domain !== null) {

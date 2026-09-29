@@ -1,6 +1,7 @@
 // Segmentregler: { all: [{ field, op, value }] } — AND over alle regler.
 // Kontaktfelter: stage, source, email, organizationId, lastActivityAt, tags.
-// Deal-felter prefikses "deal." og passerer hvis MINST ÉN deal matcher.
+// Deal-felter prefikses "deal." — alle deal-regler i et segment må matche
+// SAMME deal (f.eks. «julebord» OG «dato før 2026» = ett julebord før 2026).
 // Evalueres ved lesing — ingen lagrede medlemskapsrader.
 
 export type SegmentOp = 'eq' | 'neq' | 'contains' | 'lt' | 'gt' | 'is_null' | 'not_null';
@@ -81,13 +82,20 @@ function checkValue(actual: unknown, rule: SegmentRule): boolean {
   }
 }
 
-function checkRule(contact: SegmentContact, rule: SegmentRule): boolean {
-  if (rule.field.startsWith('deal.')) {
-    const dealField = rule.field.slice('deal.'.length);
-    if (!['eventType', 'eventDate', 'status'].includes(dealField)) return false;
-    return contact.deals.some((d) => checkValue(d[dealField as keyof typeof d], rule));
-  }
+const DEAL_FIELDS = ['eventType', 'eventDate', 'status'] as const;
+type DealField = (typeof DEAL_FIELDS)[number];
 
+export function isDealRule(rule: SegmentRule): boolean {
+  return rule.field.startsWith('deal.');
+}
+
+function checkDealRule(deal: SegmentContact['deals'][number], rule: SegmentRule): boolean {
+  const dealField = rule.field.slice('deal.'.length);
+  if (!DEAL_FIELDS.includes(dealField as DealField)) return false;
+  return checkValue(deal[dealField as DealField], rule);
+}
+
+function checkContactRule(contact: SegmentContact, rule: SegmentRule): boolean {
   switch (rule.field) {
     case 'stage': return checkValue(contact.stage, rule);
     case 'source': return checkValue(contact.source, rule);
@@ -100,5 +108,9 @@ function checkRule(contact: SegmentContact, rule: SegmentRule): boolean {
 }
 
 export function contactMatchesSegment(contact: SegmentContact, rules: SegmentRules): boolean {
-  return rules.all.every((rule) => checkRule(contact, rule));
+  const dealRules = rules.all.filter(isDealRule);
+  const contactRules = rules.all.filter((r) => !isDealRule(r));
+  if (!contactRules.every((rule) => checkContactRule(contact, rule))) return false;
+  if (dealRules.length === 0) return true;
+  return contact.deals.some((deal) => dealRules.every((rule) => checkDealRule(deal, rule)));
 }

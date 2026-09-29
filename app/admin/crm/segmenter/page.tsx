@@ -5,6 +5,7 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
 
 interface Segment { id: number; name: string; rules: string }
 interface List { id: number; name: string; memberCount: number }
@@ -62,6 +63,7 @@ export default function SegmenterPage() {
   const [rules, setRules] = useState<Rule[]>([emptyRule()]);
   const [segmentBusy, setSegmentBusy] = useState(false);
   const [deletingSegmentId, setDeletingSegmentId] = useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<{ kind: 'segment' | 'list'; id: number; name: string } | null>(null);
 
   // Lister
   const [listName, setListName] = useState('');
@@ -163,7 +165,6 @@ export default function SegmenterPage() {
 
   async function deleteSegment(id: number) {
     if (deletingSegmentId !== null) return;
-    if (!confirm('Er du sikker på at du vil slette dette segmentet?')) return;
 
     setDeletingSegmentId(id);
     try {
@@ -208,7 +209,6 @@ export default function SegmenterPage() {
 
   async function deleteList(id: number) {
     if (deletingListId !== null) return;
-    if (!confirm('Er du sikker på at du vil slette denne listen? Alle medlemskap fjernes.')) return;
 
     setDeletingListId(id);
     try {
@@ -386,7 +386,11 @@ export default function SegmenterPage() {
           <h2 className="font-semibold mb-3">Segmenter</h2>
           <p className="text-sm text-gray-500 mb-3">
             Dynamiske utvalg av kontakter, f.eks. «booket julebord i fjor». Brukes som filter i kontaktlisten
-            og senere som målgruppe for automatiske flyter.
+            og som målgruppe for automatiske flyter.
+          </p>
+          <p className="text-xs text-gray-500 mb-3">
+            Alle regler må stemme. Deal-regler gjelder samme deal: «arrangementstype er julebord» + «dato før
+            2026-01-01» treffer kun kontakter med et julebord før 2026.
           </p>
           <div className="border border-gray-200 rounded-lg p-4 mb-4 space-y-3">
             <input
@@ -462,10 +466,17 @@ export default function SegmenterPage() {
           ) : (
             <ul className="space-y-2">
               {segments.map((s) => (
-                <li key={s.id} className="border border-gray-200 rounded-lg p-3 text-sm flex items-center justify-between">
-                  <span className="font-medium">{s.name}</span>
+                <li key={s.id} className="border border-gray-200 rounded-lg p-3 text-sm flex items-center justify-between gap-3">
+                  <span className="font-medium flex-1">{s.name}</span>
+                  <a
+                    href={`/api/admin/crm/segments/${s.id}/export`}
+                    download
+                    className="text-blue-700 hover:underline text-xs"
+                  >
+                    Eksporter CSV
+                  </a>
                   <button
-                    onClick={() => deleteSegment(s.id)}
+                    onClick={() => setPendingDelete({ kind: 'segment', id: s.id, name: s.name })}
                     disabled={deletingSegmentId === s.id}
                     className="text-gray-400 hover:text-red-600 text-xs disabled:opacity-50"
                   >
@@ -513,7 +524,7 @@ export default function SegmenterPage() {
                         {memberListId === l.id ? 'Lukk' : 'Administrer medlemmer'}
                       </button>
                       <button
-                        onClick={() => deleteList(l.id)}
+                        onClick={() => setPendingDelete({ kind: 'list', id: l.id, name: l.name })}
                         disabled={deletingListId === l.id}
                         className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
                       >
@@ -611,6 +622,24 @@ export default function SegmenterPage() {
           </section>
         </div>
       </div>
+      <ConfirmModal
+        open={pendingDelete !== null}
+        title={pendingDelete?.kind === 'list' ? 'Slett liste' : 'Slett segment'}
+        message={
+          pendingDelete?.kind === 'list'
+            ? `Slette listen «${pendingDelete.name}»? Alle medlemskap fjernes.`
+            : `Slette segmentet «${pendingDelete?.name ?? ''}»? Flyter som bruker segmentet slutter å treffe.`
+        }
+        confirmLabel="Slett"
+        loading={deletingSegmentId !== null || deletingListId !== null}
+        onConfirm={async () => {
+          if (!pendingDelete) return;
+          if (pendingDelete.kind === 'list') await deleteList(pendingDelete.id);
+          else await deleteSegment(pendingDelete.id);
+          setPendingDelete(null);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

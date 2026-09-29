@@ -5,6 +5,8 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { parseSegmentRules, contactMatchesSegment } from '@/lib/crm/segments';
+import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
+import { ownerFilterWhere, parseOwnerFilter } from '@/lib/crm/owner-filter';
 
 const PAGE_SIZE = 50;
 
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest) {
   const stage = sp.get('stage') ?? '';
   const tag = sp.get('tag')?.trim() ?? '';
   const segmentId = Number(sp.get('segmentId')) || null;
+  const ownerFilter = parseOwnerFilter(sp.get('owner'), Number(session.user.id) || null);
   const page = Math.max(1, Number(sp.get('page')) || 1);
 
   const where = {
@@ -31,6 +34,7 @@ export async function GET(request: NextRequest) {
       ],
     }),
     ...(stage && { stage }),
+    ...ownerFilterWhere(ownerFilter, 'ownerId'),
   };
 
   const all = await prisma.contact.findMany({
@@ -46,6 +50,7 @@ export async function GET(request: NextRequest) {
   // Tag- og segmentfiltrering skjer i minnet (tags er JSON-kolonne,
   // segmenter er regelbaserte). Datamengden her er små tusen kontakter.
   let filtered = all.map((c) => ({ ...c, tagList: parseJsonArray(c.tags) }));
+  const availableTags = [...new Set(filtered.flatMap((c) => c.tagList))].sort((a, b) => a.localeCompare(b, 'nb'));
   if (tag) {
     filtered = filtered.filter((c) => c.tagList.includes(tag));
   }
@@ -76,7 +81,7 @@ export async function GET(request: NextRequest) {
       organization: c.organization, owner: c.owner,
       lastActivityAt: c.lastActivityAt, dealCount: c.deals.length,
     })),
-    total, page, pageSize: PAGE_SIZE,
+    total, page, pageSize: PAGE_SIZE, availableTags,
   });
 }
 
@@ -88,6 +93,7 @@ const createSchema = z.object({
   stage: z.enum(['lead', 'active', 'customer', 'dormant', 'lost']).optional(),
   tags: z.array(z.string().max(50)).max(20).optional(),
   roleTitle: z.string().max(100).nullable().optional(),
+  ownerId: z.number().int().positive().nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -110,6 +116,10 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
   const email = normalizeEmail(data.email ?? null);
 
+  if (!(await isAssignableUser(data.ownerId))) {
+    return NextResponse.json({ error: INVALID_ASSIGNEE_ERROR }, { status: 400 });
+  }
+
   if (email) {
     const existing = await prisma.contact.findUnique({ where: { email } });
     if (existing) {
@@ -124,6 +134,7 @@ export async function POST(request: NextRequest) {
       stage: data.stage ?? 'lead',
       tags: JSON.stringify(data.tags ?? []),
       roleTitle: data.roleTitle ?? null,
+      ownerId: data.ownerId ?? null,
       source: 'manual',
     },
   });

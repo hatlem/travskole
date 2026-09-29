@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
+import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
 
 interface ContactRow {
   id: number;
@@ -17,6 +18,7 @@ interface ContactRow {
   source: string;
   tags: string[];
   organization: { id: number; name: string } | null;
+  owner: { id: number; email: string } | null;
   lastActivityAt: string | null;
   dealCount: number;
 }
@@ -38,6 +40,10 @@ export default function KontakterPage() {
   const [q, setQ] = useState('');
   const [stage, setStage] = useState('');
   const [segmentId, setSegmentId] = useState('');
+  const [tag, setTag] = useState('');
+  const [owner, setOwner] = useState('');
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const { assignees } = useAssignees();
   const [showNew, setShowNew] = useState(false);
   const [newContact, setNewContact] = useState({ name: '', email: '', phone: '' });
   const { toast } = useToast();
@@ -54,6 +60,8 @@ export default function KontakterPage() {
       if (q) params.set('q', q);
       if (stage) params.set('stage', stage);
       if (segmentId) params.set('segmentId', segmentId);
+      if (tag) params.set('tag', tag);
+      if (owner) params.set('owner', owner);
       params.set('page', String(page));
       const res = await fetch(`/api/admin/crm/contacts?${params}`, { signal: controller.signal });
       if (!res.ok) throw new Error('Kunne ikke laste kontakter');
@@ -61,6 +69,7 @@ export default function KontakterPage() {
       setContacts(data.contacts || []);
       setTotal(data.total || 0);
       setPageSize(data.pageSize || 50);
+      setAvailableTags(data.availableTags || []);
       setLoadError(false);
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -72,7 +81,7 @@ export default function KontakterPage() {
         setLoading(false);
       }
     }
-  }, [q, stage, segmentId, page, toast]);
+  }, [q, stage, segmentId, tag, owner, page, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 300 : 0);
@@ -141,6 +150,31 @@ export default function KontakterPage() {
             <option key={s.id} value={s.id}>{s.name}</option>
           ))}
         </select>
+        <select
+          value={tag}
+          onChange={(e) => { setPage(1); setTag(e.target.value); }}
+          aria-label="Filtrer på tagg"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+        >
+          <option value="">Alle tagger</option>
+          {/* Behold valgt tagg selv om gjeldende filtre ikke lenger gir den som fasett */}
+          {[...new Set([...(tag ? [tag] : []), ...availableTags])].map((t) => (
+            <option key={t} value={t}>{t}</option>
+          ))}
+        </select>
+        <select
+          value={owner}
+          onChange={(e) => { setPage(1); setOwner(e.target.value); }}
+          aria-label="Filtrer på ansvarlig"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+        >
+          <option value="">Alle ansvarlige</option>
+          <option value="me">Mine</option>
+          <option value="none">Uten ansvarlig</option>
+          {assignees.map((a) => (
+            <option key={a.id} value={a.id}>{assigneeLabel(a)}</option>
+          ))}
+        </select>
         <span className="text-sm text-gray-500">{total} kontakter</span>
         <button
           onClick={() => setShowNew(true)}
@@ -194,6 +228,7 @@ export default function KontakterPage() {
                 <th className="px-4 py-3 font-medium">E-post</th>
                 <th className="px-4 py-3 font-medium">Bedrift</th>
                 <th className="px-4 py-3 font-medium">Stadium</th>
+                <th className="px-4 py-3 font-medium">Ansvarlig</th>
                 <th className="px-4 py-3 font-medium">Deals</th>
                 <th className="px-4 py-3 font-medium">Sist aktiv</th>
               </tr>
@@ -208,7 +243,15 @@ export default function KontakterPage() {
                     {c.tags.length > 0 && (
                       <span className="ml-2 space-x-1">
                         {c.tags.map((t) => (
-                          <span key={t} className="inline-block bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded">{t}</span>
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => { setPage(1); setTag(t); }}
+                            title={`Filtrer på «${t}»`}
+                            className="inline-block bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded hover:bg-blue-100"
+                          >
+                            {t}
+                          </button>
                         ))}
                       </span>
                     )}
@@ -222,6 +265,7 @@ export default function KontakterPage() {
                     ) : '—'}
                   </td>
                   <td className="px-4 py-3">{STAGE_LABELS[c.stage] ?? c.stage}</td>
+                  <td className="px-4 py-3 text-gray-600">{c.owner?.email ?? '—'}</td>
                   <td className="px-4 py-3">{c.dealCount}</td>
                   <td className="px-4 py-3 text-gray-500">
                     {c.lastActivityAt ? new Date(c.lastActivityAt).toLocaleDateString('nb-NO') : '—'}
