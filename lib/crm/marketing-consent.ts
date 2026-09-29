@@ -41,11 +41,19 @@ export type MarketingOptInSource = 'registration_form' | 'booking_form';
 export async function recordMarketingOptIn(contactId: number, source: MarketingOptInSource): Promise<void> {
   try {
     const data = { marketing: true, lawfulBasis: 'consent', consentAt: new Date(), source };
-    await prisma.consent.upsert({
+    const consent = await prisma.consent.upsert({
       where: { contactId },
       create: { contactId, ...data },
       update: data,
+      select: { contact: { select: { email: true } } },
     });
+    // Et nytt, aktivt samtykke opphever en tidligere avmelding — men ikke
+    // bounce/klage/manuell sperring, som gjelder adressen, ikke viljen.
+    if (consent.contact.email) {
+      await prisma.suppression.deleteMany({
+        where: { email: consent.contact.email, reason: 'unsubscribe' },
+      });
+    }
     await emitEvent({
       type: 'consent.updated',
       source: 'server',

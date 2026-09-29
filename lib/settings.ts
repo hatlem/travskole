@@ -86,6 +86,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   marketing_allow_legitimate_interest: 'false',
   // Frivillig markedsføringssamtykke i påmeldings-/forespørselsskjema
   marketing_optin_enabled: 'false',
+  // Domener nye avsenderadresser må ligge på (må også verifiseres i ACS)
+  sender_allowed_domains: 'bjerke.no',
   marketing_optin_text: 'Ja takk, jeg vil gjerne få tilbud og nyheter fra Bjerke Travbane på e-post. Du kan melde deg av når som helst.',
 };
 
@@ -113,6 +115,25 @@ export async function getSettings(): Promise<SiteSettings> {
   } catch {
     return { ...SETTING_DEFAULTS };
   }
+}
+
+// Interne innstillinger og driftstilstand som aldri skal havne i sidens HTML.
+const SERVER_ONLY_SETTING_PREFIXES = [
+  'graph_',
+  'reply_task_',
+  'reply_create_task',
+  'sender_allowed_domains',
+  'marketing_allow_',
+  'ai_analysis_last_',
+  'data_retention_days',
+];
+
+export function toClientSettings(settings: SiteSettings): SiteSettings {
+  return Object.fromEntries(
+    Object.entries(settings).filter(
+      ([key]) => !SERVER_ONLY_SETTING_PREFIXES.some((prefix) => key.startsWith(prefix)),
+    ),
+  );
 }
 
 export async function getSetting(key: string): Promise<string> {

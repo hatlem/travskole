@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prisma, emitEvent } = vi.hoisted(() => ({
-  prisma: { consent: { upsert: vi.fn() } },
+  prisma: { consent: { upsert: vi.fn() }, suppression: { deleteMany: vi.fn() } },
   emitEvent: vi.fn(),
 }));
 
@@ -69,7 +69,8 @@ describe('isMarketingAllowed', () => {
 describe('recordMarketingOptIn', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prisma.consent.upsert.mockResolvedValue({ id: 1 });
+    prisma.consent.upsert.mockResolvedValue({ contact: { email: 'ola@firma.no' } });
+    prisma.suppression.deleteMany.mockResolvedValue({ count: 0 });
     emitEvent.mockResolvedValue(undefined);
   });
 
@@ -86,6 +87,19 @@ describe('recordMarketingOptIn', () => {
       contactId: 42,
       meta: expect.objectContaining({ marketing: true }),
     }));
+  });
+
+  it('lifts only an unsubscribe suppression for the contact email', async () => {
+    await recordMarketingOptIn(42, 'registration_form');
+    expect(prisma.suppression.deleteMany).toHaveBeenCalledWith({
+      where: { email: 'ola@firma.no', reason: 'unsubscribe' },
+    });
+  });
+
+  it('skips suppression cleanup for contacts without email', async () => {
+    prisma.consent.upsert.mockResolvedValue({ contact: { email: null } });
+    await recordMarketingOptIn(42, 'booking_form');
+    expect(prisma.suppression.deleteMany).not.toHaveBeenCalled();
   });
 
   it('never throws when the database write fails', async () => {

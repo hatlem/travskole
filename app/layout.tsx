@@ -7,7 +7,7 @@ import Providers from "@/components/Providers";
 import { SettingsProvider } from "@/components/SettingsProvider";
 import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { Tracker } from "@/components/Tracker";
-import { getSettings } from "@/lib/settings";
+import { getSettings, toClientSettings } from "@/lib/settings";
 
 export const dynamic = 'force-dynamic';
 
@@ -89,7 +89,7 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
           </noscript>
         )}
         <Providers>
-          <SettingsProvider settings={settings}>
+          <SettingsProvider settings={toClientSettings(settings)}>
             <SiteChrome>{children}</SiteChrome>
             <FeedbackWidget />
           </SettingsProvider>

@@ -125,6 +125,7 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'reply_create_task', label: 'Opprett oppgave når en kontakt svarer', type: 'toggle', help: 'Oppgaven havner hos brukeren som står som avsender av e-posten, ellers hos standard ansvarlig under.' },
       { key: 'reply_task_default_assignee', label: 'Standard ansvarlig for svar-oppgaver (e-post til admin-bruker)', type: 'email', placeholder: 'navn@bjerke.no', help: 'Brukes når avsenderen ikke har en admin-bruker. Tomt = oppgaven blir ikke tildelt noen.' },
       { key: 'reply_task_due_days', label: 'Frist for svar-oppgaver (dager)', type: 'text', placeholder: '1' },
+      { key: 'sender_allowed_domains', label: 'Tillatte domener for avsenderadresser (kommaseparert)', type: 'text', placeholder: 'bjerke.no', help: 'Nye avsendere under CRM → Avsendere må ligge på et av disse domenene, og må i tillegg verifiseres i Azure Communication Services av Basefarm før de kan sende.' },
       { key: 'marketing_allow_legitimate_interest', label: 'Tillat markedsføring til bedriftskunder uten samtykke (berettiget interesse)', type: 'toggle', help: 'Gjelder kun kontakter som er knyttet til en organisasjon, dvs. eksisterende bedriftskunder. Alle andre må ha gitt samtykke. Avmelding vinner alltid: kontakter som har meldt seg av eller trukket samtykket får aldri markedsføring.' },
     ],
   },
