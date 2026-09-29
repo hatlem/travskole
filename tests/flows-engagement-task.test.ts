@@ -95,7 +95,7 @@ describe('planStep: create_task', () => {
     const node = n(5, 'action', { kind: 'create_task', title: '  Ring  ', assigneeUserId: 4, dueDays: 3 });
     expect(planStep(node, [e(1, 5, 6)], ctx())).toEqual({
       kind: 'act',
-      action: { kind: 'create_task', task: { title: 'Ring', assigneeUserId: 4, dueDays: 3 } },
+      action: { kind: 'create_task', task: { title: 'Ring', assigneeUserId: 4, assignToOwner: false, dueDays: 3 } },
       nextNodeId: 6,
     });
   });
@@ -105,7 +105,7 @@ describe('planStep: create_task', () => {
     const plan = planStep(node, [e(1, 5, 6)], ctx());
     expect(plan).toEqual({
       kind: 'act',
-      action: { kind: 'create_task', task: { title: 'Ring', assigneeUserId: null, dueDays: null } },
+      action: { kind: 'create_task', task: { title: 'Ring', assigneeUserId: null, assignToOwner: false, dueDays: null } },
       nextNodeId: 6,
     });
   });

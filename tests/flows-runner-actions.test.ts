@@ -103,6 +103,45 @@ describe('runFlowBatch: create_task', () => {
   });
 });
 
+describe('runFlowBatch: create_task til kontaktens ansvarlige', () => {
+  beforeEach(() => {
+    mockGraph(
+      [
+        { id: 10, type: 'start', config: {} },
+        { id: 11, type: 'action', config: { kind: 'create_task', title: 'Ring', assignTo: 'owner', assigneeUserId: 9, dueDays: 1 } },
+        { id: 12, type: 'end', config: {} },
+      ],
+      [[10, 11, null], [11, 12, null]],
+    );
+    prisma.user.findFirst.mockImplementation(async ({ where }: { where: { id: number } }) =>
+      [3, 5, 9].includes(where.id) ? { id: where.id } : null,
+    );
+  });
+
+  const owners = (contactOwner: number | null, orgOwner: number | null) =>
+    prisma.contact.findUnique.mockImplementation(async (args: { select?: { ownerId?: boolean } }) =>
+      args.select?.ownerId ? { ownerId: contactOwner, organization: orgOwner === null ? null : { ownerId: orgOwner } } : CONTACT,
+    );
+
+  it('bruker kontaktens eier først', async () => {
+    owners(3, 5);
+    await runFlowBatch(NOW);
+    expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: 3 }) });
+  });
+
+  it('faller tilbake til bedriftens eier', async () => {
+    owners(null, 5);
+    await runFlowBatch(NOW);
+    expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: 5 }) });
+  });
+
+  it('faller tilbake til fast reserve når ingen eier er aktiv admin', async () => {
+    owners(42, null);
+    await runFlowBatch(NOW);
+    expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: 9 }) });
+  });
+});
+
 describe('runFlowBatch: engasjementsbetingelser', () => {
   const graphFor = (kind: string) =>
     mockGraph(

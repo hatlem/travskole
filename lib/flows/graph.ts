@@ -109,7 +109,7 @@ function validateActionConfig(node: GraphNode): ValidationError | null {
 }
 
 function validateCreateTaskConfig(node: GraphNode): ValidationError | null {
-  const { title, assigneeUserId, dueDays } = node.config;
+  const { title, assigneeUserId, assignTo, dueDays } = node.config;
   if (!isNonEmptyString(title)) {
     return err(node.id, 'action_config', 'Oppgave-handlingen mangler en tittel.');
   }
@@ -118,6 +118,9 @@ function validateCreateTaskConfig(node: GraphNode): ValidationError | null {
   }
   if (assigneeUserId !== undefined && assigneeUserId !== null && !(isInteger(assigneeUserId) && assigneeUserId > 0)) {
     return err(node.id, 'action_config', 'Oppgave-handlingen har en ugyldig ansvarlig.');
+  }
+  if (assignTo !== undefined && assignTo !== null && assignTo !== 'owner') {
+    return err(node.id, 'action_config', 'Oppgave-handlingen har en ugyldig tildelingsregel.');
   }
   if (dueDays !== undefined && dueDays !== null && !(isInteger(dueDays) && dueDays >= 0 && dueDays <= TASK_DUE_DAYS_MAX)) {
     return err(node.id, 'action_config', `Frist må være et helt antall dager mellom 0 og ${TASK_DUE_DAYS_MAX}.`);

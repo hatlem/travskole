@@ -24,6 +24,8 @@ export interface StepContext {
 export interface TaskActionPayload {
   title: string;
   assigneeUserId: number | null;
+  /** Tildel kontaktens ansvarlige (eier); `assigneeUserId` brukes da som reserve. */
+  assignToOwner: boolean;
   dueDays: number | null;
 }
 
@@ -130,13 +132,13 @@ function planAction(node: GraphNode, edges: GraphEdge[]): StepPlan {
 }
 
 function parseTaskPayload(config: Record<string, unknown>): TaskActionPayload | null {
-  const { title, assigneeUserId, dueDays } = config;
+  const { title, assigneeUserId, assignTo, dueDays } = config;
   if (typeof title !== 'string' || title.trim() === '') return null;
   const assignee = typeof assigneeUserId === 'number' && Number.isInteger(assigneeUserId) && assigneeUserId > 0
     ? assigneeUserId
     : null;
   const due = typeof dueDays === 'number' && Number.isInteger(dueDays) && dueDays >= 0 ? dueDays : null;
-  return { title: title.trim(), assigneeUserId: assignee, dueDays: due };
+  return { title: title.trim(), assigneeUserId: assignee, assignToOwner: assignTo === 'owner', dueDays: due };
 }
 
 function planSchedule(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPlan {

@@ -68,7 +68,7 @@ function nodeConfig(node: TemplateNode, ctx: TemplateContext): Record<string, un
     case 'condition':
       return node.value === undefined ? { kind: node.kind } : { kind: node.kind, value: node.value };
     case 'task':
-      return { kind: 'create_task', title: node.title, dueDays: node.dueDays };
+      return { kind: 'create_task', title: node.title, dueDays: node.dueDays, assignTo: 'owner' };
     case 'action':
       return { kind: node.kind, value: node.value };
     default:

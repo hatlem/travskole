@@ -451,7 +451,7 @@ export function NodeConfigPanel({
             <select
               value={typeof config.kind === 'string' ? config.kind : ''}
               onChange={(e) =>
-                set({ kind: e.target.value, value: undefined, title: undefined, assigneeUserId: undefined, dueDays: undefined })
+                set({ kind: e.target.value, value: undefined, title: undefined, assigneeUserId: undefined, assignTo: undefined, dueDays: undefined })
               }
               disabled={disabled}
               className={inputCls}
@@ -505,12 +505,22 @@ export function NodeConfigPanel({
               <div>
                 <label className={labelCls}>Ansvarlig</label>
                 <select
+                  value={config.assignTo === 'owner' ? 'owner' : ''}
+                  onChange={(e) => set({ assignTo: e.target.value === 'owner' ? 'owner' : undefined })}
+                  disabled={disabled}
+                  className={`${inputCls} mb-2`}
+                >
+                  <option value="">Fast person</option>
+                  <option value="owner">Kontaktens ansvarlige (ev. bedriftens)</option>
+                </select>
+                <select
                   value={typeof config.assigneeUserId === 'number' ? config.assigneeUserId : ''}
                   onChange={(e) => set({ assigneeUserId: e.target.value ? Number(e.target.value) : undefined })}
                   disabled={disabled}
                   className={inputCls}
+                  aria-label={config.assignTo === 'owner' ? 'Reserve hvis kontakten mangler ansvarlig' : 'Ansvarlig'}
                 >
-                  <option value="">Ingen (ufordelt)</option>
+                  <option value="">{config.assignTo === 'owner' ? 'Reserve: ingen (ufordelt)' : 'Ingen (ufordelt)'}</option>
                   {adminUsers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.email}

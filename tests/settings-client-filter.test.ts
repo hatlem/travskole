@@ -18,6 +18,7 @@ describe('toClientSettings', () => {
       marketing_allow_legitimate_interest: 'true',
       ai_analysis_last_3: '2026-09-01T00:00:00Z',
       data_retention_days: '0',
+      attribution_window_days: '14',
     });
 
     expect(result).toEqual({

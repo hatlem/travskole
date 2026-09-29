@@ -208,16 +208,31 @@ async function applyAction(
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Oppretter en CRM-oppgave på kontakten. En slettet/degradert ansvarlig gir en ufordelt oppgave i stedet for en feilet enrollment. */
+async function activeAdminId(userId: number | null | undefined): Promise<number | null> {
+  if (userId == null) return null;
+  const user = await prisma.user.findFirst({
+    where: { id: userId, role: { in: ['admin', 'superadmin'] }, deactivatedAt: null },
+    select: { id: true },
+  });
+  return user?.id ?? null;
+}
+
+/**
+ * Oppretter en CRM-oppgave på kontakten. Rekkefølge ved «kontaktens ansvarlige»:
+ * kontaktens eier → bedriftens eier → fast ansvarlig. En slettet/degradert
+ * ansvarlig gir en ufordelt oppgave i stedet for en feilet enrollment.
+ */
 async function createFlowTask(task: TaskActionPayload, contactId: number, now: Date): Promise<void> {
   let assigneeId: number | null = null;
-  if (task.assigneeUserId !== null) {
-    const user = await prisma.user.findFirst({
-      where: { id: task.assigneeUserId, role: { in: ['admin', 'superadmin'] }, deactivatedAt: null },
-      select: { id: true },
+  if (task.assignToOwner) {
+    const owners = await prisma.contact.findUnique({
+      where: { id: contactId },
+      select: { ownerId: true, organization: { select: { ownerId: true } } },
     });
-    assigneeId = user?.id ?? null;
+    assigneeId =
+      (await activeAdminId(owners?.ownerId)) ?? (await activeAdminId(owners?.organization?.ownerId));
   }
+  assigneeId ??= await activeAdminId(task.assigneeUserId);
   await prisma.task.create({
     data: {
       title: task.title,
