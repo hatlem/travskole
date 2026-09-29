@@ -16,6 +16,11 @@ export interface SegmentOption {
   name: string;
 }
 
+export interface AdminUserOption {
+  id: number;
+  email: string;
+}
+
 const MERGE_TAG_LABELS_NO: Record<string, string> = {
   '{{forelder_navn}}': 'Foresattes navn',
   '{{barnets_navn}}': 'Barnets navn',
@@ -45,8 +50,24 @@ const ACTION_KIND_OPTIONS = [
   { value: 'remove_tag', label: 'Fjern tagg' },
   { value: 'set_stage', label: 'Sett stadium' },
   { value: 'notify_admin', label: 'Varsle admin' },
+  { value: 'create_task', label: 'Opprett oppgave' },
   { value: 'exit', label: 'Avslutt flyten' },
 ];
+
+const CONDITION_KIND_OPTIONS = [
+  { value: 'in_segment', label: 'I segment' },
+  { value: 'stage_is', label: 'Stadium er' },
+  { value: 'deal_status', label: 'Deal-status er' },
+  { value: 'opened_email', label: 'Åpnet forrige e-post' },
+  { value: 'clicked_email', label: 'Klikket i forrige e-post' },
+  { value: 'replied_email', label: 'Svarte på forrige e-post' },
+];
+
+const ENGAGEMENT_HELP: Record<string, string> = {
+  opened_email: 'Ja hvis siste e-post kontakten fikk i denne flyten er åpnet.',
+  clicked_email: 'Ja hvis kontakten har klikket en lenke i siste e-post i denne flyten.',
+  replied_email: 'Ja hvis kontakten har svart på siste e-post i denne flyten.',
+};
 
 const ACTION_KINDS_WITH_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);
 
@@ -65,6 +86,8 @@ interface NodeConfigPanelProps {
   flowId: number;
   senderIdentities: SenderIdentityOption[];
   segments: SegmentOption[];
+  adminUsers: AdminUserOption[];
+  isMarketing: boolean;
   disabled: boolean;
   onChangeConfig: (rfId: string, config: Record<string, unknown>) => void;
   onDeleteNode: (rfId: string) => void;
@@ -75,6 +98,8 @@ export function NodeConfigPanel({
   flowId,
   senderIdentities,
   segments,
+  adminUsers,
+  isMarketing,
   disabled,
   onChangeConfig,
   onDeleteNode,
@@ -345,12 +370,23 @@ export function NodeConfigPanel({
               className={inputCls}
             >
               <option value="">Velg type …</option>
-              <option value="in_segment">I segment</option>
-              <option value="stage_is">Stadium er</option>
-              <option value="deal_status">Deal-status er</option>
-              <option value="opened_email">Åpnet forrige e-post</option>
+              {CONDITION_KIND_OPTIONS.map((k) => (
+                <option key={k.value} value={k.value}>
+                  {k.label}
+                </option>
+              ))}
             </select>
           </div>
+          {typeof config.kind === 'string' && ENGAGEMENT_HELP[config.kind] && (
+            <p className="text-[11px] text-gray-500">
+              {ENGAGEMENT_HELP[config.kind]} Uten tidligere e-post i flyten går kontakten til «nei».
+            </p>
+          )}
+          {!isMarketing && (config.kind === 'opened_email' || config.kind === 'clicked_email') && (
+            <p className="text-[11px] text-amber-700">
+              Åpning og klikk spores bare i markedsføringsflyter — i denne flyten vil betingelsen alltid gi «nei».
+            </p>
+          )}
           {config.kind === 'in_segment' && (
             <div>
               <label className={labelCls}>Segment</label>
@@ -414,7 +450,9 @@ export function NodeConfigPanel({
             <label className={labelCls}>Type</label>
             <select
               value={typeof config.kind === 'string' ? config.kind : ''}
-              onChange={(e) => set({ kind: e.target.value, value: undefined })}
+              onChange={(e) =>
+                set({ kind: e.target.value, value: undefined, title: undefined, assigneeUserId: undefined, dueDays: undefined })
+              }
               disabled={disabled}
               className={inputCls}
             >
@@ -436,6 +474,66 @@ export function NodeConfigPanel({
                 disabled={disabled}
                 className={inputCls}
               />
+            </div>
+          )}
+          {config.kind === 'notify_admin' && (
+            <div>
+              <label className={labelCls}>Melding (valgfri)</label>
+              <input
+                type="text"
+                value={typeof config.value === 'string' ? config.value : ''}
+                onChange={(e) => set({ value: e.target.value || undefined })}
+                disabled={disabled}
+                className={inputCls}
+              />
+            </div>
+          )}
+          {config.kind === 'create_task' && (
+            <div className="space-y-3">
+              <div>
+                <label className={labelCls}>Oppgavetittel</label>
+                <input
+                  type="text"
+                  maxLength={300}
+                  placeholder="F.eks. Ring og følg opp"
+                  value={typeof config.title === 'string' ? config.title : ''}
+                  onChange={(e) => set({ title: e.target.value })}
+                  disabled={disabled}
+                  className={inputCls}
+                />
+              </div>
+              <div>
+                <label className={labelCls}>Ansvarlig</label>
+                <select
+                  value={typeof config.assigneeUserId === 'number' ? config.assigneeUserId : ''}
+                  onChange={(e) => set({ assigneeUserId: e.target.value ? Number(e.target.value) : undefined })}
+                  disabled={disabled}
+                  className={inputCls}
+                >
+                  <option value="">Ingen (ufordelt)</option>
+                  {adminUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.email}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={labelCls}>Frist (dager etter at kontakten når noden)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={365}
+                  placeholder="Ingen frist"
+                  value={typeof config.dueDays === 'number' ? config.dueDays : ''}
+                  onChange={(e) =>
+                    set({ dueDays: e.target.value === '' ? undefined : Math.max(0, Math.trunc(Number(e.target.value)) || 0) })
+                  }
+                  disabled={disabled}
+                  className={inputCls}
+                />
+              </div>
+              <p className="text-[11px] text-gray-500">Oppgaven knyttes til kontakten og vises under CRM → Oppgaver.</p>
             </div>
           )}
         </div>

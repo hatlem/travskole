@@ -4,8 +4,9 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { isFlowEditable } from '@/lib/flows/status';
 
-const NODE_TYPES = ['start', 'email', 'wait', 'condition', 'action', 'end'] as const;
+const NODE_TYPES = ['start', 'email', 'wait', 'condition', 'action', 'schedule', 'end'] as const;
 
 const configSchema = z
   .record(z.string(), z.unknown())
@@ -71,7 +72,7 @@ export async function PUT(
   if (!flow) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
-  if (flow.status !== 'draft' && flow.status !== 'paused') {
+  if (!isFlowEditable(flow.status)) {
     return NextResponse.json({ error: 'Kan ikke endre grafen i en aktiv flyt' }, { status: 409 });
   }
 

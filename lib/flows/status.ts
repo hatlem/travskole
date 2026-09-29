@@ -1,0 +1,25 @@
+/**
+ * Flyt-statuser og hvilke operasjoner hver status tillater. Ren modul — brukes
+ * både av API-rutene og admin-UI-et så reglene holdes like.
+ *
+ * `template` er en mal: kan redigeres, omdøpes, kopieres og slettes, men
+ * aldri aktiveres eller meldes inn i. Runner/cron/hendelser ser kun på `active`.
+ */
+
+export const FLOW_STATUSES = ['draft', 'active', 'paused', 'archived', 'template'] as const;
+export type FlowStatus = (typeof FLOW_STATUSES)[number];
+
+export const ANCHOR_MODES = ['contact', 'course'] as const;
+export type AnchorMode = (typeof ANCHOR_MODES)[number];
+
+export const isTemplateStatus = (status: string): boolean => status === 'template';
+
+/** Graf, navn og innstillinger kan redigeres (samme regel som grafens lås). */
+export const isFlowEditable = (status: string): boolean =>
+  status === 'draft' || status === 'paused' || status === 'template';
+
+/** Manuell innmelding er bare meningsfull i flyter runneren faktisk kjører (eller vil kjøre etter pause). */
+export const canEnrollIntoStatus = (status: string): boolean => status === 'active' || status === 'paused';
+
+export const canDeleteStatus = (status: string): boolean =>
+  status === 'draft' || status === 'archived' || status === 'template';

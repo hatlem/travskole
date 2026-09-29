@@ -20,9 +20,9 @@ import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { matchTriggers, type EventLike } from './match';
 import { contactMatchesSegment, parseSegmentRules } from '@/lib/crm/segments';
-import { parseJsonArray } from '@/lib/crm/normalize';
+import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 
-const SEGMENT_ENROLL_CAP = 500;
+export const SEGMENT_ENROLL_CAP = 500;
 
 function isDuplicateEnrollment(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
@@ -99,15 +99,66 @@ export async function enrollCourseRegistration(
   }
 }
 
+export interface EnrollSummary {
+  enrolled: number;
+  skippedActive: number;
+  skippedSuppressed: number;
+  skippedMissing: number;
+  /** Treff utover SEGMENT_ENROLL_CAP som ikke ble forsøkt meldt inn. */
+  capped: number;
+}
+
+const emptySummary = (): EnrollSummary => ({
+  enrolled: 0,
+  skippedActive: 0,
+  skippedSuppressed: 0,
+  skippedMissing: 0,
+  capped: 0,
+});
+
 /**
- * Evaluates a segment's rules against all contacts and enrolls the matches
- * into the given flow (same active-enrollment guard as `enrollContact`).
- * Capped at 500 contacts per call. Returns the number of enrollments
- * actually created (already-enrolled matches don't count).
+ * Manuell innmelding av en liste kontakter. Hopper over kontakter som ikke
+ * finnes, som står på suppresjonslista (avmeldt/bounce/klage — sendelaget ville
+ * uansett hoppet over dem), og som allerede er aktive i flyten.
  */
-export async function enrollSegment(flowId: number, segmentId: number): Promise<number> {
+export async function enrollContacts(flowId: number, contactIds: number[]): Promise<EnrollSummary> {
+  const summary = emptySummary();
+  const uniqueIds = [...new Set(contactIds)];
+  if (uniqueIds.length === 0) return summary;
+
+  const contacts = await prisma.contact.findMany({
+    where: { id: { in: uniqueIds } },
+    select: { id: true, email: true },
+  });
+  summary.skippedMissing = uniqueIds.length - contacts.length;
+
+  const emails = contacts
+    .map((c) => (c.email ? normalizeEmail(c.email) : null))
+    .filter((e): e is string => Boolean(e));
+  const suppressed = emails.length
+    ? new Set(
+        (await prisma.suppression.findMany({ where: { email: { in: emails } }, select: { email: true } })).map(
+          (s) => s.email,
+        ),
+      )
+    : new Set<string>();
+
+  for (const contact of contacts) {
+    const email = contact.email ? normalizeEmail(contact.email) : null;
+    if (email && suppressed.has(email)) {
+      summary.skippedSuppressed++;
+      continue;
+    }
+    if (await enrollContact(flowId, contact.id)) summary.enrolled++;
+    else summary.skippedActive++;
+  }
+  return summary;
+}
+
+/** Kontakt-idene som matcher segmentet (system-kontakter utelatt). */
+export async function segmentContactIds(segmentId: number): Promise<number[] | null> {
   const segment = await prisma.segment.findUnique({ where: { id: segmentId } });
-  if (!segment) return 0;
+  if (!segment) return null;
 
   const rules = parseSegmentRules(segment.rules);
   const contacts = await prisma.contact.findMany({
@@ -115,7 +166,7 @@ export async function enrollSegment(flowId: number, segmentId: number): Promise<
     include: { deals: { select: { eventType: true, eventDate: true, status: true } } },
   });
 
-  const matched = contacts
+  return contacts
     .filter((contact) =>
       contactMatchesSegment(
         {
@@ -130,13 +181,20 @@ export async function enrollSegment(flowId: number, segmentId: number): Promise<
         rules,
       ),
     )
-    .slice(0, SEGMENT_ENROLL_CAP);
+    .map((contact) => contact.id);
+}
 
-  let created = 0;
-  for (const contact of matched) {
-    if (await enrollContact(flowId, contact.id)) created++;
-  }
-  return created;
+/**
+ * Evaluates a segment's rules against all contacts and enrolls the matches
+ * (same guards as `enrollContacts`). Capped at 500 contacts per call — the
+ * overflow is reported as `capped`.
+ */
+export async function enrollSegment(flowId: number, segmentId: number): Promise<EnrollSummary> {
+  const ids = await segmentContactIds(segmentId);
+  if (!ids) return emptySummary();
+  const summary = await enrollContacts(flowId, ids.slice(0, SEGMENT_ENROLL_CAP));
+  summary.capped = Math.max(0, ids.length - SEGMENT_ENROLL_CAP);
+  return summary;
 }
 
 /**

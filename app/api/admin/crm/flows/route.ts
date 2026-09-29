@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { ANCHOR_MODES } from '@/lib/flows/status';
 
 export async function GET() {
   const session = await requireAdmin();
@@ -39,6 +40,7 @@ const createSchema = z.object({
   name: z.string().min(1, 'Navn er påkrevd').max(200),
   description: z.string().max(2000).nullable().optional(),
   isMarketing: z.boolean().optional(),
+  anchorMode: z.enum(ANCHOR_MODES).optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -66,6 +68,7 @@ export async function POST(request: NextRequest) {
         name: data.name,
         description: data.description ?? null,
         ...(data.isMarketing !== undefined && { isMarketing: data.isMarketing }),
+        ...(data.anchorMode !== undefined && { anchorMode: data.anchorMode }),
       },
     });
 

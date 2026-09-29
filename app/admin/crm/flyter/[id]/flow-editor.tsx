@@ -12,15 +12,26 @@ import {
   type NodeChange,
   type EdgeChange,
   type Connection,
-  type Edge,
+  type OnBeforeDelete,
+  type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
+import type { CourseOption } from '@/lib/flows/event-labels';
+import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 import { nodeTypes, NODE_TYPE_ORDER, NODE_LABELS, type FlowRFNode, type FlowNodeType } from './node-types';
-import { NodeConfigPanel, type SenderIdentityOption, type SegmentOption } from './node-config-panel';
+import { edgeTypes, type FlowRFEdge } from './deletable-edge';
+import {
+  NodeConfigPanel,
+  type AdminUserOption,
+  type SenderIdentityOption,
+  type SegmentOption,
+} from './node-config-panel';
 import { TriggerPanel, type TriggerRow } from './trigger-panel';
 import { EnrollmentPanel } from './enrollment-panel';
+import { EnrollModal } from './enroll-modal';
+import { FlowSettingsPanel } from './flow-settings-panel';
 import { FlowToolbar, type ValidationError } from './flow-toolbar';
 
 interface InitialNode {
@@ -44,6 +55,7 @@ interface FlowMeta {
   description: string | null;
   status: string;
   isMarketing: boolean;
+  anchorMode: string;
 }
 
 interface FlowEditorProps {
@@ -53,12 +65,19 @@ interface FlowEditorProps {
   initialTriggers: TriggerRow[];
   senderIdentities: SenderIdentityOption[];
   segments: SegmentOption[];
+  courses: CourseOption[];
+  adminUsers: AdminUserOption[];
+  initialActiveEnrollments: number;
 }
+
+const DRAG_MIME = 'application/x-flow-node-type';
 
 function refFor(rfId: string): string | number {
   const realId = Number(rfId);
   return Number.isInteger(realId) && realId > 0 ? realId : rfId;
 }
+
+const isNodeType = (v: string): v is FlowNodeType => (NODE_TYPE_ORDER as string[]).includes(v);
 
 export function FlowEditor({
   flow: initialFlow,
@@ -67,6 +86,9 @@ export function FlowEditor({
   initialTriggers,
   senderIdentities,
   segments,
+  courses,
+  adminUsers,
+  initialActiveEnrollments,
 }: FlowEditorProps) {
   const { toast } = useToast();
   const [flow, setFlow] = useState<FlowMeta>(initialFlow);
@@ -80,13 +102,13 @@ export function FlowEditor({
       data: { config: n.config, hasError: false },
     })),
   );
-  const [edges, setEdges] = useState<Edge[]>(() =>
+  const [edges, setEdges] = useState<FlowRFEdge[]>(() =>
     initialEdges.map((e) => ({
       id: `e${e.id}`,
+      type: 'deletable' as const,
       source: String(e.fromNodeId),
       target: String(e.toNodeId),
       sourceHandle: e.branch ?? undefined,
-      label: e.branch ?? undefined,
     })),
   );
 
@@ -98,12 +120,19 @@ export function FlowEditor({
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollmentsVersion, setEnrollmentsVersion] = useState(0);
+  const [hasActiveEnrollments, setHasActiveEnrollments] = useState(initialActiveEnrollments > 0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const savingRef = useRef(false);
   const activatingRef = useRef(false);
   const statusChangeRef = useRef(false);
   const tempIdRef = useRef(0);
+  const rfInstanceRef = useRef<ReactFlowInstance<FlowRFNode, FlowRFEdge> | null>(null);
 
-  const editingDisabled = flow.status !== 'draft' && flow.status !== 'paused';
+  const editingDisabled = !isFlowEditable(flow.status);
+  const isTemplate = isTemplateStatus(flow.status);
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
@@ -111,6 +140,10 @@ export function FlowEditor({
   const nodesForCanvas = useMemo(
     () => nodes.map((n) => ({ ...n, data: { ...n.data, hasError: errorNodeIds.has(n.id) } })),
     [nodes, errorNodeIds],
+  );
+  const edgesForCanvas = useMemo(
+    () => edges.map((e) => ({ ...e, data: { editable: !editingDisabled } })),
+    [edges, editingDisabled],
   );
 
   const clearErrors = useCallback(() => {
@@ -130,7 +163,7 @@ export function FlowEditor({
   );
 
   const onEdgesChange = useCallback(
-    (changes: EdgeChange[]) => {
+    (changes: EdgeChange<FlowRFEdge>[]) => {
       setEdges((eds) => applyEdgeChanges(changes, eds));
       if (changes.some((c) => c.type !== 'select')) {
         setDirty(true);
@@ -140,10 +173,20 @@ export function FlowEditor({
     [clearErrors],
   );
 
+  // Tastatursletting gjelder bare valgte koblinger — noder slettes med «Slett node» i panelet.
+  const onBeforeDelete: OnBeforeDelete<FlowRFNode, FlowRFEdge> = useCallback(
+    async ({ edges: candidates }) => {
+      if (editingDisabled) return false;
+      const selectedEdges = candidates.filter((e) => e.selected);
+      return selectedEdges.length > 0 ? { nodes: [], edges: selectedEdges } : false;
+    },
+    [editingDisabled],
+  );
+
   const onConnect = useCallback(
     (connection: Connection) => {
       if (editingDisabled) return;
-      setEdges((eds) => addEdge(connection, eds));
+      setEdges((eds) => addEdge({ ...connection, type: 'deletable' as const }, eds));
       setDirty(true);
       clearErrors();
     },
@@ -156,19 +199,40 @@ export function FlowEditor({
 
   const onPaneClick = useCallback(() => setSelectedNodeId(null), []);
 
-  function addNode(type: FlowNodeType) {
+  function addNode(type: FlowNodeType, position?: { x: number; y: number }) {
     if (editingDisabled) return;
     tempIdRef.current -= 1;
     const id = String(tempIdRef.current);
-    const position = {
+    const pos = position ?? {
       x: 120 + (nodes.length % 4) * 200,
       y: 80 + Math.floor(nodes.length / 4) * 140,
     };
     const defaultConfig: Record<string, unknown> = type === 'wait' ? { days: 0, hours: 0 } : {};
-    setNodes((nds) => [...nds, { id, type, position, data: { config: defaultConfig, hasError: false } }]);
+    setNodes((nds) => [...nds, { id, type, position: pos, data: { config: defaultConfig, hasError: false } }]);
     setSelectedNodeId(id);
     setDirty(true);
     clearErrors();
+  }
+
+  function onPaletteDragStart(event: React.DragEvent, type: FlowNodeType) {
+    event.dataTransfer.setData(DRAG_MIME, type);
+    event.dataTransfer.effectAllowed = 'move';
+  }
+
+  function onCanvasDragOver(event: React.DragEvent) {
+    if (editingDisabled || !event.dataTransfer.types.includes(DRAG_MIME)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }
+
+  function onCanvasDrop(event: React.DragEvent) {
+    const type = event.dataTransfer.getData(DRAG_MIME);
+    const instance = rfInstanceRef.current;
+    if (editingDisabled || !isNodeType(type) || !instance) return;
+    event.preventDefault();
+    const position = instance.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+    // Sentrer kortet (~180×60) under markøren.
+    addNode(type, { x: position.x - 90, y: position.y - 30 });
   }
 
   function deleteNode(rfId: string) {
@@ -313,9 +377,31 @@ export function FlowEditor({
     }
   }
 
+  async function handleSaveAsTemplate() {
+    if (savingTemplate || dirty) return;
+    setSavingTemplate(true);
+    try {
+      const res = await fetch(`/api/admin/crm/flows/${flow.id}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target: 'template' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast(data.error || 'Kunne ikke lagre som mal', 'error');
+        return;
+      }
+      toast(`Lagret som mal «${data.flow.name}» — finnes under Maler i flytlisten`, 'success');
+    } catch {
+      toast('Kunne ikke lagre som mal', 'error');
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
   useEffect(() => {
-    document.title = `${flow.name} – Flyt`;
-  }, [flow.name]);
+    document.title = `${flow.name} – ${isTemplate ? 'Mal' : 'Flyt'}`;
+  }, [flow.name, isTemplate]);
 
   return (
     <div>
@@ -332,7 +418,10 @@ export function FlowEditor({
         onActivate={handleActivate}
         onPause={() => handleStatusChange('paused')}
         onResume={() => handleStatusChange('active')}
-        enrollmentCounter={<EnrollmentPanel flowId={flow.id} />}
+        onEnroll={() => setEnrollOpen(true)}
+        onSaveAsTemplate={handleSaveAsTemplate}
+        savingTemplate={savingTemplate}
+        enrollmentCounter={<EnrollmentPanel key={enrollmentsVersion} flowId={flow.id} />}
       />
 
       <div className="grid grid-cols-[160px_1fr_320px] gap-4">
@@ -342,27 +431,45 @@ export function FlowEditor({
             <button
               key={type}
               onClick={() => addNode(type)}
+              draggable={!editingDisabled}
+              onDragStart={(e) => onPaletteDragStart(e, type)}
               disabled={editingDisabled}
-              className="w-full text-left border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+              title="Klikk for å legge til, eller dra inn på lerretet"
+              className="w-full text-left border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 cursor-grab active:cursor-grabbing disabled:cursor-not-allowed"
             >
               {NODE_LABELS[type]}
             </button>
           ))}
+          {!editingDisabled && (
+            <p className="text-[11px] text-gray-500 pt-1">
+              Klikk eller dra en node inn på lerretet. Velg en kobling og trykk Delete/Backspace (eller ×) for å slette den.
+            </p>
+          )}
         </div>
 
-        <div className="h-[600px] rounded-lg border border-gray-200 bg-gray-50">
-          <ReactFlow
+        <div
+          className="h-[600px] rounded-lg border border-gray-200 bg-gray-50"
+          onDragOver={onCanvasDragOver}
+          onDrop={onCanvasDrop}
+        >
+          <ReactFlow<FlowRFNode, FlowRFEdge>
             nodes={nodesForCanvas}
-            edges={edges}
+            edges={edgesForCanvas}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
+            onInit={(instance) => {
+              rfInstanceRef.current = instance;
+            }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onBeforeDelete={onBeforeDelete}
             onConnect={onConnect}
             onNodeClick={onNodeClick}
             onPaneClick={onPaneClick}
             nodesDraggable={!editingDisabled}
             nodesConnectable={!editingDisabled}
-            deleteKeyCode={null}
+            edgesFocusable={!editingDisabled}
+            deleteKeyCode={editingDisabled ? null : ['Delete', 'Backspace']}
             fitView
           >
             <Background />
@@ -373,12 +480,39 @@ export function FlowEditor({
 
         <div className="space-y-4">
           <div className="rounded-lg border border-gray-200 bg-white p-4">
+            <button
+              onClick={() => setSettingsOpen((v) => !v)}
+              aria-expanded={settingsOpen}
+              className="flex w-full items-center justify-between text-sm font-semibold text-gray-800"
+            >
+              <span>Innstillinger</span>
+              <span className="text-xs font-normal text-gray-500">
+                {flow.isMarketing ? 'Markedsføring' : 'Transaksjonell'} · {flow.anchorMode === 'course' ? 'Kurs' : 'Kontakt'}
+                {settingsOpen ? ' ▲' : ' ▼'}
+              </span>
+            </button>
+            {settingsOpen && (
+              <div className="mt-3">
+                <FlowSettingsPanel
+                  key={flow.status}
+                  flow={flow}
+                  disabled={editingDisabled}
+                  hasActiveEnrollments={hasActiveEnrollments}
+                  onSaved={(patch) => setFlow((f) => ({ ...f, ...patch }))}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-gray-200 bg-white p-4">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">Node-konfigurasjon</h3>
             <NodeConfigPanel
               node={selectedNode}
               flowId={flow.id}
               senderIdentities={senderIdentities}
               segments={segments}
+              adminUsers={adminUsers}
+              isMarketing={flow.isMarketing}
               disabled={editingDisabled}
               onChangeConfig={updateNodeConfig}
               onDeleteNode={deleteNode}
@@ -387,10 +521,28 @@ export function FlowEditor({
 
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <h3 className="text-sm font-semibold text-gray-800 mb-3">Utløsere</h3>
-            <TriggerPanel flowId={flow.id} triggers={triggers} onTriggersChange={setTriggers} />
+            {isTemplate && (
+              <p className="mb-2 text-xs text-gray-500">Utløsere i en mal kopieres til nye flyter, men utløser aldri noe selv.</p>
+            )}
+            <TriggerPanel flowId={flow.id} triggers={triggers} courses={courses} onTriggersChange={setTriggers} />
           </div>
         </div>
       </div>
+
+      {enrollOpen && (
+        <EnrollModal
+          flowId={flow.id}
+          anchorMode={flow.anchorMode}
+          isMarketing={flow.isMarketing}
+          onClose={() => setEnrollOpen(false)}
+          onEnrolled={(result) => {
+            if (result.enrolled > 0) {
+              setHasActiveEnrollments(true);
+              setEnrollmentsVersion((v) => v + 1);
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

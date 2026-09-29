@@ -15,15 +15,29 @@ export interface StepContext {
   contact: SegmentContact & { stage: string | null; tags: string[] };
   segmentRulesById: Record<number, string>; // segmentId → raw rules-JSON (for in_segment)
   lastSendOpened: boolean | null; // most recent tracked email-node send's openedAt !== null in THIS enrollment; null = no prior tracked send exists
+  lastSendClicked?: boolean | null; // samme send: minst ett sporet klikk
+  lastSendReplied?: boolean | null; // samme send: repliedAt satt
   now: Date;
   courseDates?: { startDate: Date | null; endDate: Date | null } | null; // fra enrollmentens registrering; undefined/null = ingen kurs-anker
+}
+
+export interface TaskActionPayload {
+  title: string;
+  assigneeUserId: number | null;
+  dueDays: number | null;
+}
+
+export interface PlannedAction {
+  kind: string;
+  value?: string;
+  task?: TaskActionPayload;
 }
 
 export type StepPlan =
   | { kind: 'send_email'; subject: string; bodyHtml: string; senderIdentityId: number; aiPersonalize: boolean; nextNodeId: number }
   | { kind: 'sleep'; until: Date; nextNodeId: number }
   | { kind: 'advance'; nextNodeId: number } // condition/action fortsetter umiddelbart
-  | { kind: 'act'; action: { kind: string; value?: string }; nextNodeId: number | null } // null ⇒ exit-terminal
+  | { kind: 'act'; action: PlannedAction; nextNodeId: number | null } // null ⇒ exit-terminal
   | { kind: 'complete' }
   | { kind: 'fail'; reason: string };
 
@@ -66,9 +80,10 @@ function planWait(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPl
 function evaluateCondition(node: GraphNode, ctx: StepContext): boolean | null {
   const { kind, value } = node.config;
 
-  if (kind === 'opened_email') {
-    return ctx.lastSendOpened === true;
-  }
+  // Manglende tidligere sending ⇒ «nei», aldri en feil.
+  if (kind === 'opened_email') return ctx.lastSendOpened === true;
+  if (kind === 'clicked_email') return ctx.lastSendClicked === true;
+  if (kind === 'replied_email') return ctx.lastSendReplied === true;
 
   if (value === undefined || value === null) return null;
 
@@ -106,7 +121,22 @@ function planAction(node: GraphNode, edges: GraphEdge[]): StepPlan {
   }
   const edge = findEdgeByBranch(outgoingEdges(node, edges), null);
   if (!edge) return fail('Handlings-noden mangler en utgående kobling.');
+  if (kind === 'create_task') {
+    const task = parseTaskPayload(node.config);
+    if (!task) return fail('Oppgave-handlingen har en ugyldig konfigurasjon.');
+    return { kind: 'act', action: { kind, task }, nextNodeId: edge.toNodeId };
+  }
   return { kind: 'act', action: { kind, value }, nextNodeId: edge.toNodeId };
+}
+
+function parseTaskPayload(config: Record<string, unknown>): TaskActionPayload | null {
+  const { title, assigneeUserId, dueDays } = config;
+  if (typeof title !== 'string' || title.trim() === '') return null;
+  const assignee = typeof assigneeUserId === 'number' && Number.isInteger(assigneeUserId) && assigneeUserId > 0
+    ? assigneeUserId
+    : null;
+  const due = typeof dueDays === 'number' && Number.isInteger(dueDays) && dueDays >= 0 ? dueDays : null;
+  return { title: title.trim(), assigneeUserId: assignee, dueDays: due };
 }
 
 function planSchedule(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPlan {

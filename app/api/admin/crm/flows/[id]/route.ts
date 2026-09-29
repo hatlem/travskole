@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
+import { ANCHOR_MODES, canDeleteStatus, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 
 export async function GET(
   request: NextRequest,
@@ -39,6 +40,7 @@ const patchSchema = z.object({
   name: z.string().min(1).max(200).optional(),
   description: z.string().max(2000).nullable().optional(),
   isMarketing: z.boolean().optional(),
+  anchorMode: z.enum(ANCHOR_MODES).optional(),
   status: z.enum(['draft', 'active', 'paused', 'archived']).optional(),
 });
 
@@ -88,11 +90,42 @@ export async function PATCH(
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const data = parsed.data;
+  const changesSettings = data.isMarketing !== undefined || data.anchorMode !== undefined;
 
-  if (data.status !== undefined) {
-    const existing = await prisma.flow.findUnique({ where: { id: flowId }, select: { status: true } });
-    if (!existing) {
-      return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
+  const existing =
+    data.status !== undefined || changesSettings
+      ? await prisma.flow.findUnique({ where: { id: flowId }, select: { status: true, anchorMode: true } })
+      : null;
+  if ((data.status !== undefined || changesSettings) && !existing) {
+    return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
+  }
+
+  if (existing && changesSettings) {
+    // Samme lås som grafen: innstillinger endres bare når flyten ikke kjører.
+    if (!isFlowEditable(existing.status)) {
+      return NextResponse.json(
+        { error: 'Sett flyten på pause for å endre innstillingene.' },
+        { status: 409 },
+      );
+    }
+    // En flyts enrollments er enten kontakt- eller kurs-forankret, aldri blandet (se lib/flows/enroll.ts).
+    if (data.anchorMode !== undefined && data.anchorMode !== existing.anchorMode) {
+      const activeCount = await prisma.flowEnrollment.count({ where: { flowId, status: 'active' } });
+      if (activeCount > 0) {
+        return NextResponse.json(
+          { error: 'Kan ikke bytte forankring mens flyten har aktive påmeldinger.' },
+          { status: 409 },
+        );
+      }
+    }
+  }
+
+  if (existing && data.status !== undefined) {
+    if (isTemplateStatus(existing.status)) {
+      return NextResponse.json(
+        { error: 'En mal kan ikke aktiveres eller endre status — lag en ny flyt fra malen.' },
+        { status: 409 },
+      );
     }
     if (existing.status === 'draft' && data.status === 'active') {
       return NextResponse.json(
@@ -140,6 +173,7 @@ export async function PATCH(
         ...(data.name !== undefined && { name: data.name }),
         ...(data.description !== undefined && { description: data.description }),
         ...(data.isMarketing !== undefined && { isMarketing: data.isMarketing }),
+        ...(data.anchorMode !== undefined && { anchorMode: data.anchorMode }),
         ...(data.status !== undefined && { status: data.status }),
       },
     });
@@ -186,9 +220,9 @@ export async function DELETE(
   if (!existing) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
-  if (existing.status !== 'draft' && existing.status !== 'archived') {
+  if (!canDeleteStatus(existing.status)) {
     return NextResponse.json(
-      { error: 'Kan bare slette flyter med status kladd eller arkivert.' },
+      { error: 'Kan bare slette maler og flyter med status kladd eller arkivert.' },
       { status: 409 },
     );
   }
