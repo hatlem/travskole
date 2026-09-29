@@ -22,7 +22,9 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
   const [form, setForm] = useState({
     name: '', email: '', phone: '', participants: 1, preferredDate: '', message: '',
     consentRisk: false, consentTerms: false, consentMedia: false, consentActivities: false,
+    marketingOptIn: false,
   });
+  const showMarketingOptIn = settings.marketing_optin_enabled === 'true' && !!settings.marketing_optin_text;
 
   // Forhåndsutfyll kontaktinfo for innloggede brukere (gir 401 for anonyme → ingen utfylling).
   useEffect(() => {
@@ -137,6 +139,12 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
         <label className="flex gap-2 text-sm">
           <input type="checkbox" checked={form.consentActivities} onChange={(e) => set('consentActivities', e.target.checked)} />
           <span>{settings.consent_activities_text}</span>
+        </label>
+      )}
+      {showMarketingOptIn && (
+        <label className="flex gap-2 text-sm">
+          <input type="checkbox" checked={form.marketingOptIn} onChange={(e) => set('marketingOptIn', e.target.checked)} />
+          <span>{settings.marketing_optin_text}</span>
         </label>
       )}
 

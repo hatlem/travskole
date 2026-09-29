@@ -5,8 +5,9 @@
 // Denne modulen er HELT konfigurasjonsstyrt: Microsoft Graph-appregistrering
 // (tenant/klient-id/hemmelighet) er ikke provisjonert av driftsleverandøren
 // (Basefarm) ennå. isGraphConfigured() slår av hele pollingen (returnerer
-// nuller) frem til GRAPH_TENANT_ID/GRAPH_CLIENT_ID/GRAPH_CLIENT_SECRET og
-// GRAPH_MAILBOXES er satt i miljøet. Koden kan derfor ikke testes mot en
+// nuller) frem til GRAPH_TENANT_ID/GRAPH_CLIENT_ID/GRAPH_CLIENT_SECRET er satt
+// i miljøet. Postboksene styres av innstillingen graph_mailboxes (admin →
+// Innstillinger); env GRAPH_MAILBOXES overstyrer den hvis satt. Koden kan derfor ikke testes mot en
 // ekte Graph-tenant i denne omgangen — korrektheten hviler på Microsoft
 // Graphs dokumenterte v1.0 message-ressursform og gjenbruk av den allerede
 // testede klassifiserings-/apply-logikken i reply-match.ts / apply.ts.
@@ -32,7 +33,7 @@
 // om detaljene lot seg hente.
 
 import { prisma } from '@/lib/prisma';
-import { getSetting } from '@/lib/settings';
+import { getSetting, parseEmailList } from '@/lib/settings';
 import logger from '@/lib/logger';
 import {
   extractMessageIds,
@@ -41,20 +42,23 @@ import {
 } from '@/lib/tracking/reply-match';
 import { recordReply, recordBounce } from '@/lib/tracking/apply';
 
-function graphMailboxes(): string[] {
-  return (process.env.GRAPH_MAILBOXES ?? '')
-    .split(',')
-    .map((m) => m.trim())
-    .filter(Boolean);
+/** Env GRAPH_MAILBOXES (hvis satt) overstyrer admin-innstillingen graph_mailboxes. */
+export async function graphMailboxes(): Promise<string[]> {
+  const fromEnv = parseEmailList(process.env.GRAPH_MAILBOXES);
+  if (fromEnv.length > 0) return fromEnv;
+  return parseEmailList(await getSetting('graph_mailboxes'));
 }
 
-export function isGraphConfigured(): boolean {
+export function hasGraphCredentials(): boolean {
   return !!(
     process.env.GRAPH_TENANT_ID &&
     process.env.GRAPH_CLIENT_ID &&
-    process.env.GRAPH_CLIENT_SECRET &&
-    graphMailboxes().length > 0
+    process.env.GRAPH_CLIENT_SECRET
   );
+}
+
+export async function isGraphConfigured(): Promise<boolean> {
+  return hasGraphCredentials() && (await graphMailboxes()).length > 0;
 }
 
 function cursorSettingKey(mailbox: string): string {
@@ -248,7 +252,7 @@ async function pollOneMailbox(
       const msg = await toInboundMessageLike(message, mailbox, token);
       const classification = classifyInboundMessage(msg, knownMessageIds);
       if (classification.kind === 'reply') {
-        await recordReply(classification.matchedMessageId);
+        await recordReply(classification.matchedMessageId, { subject: msg.subject });
         replies++;
       } else if (classification.kind === 'bounce') {
         await recordBounce(null, classification.failedRecipient ?? null, classification.hard);
@@ -275,7 +279,9 @@ async function pollOneMailbox(
 
 export async function pollMailboxes(): Promise<{ replies: number; bounces: number; scanned: number }> {
   const zero = { replies: 0, bounces: 0, scanned: 0 };
-  if (!isGraphConfigured()) return zero;
+  if (!hasGraphCredentials()) return zero;
+  const mailboxes = await graphMailboxes();
+  if (mailboxes.length === 0) return zero;
 
   try {
     const token = await getGraphAccessToken();
@@ -297,7 +303,7 @@ export async function pollMailboxes(): Promise<{ replies: number; bounces: numbe
     let bounces = 0;
     let scanned = 0;
 
-    for (const mailbox of graphMailboxes()) {
+    for (const mailbox of mailboxes) {
       try {
         const result = await pollOneMailbox(mailbox, token, knownMessageIds);
         replies += result.replies;

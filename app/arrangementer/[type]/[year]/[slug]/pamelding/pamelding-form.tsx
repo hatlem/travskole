@@ -26,6 +26,7 @@ const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requ
   consentActivities: z.boolean(),
   consentMedia: z.boolean(),
   consentTerms: z.boolean(),
+  marketingOptIn: z.boolean(),
   consentRisk: z.boolean().refine(val => val === true, {
     message: 'Du må bekrefte at du har lest og forstått forsikringsvilkårene'
   })
@@ -181,6 +182,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
   // Admin styrer obligatorisk-status; default obligatorisk (kun 'false' slår av)
   const requireAddress = settings.registration_address_required !== 'false';
   const requireTerms = settings.registration_terms_required !== 'false';
+  const showMarketingOptIn = settings.marketing_optin_enabled === 'true' && !!settings.marketing_optin_text;
 
   const { type, year, slug } = courseRef;
 
@@ -231,6 +233,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
       consentActivities: false,
       consentMedia: false,
       consentTerms: false,
+      marketingOptIn: false,
       consentRisk: false
     }
   });
@@ -758,6 +761,17 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                   <p id="consentTerms-error" role="alert" className="text-red-600 text-sm mt-1 ml-8">{errors.consentTerms.message}</p>
                 )}
               </div>
+            )}
+
+            {showMarketingOptIn && (
+              <label className="flex items-start space-x-3 cursor-pointer">
+                <input
+                  {...register('marketingOptIn')}
+                  type="checkbox"
+                  className="w-5 h-5 mt-0.5 text-bjerke-blue rounded border-gray-300 flex-shrink-0"
+                />
+                <span className="text-gray-700 text-sm leading-relaxed">{settings.marketing_optin_text}</span>
+              </label>
             )}
 
             <div className="pt-6 border-t border-gray-200">

@@ -27,6 +27,8 @@ import { resolveCourseMergeContext } from './course-merge';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
+import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
+import { getSetting } from '@/lib/settings';
 
 /**
  * Fellespostboksen alle automatiske utsendelser ber om svar til, uavhengig av
@@ -150,7 +152,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const contact = await prisma.contact.findUnique({
     where: { id: input.contactId },
     select: {
-      email: true, name: true, stage: true, tags: true,
+      email: true, name: true, stage: true, tags: true, organizationId: true,
       organization: { select: { name: true } },
       deals: { select: { eventType: true }, take: 3, orderBy: { createdAt: 'desc' } },
     },
@@ -168,7 +170,13 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
 
   if (input.isMarketing) {
     const consent = await prisma.consent.findUnique({ where: { contactId: input.contactId } });
-    if (!consent?.marketing) {
+    // Innstillingen leses kun når samtykke mangler (B2B berettiget interesse).
+    const allowed = consent?.marketing === true || isMarketingAllowed({
+      consent,
+      organizationId: contact.organizationId,
+      allowLegitimateInterest: (await getSetting('marketing_allow_legitimate_interest')) === 'true',
+    });
+    if (!allowed) {
       await logSkippedSend(input, contact.email, 'skipped_no_consent');
       return 'skipped_no_consent';
     }

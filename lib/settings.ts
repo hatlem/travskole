@@ -73,6 +73,20 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // 0 = AV (standard): ingen automatisk sletting. Familier skal kunne logge inn
   // år etter år og gjenbruke informasjonen sin; sletting skjer kun på forespørsel.
   data_retention_days: '0',
+
+  // CRM og e-postflyter
+  // Postbokser Graph-polleren leser svar/bounces fra (kommaseparert). Env
+  // GRAPH_MAILBOXES overstyrer hvis satt; tenant/klient/hemmelighet er alltid env.
+  graph_mailboxes: 'registrering@bjerke.no',
+  reply_create_task: 'true',
+  reply_task_default_assignee: '',
+  reply_task_due_days: '1',
+  // B2B: send markedsføring til organisasjonskontakter på berettiget interesse
+  // (så lenge de ikke har trukket samtykke/meldt seg av).
+  marketing_allow_legitimate_interest: 'false',
+  // Frivillig markedsføringssamtykke i påmeldings-/forespørselsskjema
+  marketing_optin_enabled: 'false',
+  marketing_optin_text: 'Ja takk, jeg vil gjerne få tilbud og nyheter fra Bjerke Travbane på e-post. Du kan melde deg av når som helst.',
 };
 
 // Client-safe helpers live in settings-shared.ts; re-exported here so server
@@ -83,6 +97,7 @@ export {
   courseTypeLabel,
   isAdmin,
   isSuperAdmin,
+  parseEmailList,
   type SiteSettings,
   type CourseType,
 } from '@/lib/settings-shared';
