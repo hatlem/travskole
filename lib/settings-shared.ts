@@ -73,4 +73,55 @@ export const ADMIN_EDITABLE_SETTINGS: readonly string[] = [
   'consent_terms_text',
   'registration_address_required',
   'registration_terms_required',
+  'marketing_optin_enabled',
+  'marketing_optin_text',
 ];
+
+const TOGGLE_SETTINGS: readonly string[] = [
+  'registration_address_required',
+  'registration_terms_required',
+  'payment_test_mode',
+  'reply_create_task',
+  'marketing_allow_legitimate_interest',
+  'marketing_optin_enabled',
+];
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Kommaseparert e-postliste → trimmede, små bokstaver, uten tomme. */
+export function parseEmailList(value: string | undefined): string[] {
+  return (value ?? '')
+    .split(',')
+    .map((m) => m.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Validerer verdier for innstillinger med fast format. Returnerer en norsk
+ * feilmelding, eller null når verdien er gyldig (fritekst er alltid gyldig).
+ */
+export function validateSettingValue(key: string, value: string): string | null {
+  if (TOGGLE_SETTINGS.includes(key) && value !== 'true' && value !== 'false') {
+    return 'Verdien må være «true» eller «false»';
+  }
+  switch (key) {
+    case 'graph_mailboxes': {
+      const list = parseEmailList(value);
+      if (list.length === 0) return 'Oppgi minst én postboks';
+      const invalid = list.find((m) => !EMAIL_RE.test(m));
+      return invalid ? `Ugyldig e-postadresse: ${invalid}` : null;
+    }
+    case 'reply_task_default_assignee': {
+      const email = value.trim();
+      return email === '' || EMAIL_RE.test(email) ? null : 'Ugyldig e-postadresse';
+    }
+    case 'reply_task_due_days': {
+      const n = Number(value);
+      return Number.isInteger(n) && n >= 0 && n <= 365 ? null : 'Må være et heltall mellom 0 og 365';
+    }
+    case 'marketing_optin_text':
+      return value.trim() === '' ? 'Samtykketeksten kan ikke være tom' : null;
+    default:
+      return null;
+  }
+}

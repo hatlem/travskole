@@ -12,7 +12,13 @@ interface SettingGroup {
     label: string;
     type: 'text' | 'textarea' | 'email' | 'tel' | 'toggle';
     placeholder?: string;
+    help?: string;
   }[];
+}
+
+interface GraphStatus {
+  credentialsConfigured: boolean;
+  mailboxesEnvOverride: boolean;
 }
 
 const SETTING_GROUPS: SettingGroup[] = [
@@ -103,6 +109,26 @@ const SETTING_GROUPS: SettingGroup[] = [
     ],
   },
   {
+    title: 'Markedsføringssamtykke',
+    description: 'Valgfri avkrysningsboks i påmeldings- og forespørselsskjemaet der deltakeren kan samtykke til å motta nyhetsbrev og tilbud. Boksen er aldri forhåndsavkrysset, og samtykket lagres på kontakten i CRM.',
+    adminEditable: true,
+    fields: [
+      { key: 'marketing_optin_enabled', label: 'Vis avkrysningsboks for markedsføring', type: 'toggle' },
+      { key: 'marketing_optin_text', label: 'Tekst ved avkrysningsboksen', type: 'textarea', help: 'Si tydelig hva man samtykker til, og at man kan melde seg av når som helst.' },
+    ],
+  },
+  {
+    title: 'CRM og e-postflyter',
+    description: 'Hvordan svar på automatiske e-poster fanges opp og følges opp, og hvilket grunnlag som kreves for markedsføringsutsendelser.',
+    fields: [
+      { key: 'graph_mailboxes', label: 'Postbokser som leses for svar og returmeldinger (kommaseparert)', type: 'text', placeholder: 'registrering@bjerke.no', help: 'Alle automatiske e-poster ber om svar til registrering@bjerke.no, så den bør stå her. Krever at Microsoft Graph-tilgangen er satt opp på serveren.' },
+      { key: 'reply_create_task', label: 'Opprett oppgave når en kontakt svarer', type: 'toggle', help: 'Oppgaven havner hos brukeren som står som avsender av e-posten, ellers hos standard ansvarlig under.' },
+      { key: 'reply_task_default_assignee', label: 'Standard ansvarlig for svar-oppgaver (e-post til admin-bruker)', type: 'email', placeholder: 'navn@bjerke.no', help: 'Brukes når avsenderen ikke har en admin-bruker. Tomt = oppgaven blir ikke tildelt noen.' },
+      { key: 'reply_task_due_days', label: 'Frist for svar-oppgaver (dager)', type: 'text', placeholder: '1' },
+      { key: 'marketing_allow_legitimate_interest', label: 'Tillat markedsføring til bedriftskunder uten samtykke (berettiget interesse)', type: 'toggle', help: 'Gjelder kun kontakter som er knyttet til en organisasjon, dvs. eksisterende bedriftskunder. Alle andre må ha gitt samtykke. Avmelding vinner alltid: kontakter som har meldt seg av eller trukket samtykket får aldri markedsføring.' },
+    ],
+  },
+  {
     title: 'Betaling',
     description: 'Testmodus bruker Stripe/Vipps sine testnøkler. Slå av for å ta ekte betalinger (live). Betalingsmåter velges per kurs.',
     fields: [
@@ -122,6 +148,9 @@ const SETTING_GROUPS: SettingGroup[] = [
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [defaults, setDefaults] = useState<Record<string, string>>({});
+  const [dirty, setDirty] = useState<Set<string>>(new Set());
+  const [graph, setGraph] = useState<GraphStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -133,6 +162,8 @@ export default function AdminSettingsPage() {
       if (!res.ok) throw new Error('Kunne ikke hente innstillinger');
       const data = await res.json();
       setSettings(data.settings);
+      setDefaults(data.defaults ?? {});
+      setGraph(data.graph ?? null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt');
     } finally {
@@ -157,14 +188,22 @@ export default function AdminSettingsPage() {
         (superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable))
           .flatMap(g => g.fields.map(f => f.key))
       );
-      for (const [key, value] of Object.entries(settings)) {
+      for (const key of dirty) {
         if (!allowedKeys.has(key)) continue;
         const res = await fetch('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ key, value }),
+          body: JSON.stringify({ key, value: settings[key] ?? '' }),
         });
-        if (!res.ok) throw new Error(`Kunne ikke lagre ${key}`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.error ? `${key}: ${body.error}` : `Kunne ikke lagre ${key}`);
+        }
+        setDirty(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
       }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
@@ -177,7 +216,11 @@ export default function AdminSettingsPage() {
 
   function updateSetting(key: string, value: string) {
     setSettings(prev => ({ ...prev, [key]: value }));
+    setDirty(prev => new Set(prev).add(key));
   }
+
+  // Effektiv verdi: lagret verdi, ellers standardverdien fra koden.
+  const valueOf = (key: string) => settings[key] ?? defaults[key] ?? '';
 
   if (loading) {
     return (
@@ -232,6 +275,18 @@ export default function AdminSettingsPage() {
           <div key={group.title} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <h2 className="text-xl font-bold text-gray-900 mb-1">{group.title}</h2>
             <p className="text-sm text-gray-500 mb-6">{group.description}</p>
+            {group.title === 'CRM og e-postflyter' && graph && (
+              <div className={`text-sm rounded-lg px-4 py-3 mb-6 border ${
+                graph.credentialsConfigured
+                  ? 'bg-green-50 border-green-200 text-green-800'
+                  : 'bg-amber-50 border-amber-200 text-amber-800'
+              }`}>
+                {graph.credentialsConfigured
+                  ? 'Microsoft Graph er satt opp — svar og returmeldinger leses automatisk.'
+                  : 'Microsoft Graph er ikke satt opp på serveren ennå (GRAPH_TENANT_ID/GRAPH_CLIENT_ID/GRAPH_CLIENT_SECRET). Svar oppdages ikke før dette er på plass.'}
+                {graph.mailboxesEnvOverride && ' Postboksene er overstyrt av miljøvariabelen GRAPH_MAILBOXES, så feltet under har ingen effekt.'}
+              </div>
+            )}
 
             <div className="space-y-5">
               {group.fields.map((field) => (
@@ -241,22 +296,25 @@ export default function AdminSettingsPage() {
                   </label>
                   {field.type === 'toggle' ? (
                     <button
+                      id={field.key}
                       type="button"
-                      onClick={() => updateSetting(field.key, settings[field.key] === 'true' ? 'false' : 'true')}
+                      role="switch"
+                      aria-checked={valueOf(field.key) === 'true'}
+                      onClick={() => updateSetting(field.key, valueOf(field.key) === 'true' ? 'false' : 'true')}
                       className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        settings[field.key] === 'true' ? 'bg-bjerke-blue' : 'bg-gray-300'
+                        valueOf(field.key) === 'true' ? 'bg-bjerke-blue' : 'bg-gray-300'
                       }`}
                     >
                       <span
                         className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          settings[field.key] === 'true' ? 'translate-x-6' : 'translate-x-1'
+                          valueOf(field.key) === 'true' ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
                     </button>
                   ) : field.type === 'textarea' ? (
                     <textarea
                       id={field.key}
-                      value={settings[field.key] || ''}
+                      value={valueOf(field.key)}
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       rows={3}
@@ -266,12 +324,13 @@ export default function AdminSettingsPage() {
                     <input
                       id={field.key}
                       type={field.type}
-                      value={settings[field.key] || ''}
+                      value={valueOf(field.key)}
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
                     />
                   )}
+                  {field.help && <p className="text-xs text-gray-500 mt-1">{field.help}</p>}
                   <p className="text-xs text-gray-400 mt-1">Nøkkel: {field.key}</p>
                 </div>
               ))}

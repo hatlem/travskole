@@ -5,6 +5,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { createReplyTask } from '@/lib/crm/reply-task';
 
 export async function recordOpen(token: string): Promise<boolean> {
   const send = await prisma.messageSend.findUnique({ where: { trackingToken: token } });
@@ -54,17 +55,26 @@ export async function recordClick(token: string, idx: number): Promise<string | 
   return link.url;
 }
 
-export async function recordReply(matchedMessageId: string): Promise<void> {
+export async function recordReply(
+  matchedMessageId: string,
+  inbound: { subject?: string | null } = {},
+): Promise<void> {
   const send = await prisma.messageSend.findFirst({
     where: { messageId: matchedMessageId },
     orderBy: { sentAt: 'desc' },
   });
   if (!send) return;
 
-  await prisma.messageSend.updateMany({
+  const { count: firstReply } = await prisma.messageSend.updateMany({
     where: { id: send.id, repliedAt: null },
     data: { repliedAt: new Date() },
   });
+
+  // Kun ved første registrerte svar per utsendelse — gjentatte polls/svar i
+  // samme tråd gir ikke duplikate oppgaver.
+  if (firstReply > 0) {
+    await createReplyTask(send, inbound.subject);
+  }
 
   await emitEvent({
     type: 'email.replied',
