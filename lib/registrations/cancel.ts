@@ -69,16 +69,23 @@ export async function releaseSeats(courseId: number): Promise<void> {
     waitlisted,
   });
 
+  let promotedCount = 0;
   if (plan.promote > 0) {
-    const promoted = await prisma.registration.findMany({
+    const candidates = await prisma.registration.findMany({
       where: { courseId: course.id, status: 'waitlist' },
       orderBy: { createdAt: 'asc' },
       take: plan.promote,
       include: { parent: { include: { user: true } }, child: true },
     });
     const { sendWaitlistPromotionEmail } = await import('@/lib/mail');
-    for (const reg of promoted) {
-      await prisma.registration.update({ where: { id: reg.id }, data: { status: 'pending' } });
+    for (const reg of candidates) {
+      // Betinget: ved samtidige avbestillinger rykker bare én kaller opp samme rad.
+      const { count } = await prisma.registration.updateMany({
+        where: { id: reg.id, status: 'waitlist' },
+        data: { status: 'pending' },
+      });
+      if (count !== 1) continue;
+      promotedCount++;
       await sendWaitlistPromotionEmail({
         parentName: reg.parent.name,
         parentEmail: reg.parent.user.email,
@@ -88,7 +95,13 @@ export async function releaseSeats(courseId: number): Promise<void> {
     }
   }
 
-  if (plan.nextStatus) {
-    await prisma.course.update({ where: { id: course.id }, data: { status: plan.nextStatus } });
+  const { nextStatus } = planSeatRelease({
+    courseStatus: course.status,
+    maxParticipants: course.maxParticipants,
+    occupied: occupied + promotedCount,
+    waitlisted: 0,
+  });
+  if (nextStatus) {
+    await prisma.course.update({ where: { id: course.id }, data: { status: nextStatus } });
   }
 }

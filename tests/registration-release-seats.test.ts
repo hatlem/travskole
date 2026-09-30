@@ -3,7 +3,9 @@ import { NextRequest } from 'next/server';
 
 const { prisma, mail } = vi.hoisted(() => ({
   prisma: {
-    registration: { findUnique: vi.fn(), count: vi.fn(), findMany: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    registration: {
+      findUnique: vi.fn(), count: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(),
+    },
     course: { findUnique: vi.fn(), update: vi.fn() },
   },
   mail: { sendWaitlistPromotionEmail: vi.fn(async () => {}) },
@@ -35,13 +37,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   prisma.registration.findUnique.mockResolvedValue({ courseId: 9 });
   prisma.course.findUnique.mockResolvedValue({ id: 9, name: 'Kursadmin', status: 'full', maxParticipants: 1 });
+  prisma.registration.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('promoteFromWaitlist', () => {
   it('reopens the course when the only seat is cancelled and nobody waits', async () => {
     counts(0, 0);
     await promoteFromWaitlist(5);
-    expect(prisma.registration.update).not.toHaveBeenCalled();
+    expect(prisma.registration.updateMany).not.toHaveBeenCalled();
     expect(prisma.course.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { status: 'open' } });
   });
 
@@ -50,9 +53,34 @@ describe('promoteFromWaitlist', () => {
     prisma.registration.findMany.mockResolvedValue([waitlisted(11)]);
     await promoteFromWaitlist(5);
     expect(prisma.registration.findMany).toHaveBeenCalledWith(expect.objectContaining({ take: 1 }));
-    expect(prisma.registration.update).toHaveBeenCalledWith({ where: { id: 11 }, data: { status: 'pending' } });
+    expect(prisma.registration.updateMany).toHaveBeenCalledWith({
+      where: { id: 11, status: 'waitlist' },
+      data: { status: 'pending' },
+    });
     expect(mail.sendWaitlistPromotionEmail).toHaveBeenCalledTimes(1);
     expect(prisma.course.update).not.toHaveBeenCalled();
+  });
+
+  it('skips rows a concurrent cancellation already promoted — no email, seat not counted', async () => {
+    counts(0, 2);
+    prisma.registration.findMany.mockResolvedValue([waitlisted(11)]);
+    prisma.registration.updateMany.mockResolvedValue({ count: 0 });
+    await promoteFromWaitlist(5);
+    expect(mail.sendWaitlistPromotionEmail).not.toHaveBeenCalled();
+    expect(prisma.course.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { status: 'open' } });
+  });
+
+  it('emails only the rows this call actually promoted', async () => {
+    prisma.course.findUnique.mockResolvedValue({ id: 9, name: 'Kursadmin', status: 'full', maxParticipants: 2 });
+    counts(0, 3);
+    prisma.registration.findMany.mockResolvedValue([waitlisted(11), waitlisted(12)]);
+    prisma.registration.updateMany
+      .mockResolvedValueOnce({ count: 0 })
+      .mockResolvedValueOnce({ count: 1 });
+    await promoteFromWaitlist(5);
+    expect(mail.sendWaitlistPromotionEmail).toHaveBeenCalledTimes(1);
+    expect(mail.sendWaitlistPromotionEmail).toHaveBeenCalledWith(expect.objectContaining({ parentEmail: 'k12@x.no' }));
+    expect(prisma.course.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { status: 'open' } });
   });
 });
 
