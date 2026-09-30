@@ -1,15 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { syncRegistrationToCrm } from '@/lib/crm/bridge';
+import { emitEvent } from '@/lib/events/bus';
+import { normalizeEmail } from '@/lib/crm/normalize';
+import { planAdminPlacement } from '@/lib/registration-rules';
+import { countOccupiedPlaces, markCourseFullIfAtCapacity } from '@/lib/registrations/capacity';
 import logger from '@/lib/logger';
 
-interface ChildInput {
-  firstName: string;
-  lastName?: string;
-  birthdate?: string;
-  allergies?: string;
-}
+const optionalText = (max: number) => z.string().trim().max(max).optional().default('');
+
+const childSchema = z.object({
+  firstName: z.string().trim().min(1, 'Barnet må ha fornavn').max(100),
+  lastName: optionalText(100),
+  birthdate: z
+    .string()
+    .trim()
+    .regex(/^(\d{4}-\d{2}-\d{2})?$/, 'Ugyldig fødselsdato')
+    .optional()
+    .default(''),
+  allergies: optionalText(500),
+});
+
+const adminRegistrationSchema = z.object({
+  courseId: z.coerce.number().int().positive('Velg et kurs'),
+  parentFirstName: z.string().trim().min(1, 'Fornavn på foresatt er påkrevd').max(100),
+  parentLastName: optionalText(100),
+  parentEmail: z.string().trim().toLowerCase().pipe(z.string().email('Ugyldig e-postadresse')),
+  parentPhone: optionalText(30),
+  children: z
+    .array(childSchema)
+    .min(1, 'Minst ett barn med fornavn er påkrevd')
+    .max(20, 'Maks 20 barn per påmelding'),
+  // Admin registrerer kun det foresatte faktisk har bekreftet — aldri stilltiende samtykke.
+  consentActivities: z.boolean().optional().default(false),
+  consentRisk: z.boolean().optional().default(false),
+  consentMedia: z.boolean().optional().default(false),
+  waitlist: z.boolean().optional().default(false),
+  overrideCapacity: z.boolean().optional().default(false),
+});
 
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
@@ -18,59 +49,45 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-
-    // Support both old format (single child) and new format (children array)
-    const children: ChildInput[] = body.children ?? [{
-      firstName: body.childFirstName,
-      lastName: body.childLastName,
-      birthdate: body.childBirthdate,
-      allergies: body.childAllergies,
-    }];
-
-    const { courseId, parentFirstName, parentLastName, parentEmail, parentPhone } = body;
-
-    if (!courseId || !parentFirstName || !parentEmail) {
-      return NextResponse.json({ error: 'Kurs, fornavn og e-post er påkrevd' }, { status: 400 });
+    const parsed = adminRegistrationSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
+    const data = parsed.data;
 
-    if (children.length === 0 || !children[0].firstName) {
-      return NextResponse.json({ error: 'Minst ett barn med fornavn er påkrevd' }, { status: 400 });
-    }
-
-    const course = await prisma.course.findUnique({ where: { id: Number(courseId) } });
+    const course = await prisma.course.findUnique({ where: { id: data.courseId } });
     if (!course) {
       return NextResponse.json({ error: 'Kurset finnes ikke' }, { status: 404 });
     }
 
-    const parentName = [parentFirstName, parentLastName].filter(Boolean).join(' ');
-
-    // Find or create user + parent
-    let user = await prisma.user.findUnique({ where: { email: parentEmail } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: { email: parentEmail, role: 'parent' },
-      });
+    const placement = planAdminPlacement({
+      courseStatus: course.status,
+      maxParticipants: course.maxParticipants,
+      occupied: await countOccupiedPlaces(course.id),
+      requested: data.children.length,
+      waitlist: data.waitlist,
+      overrideCapacity: data.overrideCapacity,
+    });
+    if (!placement.ok) {
+      return NextResponse.json({ error: placement.error }, { status: 409 });
     }
 
-    let parent = await prisma.parent.findUnique({ where: { userId: user.id } });
-    if (!parent) {
-      parent = await prisma.parent.create({
-        data: { userId: user.id, name: parentName, phone: parentPhone || '' },
-      });
-    }
+    const parentName = [data.parentFirstName, data.parentLastName].filter(Boolean).join(' ');
 
-    // Create registrations for each child
+    const user =
+      (await prisma.user.findUnique({ where: { email: data.parentEmail } })) ??
+      (await prisma.user.create({ data: { email: data.parentEmail, role: 'parent' } }));
+
+    const parent =
+      (await prisma.parent.findUnique({ where: { userId: user.id } })) ??
+      (await prisma.parent.create({ data: { userId: user.id, name: parentName, phone: data.parentPhone } }));
+
     const registrations = [];
-    for (const childInput of children) {
-      if (!childInput.firstName) continue;
-
-      const childName = [childInput.firstName, childInput.lastName].filter(Boolean).join(' ');
-
+    for (const [index, childInput] of data.children.entries()) {
       const child = await prisma.child.create({
         data: {
           parentId: parent.id,
-          name: childName,
+          name: [childInput.firstName, childInput.lastName].filter(Boolean).join(' '),
           birthdate: childInput.birthdate ? new Date(childInput.birthdate) : null,
           allergies: childInput.allergies || null,
         },
@@ -81,10 +98,11 @@ export async function POST(request: NextRequest) {
           courseId: course.id,
           childId: child.id,
           parentId: parent.id,
-          consentActivities: true,
-          consentMedia: false,
-          consentRisk: true,
-          status: 'confirmed',
+          consentActivities: data.consentActivities,
+          consentMedia: data.consentMedia,
+          consentRisk: data.consentRisk,
+          // consentAt forblir null: samtykket er ikke avgitt i skjemaet av foresatte selv.
+          status: placement.statuses[index],
         },
         include: {
           course: { select: { id: true, name: true } },
@@ -99,11 +117,25 @@ export async function POST(request: NextRequest) {
           },
         },
       });
-      logActivity({ action: 'create', entity: 'registration', entityId: registration.id, details: JSON.stringify({ course: registration.course.name, child: registration.child?.name ?? registration.parent.name }), userEmail: session.user.email }).catch(() => {});
+      logActivity({
+        action: 'create',
+        entity: 'registration',
+        entityId: registration.id,
+        details: JSON.stringify({
+          course: registration.course.name,
+          child: registration.child?.name ?? registration.parent.name,
+          status: registration.status,
+          registeredByAdmin: true,
+          ...(data.overrideCapacity ? { overrideCapacity: true } : {}),
+        }),
+        userEmail: session.user.email,
+      }).catch(() => {});
+      emitCreated(registration.id, course.id, course.name, data.parentEmail);
       registrations.push(registration);
     }
 
-    // Return single or multiple
+    await markCourseFullIfAtCapacity(course);
+
     if (registrations.length === 1) {
       return NextResponse.json({ registration: registrations[0] }, { status: 201 });
     }
@@ -112,6 +144,26 @@ export async function POST(request: NextRequest) {
     logger.error('Error creating registration', { error });
     return NextResponse.json({ error: 'Kunne ikke opprette påmelding' }, { status: 500 });
   }
+}
+
+/** Samme etterarbeid som det offentlige skjemaet: CRM-sync, deretter hendelsen (kontakten må finnes). */
+function emitCreated(registrationId: number, courseId: number, courseName: string, parentEmail: string): void {
+  syncRegistrationToCrm(registrationId)
+    .catch(() => {})
+    .then(async () => {
+      const email = normalizeEmail(parentEmail);
+      const contact = email
+        ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
+        : null;
+      await emitEvent({
+        type: 'registration.created',
+        source: 'server',
+        contactId: contact?.id ?? null,
+        meta: { registrationId, courseId, courseName },
+        dedupeKey: `registration.created:${registrationId}`,
+      });
+    })
+    .catch(() => {});
 }
 
 export async function GET(request: NextRequest) {

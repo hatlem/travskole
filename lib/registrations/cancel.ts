@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { isAtCapacity } from '@/lib/registration-rules';
+import { countOccupiedPlaces } from '@/lib/registrations/capacity';
 
 /**
  * Sideeffektene av en statusendring på en påmelding, delt av admin-ruten og den
@@ -49,14 +51,9 @@ export async function promoteFromWaitlist(registrationId: number): Promise<void>
   if (!cancelledReg) return;
 
   const course = cancelledReg.course;
-  const activeCount = await prisma.registration.count({
-    where: {
-      courseId: course.id,
-      status: { in: ['pending', 'confirmed'] },
-    },
-  });
+  const activeCount = await countOccupiedPlaces(course.id);
 
-  if (!course.maxParticipants || activeCount >= course.maxParticipants) return;
+  if (!course.maxParticipants || isAtCapacity(course.maxParticipants, activeCount)) return;
 
   const firstWaitlist = await prisma.registration.findFirst({
     where: { courseId: course.id, status: 'waitlist' },

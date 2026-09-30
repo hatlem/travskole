@@ -44,6 +44,13 @@ const emptyChild: ChildForm = {
   allergies: '',
 };
 
+const emptyAddOptions = {
+  consentActivities: false,
+  consentRisk: false,
+  consentMedia: false,
+  waitlist: false,
+  overrideCapacity: false,
+};
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -78,6 +85,7 @@ export default function AdminRegistrationsPage() {
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [parentForm, setParentForm] = useState({ firstName: '', lastName: '', email: '', phone: '' });
   const [children, setChildren] = useState<ChildForm[]>([{ ...emptyChild }]);
+  const [addOptions, setAddOptions] = useState(emptyAddOptions);
   const [submitting, setSubmitting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
@@ -133,6 +141,7 @@ export default function AdminRegistrationsPage() {
   function openAddForm() {
     setParentForm({ firstName: '', lastName: '', email: '', phone: '' });
     setChildren([{ ...emptyChild }]);
+    setAddOptions(emptyAddOptions);
     setSelectedCourseId('');
     setCourseSearch('');
     fetchCourses();
@@ -165,6 +174,7 @@ export default function AdminRegistrationsPage() {
           parentEmail: parentForm.email,
           parentPhone: parentForm.phone,
           children: children.filter((c) => c.firstName.trim()),
+          ...addOptions,
         }),
       });
       if (!res.ok) {
@@ -176,7 +186,11 @@ export default function AdminRegistrationsPage() {
       const newRegs = data.registrations ?? [data.registration];
       setRegistrations((prev) => [...newRegs, ...prev]);
       setShowAddForm(false);
-      toast('Påmelding opprettet', 'success');
+      const waitlisted = newRegs.filter((r: Registration) => r.status === 'waitlist').length;
+      toast(
+        waitlisted > 0 ? `Påmelding opprettet — ${waitlisted} satt på venteliste` : 'Påmelding opprettet',
+        'success'
+      );
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
@@ -584,6 +598,64 @@ export default function AdminRegistrationsPage() {
                   ))}
                 </div>
               </div>
+              <fieldset>
+                <legend className="text-sm font-semibold text-gray-900 mb-1 border-b border-gray-100 pb-2 w-full">
+                  Samtykker fra foresatt
+                </legend>
+                <p className="text-xs text-gray-500 mb-3">
+                  Kryss kun av for samtykker foresatte faktisk har gitt (f.eks. på e-post eller telefon).
+                  Påmeldingen registreres som lagt inn av admin.
+                </p>
+                <div className="space-y-2">
+                  {([
+                    ['consentRisk', 'Foresatte har godtatt risiko ved deltakelse'],
+                    ['consentActivities', 'Foresatte har samtykket til aktivitetene'],
+                    ['consentMedia', 'Foresatte har samtykket til bilder/video'],
+                  ] as const).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={addOptions[key]}
+                        onChange={(e) => setAddOptions((prev) => ({ ...prev, [key]: e.target.checked }))}
+                        className="rounded border-gray-300"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+
+              <fieldset>
+                <legend className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2 w-full">
+                  Kapasitet
+                </legend>
+                <div className="space-y-2">
+                  <label className="flex items-start gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={addOptions.waitlist}
+                      onChange={(e) => setAddOptions((prev) => ({ ...prev, waitlist: e.target.checked }))}
+                      className="mt-0.5 rounded border-gray-300"
+                    />
+                    <span>
+                      Sett på venteliste hvis kurset er fullt
+                      <span className="block text-xs text-gray-500">Ledige plasser fylles først, resten havner på ventelisten.</span>
+                    </span>
+                  </label>
+                  <label className="flex items-start gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={addOptions.overrideCapacity}
+                      onChange={(e) => setAddOptions((prev) => ({ ...prev, overrideCapacity: e.target.checked }))}
+                      className="mt-0.5 rounded border-gray-300"
+                    />
+                    <span>
+                      Overstyr kapasitet
+                      <span className="block text-xs text-gray-500">Bekrefter alle selv om kurset er fullt eller stengt.</span>
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
             </div>
 
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-100">
@@ -609,6 +681,9 @@ export default function AdminRegistrationsPage() {
               >
                 Avbryt
               </button>
+              {!selectedCourseId && (
+                <span className="self-center text-xs text-gray-500">Velg et kurs for å legge til deltakere</span>
+              )}
             </div>
           </form>
         </div>

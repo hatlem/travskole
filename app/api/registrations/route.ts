@@ -10,6 +10,7 @@ import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
 import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
+import { markCourseFullIfAtCapacity } from '@/lib/registrations/capacity';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
@@ -378,21 +379,7 @@ export async function POST(request: NextRequest) {
       })
       .catch(() => {});
 
-    // Auto-set course to "full" when maxParticipants reached
-    if (course.maxParticipants && course.status === 'open') {
-      const activeCount = await prisma.registration.count({
-        where: {
-          courseId: course.id,
-          status: { in: ['pending', 'confirmed'] },
-        },
-      });
-      if (activeCount >= course.maxParticipants) {
-        await prisma.course.update({
-          where: { id: course.id },
-          data: { status: 'full' },
-        });
-      }
-    }
+    await markCourseFullIfAtCapacity(course);
 
     // SECURITY: Log registration
     logRegistration(data.parentEmail, course.slug || data.courseSlug);
