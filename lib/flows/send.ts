@@ -346,7 +346,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
 
   try {
     const { messageId } = await sendMailAs({
-      from: `"${identity.displayName}" <${identity.email}>`,
+      from: { name: identity.displayName, address: identity.email },
       // Reply-To sentraliseres til fellespostboksen uansett avsenderidentitet:
       // svar-/bounce-pollingen (Graph) trenger da kun lesetilgang til ÉN
       // postboks (registrering@) i stedet for alle syv avsenderpostboksene —

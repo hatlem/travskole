@@ -87,8 +87,14 @@ async function sendMail(to: string, subject: string, html: string) {
   });
 }
 
+/** Navn + adresse som objekt: nodemailer tar seg av quoting og koding av æøå. */
+export interface MailSender {
+  name: string;
+  address: string;
+}
+
 interface SendMailAsInput {
-  from: string;
+  from: MailSender;
   replyTo?: string;
   to: string;
   subject: string;
