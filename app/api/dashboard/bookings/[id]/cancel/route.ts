@@ -5,6 +5,8 @@ import { logActivity } from '@/lib/activity';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { bookingOwnershipWhere } from '@/lib/bookings/ownership';
 import { selfCancelBookingError } from '@/lib/registrations/cancel-rules';
+import { syncBookingToCrm } from '@/lib/crm/bridge';
+import { emitBookingStatusEvent } from '@/lib/bookings/status-event';
 import logger from '@/lib/logger';
 
 /**
@@ -38,7 +40,7 @@ export async function POST(
   try {
     const booking = await prisma.bookingRequest.findFirst({
       where: { id, ...bookingOwnershipWhere(email, sessionUserId) },
-      select: { id: true, status: true, paymentStatus: true },
+      select: { id: true, status: true, paymentStatus: true, email: true },
     });
     if (!booking) {
       return NextResponse.json({ error: 'Forespørselen ble ikke funnet' }, { status: 404 });
@@ -61,6 +63,12 @@ export async function POST(
       details: JSON.stringify({ from: booking.status, to: 'cancelled', selfService: true }),
       userEmail: session.user.email,
     }).catch(() => {});
+
+    // Hendelsen kjeder seg på syncen, så kontakten finnes når den slås opp.
+    syncBookingToCrm(id)
+      .catch(() => {})
+      .then(() => emitBookingStatusEvent({ id, email: booking.email, status: 'cancelled' }))
+      .catch(() => {});
 
     return NextResponse.json({ ok: true, status: 'cancelled' });
   } catch (error) {
