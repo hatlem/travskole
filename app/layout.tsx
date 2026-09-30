@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { geistSans, geistMono } from "@/fonts";
 import Script from "next/script";
 import "./globals.css";
 import SiteChrome from "@/components/SiteChrome";
@@ -10,16 +10,6 @@ import { Tracker } from "@/components/Tracker";
 import { getSettings, toClientSettings } from "@/lib/settings";
 
 export const dynamic = 'force-dynamic';
-
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
 
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings();
