@@ -21,6 +21,11 @@ export async function findCourseBySlug(type: string, slug: string) {
   const course = await prisma.course.findFirst({ where: { type, slug } });
   if (course) return course;
   // Legacy fallback: kurs opprettet før slug ble lagret.
-  const candidates = await prisma.course.findMany({ where: { type } });
-  return candidates.find((c) => (c.slug || generateSlug(c.name)) === slug) ?? null;
+  const candidates = await prisma.course.findMany({
+    where: { type, OR: [{ slug: null }, { slug: '' }] },
+    select: { id: true, name: true },
+  });
+  const legacy = candidates.find((c) => generateSlug(c.name) === slug);
+  if (!legacy) return null;
+  return prisma.course.findUnique({ where: { id: legacy.id } });
 }
