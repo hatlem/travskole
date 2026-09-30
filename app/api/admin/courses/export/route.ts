@@ -2,18 +2,20 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
+import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
+import { COURSE_STATUS_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
 
-function escapeCsvField(value: string): string {
-  // SECURITY: nøytraliser formelinjeksjon i Excel/Sheets (=, +, -, @, tab, CR)
-  let v = value;
-  if (/^[=+\-@\t\r]/.test(v)) {
-    v = `'${v}`;
-  }
-  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-    return `"${v.replace(/"/g, '""')}"`;
-  }
-  return v;
+const TYPE_LABELS: Record<string, string> = {
+  kurs: 'Kurs',
+  leir: 'Leir',
+};
+
+function ageRange(ageMin: number | null, ageMax: number | null): string {
+  if (ageMin != null && ageMax != null) return `${ageMin}–${ageMax}`;
+  if (ageMin != null) return `${ageMin}+`;
+  if (ageMax != null) return `0–${ageMax}`;
+  return '';
 }
 
 export async function GET() {
@@ -35,63 +37,30 @@ export async function GET() {
       'Status',
       'Startdato',
       'Sluttdato',
-      'Alder (min-max)',
+      'Alder (min–maks)',
       'Pris',
       'Maks deltakere',
-      'Pameldinger',
+      'Påmeldinger (aktive)',
       'Opprettet',
     ];
 
-    const statusLabels: Record<string, string> = {
-      open: 'Apen',
-      full: 'Fullt',
-      closed: 'Stengt',
-    };
-
-    const typeLabels: Record<string, string> = {
-      kurs: 'Kurs',
-      leir: 'Leir',
-    };
-
     const rows = courses.map((course) => [
-      String(course.id),
-      escapeCsvField(course.name),
-      typeLabels[course.type] || course.type,
-      statusLabels[course.status] || course.status,
-      course.startDate ? new Date(course.startDate).toLocaleDateString('nb-NO') : '',
-      course.endDate ? new Date(course.endDate).toLocaleDateString('nb-NO') : '',
-      course.ageMin != null && course.ageMax != null
-        ? `${course.ageMin}-${course.ageMax}`
-        : course.ageMin != null
-          ? `${course.ageMin}+`
-          : course.ageMax != null
-            ? `0-${course.ageMax}`
-            : '',
-      course.price != null ? String(course.price) : '0',
-      course.maxParticipants != null ? String(course.maxParticipants) : '',
-      String(course._count.registrations),
-      new Date(course.createdAt).toLocaleDateString('nb-NO'),
+      course.id,
+      course.name,
+      label(TYPE_LABELS, course.type),
+      label(COURSE_STATUS_LABELS, course.status),
+      formatOsloDate(course.startDate),
+      formatOsloDate(course.endDate),
+      ageRange(course.ageMin, course.ageMax),
+      course.price ?? 0,
+      course.maxParticipants,
+      course._count.registrations,
+      formatOsloDate(course.createdAt),
     ]);
 
-    const csv =
-      '\uFEFF' +
-      [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
-
-    const today = new Date().toISOString().split('T')[0];
-    const filename = `kurs-${today}.csv`;
-
-    return new NextResponse(csv, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    });
+    return csvResponse(toCsv(headers, rows), csvFilename('kurs'));
   } catch (error) {
     logger.error('Error exporting courses', { error });
-    return NextResponse.json(
-      { error: 'Kunne ikke eksportere kurs' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Kunne ikke eksportere kurs' }, { status: 500 });
   }
 }
