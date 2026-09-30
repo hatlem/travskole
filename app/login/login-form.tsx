@@ -2,12 +2,13 @@
 
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
 import { useStrings } from '@/components/SettingsProvider';
+import { getSafeCallbackUrl, postLoginDestination } from '@/lib/auth-redirect';
 
 const loginSchema = z.object({
   email: z.string().email('Ugyldig e-postadresse'),
@@ -28,23 +29,16 @@ const errorMessages: Record<string, string> = {
   Default: 'Noe gikk galt med innloggingen.',
 };
 
-// Only allow same-site relative paths as post-login redirect (open-redirect guard).
-function getSafeCallbackUrl(cb: string | null): string | null {
-  if (!cb) return null;
-  if (!cb.startsWith('/') || cb.startsWith('//') || cb.startsWith('/\\')) return null;
-  return cb;
-}
-
 export default function LoginForm() {
   const t = useStrings();
-  const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams.get('error');
   const callbackUrl = getSafeCallbackUrl(searchParams.get('callbackUrl'));
+  const justRegistered = searchParams.get('registered') === 'true';
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [magicLinkSent, setMagicLinkSent] = useState(false);
-  const [activeTab, setActiveTab] = useState<'password' | 'magic'>('magic');
+  const [activeTab, setActiveTab] = useState<'password' | 'magic'>(justRegistered ? 'password' : 'magic');
 
   const passwordForm = useForm<LoginFormData>({
     resolver: zodResolver(loginSchema),
@@ -65,21 +59,19 @@ export default function LoginForm() {
         redirect: false,
       });
 
-      if (result?.error) {
-        setError('Feil e-post eller passord');
-      } else if (result?.ok) {
-        // Check if user is admin and redirect accordingly
+      if (result?.ok && !result.error) {
         const sessionRes = await fetch('/api/auth/session');
         const session = await sessionRes.json();
-        const isAdmin = session?.user?.role === 'admin' || session?.user?.role === 'superadmin';
-        router.push(callbackUrl ?? (isAdmin ? '/admin' : '/dashboard'));
-        router.refresh();
+        // Full navigasjon: klient-routerens cache kan inneholde en forhåndshentet
+        // /dashboard→/login-redirect fra før innloggingen. Beholder isLoading.
+        window.location.assign(postLoginDestination(callbackUrl, session?.user?.role));
+        return;
       }
+      setError('Feil e-post eller passord');
     } catch {
       setError('Noe gikk galt. Vennligst prøv igjen.');
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   const onMagicLinkSubmit = async (data: MagicLinkFormData) => {
@@ -127,6 +119,15 @@ export default function LoginForm() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md">
         <div className="bg-white py-8 px-4 shadow-sm border border-gray-200 rounded-lg sm:px-10">
+          {justRegistered && !displayError && (
+            <div
+              role="status"
+              className="mb-6 bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg text-sm"
+            >
+              Kontoen er opprettet – logg inn
+            </div>
+          )}
+
           {displayError && (
             <div
               role="alert"
