@@ -3,14 +3,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useSession } from 'next-auth/react';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { trackClientEvent } from '@/components/Tracker';
 import { pushDataLayerEvent } from '@/lib/gtm';
-import { courseAgeError, describeAgeLimits, type CourseAgeLimits } from '@/lib/registration-rules';
+import { courseAgeError, describeAgeLimits, existingChildAgeIssue, type CourseAgeLimits } from '@/lib/registration-rules';
 import { phoneSchema } from '@/lib/validation/phone';
 import { splitFullName } from '@/lib/profile';
 
@@ -24,7 +24,7 @@ const buildRegistrationSchema = (
   requireAddress: boolean,
   requireTerms: boolean,
   ageRule: AgeRule,
-  childBirthdates: Record<string, string>,
+  childBirthdates: Record<string, string | null>,
 ) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
   parentLastName: z.string().min(2, 'Etternavn må være minst 2 tegn'),
@@ -33,6 +33,7 @@ const buildRegistrationSchema = (
   parentAddress: z.string().optional(),
   childSelection: z.enum(['existing', 'new']),
   existingChildId: z.string().optional(),
+  existingChildBirthdate: z.string().optional(),
   childFirstName: z.string().optional(),
   childLastName: z.string().optional(),
   childBirthdate: z.string().optional(),
@@ -96,8 +97,13 @@ const buildRegistrationSchema = (
     if (ageError) ctx.addIssue({ code: z.ZodIssueCode.custom, message: ageError, path: ['childBirthdate'] });
   }
   if (data.childSelection === 'existing' && data.existingChildId) {
-    const ageError = courseAgeError(ageRule, childBirthdates[data.existingChildId] ?? null, courseStart);
-    if (ageError) ctx.addIssue({ code: z.ZodIssueCode.custom, message: ageError, path: ['existingChildId'] });
+    const issue = existingChildAgeIssue(
+      ageRule,
+      childBirthdates[data.existingChildId] ?? null,
+      data.existingChildBirthdate,
+      courseStart,
+    );
+    if (issue) ctx.addIssue({ code: z.ZodIssueCode.custom, message: issue.message, path: [issue.field] });
   }
   if (data.childSelection === 'existing' && !data.existingChildId) {
     ctx.addIssue({
@@ -113,7 +119,7 @@ type RegistrationFormData = z.infer<ReturnType<typeof buildRegistrationSchema>>;
 interface ChildData {
   id: string;
   name: string;
-  birthdate: string;
+  birthdate: string | null;
 }
 
 type PayableProvider = 'stripe' | 'vipps';
@@ -233,6 +239,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
     handleSubmit,
     getValues,
     setValue,
+    control,
     formState: { errors },
   } = useForm<RegistrationFormData>({
     resolver: zodResolver(
@@ -257,6 +264,11 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
     }
   });
 
+  const selectedChildId = useWatch({ control, name: 'existingChildId' });
+  const selectedChildNeedsBirthdate =
+    !!ageLimitText &&
+    existingChildren.some((c) => c.id === selectedChildId && !c.birthdate);
+
   // Innlogget: hent barn og forhåndsutfyll tomme kontaktfelt fra profilen.
   useEffect(() => {
     if (!session) return;
@@ -266,7 +278,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
       .then(data => {
         if (!active || !data) return;
         if (!isAdult && data.children?.length > 0) {
-          setExistingChildren(data.children.map((c: { id: number; name: string; birthdate: string }) => ({
+          setExistingChildren(data.children.map((c: { id: number; name: string; birthdate: string | null }) => ({
             id: String(c.id),
             name: c.name,
             birthdate: c.birthdate,
@@ -603,12 +615,34 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                     <option value="">{t('reg.select_child_placeholder')}</option>
                     {existingChildren.map(child => (
                       <option key={child.id} value={child.id}>
-                        {child.name} (født {new Date(child.birthdate).toLocaleDateString('nb-NO')})
+                        {child.name}
+                        {child.birthdate ? ` (født ${new Date(child.birthdate).toLocaleDateString('nb-NO')})` : ''}
                       </option>
                     ))}
                   </select>
                   {errors.existingChildId && (
                     <p id="existingChildId-error" role="alert" className="text-red-600 text-sm mt-1">{errors.existingChildId.message}</p>
+                  )}
+                  {selectedChildNeedsBirthdate && (
+                    <div className="mt-4">
+                      <label htmlFor="existingChildBirthdate" className="block text-sm font-medium text-gray-700 mb-1">
+                        {t('reg.birthdate')} *
+                      </label>
+                      <p className="text-xs text-gray-500 mb-1">
+                        Vi mangler fødselsdato for barnet. Aldersgrense: {ageLimitText} ved kursstart
+                      </p>
+                      <input
+                        {...register('existingChildBirthdate')}
+                        type="date"
+                        id="existingChildBirthdate"
+                        aria-invalid={!!errors.existingChildBirthdate}
+                        aria-describedby={errors.existingChildBirthdate ? 'existingChildBirthdate-error' : undefined}
+                        className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
+                      />
+                      {errors.existingChildBirthdate && (
+                        <p id="existingChildBirthdate-error" role="alert" className="text-red-600 text-sm mt-1">{errors.existingChildBirthdate.message}</p>
+                      )}
+                    </div>
                   )}
                 </div>
               )}

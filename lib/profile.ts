@@ -27,6 +27,15 @@ export const MAX_ALLERGIES = 500;
 /** Tidligste fødselsår vi godtar — fanger opp tastefeil som «0202» og «1899». */
 const MIN_BIRTH_YEAR = 1900;
 
+/** Validerer en oppgitt fødselsdato (yyyy-mm-dd). Null når den er gyldig. */
+export function validateBirthdate(birthdate: string, now: Date = new Date()): string | null {
+  const parsed = new Date(birthdate.trim());
+  if (Number.isNaN(parsed.getTime())) return 'Ugyldig fødselsdato';
+  if (parsed.getUTCFullYear() < MIN_BIRTH_YEAR) return 'Ugyldig fødselsdato';
+  if (parsed.getTime() > now.getTime()) return 'Fødselsdato kan ikke være frem i tid';
+  return null;
+}
+
 /** Returnerer første feilmelding, eller null når barnet er gyldig. */
 export function validateChildInput(
   input: ChildInput,
@@ -42,10 +51,8 @@ export function validateChildInput(
   if (!birthdate) {
     if (requireBirthdate) return 'Fødselsdato er påkrevd';
   } else {
-    const parsed = new Date(birthdate);
-    if (Number.isNaN(parsed.getTime())) return 'Ugyldig fødselsdato';
-    if (parsed.getUTCFullYear() < MIN_BIRTH_YEAR) return 'Ugyldig fødselsdato';
-    if (parsed.getTime() > now.getTime()) return 'Fødselsdato kan ikke være frem i tid';
+    const birthdateError = validateBirthdate(birthdate, now);
+    if (birthdateError) return birthdateError;
   }
 
   const allergies = (input.allergies ?? '').trim();

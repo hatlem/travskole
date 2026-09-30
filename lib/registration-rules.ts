@@ -5,6 +5,7 @@
  * can be unit-tested in isolation. The route imports and calls them so that the
  * tested logic and the production logic are one and the same.
  */
+import { validateBirthdate } from '@/lib/profile';
 
 export interface SubmittedConsents {
   consentRisk: boolean;
@@ -204,4 +205,26 @@ export function courseAgeError(
     return `Kurset er for barn ${range}. Barnet er ${age} år ved kursstart.`;
   }
   return null;
+}
+
+/**
+ * Alderssjekk for et eksisterende barn i påmeldingsskjemaet. Mangler barnet
+ * lagret fødselsdato, brukes den oppgitte (og feilen knyttes til det feltet).
+ */
+export function existingChildAgeIssue(
+  limits: CourseAgeLimits,
+  storedBirthdate: string | null,
+  suppliedBirthdate: string | undefined,
+  courseStart: Date | null,
+  now: Date = new Date(),
+): { field: 'existingChildId' | 'existingChildBirthdate'; message: string } | null {
+  if (storedBirthdate) {
+    const message = courseAgeError(limits, storedBirthdate, courseStart, now);
+    return message ? { field: 'existingChildId', message } : null;
+  }
+  const supplied = (suppliedBirthdate ?? '').trim();
+  const message =
+    (supplied ? validateBirthdate(supplied, now) : null) ??
+    courseAgeError(limits, supplied || null, courseStart, now);
+  return message ? { field: 'existingChildBirthdate', message } : null;
 }

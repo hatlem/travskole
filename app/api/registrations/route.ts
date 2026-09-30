@@ -18,8 +18,10 @@ import { normalizeEmail } from '@/lib/crm/normalize';
 import { recordMarketingOptIn } from '@/lib/crm/marketing-consent';
 import { parsePaymentMethods } from '@/lib/payments';
 import { signCheckoutToken } from '@/lib/payments/checkout-token';
+import { validateBirthdate } from '@/lib/profile';
 
 const CHECKOUT_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 time
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface RegistrationData {
   courseType: string;
@@ -31,6 +33,8 @@ interface RegistrationData {
   parentAddress?: string;
   childSelection: 'existing' | 'new';
   existingChildId?: string;
+  /** Fødselsdato for et eksisterende barn som mangler den (kurs med aldersgrense). */
+  existingChildBirthdate?: string;
   childName?: string;
   childBirthdate?: string;
   childAllergies?: string;
@@ -318,13 +322,31 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
-      const ageError = courseAgeError(course, child.birthdate, course.startDate);
+      let birthdate = child.birthdate;
+      const suppliedBirthdate =
+        typeof data.existingChildBirthdate === 'string' ? data.existingChildBirthdate.trim() : '';
+      if (!birthdate && suppliedBirthdate) {
+        const birthdateError = ISO_DATE.test(suppliedBirthdate)
+          ? validateBirthdate(suppliedBirthdate)
+          : 'Ugyldig fødselsdato';
+        if (birthdateError) {
+          return NextResponse.json({ error: birthdateError }, { status: 400 });
+        }
+        // Lagres før alderssjekken: fødselsdatoen er riktig uansett om barnet passer kurset.
+        const updated = await prisma.child.update({
+          where: { id: child.id },
+          data: { birthdate: new Date(suppliedBirthdate) },
+          select: { birthdate: true },
+        });
+        birthdate = updated.birthdate;
+      }
+      const ageError = courseAgeError(course, birthdate, course.startDate);
       if (ageError) {
         return NextResponse.json({ error: ageError }, { status: 400 });
       }
       childId = child.id;
       childName = child.name;
-      childBirthdate = child.birthdate ? child.birthdate.toISOString().split('T')[0] : '';
+      childBirthdate = birthdate ? birthdate.toISOString().split('T')[0] : '';
       childAllergies = child.allergies ?? undefined;
     }
 
