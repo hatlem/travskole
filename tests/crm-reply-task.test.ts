@@ -36,11 +36,15 @@ const SEND: ReplyTaskSend = {
 const STAFF = { id: 77, role: 'admin', deactivatedAt: null, anonymizedAt: null };
 const DEFAULT_STAFF = { id: 88, role: 'superadmin', deactivatedAt: null, anonymizedAt: null };
 
-function usersByEmail(map: Record<string, unknown>) {
+function usersByEmail(map: Record<string, unknown>, byId: Record<number, unknown> = {}) {
   prisma.user.findUnique.mockImplementation(
-    async ({ where }: { where: { email: string } }) => map[where.email] ?? null,
+    async ({ where }: { where: { email?: string; id?: number } }) =>
+      (where.email != null ? map[where.email] : byId[where.id as number]) ?? null,
   );
 }
+
+const CONTACT_OWNER = { id: 55, role: 'admin', deactivatedAt: null, anonymizedAt: null };
+const ORG_OWNER = { id: 66, role: 'superadmin', deactivatedAt: null, anonymizedAt: null };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -49,7 +53,7 @@ beforeEach(() => {
     reply_task_default_assignee: 'leder@bjerke.no',
     reply_task_due_days: '2',
   });
-  prisma.contact.findUnique.mockResolvedValue({ name: 'Kari Nordmann', organizationId: 9 });
+  prisma.contact.findUnique.mockResolvedValue({ name: 'Kari Nordmann', organizationId: 9, ownerId: null, organization: null });
   prisma.flowEnrollment.findUnique.mockResolvedValue({ flow: { name: 'Sommerleir-flyt' }, status: 'completed' });
   prisma.senderIdentity.findUnique.mockResolvedValue({ email: 'hege@bjerke.no' });
   usersByEmail({ 'hege@bjerke.no': STAFF, 'leder@bjerke.no': DEFAULT_STAFF });
@@ -91,6 +95,36 @@ describe('createReplyTask', () => {
     usersByEmail({ 'hege@bjerke.no': { ...STAFF, role: 'parent' }, 'leder@bjerke.no': DEFAULT_STAFF });
     await createReplyTask(SEND);
     expect(prisma.task.create.mock.calls[0][0].data.assigneeId).toBe(88);
+  });
+
+  it('falls back to the contact owner, then the organization owner, before the default', async () => {
+    prisma.senderIdentity.findUnique.mockResolvedValue({ email: 'ukjent@bjerke.no' });
+    prisma.contact.findUnique.mockResolvedValue({
+      name: 'Kari Nordmann', organizationId: 9, ownerId: 55, organization: { ownerId: 66 },
+    });
+    usersByEmail({ 'leder@bjerke.no': DEFAULT_STAFF }, { 55: CONTACT_OWNER, 66: ORG_OWNER });
+    await createReplyTask(SEND);
+    expect(prisma.task.create.mock.calls[0][0].data.assigneeId).toBe(55);
+
+    usersByEmail({ 'leder@bjerke.no': DEFAULT_STAFF }, { 55: { ...CONTACT_OWNER, role: 'parent' }, 66: ORG_OWNER });
+    await createReplyTask(SEND);
+    expect(prisma.task.create.mock.calls[1][0].data.assigneeId).toBe(66);
+
+    usersByEmail(
+      { 'leder@bjerke.no': DEFAULT_STAFF },
+      { 55: { ...CONTACT_OWNER, deactivatedAt: new Date() }, 66: { ...ORG_OWNER, anonymizedAt: new Date() } },
+    );
+    await createReplyTask(SEND);
+    expect(prisma.task.create.mock.calls[2][0].data.assigneeId).toBe(88);
+  });
+
+  it('prefers the sender user over contact and organization owners', async () => {
+    prisma.contact.findUnique.mockResolvedValue({
+      name: 'Kari Nordmann', organizationId: 9, ownerId: 55, organization: { ownerId: 66 },
+    });
+    usersByEmail({ 'hege@bjerke.no': STAFF }, { 55: CONTACT_OWNER, 66: ORG_OWNER });
+    await createReplyTask(SEND);
+    expect(prisma.task.create.mock.calls[0][0].data.assigneeId).toBe(77);
   });
 
   it('skips deactivated sender users', async () => {
