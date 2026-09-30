@@ -3,6 +3,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import { TableSkeleton, StatCardsSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { adminBookingStatusLabel } from '@/lib/bookings/withdrawn';
+import { paymentStatusBadge } from '@/lib/payments/badge';
+import { isSettledPaymentStatus } from '@/lib/payments/transitions';
 
 interface Booking {
   id: number;
@@ -16,6 +20,8 @@ interface Booking {
   createdAt: string;
   confirmedAt?: string | null;
   cancelledAt?: string | null;
+  paymentStatus?: string;
+  withdrawnByCustomer?: boolean;
   course?: { name: string } | null;
 }
 
@@ -28,6 +34,8 @@ export default function AdminForesporslerPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Booking | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -94,6 +102,31 @@ export default function AdminForesporslerPage() {
       toast(status === 'confirmed' ? 'Forespørsel bekreftet' : 'Forespørsel avvist', 'success');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    }
+  }
+
+  async function deleteBooking() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/bookings/${deleteTarget.id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? 'Kunne ikke slette forespørselen');
+      }
+      const id = deleteTarget.id;
+      setBookings(prev => prev.filter(b => b.id !== id));
+      setSelected(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      toast('Forespørsel slettet', 'success');
+      setDeleteTarget(null);
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -192,7 +225,7 @@ export default function AdminForesporslerPage() {
         </div>
         <div className="bg-white rounded-lg border border-red-200 p-4 text-center">
           <p className="text-2xl font-bold text-red-700">{stats.cancelled}</p>
-          <p className="text-xs text-red-600 mt-1">Avvist</p>
+          <p className="text-xs text-red-600 mt-1">Kansellert</p>
         </div>
       </div>
 
@@ -218,7 +251,7 @@ export default function AdminForesporslerPage() {
           <option value="all">Alle statuser</option>
           <option value="new">Ny</option>
           <option value="confirmed">Bekreftet</option>
-          <option value="cancelled">Avvist</option>
+          <option value="cancelled">Kansellert (avvist/trukket)</option>
         </select>
       </div>
 
@@ -264,6 +297,7 @@ export default function AdminForesporslerPage() {
             key={booking.id}
             booking={booking}
             onUpdateStatus={updateStatus}
+            onDelete={setDeleteTarget}
             isSelected={selected.has(booking.id)}
             onToggleSelect={toggleSelect}
           />
@@ -279,6 +313,21 @@ export default function AdminForesporslerPage() {
           </p>
         </div>
       )}
+
+      <ConfirmModal
+        open={deleteTarget !== null}
+        title="Slette forespørselen?"
+        message={
+          deleteTarget
+            ? `Forespørselen fra ${deleteTarget.name}${deleteTarget.course ? ` (${deleteTarget.course.name})` : ''} slettes permanent. Dette kan ikke angres.`
+            : ''
+        }
+        confirmLabel="Slett"
+        variant="danger"
+        loading={deleting}
+        onConfirm={deleteBooking}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }
@@ -286,11 +335,13 @@ export default function AdminForesporslerPage() {
 function BookingCard({
   booking,
   onUpdateStatus,
+  onDelete,
   isSelected,
   onToggleSelect,
 }: {
   booking: Booking;
   onUpdateStatus: (id: number, status: string) => void;
+  onDelete: (booking: Booking) => void;
   isSelected: boolean;
   onToggleSelect: (id: number) => void;
 }) {
@@ -299,11 +350,9 @@ function BookingCard({
     confirmed: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
   };
-  const statusLabels: Record<string, string> = {
-    new: 'Ny',
-    confirmed: 'Bekreftet',
-    cancelled: 'Avvist',
-  };
+  const statusLabel = adminBookingStatusLabel(booking.status, !!booking.withdrawnByCustomer);
+  const payment = paymentStatusBadge(booking.paymentStatus);
+  const paid = isSettledPaymentStatus(booking.paymentStatus ?? 'none');
 
   return (
     <div className={`bg-white rounded-xl shadow-sm border p-5 transition ${
@@ -329,9 +378,16 @@ function BookingCard({
             </p>
           </div>
         </div>
-        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusColors[booking.status] || 'bg-gray-100 text-gray-800'}`}>
-          {statusLabels[booking.status] || booking.status}
-        </span>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {payment && (
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${payment.className}`}>
+              {payment.label}
+            </span>
+          )}
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${booking.withdrawnByCustomer ? 'bg-gray-100 text-gray-700' : statusColors[booking.status] || 'bg-gray-100 text-gray-800'}`}>
+            {statusLabel}
+          </span>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm mb-3">
@@ -375,28 +431,38 @@ function BookingCard({
       )}
       {booking.cancelledAt && (
         <p className="text-xs text-red-600 mb-2">
-          Avvist {new Date(booking.cancelledAt).toLocaleDateString('nb-NO', {
+          {statusLabel} {new Date(booking.cancelledAt).toLocaleDateString('nb-NO', {
             day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
           })}
         </p>
       )}
 
-      {booking.status === 'new' && (
-        <div className="flex gap-2 pt-2 border-t border-gray-100">
-          <button
-            onClick={() => onUpdateStatus(booking.id, 'confirmed')}
-            className="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-1.5 rounded-md transition"
-          >
-            Bekreft
-          </button>
-          <button
-            onClick={() => onUpdateStatus(booking.id, 'cancelled')}
-            className="text-sm font-medium text-white bg-red-600 hover:bg-red-700 px-4 py-1.5 rounded-md transition"
-          >
-            Avvis
-          </button>
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gray-100">
+        {booking.status === 'new' && (
+          <>
+            <button
+              onClick={() => onUpdateStatus(booking.id, 'confirmed')}
+              className="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-1.5 rounded-md transition"
+            >
+              Bekreft
+            </button>
+            <button
+              onClick={() => onUpdateStatus(booking.id, 'cancelled')}
+              className="text-sm font-medium text-white bg-red-600 hover:bg-red-700 px-4 py-1.5 rounded-md transition"
+            >
+              Avvis
+            </button>
+          </>
+        )}
+        <button
+          onClick={() => onDelete(booking)}
+          disabled={paid}
+          title={paid ? 'Betalte forespørsler kan ikke slettes (regnskap)' : undefined}
+          className="ml-auto text-sm font-medium text-gray-600 hover:text-red-700 hover:underline px-2 py-1.5 disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+        >
+          Slett
+        </button>
+      </div>
     </div>
   );
 }

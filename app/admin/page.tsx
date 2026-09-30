@@ -324,7 +324,7 @@ function StatusBadge({ status }: { status: string }) {
     pending: 'Venter',
     new: 'Ny',
     confirmed: 'Bekreftet',
-    cancelled: 'Avvist',
+    cancelled: 'Kansellert',
     waitlist: 'Venteliste',
     open: 'Åpen',
     closed: 'Stengt',

@@ -8,6 +8,7 @@ import { decideBookingApprovalEmail, BOOKING_CHECKOUT_TOKEN_TTL_MS } from '@/lib
 import { sendBookingApprovedPayEmail, sendBookingApprovedEmail } from '@/lib/mail';
 import { signCheckoutToken } from '@/lib/payments/checkout-token';
 import { parsePaymentMethods } from '@/lib/payments';
+import { isSettledPaymentStatus } from '@/lib/payments/transitions';
 import { getBaseUrl } from '@/lib/site';
 
 export async function PUT(
@@ -86,12 +87,28 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  const bookingId = Number(id);
+  if (!Number.isInteger(bookingId)) {
+    return NextResponse.json({ error: 'Ugyldig id' }, { status: 400 });
+  }
+
+  const booking = await prisma.bookingRequest.findUnique({ where: { id: bookingId }, select: { paymentStatus: true } });
+  if (!booking) {
+    return NextResponse.json({ error: 'Forespørselen finnes ikke' }, { status: 404 });
+  }
+  // Betalte bookinger er regnskapsbilag — de kan avvises, men ikke slettes.
+  if (isSettledPaymentStatus(booking.paymentStatus)) {
+    return NextResponse.json(
+      { error: 'Betalte forespørsler kan ikke slettes fordi de trengs i regnskapet. Avvis den i stedet.' },
+      { status: 409 },
+    );
+  }
 
   await prisma.bookingRequest.delete({
-    where: { id: Number(id) },
+    where: { id: bookingId },
   });
 
-  logActivity({ action: 'delete', entity: 'booking', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
+  logActivity({ action: 'delete', entity: 'booking', entityId: bookingId, userEmail: session.user.email }).catch(() => {});
 
   return NextResponse.json({ success: true });
 }
