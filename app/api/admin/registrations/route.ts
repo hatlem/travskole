@@ -30,10 +30,8 @@ const adminRegistrationSchema = z.object({
   parentLastName: optionalText(100),
   parentEmail: z.string().trim().toLowerCase().pipe(z.string().email('Ugyldig e-postadresse')),
   parentPhone: optionalText(30),
-  children: z
-    .array(childSchema)
-    .min(1, 'Minst ett barn med fornavn er påkrevd')
-    .max(20, 'Maks 20 barn per påmelding'),
+  // Voksenarrangementer har ingen barn: deltakeren er den voksne selv (som i det offentlige skjemaet).
+  children: z.array(childSchema).max(20, 'Maks 20 barn per påmelding').optional().default([]),
   // Admin registrerer kun det foresatte faktisk har bekreftet — aldri stilltiende samtykke.
   consentActivities: z.boolean().optional().default(false),
   consentRisk: z.boolean().optional().default(false),
@@ -63,7 +61,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Kurset finnes ikke' }, { status: 404 });
     }
 
-    if (!data.overrideCapacity && course.audience !== 'voksen') {
+    const isAdultCourse = course.audience === 'voksen';
+    if (!isAdultCourse && data.children.length === 0) {
+      return NextResponse.json({ error: 'Minst ett barn med fornavn er påkrevd' }, { status: 400 });
+    }
+    // null = den voksne selv; ingen Child-rad opprettes.
+    const participants: Array<z.infer<typeof childSchema> | null> = isAdultCourse ? [null] : data.children;
+
+    if (!data.overrideCapacity && !isAdultCourse) {
       for (const child of data.children) {
         const ageError = courseAgeError(course, child.birthdate || null, course.startDate);
         if (ageError) {
@@ -79,7 +84,7 @@ export async function POST(request: NextRequest) {
       courseStatus: course.status,
       maxParticipants: course.maxParticipants,
       occupied: await countOccupiedPlaces(course.id),
-      requested: data.children.length,
+      requested: participants.length,
       waitlist: data.waitlist,
       overrideCapacity: data.overrideCapacity,
     });
@@ -98,22 +103,25 @@ export async function POST(request: NextRequest) {
       (await prisma.parent.create({ data: { userId: user.id, name: parentName, phone: data.parentPhone } }));
 
     const registrations = [];
-    for (const [index, childInput] of data.children.entries()) {
-      const child = await prisma.child.create({
-        data: {
-          parentId: parent.id,
-          name: [childInput.firstName, childInput.lastName].filter(Boolean).join(' '),
-          birthdate: childInput.birthdate ? new Date(childInput.birthdate) : null,
-          allergies: childInput.allergies || null,
-        },
-      });
+    for (const [index, childInput] of participants.entries()) {
+      const child = childInput
+        ? await prisma.child.create({
+            data: {
+              parentId: parent.id,
+              name: [childInput.firstName, childInput.lastName].filter(Boolean).join(' '),
+              birthdate: childInput.birthdate ? new Date(childInput.birthdate) : null,
+              allergies: childInput.allergies || null,
+            },
+          })
+        : null;
 
       const registration = await prisma.registration.create({
         data: {
           courseId: course.id,
-          childId: child.id,
+          childId: child?.id ?? null,
           parentId: parent.id,
-          consentActivities: data.consentActivities,
+          // Aktivitetssamtykke gjelder kun barnearrangementer.
+          consentActivities: isAdultCourse ? false : data.consentActivities,
           consentMedia: data.consentMedia,
           consentRisk: data.consentRisk,
           // consentAt forblir null: samtykket er ikke avgitt i skjemaet av foresatte selv.

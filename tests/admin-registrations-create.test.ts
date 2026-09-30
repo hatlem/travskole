@@ -159,4 +159,39 @@ describe('POST /api/admin/registrations', () => {
       where: { courseId: 9, status: { in: ['pending', 'confirmed'] } },
     });
   });
+  describe('adult course (voksen)', () => {
+    beforeEach(() => {
+      prisma.course.findUnique.mockResolvedValue({
+        id: 9, name: 'Kjørekurs for voksne', status: 'open', maxParticipants: 10, audience: 'voksen',
+        ageMin: 18, ageMax: null, startDate: new Date('2026-06-15T08:00:00Z'),
+      });
+    });
+
+    it('registers the adult themself with no child row, like the public adult path', async () => {
+      const res = await POST(req({ ...BODY, children: undefined, consentRisk: true, consentActivities: true }));
+      expect(res.status).toBe(201);
+      expect(prisma.child.create).not.toHaveBeenCalled();
+      expect(prisma.registration.create).toHaveBeenCalledTimes(1);
+      expect(prisma.registration.create.mock.calls[0][0].data).toMatchObject({
+        childId: null,
+        parentId: 2,
+        consentRisk: true,
+        consentActivities: false,
+      });
+    });
+
+    it('ignores stray child rows and the age limit', async () => {
+      const res = await POST(req({ ...BODY, children: [{ firstName: 'Ola', birthdate: '2023-01-10' }, { firstName: 'Per' }] }));
+      expect(res.status).toBe(201);
+      expect(prisma.child.create).not.toHaveBeenCalled();
+      expect(prisma.registration.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('still applies capacity rules to the single adult place', async () => {
+      prisma.registration.count.mockResolvedValue(10);
+      const res = await POST(req({ ...BODY, children: [] }));
+      expect(res.status).toBe(409);
+      expect(prisma.registration.create).not.toHaveBeenCalled();
+    });
+  });
 });

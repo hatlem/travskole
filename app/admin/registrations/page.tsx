@@ -28,6 +28,7 @@ interface Course {
   name: string;
   status: string;
   startDate?: string;
+  audience?: string;
 }
 
 interface ChildForm {
@@ -174,8 +175,9 @@ export default function AdminRegistrationsPage() {
           parentLastName: parentForm.lastName,
           parentEmail: parentForm.email,
           parentPhone: parentForm.phone,
-          children: children.filter((c) => c.firstName.trim()),
+          children: isAdultCourse ? [] : children.filter((c) => c.firstName.trim()),
           ...addOptions,
+          consentActivities: isAdultCourse ? false : addOptions.consentActivities,
         }),
       });
       if (!res.ok) {
@@ -290,7 +292,21 @@ export default function AdminRegistrationsPage() {
     return sorted.filter((c) => c.name.toLowerCase().includes(q));
   }, [courses, courseSearch]);
 
-  const selectedCourseName = courses.find((c) => String(c.id) === selectedCourseId)?.name || '';
+  const selectedCourse = courses.find((c) => String(c.id) === selectedCourseId);
+  const selectedCourseName = selectedCourse?.name || '';
+  // Voksenarrangement: deltakeren er den voksne selv — ingen foresatt/barn.
+  const isAdultCourse = selectedCourse?.audience === 'voksen';
+  const personLabel = isAdultCourse ? 'Deltaker' : 'Foresatt';
+  const consentOptions = isAdultCourse
+    ? ([
+        ['consentRisk', 'Deltakeren har godtatt risiko ved deltakelse'],
+        ['consentMedia', 'Deltakeren har samtykket til bilder/video'],
+      ] as const)
+    : ([
+        ['consentRisk', 'Foresatte har godtatt risiko ved deltakelse'],
+        ['consentActivities', 'Foresatte har samtykket til aktivitetene'],
+        ['consentMedia', 'Foresatte har samtykket til bilder/video'],
+      ] as const);
 
   // Derived data
   const uniqueCourses = useMemo(() => {
@@ -484,7 +500,7 @@ export default function AdminRegistrationsPage() {
 
               {/* Parent section */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2">Foresatt</h3>
+                <h3 className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2">{personLabel}</h3>
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">Fornavn *</label>
@@ -527,92 +543,89 @@ export default function AdminRegistrationsPage() {
                 </div>
               </div>
 
-              {/* Children section */}
-              <div>
-                <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
-                  <h3 className="text-sm font-semibold text-gray-900">
-                    Barn ({children.length})
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={addChild}
-                    className="text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium"
-                  >
-                    + Legg til barn
-                  </button>
+              {!isAdultCourse && (
+                <div>
+                  <div className="flex items-center justify-between mb-3 border-b border-gray-100 pb-2">
+                    <h3 className="text-sm font-semibold text-gray-900">
+                      Barn ({children.length})
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={addChild}
+                      className="text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium"
+                    >
+                      + Legg til barn
+                    </button>
+                  </div>
+                  <div className="space-y-4">
+                    {children.map((child, idx) => (
+                      <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">
+                            Fornavn {idx === 0 ? '*' : ''}
+                          </label>
+                          <input
+                            required={idx === 0}
+                            type="text"
+                            value={child.firstName}
+                            onChange={(e) => updateChild(idx, 'firstName', e.target.value)}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Etternavn</label>
+                          <input
+                            type="text"
+                            value={child.lastName}
+                            onChange={(e) => updateChild(idx, 'lastName', e.target.value)}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Fødselsdato</label>
+                          <input
+                            type="date"
+                            value={child.birthdate}
+                            onChange={(e) => updateChild(idx, 'birthdate', e.target.value)}
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-gray-600 mb-1">Allergier</label>
+                          <input
+                            type="text"
+                            value={child.allergies}
+                            onChange={(e) => updateChild(idx, 'allergies', e.target.value)}
+                            className={inputClass}
+                            placeholder="Valgfritt"
+                          />
+                        </div>
+                        <div>
+                          {children.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeChild(idx)}
+                              className="text-red-500 hover:text-red-700 text-xs font-medium py-2"
+                            >
+                              Fjern
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="space-y-4">
-                  {children.map((child, idx) => (
-                    <div key={idx} className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Fornavn {idx === 0 ? '*' : ''}
-                        </label>
-                        <input
-                          required={idx === 0}
-                          type="text"
-                          value={child.firstName}
-                          onChange={(e) => updateChild(idx, 'firstName', e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Etternavn</label>
-                        <input
-                          type="text"
-                          value={child.lastName}
-                          onChange={(e) => updateChild(idx, 'lastName', e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Fødselsdato</label>
-                        <input
-                          type="date"
-                          value={child.birthdate}
-                          onChange={(e) => updateChild(idx, 'birthdate', e.target.value)}
-                          className={inputClass}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">Allergier</label>
-                        <input
-                          type="text"
-                          value={child.allergies}
-                          onChange={(e) => updateChild(idx, 'allergies', e.target.value)}
-                          className={inputClass}
-                          placeholder="Valgfritt"
-                        />
-                      </div>
-                      <div>
-                        {children.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => removeChild(idx)}
-                            className="text-red-500 hover:text-red-700 text-xs font-medium py-2"
-                          >
-                            Fjern
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              )}
               <fieldset>
                 <legend className="text-sm font-semibold text-gray-900 mb-1 border-b border-gray-100 pb-2 w-full">
-                  Samtykker fra foresatt
+                  Samtykker fra {personLabel.toLowerCase()}
                 </legend>
                 <p className="text-xs text-gray-500 mb-3">
-                  Kryss kun av for samtykker foresatte faktisk har gitt (f.eks. på e-post eller telefon).
+                  Kryss kun av for samtykker {isAdultCourse ? 'deltakeren' : 'foresatte'} faktisk har gitt (f.eks. på e-post eller telefon).
                   Påmeldingen registreres som lagt inn av admin.
                 </p>
                 <div className="space-y-2">
-                  {([
-                    ['consentRisk', 'Foresatte har godtatt risiko ved deltakelse'],
-                    ['consentActivities', 'Foresatte har samtykket til aktivitetene'],
-                    ['consentMedia', 'Foresatte har samtykket til bilder/video'],
-                  ] as const).map(([key, label]) => (
+                  {consentOptions.map(([key, label]) => (
                     <label key={key} className="flex items-center gap-2 text-sm text-gray-700">
                       <input
                         type="checkbox"
@@ -656,7 +669,11 @@ export default function AdminRegistrationsPage() {
                     />
                     <span>
                       Overstyr kapasitet og aldersgrense
-                      <span className="block text-xs text-gray-500">Bekrefter alle selv om kurset er fullt eller stengt, eller barnet er utenfor aldersgrensen.</span>
+                      <span className="block text-xs text-gray-500">
+                        {isAdultCourse
+                          ? 'Bekrefter deltakeren selv om kurset er fullt eller stengt.'
+                          : 'Bekrefter alle selv om kurset er fullt eller stengt, eller barnet er utenfor aldersgrensen.'}
+                      </span>
                     </span>
                   </label>
                 </div>
@@ -674,7 +691,7 @@ export default function AdminRegistrationsPage() {
                     className="mt-0.5 rounded border-gray-300"
                   />
                   <span>
-                    Send automatiske e-poster til foresatt
+                    Send automatiske e-poster til {personLabel.toLowerCase()}
                     <span className="block text-xs text-gray-500">Starter de automatiske flytene for ny påmelding, som ved påmelding på nettsiden.</span>
                   </span>
                 </label>
@@ -693,7 +710,7 @@ export default function AdminRegistrationsPage() {
               >
                 {submitting
                   ? 'Legger til...'
-                  : children.length > 1
+                  : !isAdultCourse && children.length > 1
                   ? `Legg til ${children.filter((c) => c.firstName.trim()).length} deltakere`
                   : 'Legg til deltaker'}
               </button>
