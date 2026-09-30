@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
@@ -45,8 +45,18 @@ function usePendingReviewCount(pathname: string): number {
 export function CrmTabs() {
   const pathname = usePathname();
   const pendingReviews = usePendingReviewCount(pathname);
+  const activeRef = useRef<HTMLAnchorElement>(null);
+
+  // Mange faner: på smale skjermer rulles fanelinjen, og aktiv fane holdes synlig.
+  useEffect(() => {
+    activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [pathname]);
+
   return (
-    <div className="flex gap-1 border-b border-gray-200 mb-6">
+    <nav
+      aria-label="CRM"
+      className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] -mx-4 px-4 sm:mx-0 sm:px-0"
+    >
       {TABS.map((tab) => {
         const active = pathname.startsWith(tab.href);
         const badge = tab.href === REVIEW_HREF && pendingReviews > 0 ? pendingReviews : null;
@@ -54,7 +64,9 @@ export function CrmTabs() {
           <Link
             key={tab.href}
             href={tab.href}
-            className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px transition-colors ${
+            ref={active ? activeRef : undefined}
+            aria-current={active ? 'page' : undefined}
+            className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px transition-colors ${
               active
                 ? 'border-blue-600 text-blue-700 bg-blue-50'
                 : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
@@ -72,6 +84,6 @@ export function CrmTabs() {
           </Link>
         );
       })}
-    </div>
+    </nav>
   );
 }
