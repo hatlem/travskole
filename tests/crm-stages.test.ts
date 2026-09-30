@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   checkStageDeletion,
+  stageDeleteBlockedReason,
   checkStageRoleChange,
   missingRole,
   nextStagePosition,
@@ -99,5 +100,13 @@ describe('planReorder / nextStagePosition', () => {
   it('new stages go last', () => {
     expect(nextStagePosition(stages)).toBe(6);
     expect(nextStagePosition([])).toBe(0);
+  });
+});
+
+describe('stageDeleteBlockedReason', () => {
+  it('explains why a stage with deals cannot be deleted', () => {
+    expect(stageDeleteBlockedReason(0)).toBeNull();
+    expect(stageDeleteBlockedReason(1)).toBe('Stadiet har 1 deal. Flytt dem til et annet stadium før du sletter.');
+    expect(stageDeleteBlockedReason(3)).toContain('3 deals');
   });
 });

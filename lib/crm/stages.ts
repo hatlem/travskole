@@ -56,6 +56,12 @@ function lastOfRoleError(role: StageRole): StageCheck {
   };
 }
 
+/** Hvorfor et stadium ikke kan slettes på grunn av deals (null = ingen deals). Deles av API og UI. */
+export function stageDeleteBlockedReason(dealCount: number): string | null {
+  if (dealCount <= 0) return null;
+  return `Stadiet har ${dealCount} ${dealCount === 1 ? 'deal' : 'deals'}. Flytt dem til et annet stadium før du sletter.`;
+}
+
 export function checkStageDeletion(
   stages: readonly StageLike[],
   stageId: number,
@@ -63,13 +69,8 @@ export function checkStageDeletion(
 ): StageCheck {
   const stage = stages.find((s) => s.id === stageId);
   if (!stage) return { ok: false, status: 404, error: 'Stadiet ble ikke funnet' };
-  if (dealCount > 0) {
-    return {
-      ok: false,
-      status: 409,
-      error: `Stadiet har ${dealCount} ${dealCount === 1 ? 'deal' : 'deals'}. Flytt dem til et annet stadium før du sletter.`,
-    };
-  }
+  const blocked = stageDeleteBlockedReason(dealCount);
+  if (blocked) return { ok: false, status: 409, error: blocked };
   const missing = missingRole(stages.filter((s) => s.id !== stageId));
   return missing ? lastOfRoleError(missing) : { ok: true };
 }

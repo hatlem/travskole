@@ -244,9 +244,9 @@ export default function PipelinePage() {
               <div className={`px-3 py-2 border-b border-gray-200 flex items-center justify-between rounded-t-lg ${
                 stage.isWon ? 'bg-green-50' : stage.isLost ? 'bg-red-50' : 'bg-gray-100'
               }`}>
-                <span className="font-semibold text-sm">{stage.name}</span>
-                <span className="flex items-center gap-2 text-xs text-gray-500">
-                  {stage.deals.length}{sum > 0 && ` · ${sum.toLocaleString('nb-NO')} kr`}
+                <span className="font-semibold text-sm truncate min-w-0" title={stage.name}>{stage.name}</span>
+                <span className="flex shrink-0 items-center gap-2 text-xs text-gray-500 whitespace-nowrap tabular-nums">
+                  {stage.deals.length}{sum > 0 && ` · ${sum.toLocaleString('nb-NO')}\u00a0kr`}
                   <button
                     onClick={() => setDealDialog({ dealId: null, stageId: stage.id })}
                     className="text-gray-500 hover:text-gray-900 text-base leading-none px-1"
