@@ -93,6 +93,24 @@ describe('POST /api/admin/registrations', () => {
     }));
   });
 
+  it('syncs CRM but emits no registration.created when emails are turned off', async () => {
+    await POST(req({ ...BODY, sendEmails: false }));
+    await flush();
+    expect(bridge.syncRegistrationToCrm).toHaveBeenCalledWith(expect.any(Number));
+    expect(emitEvent).not.toHaveBeenCalled();
+  });
+
+  it('defaults emails off on override, but emits when explicitly ticked', async () => {
+    await POST(req({ ...BODY, overrideCapacity: true }));
+    await flush();
+    expect(bridge.syncRegistrationToCrm).toHaveBeenCalledTimes(1);
+    expect(emitEvent).not.toHaveBeenCalled();
+
+    await POST(req({ ...BODY, overrideCapacity: true, sendEmails: true }));
+    await flush();
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'registration.created' }));
+  });
+
   it('returns 409 when the course is full and neither waitlist nor override is chosen', async () => {
     prisma.registration.count.mockResolvedValue(10);
     const res = await POST(req(BODY));

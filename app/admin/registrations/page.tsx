@@ -50,6 +50,7 @@ const emptyAddOptions = {
   consentMedia: false,
   waitlist: false,
   overrideCapacity: false,
+  sendEmails: true,
 };
 
 const STATUS_COLORS: Record<string, string> = {
@@ -646,7 +647,11 @@ export default function AdminRegistrationsPage() {
                     <input
                       type="checkbox"
                       checked={addOptions.overrideCapacity}
-                      onChange={(e) => setAddOptions((prev) => ({ ...prev, overrideCapacity: e.target.checked }))}
+                      onChange={(e) => {
+                        const overrideCapacity = e.target.checked;
+                        // Overstyrte påmeldinger er ofte etterregistreringer — e-post er da av som standard.
+                        setAddOptions((prev) => ({ ...prev, overrideCapacity, sendEmails: !overrideCapacity }));
+                      }}
                       className="mt-0.5 rounded border-gray-300"
                     />
                     <span>
@@ -655,6 +660,24 @@ export default function AdminRegistrationsPage() {
                     </span>
                   </label>
                 </div>
+              </fieldset>
+
+              <fieldset>
+                <legend className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2 w-full">
+                  E-post
+                </legend>
+                <label className="flex items-start gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={addOptions.sendEmails}
+                    onChange={(e) => setAddOptions((prev) => ({ ...prev, sendEmails: e.target.checked }))}
+                    className="mt-0.5 rounded border-gray-300"
+                  />
+                  <span>
+                    Send automatiske e-poster til foresatt
+                    <span className="block text-xs text-gray-500">Starter de automatiske flytene for ny påmelding, som ved påmelding på nettsiden.</span>
+                  </span>
+                </label>
               </fieldset>
             </div>
 

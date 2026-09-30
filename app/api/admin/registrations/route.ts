@@ -40,6 +40,8 @@ const adminRegistrationSchema = z.object({
   consentMedia: z.boolean().optional().default(false),
   waitlist: z.boolean().optional().default(false),
   overrideCapacity: z.boolean().optional().default(false),
+  // Utelatt: på for vanlig påmelding, av ved overstyring (samme standard som skjemaet).
+  sendEmails: z.boolean().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -54,6 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
     }
     const data = parsed.data;
+    const sendEmails = data.sendEmails ?? !data.overrideCapacity;
 
     const course = await prisma.course.findUnique({ where: { id: data.courseId } });
     if (!course) {
@@ -139,10 +142,11 @@ export async function POST(request: NextRequest) {
           status: registration.status,
           registeredByAdmin: true,
           ...(data.overrideCapacity ? { overrideCapacity: true } : {}),
+          ...(sendEmails ? {} : { emailsSuppressed: true }),
         }),
         userEmail: session.user.email,
       }).catch(() => {});
-      emitCreated(registration.id, course.id, course.name, data.parentEmail);
+      syncAndEmitCreated(registration.id, course.id, course.name, data.parentEmail, sendEmails);
       registrations.push(registration);
     }
 
@@ -158,11 +162,22 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/** Samme etterarbeid som det offentlige skjemaet: CRM-sync, deretter hendelsen (kontakten må finnes). */
-function emitCreated(registrationId: number, courseId: number, courseName: string, parentEmail: string): void {
+/**
+ * Samme etterarbeid som det offentlige skjemaet: CRM-sync, deretter hendelsen
+ * (kontakten må finnes). Uten `emit` synkes bare CRM — registration.created
+ * starter e-postflyter til foresatt.
+ */
+function syncAndEmitCreated(
+  registrationId: number,
+  courseId: number,
+  courseName: string,
+  parentEmail: string,
+  emit: boolean
+): void {
   syncRegistrationToCrm(registrationId)
     .catch(() => {})
     .then(async () => {
+      if (!emit) return;
       const email = normalizeEmail(parentEmail);
       const contact = email
         ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
