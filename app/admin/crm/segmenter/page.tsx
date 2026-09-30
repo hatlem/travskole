@@ -87,6 +87,7 @@ export default function SegmenterPage() {
   const [suppressEmail, setSuppressEmail] = useState('');
   const [suppressBusy, setSuppressBusy] = useState(false);
   const [removingEmail, setRemovingEmail] = useState<string | null>(null);
+  const [pendingUnsuppress, setPendingUnsuppress] = useState<Suppression | null>(null);
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -614,7 +615,7 @@ export default function SegmenterPage() {
                     <span>{s.email} <span className="text-gray-400 text-xs">({s.reason})</span></span>
                     {canRemoveSuppression && (
                       <button
-                        onClick={() => removeSuppression(s.email)}
+                        onClick={() => setPendingUnsuppress(s)}
                         disabled={removingEmail === s.email}
                         className="text-gray-400 hover:text-red-600 text-xs disabled:opacity-50"
                       >
@@ -645,6 +646,20 @@ export default function SegmenterPage() {
           setPendingDelete(null);
         }}
         onCancel={() => setPendingDelete(null)}
+      />
+      <ConfirmModal
+        open={pendingUnsuppress !== null}
+        title="Fjerne fra ikke-kontakt-listen?"
+        message={`${pendingUnsuppress?.email ?? ''} kan da igjen motta e-post fra flyter og utsendelser. Gjør dette bare hvis personen selv har bedt om det${pendingUnsuppress?.reason === 'unsubscribe' ? ' — adressen meldte seg av selv' : ''}.`}
+        confirmLabel="Fjern"
+        variant="warning"
+        loading={removingEmail !== null}
+        onConfirm={async () => {
+          if (!pendingUnsuppress) return;
+          await removeSuppression(pendingUnsuppress.email);
+          setPendingUnsuppress(null);
+        }}
+        onCancel={() => setPendingUnsuppress(null)}
       />
     </div>
   );
