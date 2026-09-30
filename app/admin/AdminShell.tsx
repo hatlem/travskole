@@ -8,6 +8,7 @@ import { ToastProvider } from '@/components/admin/Toast';
 import { KeyboardShortcuts } from '@/components/admin/KeyboardShortcuts';
 import { BreadcrumbLabelProvider, useBreadcrumbOverrides } from '@/components/admin/BreadcrumbLabel';
 import { buildBreadcrumbs } from '@/lib/admin-breadcrumbs';
+import { FeedbackWidget } from '@/components/FeedbackWidget';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -272,6 +273,7 @@ export function AdminShell({
                 </span>
               ))}
             </nav>
+            <FeedbackWidget variant="inline" />
           </header>
 
           {/* Ingen overflow her: vinduet er scroll-containeren, så sticky (f.eks. lagre-linja) følger viewporten. Brede tabeller/kanban har egen overflow-x-auto. */}
