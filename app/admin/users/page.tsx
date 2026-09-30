@@ -444,12 +444,13 @@ export default function AdminUsersPage() {
                     </th>
                     <th className="px-4 py-3 text-left">Bruker</th>
                     <th className="px-4 py-3 text-left hidden lg:table-cell">Kontakt</th>
-                    <th className="px-4 py-3 text-left hidden xl:table-cell">Barn</th>
-                    <th className="px-4 py-3 text-left hidden xl:table-cell" title="Påmeldinger">Påm.</th>
+                    <th className="px-4 py-3 text-left hidden 2xl:table-cell">Barn</th>
+                    <th className="px-4 py-3 text-left hidden 2xl:table-cell" title="Påmeldinger">Påm.</th>
                     <th className="px-4 py-3 text-left">Rolle</th>
                     <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-left hidden xl:table-cell">Opprettet</th>
-                    <th className="px-4 py-3 text-right">Handlinger</th>
+                    <th className="px-4 py-3 text-left hidden 2xl:table-cell">Opprettet</th>
+                    {/* Handlinger klebes til høyre, så de alltid er synlige når tabellen scroller. */}
+                    <th className="sticky right-0 z-[1] bg-gray-50 px-4 py-3 text-right shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]">Handlinger</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -462,7 +463,7 @@ export default function AdminUsersPage() {
                       <Fragment key={user.id}>
                         <tr
                           onClick={() => toggleExpanded(user.id)}
-                          className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                          className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'}`}
                         >
                           <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                             <input
@@ -479,22 +480,25 @@ export default function AdminUsersPage() {
                               <div className="h-9 w-9 rounded-full bg-bjerke-blue flex items-center justify-center text-white text-xs font-bold shrink-0">
                                 {initials}
                               </div>
-                              <div className="min-w-0 max-w-[14rem] xl:max-w-[18rem]">
+                              <div className="min-w-0 max-w-[14rem] 2xl:max-w-[18rem]">
                                 <p className="font-medium text-gray-900 truncate">{user.parent?.name || '-'}</p>
                                 <p className="text-gray-500 text-xs truncate" title={user.email}>{user.email}</p>
                                 {user.parent?.phone && (
                                   <p className="text-gray-400 text-xs lg:hidden">{user.parent.phone}</p>
                                 )}
+                                <p className="text-gray-400 text-xs 2xl:hidden">
+                                  Opprettet {new Date(user.createdAt).toLocaleDateString('nb-NO')}
+                                </p>
                               </div>
                             </div>
                           </td>
                           <td className="px-4 py-4 text-gray-500 hidden lg:table-cell whitespace-nowrap">{user.parent?.phone || '-'}</td>
-                          <td className="px-4 py-4 hidden xl:table-cell">
+                          <td className="px-4 py-4 hidden 2xl:table-cell">
                             <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
                               {user.parent?._count?.children ?? 0}
                             </span>
                           </td>
-                          <td className="px-4 py-4 hidden xl:table-cell">
+                          <td className="px-4 py-4 hidden 2xl:table-cell">
                             <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
                               {user.parent?._count?.registrations ?? 0}
                             </span>
@@ -542,12 +546,15 @@ export default function AdminUsersPage() {
                               {status === 'anonymized' ? 'Anonymisert' : status === 'deactivated' ? 'Deaktivert' : 'Aktiv'}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-gray-500 hidden xl:table-cell whitespace-nowrap">
+                          <td className="px-4 py-4 text-gray-500 hidden 2xl:table-cell whitespace-nowrap">
                             {new Date(user.createdAt).toLocaleDateString('nb-NO')}
                           </td>
-                          <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
+                          <td
+                            className="sticky right-0 bg-inherit px-4 py-4 shadow-[-8px_0_8px_-8px_rgba(0,0,0,0.15)]"
+                            onClick={(e) => e.stopPropagation()}
+                          >
                             {manageable ? (
-                              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+                              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 min-w-[9rem] max-w-[13rem] ml-auto">
                                 <button
                                   onClick={() => openEdit(user)}
                                   className="text-xs font-medium text-bjerke-blue hover:underline"
