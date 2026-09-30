@@ -157,3 +157,14 @@ describe('buildPaymentReceiptEmail', () => {
     expect(html).toContain('30. september 2026');
   });
 });
+
+describe('user-cancelled payment status', () => {
+  it('stores Vipps ABORTED as «cancelled», not «failed»', async () => {
+    prisma.bookingRequest.findUnique.mockImplementation(async ({ where }: { where: Record<string, unknown> }) =>
+      where.paymentRef === 'vipps-ref-3' ? bookingRow : null,
+    );
+    await applyPaymentEvent({ ...vippsSucceeded(), type: 'payment.failed', userCancelled: true, eventId: 'vipps-ref-3:ABORTED' });
+    expect(prisma.bookingRequest.update).toHaveBeenCalledWith({ where: { id: 3 }, data: { paymentStatus: 'cancelled' } });
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'payment.failed', meta: expect.objectContaining({ reason: 'cancelled' }) }));
+  });
+});

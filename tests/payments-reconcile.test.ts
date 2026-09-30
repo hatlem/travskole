@@ -123,7 +123,7 @@ describe('resolveThankYouStatus — Vipps', () => {
   it('avbrutt i Vipps vises som avbrutt, ikke «behandles»', async () => {
     getVippsPayment.mockResolvedValue({ state: 'ABORTED', amountOre: 150000 });
     await expect(resolveThankYouStatus('reg-5-abcd1234')).resolves.toBe('aborted');
-    expect(row.status).toBe('failed');
+    expect(row.status).toBe('cancelled');
   });
 
   it('AUTHORIZED anvendes som betalt', async () => {

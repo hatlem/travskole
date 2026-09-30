@@ -14,7 +14,8 @@
  * refusjon) er lagt til, med samme monotone garantier.
  */
 
-export const STATUS_RANK = { none: 0, pending: 1, expired: 2, failed: 3, paid: 4, partially_refunded: 5, refunded: 6 } as const;
+// cancelled (kjøperen avbrøt i Vipps) og failed er likestilt: første utfall står.
+export const STATUS_RANK = { none: 0, pending: 1, expired: 2, cancelled: 3, failed: 3, paid: 4, partially_refunded: 5, refunded: 6 } as const;
 
 export type PaymentStatus = keyof typeof STATUS_RANK;
 

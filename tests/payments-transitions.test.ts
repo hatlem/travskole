@@ -57,7 +57,7 @@ describe('planStatusTransition — named scenarios', () => {
 
 describe('utvidet rank (expired / partially_refunded)', () => {
   it('rank-rekkefølge', () => {
-    expect(STATUS_RANK).toEqual({ none: 0, pending: 1, expired: 2, failed: 3, paid: 4, partially_refunded: 5, refunded: 6 });
+    expect(STATUS_RANK).toEqual({ none: 0, pending: 1, expired: 2, cancelled: 3, failed: 3, paid: 4, partially_refunded: 5, refunded: 6 });
   });
   it('pending → expired skriver', () => {
     expect(planStatusTransition('pending', 'expired')).toEqual({ write: true, downgrade: false });

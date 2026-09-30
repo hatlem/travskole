@@ -16,6 +16,7 @@ import { mapStripeEvent, mapVippsEvent } from './mapping';
 import { retrieveStripeCheckoutSession, stripeSessionTestMode } from './stripe';
 import { getVippsPayment, isVippsConfigured, type VippsPaymentSnapshot } from './vipps';
 import { STATUS_RANK, type PaymentStatus } from './transitions';
+import type { PaymentSubject } from './thank-you';
 
 export type ThankYouStatus =
   | 'paid'
@@ -93,6 +94,7 @@ export async function reconcileVippsPayment(reference: string): Promise<string |
 
 function toThankYouStatus(status: string): ThankYouStatus {
   if (status === 'none') return 'pending';
+  if (status === 'cancelled') return 'aborted';
   const known: ThankYouStatus[] = ['paid', 'pending', 'expired', 'failed', 'refunded', 'partially_refunded'];
   return known.includes(status as ThankYouStatus) ? (status as ThankYouStatus) : 'not_found';
 }
@@ -114,4 +116,14 @@ export async function resolveThankYouStatus(ref: string | undefined): Promise<Th
 
   const updated = await findPayment(ref);
   return toThankYouStatus(updated?.status ?? payment.status);
+}
+
+/** Påmeldingen/bookingen bak en leverandør-ref, for sannferdig tekst på takk-siden. */
+export async function findPaymentSubject(ref: string | undefined): Promise<PaymentSubject | null> {
+  if (!ref) return null;
+  const select = { status: true } as const;
+  const registration = await prisma.registration.findUnique({ where: { paymentRef: ref }, select });
+  if (registration) return { kind: 'registration', status: registration.status };
+  const booking = await prisma.bookingRequest.findUnique({ where: { paymentRef: ref }, select });
+  return booking ? { kind: 'booking', status: booking.status } : null;
 }

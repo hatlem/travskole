@@ -199,7 +199,7 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
     return 'not_found';
   }
 
-  const newStatus = STATUS_MAP[input.type];
+  const newStatus = input.type === 'payment.failed' && input.userCancelled ? 'cancelled' : STATUS_MAP[input.type];
   const { write, downgrade: isDowngrade } = planStatusTransition(row.paymentStatus, newStatus as PaymentStatus);
 
   // nextRef er kun satt av Stripe checkout.session.completed (payment.succeeded)
@@ -249,6 +249,7 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
     meta: {
       provider: input.provider,
       amountKr: input.amountKr,
+      ...(input.userCancelled && { reason: 'cancelled' }),
       ...(row.kind === 'registration' ? { registrationId: row.id } : { bookingRequestId: row.id }),
     },
     dedupeKey: paymentEventDedupeKey(input, row),

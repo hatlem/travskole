@@ -9,7 +9,8 @@ import { ChildrenSection } from './ChildrenSection';
 import { PasswordSection } from './PasswordSection';
 import { EmailSection } from './EmailSection';
 import { DeleteAccountSection } from './DeleteAccountSection';
-import type { DashboardChild, DashboardData, DashboardProfile } from './types';
+import { buyerPaymentBadge, isUnpaidStatus } from '@/lib/payments/badge';
+import type { DashboardChild, DashboardData, DashboardProfile, DashboardRegistration } from './types';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,6 +27,11 @@ function formatDate(iso: string) {
     month: 'long',
     year: 'numeric',
   });
+}
+
+/** Online betaling er aktuelt: pris, betalingsmåte, og påmeldingen er ikke avbestilt. */
+function requiresOnlinePayment(r: DashboardRegistration): boolean {
+  return r.priceKr !== null && r.priceKr > 0 && r.payableMethods.length > 0 && r.status !== 'cancelled';
 }
 
 function DashboardContent() {
@@ -185,6 +191,8 @@ function DashboardContent() {
                 {data.registrations.map((r) => {
                   const badgeStyle = statusStyles[r.status] ?? statusStyles.pending;
                   const badgeLabel = t(`dash.status_${r.status in statusStyles ? r.status : 'pending'}`);
+                  const paymentBadge = buyerPaymentBadge(r.paymentStatus, requiresOnlinePayment(r));
+                  const canPay = requiresOnlinePayment(r) && isUnpaidStatus(r.paymentStatus);
                   return (
                     <div
                       key={r.id}
@@ -197,12 +205,8 @@ function DashboardContent() {
                           {r.courseEndDate && ` – ${formatDate(r.courseEndDate)}`}
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
-                        {r.priceKr !== null &&
-                          r.priceKr > 0 &&
-                          r.payableMethods.length > 0 &&
-                          r.status !== 'cancelled' &&
-                          ['none', 'pending', 'failed'].includes(r.paymentStatus) && (
+                      <div className="flex flex-wrap items-center gap-3">
+                        {canPay && (
                             <div className="flex gap-2">
                               {r.payableMethods.includes('stripe') && (
                                 <button
@@ -236,6 +240,11 @@ function DashboardContent() {
                         <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${badgeStyle}`}>
                           {badgeLabel}
                         </span>
+                        {paymentBadge && (
+                          <span className={`text-xs font-medium px-3 py-1 rounded-full whitespace-nowrap ${paymentBadge.className}`}>
+                            {paymentBadge.label}
+                          </span>
+                        )}
                       </div>
                     </div>
                   );

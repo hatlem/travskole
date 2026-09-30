@@ -8,6 +8,8 @@ export interface PaymentEventInput {
   bookingRequestId?: number;
   amountKr: number | null;
   eventId: string;
+  /** Kjøperen avbrøt selv (Vipps ABORTED) — lagres som «cancelled», ikke «failed». */
+  userCancelled?: boolean;
 }
 
 const num = (v: unknown): number | null => (typeof v === 'number' ? v : null);
@@ -107,5 +109,6 @@ export function mapVippsEvent(body: Record<string, unknown>): PaymentEventInput 
     type, provider: 'vipps', ref: reference, refKind: 'paymentRef',
     amountKr: amountValue !== null ? amountValue / 100 : null,
     eventId: `${reference}:${name}`,
+    ...(name === 'ABORTED' && { userCancelled: true }),
   };
 }

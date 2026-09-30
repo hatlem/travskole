@@ -168,7 +168,7 @@ export const STRINGS: Record<string, string> = {
   'dash.password_change_hint': 'Velg et passord på minst 8 tegn.',
   'dash.password_updated': 'Passordet er oppdatert',
   'dash.password_mismatch': 'Passordene er ikke like',
-  'dash.status_pending': 'Venter',
+  'dash.status_pending': 'Til behandling',
   'dash.status_confirmed': 'Bekreftet',
   'dash.status_cancelled': 'Avlyst',
   'dash.status_waitlist': 'Venteliste',

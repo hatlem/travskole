@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { verifyCheckoutToken } from '@/lib/payments/checkout-token';
 import { parsePaymentMethods } from '@/lib/payments';
 import { BookingCheckout } from '@/components/BookingCheckout';
+import { subjectStatusText } from '@/lib/payments/thank-you';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Betal booking', description: 'Fullfør betaling for din booking' };
@@ -34,7 +35,7 @@ export default async function BookingBetalPage({ searchParams }: { searchParams:
     if (!booking || !booking.course) {
       content = <Box tone="gray" title="Fant ikke bookingen" message="Vi fant ikke bookingen. Kontakt oss hvis dette er feil." />;
     } else if (booking.paymentStatus === 'paid') {
-      content = <Box tone="green" title="Betalingen er allerede mottatt — takk!" message="Bookingen din er betalt og bekreftet." />;
+      content = <Box tone="green" title="Betalingen er allerede mottatt — takk!" message={`Bookingen din er betalt. ${subjectStatusText({ kind: 'booking', status: booking.status })}`} />;
     } else if (booking.status === 'cancelled') {
       content = <Box tone="gray" title="Bookingen er kansellert" message="Denne bookingen er kansellert, og kan ikke betales." />;
     } else {

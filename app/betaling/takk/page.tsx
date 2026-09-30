@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { resolveThankYouStatus } from '@/lib/payments/reconcile';
+import { findPaymentSubject, resolveThankYouStatus } from '@/lib/payments/reconcile';
+import { paidThankYouMessage } from '@/lib/payments/thank-you';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +76,7 @@ export default async function TakkPage({
 }) {
   const { ref } = await searchParams;
   const status = await resolveThankYouStatus(ref);
+  const subject = status === 'paid' ? await findPaymentSubject(ref).catch(() => null) : null;
 
   return (
     <main className="bg-white">
@@ -89,7 +91,7 @@ export default async function TakkPage({
           {status === 'paid' && (
             <StatusBox
               title="Betalingen er mottatt — takk!"
-              message="Din registrering er bekreftet og betalingen er behandlet."
+              message={paidThankYouMessage(subject)}
               color="green"
             />
           )}
