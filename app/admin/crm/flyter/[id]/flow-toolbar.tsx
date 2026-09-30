@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
+import { FLOW_STATUS_LABELS, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 
 export interface ValidationError {
   nodeId: number | null;
@@ -9,13 +9,7 @@ export interface ValidationError {
   message: string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Utkast',
-  active: 'Aktiv',
-  paused: 'Pauset',
-  archived: 'Arkivert',
-  template: 'Mal',
-};
+const STATUS_LABELS = FLOW_STATUS_LABELS;
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',

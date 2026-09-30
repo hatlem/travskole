@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
+import { FLOW_STATUS_LABELS, canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
 import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
 import { DEFAULT_FLOW_SETTINGS, FlowSettingsFields, type FlowSettingsValues } from './flow-settings-fields';
 
@@ -36,13 +36,7 @@ interface ValidationError {
   message: string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Utkast',
-  active: 'Aktiv',
-  paused: 'Pauset',
-  archived: 'Arkivert',
-  template: 'Mal',
-};
+const STATUS_LABELS = FLOW_STATUS_LABELS;
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',

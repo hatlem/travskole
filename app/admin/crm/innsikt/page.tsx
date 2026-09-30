@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { GjenbookingFane } from './GjenbookingFane';
+import { wonChartMessage } from '@/lib/crm/insights';
+import { flowStatusLabel } from '@/lib/flows/status';
 import { AttribusjonFane } from './AttribusjonFane';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -161,7 +163,7 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
               {flows.perFlow.map((f) => (
                 <tr key={f.flowId} className="border-b last:border-0">
                   <td className="p-3"><Link href={`/admin/crm/flyter/${f.flowId}`} className="text-blue-700 hover:underline">{f.name}</Link></td>
-                  <td className="p-3">{f.status}</td>
+                  <td className="p-3">{flowStatusLabel(f.status)}</td>
                   <td className="p-3">{f.sent}</td><td className="p-3">{f.opened}</td>
                   <td className="p-3">{f.clicked}</td><td className="p-3">{f.replied}</td>
                   <td className="p-3">{f.bounced}</td>
@@ -174,13 +176,13 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
         )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Enrollment-status</h2>
+        <h2 className="font-semibold mb-3">Påmeldingsstatus</h2>
         <div className="flex gap-6">
           {flows.enrollmentStatus.map((s) => (
             <div key={s.status}><span className="text-2xl font-bold">{s.count}</span>{' '}
               <span className="text-gray-500 text-sm">{ENROLLMENT_STATUS_NO[s.status] ?? s.status}</span></div>
           ))}
-          {flows.enrollmentStatus.length === 0 && <p className="text-gray-500">Ingen enrollments ennå.</p>}
+          {flows.enrollmentStatus.length === 0 && <p className="text-gray-500">Ingen påmeldinger i flyter ennå.</p>}
         </div>
       </div>
     </div>
@@ -192,7 +194,7 @@ function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-3 gap-4">
-        {[['Åpne', pipeline.totals.open], ['Vunnet', pipeline.totals.won], ['Tapt', pipeline.totals.lost]].map(([label, n]) => (
+        {[['Åpne', pipeline.totals.open], ['Vunnet (totalt)', pipeline.totals.won], ['Tapt (totalt)', pipeline.totals.lost]].map(([label, n]) => (
           <div key={label as string} className="bg-white rounded-lg border border-gray-200 p-4 text-center">
             <div className="text-3xl font-bold">{n}</div><div className="text-gray-500 text-sm">{label}</div>
           </div>
@@ -214,8 +216,8 @@ function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Vunnet verdi per måned (6 mnd)</h2>
-        {pipeline.wonByMonth.every((m) => m.value === 0) ? (
-          <p className="text-gray-500">Ingen vunne deals de siste 6 månedene.</p>
+        {wonChartMessage(pipeline.wonByMonth, pipeline.totals.won) ? (
+          <p className="text-gray-500">{wonChartMessage(pipeline.wonByMonth, pipeline.totals.won)}</p>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={pipeline.wonByMonth}>

@@ -109,6 +109,15 @@ describe('rebookingByYear', () => {
     expect(contact).toMatchObject({ customers: 2, returning: 0, rebookingRate: 0 });
   });
 
+  it('fremtidig sesong uten bookinger får null (—), ikke 0 %', () => {
+    const now = new Date('2025-10-01T12:00:00Z');
+    const [future] = rebookingByYear(rows.filter((r) => dealYear(r) === 2025), 'contact', [2026], now);
+    expect(future.previousYearCustomers).toBe(4);
+    expect(future.rebookingRate).toBeNull();
+    const [past] = rebookingByYear(rows.filter((r) => dealYear(r) === 2025), 'contact', [2026], new Date('2027-01-15T12:00:00Z'));
+    expect(past.rebookingRate).toBe(0);
+  });
+
   it('rate avrundes til én desimal', () => {
     const r = [
       deal({ contactId: 1, eventDate: d2025 }), deal({ contactId: 2, eventDate: d2025 }),

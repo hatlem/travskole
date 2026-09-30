@@ -9,6 +9,16 @@
 export const FLOW_STATUSES = ['draft', 'active', 'paused', 'archived', 'template'] as const;
 export type FlowStatus = (typeof FLOW_STATUSES)[number];
 
+export const FLOW_STATUS_LABELS: Record<string, string> = {
+  draft: 'Utkast',
+  active: 'Aktiv',
+  paused: 'Pauset',
+  archived: 'Arkivert',
+  template: 'Mal',
+};
+
+export const flowStatusLabel = (status: string): string => FLOW_STATUS_LABELS[status] ?? status;
+
 export const ANCHOR_MODES = ['contact', 'course'] as const;
 export type AnchorMode = (typeof ANCHOR_MODES)[number];
 
