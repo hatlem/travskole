@@ -4,6 +4,7 @@ import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CrmTabs } from '@/components/admin/CrmTabs';
+import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CardSkeleton } from '@/components/admin/Skeleton';
@@ -73,6 +74,7 @@ function fmtDate(d: string | null): string {
 export default function BedriftDetaljPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [org, setOrg] = useState<OrgDetail | null>(null);
+  useBreadcrumbLabel(org?.name);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');

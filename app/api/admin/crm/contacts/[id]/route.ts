@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { logCrmChanges } from '@/lib/crm/change-log';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 import { purgeReviewDraftsForContact } from '@/lib/ai/review';
@@ -102,6 +103,11 @@ export async function PATCH(
     }
   }
 
+  const tracksChanges = data.stage !== undefined || data.ownerId !== undefined;
+  const before = tracksChanges
+    ? await prisma.contact.findUnique({ where: { id: contactId }, select: { stage: true, ownerId: true } })
+    : null;
+
   try {
     const contact = await prisma.contact.update({
       where: { id: contactId },
@@ -116,6 +122,10 @@ export async function PATCH(
         ...(data.roleTitle !== undefined && { roleTitle: data.roleTitle }),
       },
     });
+
+    if (before) {
+      await logCrmChanges({ contactId: contact.id, organizationId: null }, before, data, session.user.email).catch(() => {});
+    }
 
     logActivity({ action: 'update', entity: 'contact', entityId: contact.id, userEmail: session.user.email }).catch(() => {});
     return NextResponse.json({ contact });

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { parseNodeConfig, type FlowNodeType } from '@/lib/flows/graph';
 import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 import { FlowEditor } from './flow-editor';
+import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 
 /** Tolerant JSON parse for trigger filters: garbage/non-object JSON becomes {}. */
 function parseFilter(raw: string): Record<string, unknown> {
@@ -56,47 +57,50 @@ export default async function FlyterEditorPage({
   }
 
   return (
-    <FlowEditor
-      flow={{
-        id: flow.id,
-        name: flow.name,
-        description: flow.description,
-        status: flow.status,
-        isMarketing: flow.isMarketing,
-        anchorMode: flow.anchorMode,
-      }}
-      initialNodes={flow.nodes.map((node) => ({
-        id: node.id,
-        type: node.type as FlowNodeType,
-        config: parseNodeConfig(node.config),
-        posX: node.posX,
-        posY: node.posY,
-      }))}
-      initialEdges={flow.edges.map((edge) => ({
-        id: edge.id,
-        fromNodeId: edge.fromNodeId,
-        toNodeId: edge.toNodeId,
-        branch: edge.branch,
-      }))}
-      initialTriggers={flow.triggers.map((trigger) => ({
-        id: trigger.id,
-        eventType: trigger.eventType,
-        filter: parseFilter(trigger.filter),
-      }))}
-      senderIdentities={senderIdentities.map((identity) => ({
-        id: identity.id,
-        email: identity.email,
-        displayName: identity.displayName,
-      }))}
-      segments={segments.map((segment) => ({ id: segment.id, name: segment.name }))}
-      courses={courses.map((course) => ({
-        id: course.id,
-        name: course.name,
-        slug: course.slug,
-        startDate: course.startDate ? course.startDate.toISOString() : null,
-      }))}
-      adminUsers={adminUsers}
-      initialActiveEnrollments={activeEnrollments}
-    />
+    <>
+      <BreadcrumbLabel label={flow.name} />
+      <FlowEditor
+        flow={{
+          id: flow.id,
+          name: flow.name,
+          description: flow.description,
+          status: flow.status,
+          isMarketing: flow.isMarketing,
+          anchorMode: flow.anchorMode,
+        }}
+        initialNodes={flow.nodes.map((node) => ({
+          id: node.id,
+          type: node.type as FlowNodeType,
+          config: parseNodeConfig(node.config),
+          posX: node.posX,
+          posY: node.posY,
+        }))}
+        initialEdges={flow.edges.map((edge) => ({
+          id: edge.id,
+          fromNodeId: edge.fromNodeId,
+          toNodeId: edge.toNodeId,
+          branch: edge.branch,
+        }))}
+        initialTriggers={flow.triggers.map((trigger) => ({
+          id: trigger.id,
+          eventType: trigger.eventType,
+          filter: parseFilter(trigger.filter),
+        }))}
+        senderIdentities={senderIdentities.map((identity) => ({
+          id: identity.id,
+          email: identity.email,
+          displayName: identity.displayName,
+        }))}
+        segments={segments.map((segment) => ({ id: segment.id, name: segment.name }))}
+        courses={courses.map((course) => ({
+          id: course.id,
+          name: course.name,
+          slug: course.slug,
+          startDate: course.startDate ? course.startDate.toISOString() : null,
+        }))}
+        adminUsers={adminUsers}
+        initialActiveEnrollments={activeEnrollments}
+      />
+    </>
   );
 }

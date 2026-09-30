@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { logCrmChanges } from '@/lib/crm/change-log';
 import { parseJsonArray } from '@/lib/crm/normalize';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 
@@ -104,6 +105,11 @@ export async function PATCH(
     }
   }
 
+  const tracksChanges = data.stage !== undefined || data.ownerId !== undefined;
+  const before = tracksChanges
+    ? await prisma.organization.findUnique({ where: { id: orgId }, select: { stage: true, ownerId: true } })
+    : null;
+
   try {
     const organization = await prisma.organization.update({
       where: { id: orgId },
@@ -118,6 +124,10 @@ export async function PATCH(
         ...(data.tags !== undefined && { tags: JSON.stringify(data.tags) }),
       },
     });
+
+    if (before) {
+      await logCrmChanges({ contactId: null, organizationId: organization.id }, before, data, session.user.email).catch(() => {});
+    }
 
     logActivity({
       action: 'update',

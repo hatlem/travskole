@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useSettings } from '@/components/SettingsProvider';
 import { ToastProvider } from '@/components/admin/Toast';
 import { KeyboardShortcuts } from '@/components/admin/KeyboardShortcuts';
+import { BreadcrumbLabelProvider, useBreadcrumbOverrides } from '@/components/admin/BreadcrumbLabel';
+import { buildBreadcrumbs } from '@/lib/admin-breadcrumbs';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -23,45 +25,6 @@ const SETTINGS_ICON = 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0
 const ACTIVITY_ICON = 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
 const TEKSTER_ICON = 'M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129';
 
-function buildBreadcrumbs(pathname: string) {
-  const segments = pathname.split('/').filter(Boolean);
-  const crumbs: { label: string; href: string }[] = [];
-
-  for (let i = 0; i < segments.length; i++) {
-    const href = '/' + segments.slice(0, i + 1).join('/');
-    const segment = segments[i];
-
-    const labelMap: Record<string, string> = {
-      admin: 'Admin',
-      courses: 'Kurs',
-      registrations: 'Påmeldinger',
-      users: 'Brukere',
-      foresporsler: 'Forespørsler',
-      crm: 'CRM',
-      kontakter: 'Kontakter',
-      bedrifter: 'Bedrifter',
-      pipeline: 'Pipeline',
-      oppgaver: 'Oppgaver',
-      segmenter: 'Segmenter',
-      hendelser: 'Hendelser',
-      flyter: 'Flyter',
-      innsikt: 'Innsikt',
-      import: 'Import',
-      settings: 'Innstillinger',
-      tekster: 'Tekster',
-      sider: 'Sider',
-      activity: 'Aktivitetslogg',
-      new: 'Ny',
-      edit: 'Rediger',
-    };
-
-    const label = labelMap[segment] || decodeURIComponent(segment);
-    crumbs.push({ label, href });
-  }
-
-  return crumbs;
-}
-
 export function AdminShell({
   email,
   role,
@@ -75,7 +38,8 @@ export function AdminShell({
   const settings = useSettings();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
-  const breadcrumbs = buildBreadcrumbs(pathname);
+  const [breadcrumbOverrides, setBreadcrumbLabel] = useBreadcrumbOverrides();
+  const breadcrumbs = buildBreadcrumbs(pathname, breadcrumbOverrides);
   const isSuperAdmin = role === 'superadmin';
   const siteName = settings.site_name || 'Bjerke Registrering';
 
@@ -290,7 +254,7 @@ export function AdminShell({
               </svg>
             </button>
 
-            <nav className="flex items-center text-sm text-gray-500">
+            <nav className="flex items-center text-sm text-gray-500 min-w-0">
               {breadcrumbs.map((crumb, i) => (
                 <span key={crumb.href} className="flex items-center">
                   {i > 0 && (
@@ -299,7 +263,7 @@ export function AdminShell({
                     </svg>
                   )}
                   {i === breadcrumbs.length - 1 ? (
-                    <span className="text-gray-900 font-medium">{crumb.label}</span>
+                    <span className="text-gray-900 font-medium truncate max-w-[10rem] sm:max-w-xs" title={crumb.label}>{crumb.label}</span>
                   ) : (
                     <Link href={crumb.href} className="hover:text-gray-700">
                       {crumb.label}
@@ -311,7 +275,7 @@ export function AdminShell({
           </header>
 
           <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
-            {children}
+            <BreadcrumbLabelProvider value={setBreadcrumbLabel}>{children}</BreadcrumbLabelProvider>
           </main>
         </div>
       </div>

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { getSettings, parseCourseTypes, courseTypeLabel } from '@/lib/settings';
 import { ageFromBirthdate } from '@/lib/dates';
 import { CourseActions } from './CourseActions';
+import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 
 const statusLabels: Record<string, string> = {
   open: 'Åpen',
@@ -92,6 +93,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
 
   return (
     <div>
+      <BreadcrumbLabel label={course.name} />
       {/* Back link */}
       <Link
         href="/admin/courses"

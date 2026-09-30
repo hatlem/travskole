@@ -6,6 +6,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
@@ -57,6 +58,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const [course, setCourse] = useState<CourseData | null>(null);
+  useBreadcrumbLabel(course?.name, `/admin/courses/${id}`);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);

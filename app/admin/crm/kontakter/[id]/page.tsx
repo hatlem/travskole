@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { CrmTabs } from '@/components/admin/CrmTabs';
+import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CardSkeleton } from '@/components/admin/Skeleton';
@@ -55,7 +56,7 @@ const SUPPRESSION_REASONS: Record<string, string> = {
 
 const ACTIVITY_ICONS: Record<string, string> = {
   booking: '📅', registration: '📝', note: '🗒️', task: '✅',
-  deal_change: '💼', import: '📥', event: '⚡',
+  deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄',
 };
 
 function fmtDate(d: string | null): string {
@@ -70,6 +71,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const canUnsuppress = isSuperAdmin(session?.user?.role);
   const { assignees, currentUserId } = useAssignees();
   const [contact, setContact] = useState<ContactDetail | null>(null);
+  useBreadcrumbLabel(contact?.name);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');
