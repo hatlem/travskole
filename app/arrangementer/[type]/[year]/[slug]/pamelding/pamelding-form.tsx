@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm, useWatch } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -140,12 +140,12 @@ interface PameldingFormProps {
   isAdult: boolean;
   paymentMethods: string[];
   ageRule: AgeRule;
+  /** Kurset er fullt (fra serveren) — skjemaet melder på venteliste. */
+  isWaitlist: boolean;
 }
 
-export default function PameldingForm({ courseRef, courseName, isAdult, paymentMethods, ageRule }: PameldingFormProps) {
+export default function PameldingForm({ courseRef, courseName, isAdult, paymentMethods, ageRule, isWaitlist }: PameldingFormProps) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isWaitlist = searchParams.get('venteliste') === 'true';
   const { data: session } = useSession();
   const settings = useSettings();
   const t = useStrings();

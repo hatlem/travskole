@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requiredRegistrationConsentError, isWaitlist, existingChildAgeIssue } from '@/lib/registration-rules';
+import { requiredRegistrationConsentError, isWaitlist, existingChildAgeIssue, registrationFormMode } from '@/lib/registration-rules';
 
 const RISK_ACTIVITIES_ERROR = 'Du må godta alle påkrevde samtykker';
 const TERMS_ERROR = 'Du må godta vilkårene for å melde på';
@@ -145,5 +145,14 @@ describe('existingChildAgeIssue', () => {
 
   it('godtar barn uten fødselsdato når kurset ikke har aldersgrense', () => {
     expect(existingChildAgeIssue({ ageMin: null, ageMax: null }, null, undefined, start, now)).toBeNull();
+  });
+});
+
+describe('registrationFormMode', () => {
+  it('derives the form mode from the server-side course status', () => {
+    expect(registrationFormMode('open')).toBe('register');
+    expect(registrationFormMode('full')).toBe('waitlist');
+    expect(registrationFormMode('closed')).toBe('closed');
+    expect(registrationFormMode('ukjent')).toBe('closed');
   });
 });

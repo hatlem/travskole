@@ -51,6 +51,18 @@ export function isWaitlist(courseStatus: string, wantsWaitlist: boolean): boolea
   return wantsWaitlist && courseStatus === 'full';
 }
 
+/**
+ * Påmeldingsskjemaets modus avgjøres av kursets status på serveren — ikke av
+ * ?venteliste i URL-en — så et fullt kurs åpnet direkte gir venteliste.
+ */
+export type RegistrationFormMode = 'register' | 'waitlist' | 'closed';
+
+export function registrationFormMode(courseStatus: string): RegistrationFormMode {
+  if (courseStatus === 'full') return 'waitlist';
+  if (courseStatus === 'open') return 'register';
+  return 'closed';
+}
+
 /** Statuser som opptar en plass på kurset. Venteliste og kansellert gjør ikke det. */
 export const PLACE_OCCUPYING_STATUSES = ['pending', 'confirmed'] as const;
 

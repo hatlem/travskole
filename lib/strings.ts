@@ -79,7 +79,7 @@ export const STRINGS: Record<string, string> = {
   'reg.heading': 'Påmelding',
   'reg.intro_child': 'Fyll ut skjemaet nedenfor for å melde på et barn til {{kurs}}',
   'reg.intro_adult': 'Fyll ut skjemaet nedenfor for å melde deg på {{kurs}}',
-  'reg.waitlist_banner': 'Du melder deg på ventelisten for dette kurset',
+  'reg.waitlist_banner': 'Kurset er fullt – sett deg på venteliste, så kontakter vi deg hvis det blir ledig plass.',
   'reg.parent_heading': 'Foresatt',
   'reg.participant_heading': 'Deltaker',
   'reg.child_heading': 'Barn',
