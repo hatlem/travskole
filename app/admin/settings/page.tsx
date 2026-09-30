@@ -3,6 +3,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { TrackingInstallSnippet } from '@/components/admin/TrackingInstallSnippet';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { useUnsavedChangesGuard } from '@/components/admin/useUnsavedChangesGuard';
+import { validateSettingValue } from '@/lib/settings-shared';
+import { planSettingsSave } from '@/lib/unsaved-changes';
 
 interface SettingGroup {
   title: string;
@@ -171,6 +175,10 @@ const SETTING_GROUPS: SettingGroup[] = [
   },
 ];
 
+const FIELD_LABELS: Record<string, string> = Object.fromEntries(
+  SETTING_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, f.label])),
+);
+
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -181,6 +189,8 @@ export default function AdminSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const guard = useUnsavedChangesGuard(dirty.size > 0);
 
   const fetchSettings = useCallback(async () => {
     try {
@@ -207,15 +217,18 @@ export default function AdminSettingsPage() {
     setSaved(false);
     setError(null);
 
-    try {
-      // Lagre kun nøkler den innloggede rollen faktisk kan endre (unngår 403 for admins)
-      const superadmin = session?.user.role === 'superadmin';
-      const allowedKeys = new Set(
-        (superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable))
-          .flatMap(g => g.fields.map(f => f.key))
-      );
-      for (const key of dirty) {
-        if (!allowedKeys.has(key)) continue;
+    // Lagre kun nøkler den innloggede rollen faktisk kan endre (unngår 403 for admins)
+    const superadmin = session?.user.role === 'superadmin';
+    const allowedKeys = new Set(
+      (superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable))
+        .flatMap(g => g.fields.map(f => f.key))
+    );
+    const plan = planSettingsSave(dirty, allowedKeys, (key) => settings[key] ?? '', validateSettingValue);
+    const errors: Record<string, string> = { ...plan.errors };
+
+    // Alle gyldige felt lagres selv om andre feiler — feilene vises ved hvert felt.
+    for (const key of plan.toSave) {
+      try {
         const res = await fetch('/api/admin/settings', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
@@ -223,26 +236,46 @@ export default function AdminSettingsPage() {
         });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          throw new Error(body?.error ? `${key}: ${body.error}` : `Kunne ikke lagre ${key}`);
+          errors[key] = body?.error ?? 'Kunne ikke lagre';
+          continue;
         }
         setDirty(prev => {
           const next = new Set(prev);
           next.delete(key);
           return next;
         });
+      } catch {
+        errors[key] = 'Nettverksfeil — prøv igjen';
       }
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
-    } finally {
-      setSaving(false);
     }
+
+    setFieldErrors(errors);
+    const failed = Object.keys(errors);
+    if (failed.length > 0) {
+      setError(
+        `${failed.length === 1 ? 'Ett felt' : `${failed.length} felt`} ble ikke lagret: ${failed
+          .map((key) => FIELD_LABELS[key] ?? key)
+          .join(', ')}. Se feilmeldingen ved feltet.`
+      );
+      document.getElementById(failed[0])?.focus();
+    } else {
+      setSaved(true);
+      setTimeout(() => setSaved(false), 4000);
+    }
+    setSaving(false);
   }
 
   function updateSetting(key: string, value: string) {
     setSettings(prev => ({ ...prev, [key]: value }));
     setDirty(prev => new Set(prev).add(key));
+    setSaved(false);
+    if (fieldErrors[key]) {
+      setFieldErrors(prev => {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
+    }
   }
 
   // Effektiv verdi: lagret verdi, ellers standardverdien fra koden.
@@ -270,17 +303,6 @@ export default function AdminSettingsPage() {
               : 'Rediger samtykketekster og påmeldingsinnstillinger. Øvrig konfigurasjon krever superadmin.'}
           </p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
-            saving
-              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
-          }`}
-        >
-          {saving ? 'Lagrer...' : 'Lagre alle endringer'}
-        </button>
       </div>
 
       {error && (
@@ -290,11 +312,6 @@ export default function AdminSettingsPage() {
         </div>
       )}
 
-      {saved && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-          Innstillingene ble lagret. Endringer kan ta noen sekunder å vises.
-        </div>
-      )}
 
       <div className="space-y-8">
         {visibleGroups.map((group) => (
@@ -318,7 +335,7 @@ export default function AdminSettingsPage() {
             <div className="space-y-5">
               {group.fields.map((field) => (
                 <div key={field.key}>
-                  <label htmlFor={field.key} className="block text-sm font-medium text-gray-700 mb-1">
+                  <label htmlFor={field.key} className="block text-sm font-medium text-gray-700 mb-1 scroll-mt-24">
                     {field.label}
                   </label>
                   {field.type === 'toggle' ? (
@@ -345,7 +362,9 @@ export default function AdminSettingsPage() {
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       rows={3}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
+                      aria-invalid={!!fieldErrors[field.key]}
+                      aria-describedby={fieldErrors[field.key] ? `${field.key}-error` : undefined}
+                      className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent ${fieldErrors[field.key] ? 'border-red-400' : 'border-gray-300'}`}
                     />
                   ) : (
                     <input
@@ -354,8 +373,15 @@ export default function AdminSettingsPage() {
                       value={valueOf(field.key)}
                       onChange={(e) => updateSetting(field.key, e.target.value)}
                       placeholder={field.placeholder}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
+                      aria-invalid={!!fieldErrors[field.key]}
+                      aria-describedby={fieldErrors[field.key] ? `${field.key}-error` : undefined}
+                      className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent ${fieldErrors[field.key] ? 'border-red-400' : 'border-gray-300'}`}
                     />
+                  )}
+                  {fieldErrors[field.key] && (
+                    <p id={`${field.key}-error`} role="alert" className="text-sm text-red-600 mt-1">
+                      {fieldErrors[field.key]}
+                    </p>
                   )}
                   {field.help && <p className="text-xs text-gray-500 mt-1">{field.help}</p>}
                   <p className="text-xs text-gray-400 mt-1">Nøkkel: {field.key}</p>
@@ -366,19 +392,39 @@ export default function AdminSettingsPage() {
         ))}
       </div>
 
-      <div className="mt-8 flex justify-end">
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
-            saving
-              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
-          }`}
-        >
-          {saving ? 'Lagrer...' : 'Lagre alle endringer'}
-        </button>
+      <div className="sticky bottom-0 -mx-4 sm:mx-0 mt-8 z-10">
+        <div className="flex flex-wrap items-center justify-end gap-3 border border-gray-200 bg-white/95 backdrop-blur px-4 py-3 shadow-lg sm:rounded-xl">
+          <p className="mr-auto text-sm" aria-live="polite">
+            {saved ? (
+              <span className="font-medium text-green-700">✓ Innstillingene er lagret</span>
+            ) : dirty.size > 0 ? (
+              <span className="text-amber-700">
+                {dirty.size === 1 ? '1 ulagret endring' : `${dirty.size} ulagrede endringer`}
+              </span>
+            ) : (
+              <span className="text-gray-500">Ingen ulagrede endringer</span>
+            )}
+          </p>
+          <button
+            onClick={handleSave}
+            disabled={saving || dirty.size === 0}
+            className="px-6 py-2.5 rounded-lg font-semibold text-sm transition bg-bjerke-blue hover:bg-bjerke-blue-dark text-white disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
+          >
+            {saving ? 'Lagrer...' : 'Lagre endringer'}
+          </button>
+        </div>
       </div>
+
+      <ConfirmModal
+        open={guard.pendingHref !== null}
+        title="Forlate siden?"
+        message="Du har endringer som ikke er lagret. Forlater du siden, går de tapt."
+        confirmLabel="Forlat uten å lagre"
+        cancelLabel="Bli på siden"
+        variant="warning"
+        onConfirm={guard.leave}
+        onCancel={guard.stay}
+      />
     </div>
   );
 }
