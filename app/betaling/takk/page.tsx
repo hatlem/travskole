@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
+import { resolveThankYouStatus } from '@/lib/payments/reconcile';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,12 +64,9 @@ function StatusBox({ title, message, color }: StatusBoxProps) {
 }
 
 /**
- * Payment success page: looks up payment status from DB by paymentRef.
- *
- * paymentRef is stable across the payment lifecycle — the Stripe webhook
- * writes the payment-intent-id to the dedicated paymentIntentRef column
- * (see lib/payments/apply.ts) instead of rewriting paymentRef, so the
- * redirect's `?ref=cs_...` keeps resolving after the webhook runs.
+ * Betalingsstatus for `?ref=` (Stripe-sesjon eller Vipps-referanse). Har ikke
+ * webhooken kommet ennå, spør vi leverandøren direkte og anvender resultatet
+ * idempotent (se lib/payments/reconcile.ts).
  */
 export default async function TakkPage({
   searchParams,
@@ -77,30 +74,7 @@ export default async function TakkPage({
   searchParams: Promise<{ ref?: string }>;
 }) {
   const { ref } = await searchParams;
-
-  let status = 'not_found';
-
-  if (ref) {
-    // Try lookup by paymentRef in registration first
-    const registration = await prisma.registration.findUnique({
-      where: { paymentRef: ref },
-      select: { paymentStatus: true },
-    });
-
-    if (registration) {
-      status = registration.paymentStatus;
-    } else {
-      // Try lookup in bookingRequest
-      const booking = await prisma.bookingRequest.findUnique({
-        where: { paymentRef: ref },
-        select: { paymentStatus: true },
-      });
-
-      if (booking) {
-        status = booking.paymentStatus;
-      }
-    }
-  }
+  const status = await resolveThankYouStatus(ref);
 
   return (
     <main className="bg-white">
@@ -125,6 +99,14 @@ export default async function TakkPage({
               title="Betalingen behandles"
               message="Oppdater siden om et øyeblikk. Betalingen kan ta en liten stund å behandle."
               color="blue"
+            />
+          )}
+
+          {status === 'aborted' && (
+            <StatusBox
+              title="Betalingen ble avbrutt"
+              message="Betalingen ble avbrutt – du kan prøve igjen fra Min side."
+              color="gray"
             />
           )}
 
@@ -160,7 +142,7 @@ export default async function TakkPage({
             />
           )}
 
-          {(status !== 'paid' && status !== 'pending' && status !== 'refunded' && status !== 'failed' && status !== 'expired' && status !== 'partially_refunded') && (
+          {status === 'not_found' && (
             <StatusBox
               title="Vi fant ikke betalingsstatusen"
               message="Vi kunne ikke finne informasjon om betalingen. Gå til dashboard for å se statusen på din registrering."

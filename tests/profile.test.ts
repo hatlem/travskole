@@ -1,11 +1,25 @@
 import { describe, it, expect } from 'vitest';
+import { PHONE_ERROR } from '@/lib/validation/phone';
 import {
   validateChildInput,
   validateProfileInput,
   validatePasswordChange,
   childDeleteBlockedError,
   validateEmailChange,
+  splitFullName,
 } from '@/lib/profile';
+
+describe('splitFullName', () => {
+  it('deler på siste ord', () => {
+    expect(splitFullName('Kari Nordmann')).toEqual({ first: 'Kari', last: 'Nordmann' });
+    expect(splitFullName('  Anne  Marie  Hansen ')).toEqual({ first: 'Anne Marie', last: 'Hansen' });
+  });
+
+  it('håndterer ett eller ingen navn', () => {
+    expect(splitFullName('Kari')).toEqual({ first: 'Kari', last: '' });
+    expect(splitFullName(null)).toEqual({ first: '', last: '' });
+  });
+});
 
 const NOW = new Date('2026-09-03T12:00:00Z');
 
@@ -69,7 +83,7 @@ describe('validateProfileInput', () => {
   it('rejects short name and short phone', () => {
     expect(validateProfileInput({ name: 'K', phone: '12345678' })).toBe('Navn må være minst 2 tegn');
     expect(validateProfileInput({ name: 'Kari', phone: '1234' })).toBe(
-      'Telefonnummer må være minst 8 tegn'
+      PHONE_ERROR
     );
   });
 

@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSettings } from '@/components/SettingsProvider';
 import { pushDataLayerEvent } from '@/lib/gtm';
+import { isValidPhone, PHONE_ERROR } from '@/lib/validation/phone';
+import { preferredDateError, todayIsoDate } from '@/lib/validation/date';
 
 interface RequestFormProps {
   courseId: number;
@@ -57,6 +59,15 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    if (!isValidPhone(form.phone)) {
+      setError(PHONE_ERROR);
+      return;
+    }
+    const dateError = preferredDateError(form.preferredDate);
+    if (dateError) {
+      setError(dateError);
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch('/api/bookings', {
@@ -102,7 +113,7 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
       </div>
       <div>
         <label htmlFor="phone" className="block text-sm font-medium">Telefon</label>
-        <input id="phone" required value={form.phone} onChange={(e) => set('phone', e.target.value)} className="mt-1 w-full border rounded px-3 py-2" />
+        <input id="phone" name="phone" type="tel" autoComplete="tel" required value={form.phone} onChange={(e) => set('phone', e.target.value)} className="mt-1 w-full border rounded px-3 py-2" />
       </div>
       <div>
         <label htmlFor="participants" className="block text-sm font-medium">Antall deltakere</label>
@@ -110,7 +121,7 @@ export default function RequestForm({ courseId, courseName, courseType, requireL
       </div>
       <div>
         <label htmlFor="preferredDate" className="block text-sm font-medium">Ønsket dato (valgfri)</label>
-        <input id="preferredDate" type="date" value={form.preferredDate} onChange={(e) => set('preferredDate', e.target.value)} className="mt-1 w-full border rounded px-3 py-2" />
+        <input id="preferredDate" type="date" min={todayIsoDate()} value={form.preferredDate} onChange={(e) => set('preferredDate', e.target.value)} className="mt-1 w-full border rounded px-3 py-2" />
       </div>
       <div>
         <label htmlFor="message" className="block text-sm font-medium">Melding (valgfri)</label>

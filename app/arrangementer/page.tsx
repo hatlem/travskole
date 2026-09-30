@@ -8,7 +8,7 @@ import type { Metadata } from 'next';
 export async function generateMetadata(): Promise<Metadata> {
   const s = await getSettings();
   return {
-    title: `Kurs og leirer - ${s.site_name}`,
+    title: 'Kurs og leirer',
     description: `Se alle kurs og leirer hos ${s.site_name}. Kurs, sommerleirer og dobbeltsulky for barn og unge i Oslo.`,
   };
 }

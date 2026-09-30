@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useStrings } from '@/components/SettingsProvider';
 import { fieldClass, type DashboardChild } from './types';
 
@@ -41,6 +41,7 @@ function formatDate(iso: string) {
  */
 export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSectionProps) {
   const t = useStrings();
+  const fieldId = useId();
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
   const [form, setForm] = useState<ChildForm>(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -117,8 +118,10 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
   const formCard = (
     <div className="bg-white rounded-lg shadow-sm border border-bjerke-blue/40 p-5 space-y-3">
       <div>
-        <label className="block text-sm text-gray-500 mb-1">{t('dash.child_name_label')}</label>
+        <label htmlFor={`${fieldId}-name`} className="block text-sm text-gray-500 mb-1">{t('dash.child_name_label')}</label>
         <input
+          id={`${fieldId}-name`}
+          name="name"
           type="text"
           required
           value={form.name}
@@ -127,8 +130,10 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
         />
       </div>
       <div>
-        <label className="block text-sm text-gray-500 mb-1">{t('dash.child_birthdate_label')}</label>
+        <label htmlFor={`${fieldId}-birthdate`} className="block text-sm text-gray-500 mb-1">{t('dash.child_birthdate_label')}</label>
         <input
+          id={`${fieldId}-birthdate`}
+          name="birthdate"
           type="date"
           value={form.birthdate}
           onChange={(e) => setForm((f) => ({ ...f, birthdate: e.target.value }))}
@@ -136,8 +141,10 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
         />
       </div>
       <div>
-        <label className="block text-sm text-gray-500 mb-1">{t('dash.child_allergies_label')}</label>
+        <label htmlFor={`${fieldId}-allergies`} className="block text-sm text-gray-500 mb-1">{t('dash.child_allergies_label')}</label>
         <input
+          id={`${fieldId}-allergies`}
+          name="allergies"
           type="text"
           value={form.allergies}
           onChange={(e) => setForm((f) => ({ ...f, allergies: e.target.value }))}

@@ -1,11 +1,10 @@
 import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth';
 import { loginLimiter, checkRateLimit } from '@/lib/rate-limiter';
 import { logFailedLogin } from '@/lib/logger';
-import { MAGIC_LINK_PREFIX } from '@/lib/magic-link';
+import { emailFromMagicLinkIdentifier, hashToken } from '@/lib/auth-tokens';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 
@@ -19,27 +18,23 @@ export const authOptions: NextAuthOptions = {
       id: 'magic-link',
       name: 'Magic Link',
       credentials: {
-        email: { label: 'E-post', type: 'email' },
         token: { label: 'Token', type: 'text' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.token) {
+        if (!credentials?.token) {
           throw new Error('Ugyldig innloggingslenke');
         }
 
-        const normalizedEmail = credentials.email.trim().toLowerCase();
-        const identifier = MAGIC_LINK_PREFIX + normalizedEmail;
-        // Tokens lagres som sha256-hash (se /api/auth/magic-link).
-        const tokenHash = crypto.createHash('sha256').update(credentials.token).digest('hex');
+        // Tokens lagres som sha256-hash (se lib/magic-link.ts). E-posten leses
+        // fra tokenets identifier — lenken bærer den ikke.
+        const tokenHash = hashToken(credentials.token);
+        const vt = await prisma.verificationToken.findUnique({ where: { token: tokenHash } });
+        const normalizedEmail = vt ? emailFromMagicLinkIdentifier(vt.identifier) : null;
 
-        const vt = await prisma.verificationToken.findFirst({
-          where: { identifier, token: tokenHash },
-        });
-
-        if (!vt || vt.expires < new Date()) {
+        if (!vt || !normalizedEmail || vt.expires < new Date()) {
           // Rydd bort et utløpt token så det ikke blir liggende.
-          if (vt) {
-            await prisma.verificationToken.deleteMany({ where: { identifier, token: tokenHash } });
+          if (vt && normalizedEmail) {
+            await prisma.verificationToken.deleteMany({ where: { identifier: vt.identifier, token: tokenHash } });
           }
           throw new Error('Ugyldig eller utløpt innloggingslenke');
         }
@@ -56,7 +51,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Engangsbruk: forbruk tokenet umiddelbart.
-        await prisma.verificationToken.deleteMany({ where: { identifier, token: tokenHash } });
+        await prisma.verificationToken.deleteMany({ where: { identifier: vt.identifier, token: tokenHash } });
 
         // Magic link beviser kontroll over e-postadressen → marker som verifisert.
         if (!user.emailVerified) {

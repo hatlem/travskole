@@ -19,6 +19,8 @@ const PUBLIC_KEYS = [
   'consent_risk_text_adult',
   'course_learning_points',
   'course_packing_list',
+  'course_learning_points_adult',
+  'course_packing_list_adult',
   'instructor_description',
 ];
 

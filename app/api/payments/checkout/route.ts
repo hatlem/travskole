@@ -42,6 +42,7 @@ const checkoutSchema = z
 interface CheckoutTarget {
   entity: 'registration' | 'booking';
   id: number;
+  courseId: number;
   amountKr: number | null;
   title: string;
   paymentMethodsRaw: string;
@@ -55,6 +56,7 @@ async function loadRegistrationTarget(id: number): Promise<TargetResult> {
     where: { id },
     include: {
       course: true,
+      child: { select: { name: true } },
       parent: { include: { user: { select: { email: true } } } },
     },
   });
@@ -63,8 +65,10 @@ async function loadRegistrationTarget(id: number): Promise<TargetResult> {
   return {
     entity: 'registration',
     id: registration.id,
+    courseId: registration.course.id,
     amountKr: registration.course.price,
-    title: `${registration.course.name} — ${registration.parent.name}`,
+    // Deltakeren: barnet, eller den voksne selv på voksen-arrangementer.
+    title: `${registration.course.name} — ${registration.child?.name ?? registration.parent.name}`,
     paymentMethodsRaw: registration.course.paymentMethods,
     ownerEmail: registration.parent.user.email.toLowerCase(),
   };
@@ -80,6 +84,7 @@ async function loadBookingTarget(id: number): Promise<TargetResult> {
   return {
     entity: 'booking',
     id: booking.id,
+    courseId: booking.course.id,
     amountKr: booking.course.price !== null ? booking.course.price * booking.participants : null,
     title: `${booking.course.name} — ${booking.name}`,
     paymentMethodsRaw: booking.course.paymentMethods,
@@ -167,8 +172,9 @@ export async function POST(request: NextRequest) {
       // Stripe erstatter {CHECKOUT_SESSION_ID} med den faktiske sesjons-IDen ved
       // redirect — som også er `ref` vi lagrer som paymentRef under.
       successUrl: `${origin}/betaling/takk?ref={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}/betaling/avbrutt`,
+      cancelUrl: `${origin}/betaling/avbrutt?kurs=${target.courseId}`,
       testMode,
+      customerEmail: target.ownerEmail,
     });
   } else {
     if (!isVippsConfigured(testMode)) {

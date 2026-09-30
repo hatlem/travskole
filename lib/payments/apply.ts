@@ -167,9 +167,24 @@ async function moveWonDeal(row: ResolvedRow): Promise<void> {
 }
 
 /**
- * Anvender et betalings-webhook-event: oppdaterer registrerings-/
- * booking-raden, emitter en hendelse på bussen og flytter en tilknyttet
- * deal til vunnet ved vellykket betaling.
+ * Vellykket betaling dedupes per rad, ikke per leverandør-event: webhooken
+ * (evt_…), takk-sidens avstemming og Vipps AUTHORIZED+CAPTURED gjelder samme
+ * betaling og skal gi nøyaktig én payment.succeeded (og dermed én kvittering
+ * via flytene). Status er monoton, så raden kan ikke bli betalt to ganger.
+ */
+export function paymentEventDedupeKey(
+  input: Pick<PaymentEventInput, 'type' | 'provider' | 'eventId'>,
+  row: { kind: ResolvedRow['kind']; id: number }
+): string {
+  if (input.type === 'payment.succeeded') return `pay:succeeded:${row.kind}:${row.id}`;
+  return `pay:${input.provider}:${input.eventId}`;
+}
+
+/**
+ * Anvender et betalings-event (webhook eller takk-sidens avstemming mot
+ * leverandøren): oppdaterer registrerings-/booking-raden, emitter en
+ * hendelse på bussen og flytter en tilknyttet deal til vunnet ved vellykket
+ * betaling. Idempotent: samme betaling kan anvendes flere ganger.
  */
 export async function applyPaymentEvent(input: PaymentEventInput): Promise<'applied' | 'not_found'> {
   const row = await resolveRow(input);
@@ -235,7 +250,7 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
       amountKr: input.amountKr,
       ...(row.kind === 'registration' ? { registrationId: row.id } : { bookingRequestId: row.id }),
     },
-    dedupeKey: `pay:${input.provider}:${input.eventId}`,
+    dedupeKey: paymentEventDedupeKey(input, row),
   }).catch(() => {});
 
   if (input.type === 'payment.succeeded') {

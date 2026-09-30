@@ -76,6 +76,7 @@ const VIPPS_MAP: Record<string, PaymentEventInput['type']> = {
   FAILED: 'payment.failed',
   EXPIRED: 'payment.failed',
   CANCELLED: 'payment.failed',
+  ABORTED: 'payment.failed', // brukeren avbrøt i Vipps
   TERMINATED: 'payment.failed',
   // REFUNDED håndteres spesielt i mapVippsEvent (del vs full).
 };

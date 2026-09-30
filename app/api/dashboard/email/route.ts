@@ -4,7 +4,7 @@ import { getServerSession, verifyPassword } from '@/lib/auth';
 import { validateEmailChange } from '@/lib/profile';
 import { issueEmailChange } from '@/lib/email-change';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { emailChangeLimiter, checkRateLimit } from '@/lib/rate-limiter';
 
 /**
  * Ber om ny innloggingsadresse.
@@ -21,10 +21,10 @@ export async function POST(request: NextRequest) {
   }
 
   // SECURITY: rate limiting — bremser både passordgjetting og e-postbombing.
-  const ip = getClientIp(request.headers);
-  const rateLimit = await checkRateLimit(passwordResetLimiter, ip);
+  const userKey = `user:${session.user.id || session.user.email}`;
+  const rateLimit = await checkRateLimit(emailChangeLimiter, userKey);
   if (!rateLimit.allowed) {
-    logRateLimitExceeded('/api/dashboard/email', ip);
+    logRateLimitExceeded('/api/dashboard/email', userKey);
     return NextResponse.json({ error: rateLimit.error }, { status: 429 });
   }
 

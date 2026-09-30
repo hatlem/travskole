@@ -7,11 +7,12 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import Link from 'next/link';
 import { useStrings } from '@/components/SettingsProvider';
+import { phoneSchema } from '@/lib/validation/phone';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Navnet må være minst 2 tegn'),
   email: z.string().email('Ugyldig e-postadresse'),
-  phone: z.string().min(8, 'Telefonnummer må være minst 8 tegn'),
+  phone: phoneSchema,
   password: z.string().min(8, 'Passordet må være minst 8 tegn'),
   confirmPassword: z.string(),
   address: z.string().optional(),

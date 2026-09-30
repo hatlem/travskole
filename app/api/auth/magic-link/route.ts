@@ -2,13 +2,19 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { issueMagicLink } from '@/lib/magic-link';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import {
+  magicLinkEmailLimiter,
+  magicLinkIpLimiter,
+  checkRateLimit,
+  getClientIp,
+  ipEmailKey,
+} from '@/lib/rate-limiter';
 
 export async function POST(request: Request) {
   try {
     // SECURITY: rate limiting — hindrer e-postbombing og token-flom.
     const ip = getClientIp(request.headers);
-    const rateLimit = await checkRateLimit(passwordResetLimiter, ip);
+    const rateLimit = await checkRateLimit(magicLinkIpLimiter, ip);
     if (!rateLimit.allowed) {
       logRateLimitExceeded('/api/auth/magic-link', ip);
       return NextResponse.json({ error: rateLimit.error }, { status: 429 });
@@ -20,6 +26,12 @@ export async function POST(request: Request) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    const emailLimit = await checkRateLimit(magicLinkEmailLimiter, ipEmailKey(ip, normalizedEmail));
+    if (!emailLimit.allowed) {
+      logRateLimitExceeded('/api/auth/magic-link', ip);
+      return NextResponse.json({ error: emailLimit.error }, { status: 429 });
+    }
 
     // Alltid suksess-svar — ikke avslør om brukeren finnes (unngår user-enumeration).
     const user = await prisma.user.findUnique({ where: { email: normalizedEmail } });

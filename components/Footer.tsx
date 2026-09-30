@@ -15,7 +15,8 @@ export default function Footer() {
   const instructorCert = settings.instructor_certification || '';
 
   return (
-    <footer className="bg-bjerke-blue text-white py-12">
+    // Ekstra bunnluft på mobil: flytende knapper (tilbakemelding, samtykke) dekker ellers footer-teksten.
+    <footer className="bg-bjerke-blue text-white pt-12 pb-24 sm:pb-12">
       <div className="max-w-7xl mx-auto px-6">
         <div className="grid md:grid-cols-3 gap-8">
           <div>

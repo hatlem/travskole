@@ -5,6 +5,7 @@
  * en forelder og en administrator får nøyaktig samme regler og feilmeldinger.
  * Ingen DB/IO her — alt kan unit-testes direkte (se tests/profile.test.ts).
  */
+import { isValidPhone, PHONE_ERROR } from '@/lib/validation/phone';
 
 export interface ChildInput {
   name: string;
@@ -71,7 +72,7 @@ export function validateProfileInput(input: ProfileInput): string | null {
   const address = typeof input.address === 'string' ? input.address : '';
 
   if (name.length < 2) return 'Navn må være minst 2 tegn';
-  if (phone.length < 8 || phone.length > 20) return 'Telefonnummer må være minst 8 tegn';
+  if (!isValidPhone(phone)) return PHONE_ERROR;
   if (name.length > 100 || address.length > 200) return 'Feltet er for langt';
 
   return null;
@@ -146,3 +147,10 @@ export function childDeleteBlockedError(activeRegistrations: number): string | n
 
 /** Statuser som regnes som «aktive» påmeldinger for sletting av barn. */
 export const ACTIVE_REGISTRATION_STATUSES = ['pending', 'confirmed', 'waitlist'];
+
+/** Deler et fullt navn i fornavn (alt unntatt siste ord) og etternavn — for forhåndsutfylling. */
+export function splitFullName(name: string | null | undefined): { first: string; last: string } {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: parts[0] ?? '', last: '' };
+  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+}

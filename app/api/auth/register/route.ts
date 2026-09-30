@@ -7,11 +7,12 @@ import logger, { logRateLimitExceeded } from '@/lib/logger';
 import { signupLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { phoneSchema } from '@/lib/validation/phone';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Navnet må være minst 2 tegn').max(100),
   email: z.string().email('Ugyldig e-postadresse'),
-  phone: z.string().min(8, 'Ugyldig telefonnummer').max(20),
+  phone: phoneSchema,
   password: z.string().min(8, 'Passordet må være minst 8 tegn').max(200),
   address: z.string().max(200).optional().nullable(),
 });

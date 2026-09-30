@@ -22,7 +22,12 @@ async function getUpcomingCourses(): Promise<Course[]> {
   }
 }
 
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ konto?: string }>;
+}) {
+  const { konto } = await searchParams;
   const [upcomingCourses, settings] = await Promise.all([
     getUpcomingCourses(),
     getSettings(),
@@ -31,6 +36,13 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen">
+      {konto === 'slettet' && (
+        <div role="status" className="bg-green-50 border-b border-green-200 text-green-800">
+          <p className="max-w-7xl mx-auto px-6 py-3 text-sm">
+            Kontoen din er slettet, og personopplysningene dine er fjernet. Takk for at du var med oss.
+          </p>
+        </div>
+      )}
       <Hero
         title={settings.hero_title}
         subtitle={settings.hero_subtitle}

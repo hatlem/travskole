@@ -38,6 +38,7 @@ export const STRINGS: Record<string, string> = {
   'list.showing': 'Viser',
   'list.none_available': 'Ingen {{type}} tilgjengelig for øyeblikket.',
   'list.fallback_plural': 'arrangementer',
+  'list.fallback_singular': 'arrangement',
 
   // Kurskort og status
   'course.status_open': 'Ledige plasser',
@@ -96,6 +97,7 @@ export const STRINGS: Record<string, string> = {
   'reg.allergies': 'Allergier eller spesielle behov',
   'reg.allergies_placeholder': 'Eksempel: Nøtteallergi, astma, etc.',
   'reg.consent_heading': 'Samtykke og allergier',
+  'reg.consent_heading_adult': 'Samtykke',
   'reg.consent_sub_child': 'Av sikkerhetsgrunner må samtykket godkjennes per barn',
   'reg.consent_sub_adult': 'Les og bekreft vilkårene for deltakelse',
   'reg.consent_open_prompt': 'Vennligst åpne og fyll ut påkrevde samtykker',

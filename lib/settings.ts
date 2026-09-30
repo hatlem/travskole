@@ -58,6 +58,9 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Kursdetaljer
   course_learning_points: 'Grunnleggende om travhester og deres behov\nSikkerhet rundt hester og på banen\nPraktisk erfaring med stell og håndtering\nMoro og vennskap med andre hesteglade barn',
   course_packing_list: 'Varme klær som tåler skitt\nRidehjelm (kan lånes hvis ikke)\nStøvler eller gode sko\nMatpakke og drikkeflaske',
+  // Voksen-/arrangementssider (course.audience === 'voksen')
+  course_learning_points_adult: 'Innblikk i travsporten og hverdagen på Bjerke\nSikkerhet rundt hester og på banen\nPraktisk erfaring sammen med erfarne travfolk',
+  course_packing_list_adult: 'Klær etter vær som tåler stallmiljø\nGode sko eller støvler\nHjelm ved kjøring (kan lånes)',
   instructor_description: 'Lang erfaring med barn og ungdom i travsport.',
 
   // Sporing og deling — bjerke.no sin GTM-container (gjenbrukes på registrering)
