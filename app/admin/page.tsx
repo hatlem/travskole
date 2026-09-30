@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { getServerSession } from '@/lib/auth';
 import { isSuperAdmin } from '@/lib/settings';
+import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
 import { getPendingAdminNotices } from '@/lib/admin-notices';
 import SuperadminNoticesDialog from '@/components/admin/SuperadminNoticesDialog';
 
@@ -37,7 +38,7 @@ export default async function AdminDashboard() {
       where: { startDate: { gte: now }, status: { not: 'closed' } },
       orderBy: { startDate: 'asc' },
       take: 3,
-      include: { _count: { select: { registrations: true } } },
+      include: occupiedRegistrationsCount,
     }),
     prisma.registration.findMany({
       take: 5,
@@ -50,7 +51,7 @@ export default async function AdminDashboard() {
     }),
     prisma.course.findMany({
       where: { status: 'open', maxParticipants: { not: null } },
-      include: { _count: { select: { registrations: true } } },
+      include: occupiedRegistrationsCount,
     }),
   ]);
 
