@@ -3,13 +3,19 @@ import { prisma } from '@/lib/prisma';
 import { sendPasswordResetEmail } from '@/lib/mail';
 import crypto from 'crypto';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import {
+  passwordResetEmailLimiter,
+  passwordResetIpLimiter,
+  checkRateLimit,
+  getClientIp,
+  ipEmailKey,
+} from '@/lib/rate-limiter';
 
 export async function POST(request: Request) {
   try {
     // SECURITY: rate limiting — hindrer e-postbombing og token-flom
     const ip = getClientIp(request.headers);
-    const rateLimit = await checkRateLimit(passwordResetLimiter, ip);
+    const rateLimit = await checkRateLimit(passwordResetIpLimiter, ip);
     if (!rateLimit.allowed) {
       logRateLimitExceeded('/api/auth/forgot-password', ip);
       return NextResponse.json({ error: rateLimit.error }, { status: 429 });
@@ -25,6 +31,12 @@ export async function POST(request: Request) {
     }
 
     const normalizedEmail = email.toLowerCase().trim();
+
+    const emailLimit = await checkRateLimit(passwordResetEmailLimiter, ipEmailKey(ip, normalizedEmail));
+    if (!emailLimit.allowed) {
+      logRateLimitExceeded('/api/auth/forgot-password', ip);
+      return NextResponse.json({ error: emailLimit.error }, { status: 429 });
+    }
 
     // Always return success to avoid leaking user existence
     const user = await prisma.user.findUnique({

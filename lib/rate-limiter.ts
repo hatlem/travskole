@@ -12,11 +12,29 @@ export const registrationLimiter = new RateLimiterMemory({
   duration: 60 * 60, // 1 hour
 });
 
-// Password reset requests: 3 per hour per IP (email-bombing protection)
-export const passwordResetLimiter = new RateLimiterMemory({
-  points: 3,
-  duration: 60 * 60,
-});
+/*
+ * Én limiter per handling, så f.eks. en innlogget passordbytting ikke spiser
+ * kvoten for magic link. Minnebasert: tellerne er per prosess og nullstilles
+ * ved omstart — tilstrekkelig for én instans, men må flyttes til en delt
+ * lagring (Redis/Postgres) om appen skaleres ut.
+ */
+const HOUR = 60 * 60;
+
+// Uautentiserte e-postutsendelser: stramt per IP+e-post (hindrer e-postbombing
+// av én adresse), romsligere per IP (tak mot enumerering/spam på tvers).
+export const magicLinkEmailLimiter = new RateLimiterMemory({ points: 3, duration: HOUR });
+export const magicLinkIpLimiter = new RateLimiterMemory({ points: 10, duration: HOUR });
+export const passwordResetEmailLimiter = new RateLimiterMemory({ points: 3, duration: HOUR });
+export const passwordResetIpLimiter = new RateLimiterMemory({ points: 10, duration: HOUR });
+
+// Innløsning av e-postbytte-token (tokenet er uforutsigbart): per IP.
+export const confirmEmailLimiter = new RateLimiterMemory({ points: 10, duration: 15 * 60 });
+
+// Innloggede kontohandlinger, nøklet på bruker-id. Passordbytte og sletting
+// verifiserer nåværende passord → brems gjetting; e-postbytte sender e-post.
+export const passwordChangeLimiter = new RateLimiterMemory({ points: 5, duration: 15 * 60 });
+export const emailChangeLimiter = new RateLimiterMemory({ points: 5, duration: HOUR });
+export const accountDeleteLimiter = new RateLimiterMemory({ points: 5, duration: 15 * 60 });
 
 // Account creation: 5 per hour per IP
 export const signupLimiter = new RateLimiterMemory({
@@ -40,6 +58,11 @@ export function getClientIp(headers: Headers): string {
     headers.get('x-real-ip') ||
     'unknown'
   );
+}
+
+/** Nøkkel for per-IP+e-post-limitere (e-posten normaliseres). */
+export function ipEmailKey(ip: string, email: string): string {
+  return `${ip}:${email.trim().toLowerCase()}`;
 }
 
 /**

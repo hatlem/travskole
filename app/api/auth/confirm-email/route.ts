@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { consumeEmailChangeToken } from '@/lib/email-change';
 import { logActivity } from '@/lib/activity';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { confirmEmailLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
 
 /**
  * Fullfører et e-postbytte.
@@ -16,7 +16,7 @@ import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-li
  */
 export async function POST(request: NextRequest) {
   const ip = getClientIp(request.headers);
-  const rateLimit = await checkRateLimit(passwordResetLimiter, ip);
+  const rateLimit = await checkRateLimit(confirmEmailLimiter, ip);
   if (!rateLimit.allowed) {
     logRateLimitExceeded('/api/auth/confirm-email', ip);
     return NextResponse.json({ error: rateLimit.error }, { status: 429 });
