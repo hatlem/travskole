@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
+import { findCourseBySlug } from '@/lib/course-lookup';
 import { generateSlug } from '@/lib/slug';
 import { getSettings, parseCourseTypes, courseTypeLabel } from '@/lib/settings';
 import { makeT } from '@/lib/strings';
@@ -16,24 +16,15 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { type, slug } = await params;
   const [course, settings] = await Promise.all([
-    getCourse(type, slug),
+    findCourseBySlug(type, slug),
     getSettings(),
   ]);
-  if (!course) return { title: `Ikke funnet - ${settings.site_name}` };
+  if (!course) return { title: 'Ikke funnet' };
   const typeLabel = courseTypeLabel(parseCourseTypes(settings.course_types), course.type);
   return {
-    title: `${course.name} - ${settings.site_name}`,
+    title: course.name,
     description: course.description || `${typeLabel} hos ${settings.site_name} for barn og unge.`,
   };
-}
-
-async function getCourse(type: string, slug: string) {
-  if (!/^[a-z0-9-]+$/.test(type)) return null;
-  const course = await prisma.course.findFirst({ where: { type, slug } });
-  if (course) return course;
-  // Legacy fallback: courses created before slugs were stored.
-  const candidates = await prisma.course.findMany({ where: { type } });
-  return candidates.find((c) => (c.slug || generateSlug(c.name)) === slug) ?? null;
 }
 
 export default async function CourseDetailPage({
@@ -43,7 +34,7 @@ export default async function CourseDetailPage({
 }) {
   const { type, slug } = await params;
   const [course, settings] = await Promise.all([
-    getCourse(type, slug),
+    findCourseBySlug(type, slug),
     getSettings(),
   ]);
 

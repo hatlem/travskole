@@ -38,6 +38,7 @@ export const STRINGS: Record<string, string> = {
   'list.showing': 'Viser',
   'list.none_available': 'Ingen {{type}} tilgjengelig for øyeblikket.',
   'list.fallback_plural': 'arrangementer',
+  'list.fallback_singular': 'arrangement',
 
   // Kurskort og status
   'course.status_open': 'Ledige plasser',

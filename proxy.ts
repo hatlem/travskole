@@ -1,8 +1,24 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
+import { findCourseBySlug, parseCoursePath } from '@/lib/course-lookup';
+
+/**
+ * Ukjente kurs-URL-er får ekte 404. Siden selv kan ikke sette statusen:
+ * loading.tsx gjør at svaret strømmes (200) før notFound() kalles. DB-feil
+ * slipper forespørselen videre til siden.
+ */
+async function isMissingCourse(pathname: string): Promise<boolean> {
+  const parsed = parseCoursePath(pathname);
+  if (!parsed) return false;
+  try {
+    return (await findCourseBySlug(parsed.type, parsed.slug)) === null;
+  } catch {
+    return false;
+  }
+}
 
 export default withAuth(
-  function middleware(req) {
+  async function middleware(req) {
     // SECURITY: Enforce HTTPS in production
     if (
       process.env.NODE_ENV === 'production' &&
@@ -16,6 +32,11 @@ export default withAuth(
 
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
+
+    if (pathname.startsWith('/arrangementer/') && (await isMissingCourse(pathname))) {
+      // Omskriving til en sti uten rute gir Next sin not-found-side med status 404.
+      return NextResponse.rewrite(new URL('/arrangementer-ikke-funnet', req.url));
+    }
 
     // Admin routes require admin role
     if (pathname.startsWith('/admin') && token?.role !== 'admin' && token?.role !== 'superadmin') {
@@ -46,6 +67,11 @@ export default withAuth(
 );
 
 export const config = {
-  // Only run middleware on protected routes
-  matcher: ['/dashboard/:path*', '/admin/:path*'],
+  // Beskyttede ruter + kurssider (404-sjekk)
+  matcher: [
+    '/dashboard/:path*',
+    '/admin/:path*',
+    '/arrangementer/:type/:year/:slug',
+    '/arrangementer/:type/:year/:slug/pamelding',
+  ],
 };
