@@ -6,11 +6,7 @@ import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
 import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
 import { COURSE_STATUS_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
-
-const TYPE_LABELS: Record<string, string> = {
-  kurs: 'Kurs',
-  leir: 'Leir',
-};
+import { courseTypeLabel, getSetting, parseCourseTypes } from '@/lib/settings';
 
 function ageRange(ageMin: number | null, ageMax: number | null): string {
   if (ageMin != null && ageMax != null) return `${ageMin}–${ageMax}`;
@@ -26,6 +22,7 @@ export async function GET() {
   }
 
   try {
+    const courseTypes = parseCourseTypes(await getSetting('course_types'));
     const courses = await prisma.course.findMany({
       orderBy: { startDate: 'desc' },
       include: occupiedRegistrationsCount,
@@ -48,7 +45,7 @@ export async function GET() {
     const rows = courses.map((course) => [
       course.id,
       course.name,
-      label(TYPE_LABELS, course.type),
+      courseTypeLabel(courseTypes, course.type),
       label(COURSE_STATUS_LABELS, course.status),
       formatOsloDate(course.startDate),
       formatOsloDate(course.endDate),

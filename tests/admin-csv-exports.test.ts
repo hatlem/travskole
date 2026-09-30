@@ -4,6 +4,7 @@ const prisma = vi.hoisted(() => ({
   course: { findMany: vi.fn() },
   registration: { findMany: vi.fn() },
   user: { findMany: vi.fn() },
+  setting: { findUnique: vi.fn(async (): Promise<{ key: string; value: string } | null> => null) },
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email: 'admin@x.no' } })) }));
@@ -35,6 +36,18 @@ describe('admin CSV exports', () => {
     const [header, row] = await csvOf(await exportCourses());
     expect(header).toContain('Påmeldinger (aktive)');
     expect(row).toBe('1,Ponniskole høst,Kurs,Åpen,01.03.2026,,6–12,1500,10,3,01.03.2026');
+  });
+
+  it('courses: type labels come from the course_types setting (incl. arrangement)', async () => {
+    prisma.setting.findUnique.mockResolvedValueOnce({ key: 'course_types', value: 'kurs|Kurs|kurs\narrangement|Arrangement|arrangementer\nfest|Firmafest|firmafester' });
+    prisma.course.findMany.mockResolvedValue(
+      (['arrangement', 'fest', 'ukjent'] as const).map((type, i) => ({
+        id: i + 1, name: 'X', type, status: 'open', startDate: null, endDate: null,
+        ageMin: null, ageMax: null, price: null, maxParticipants: null, createdAt: created, _count: { registrations: 0 },
+      })),
+    );
+    const [, ...rows] = await csvOf(await exportCourses());
+    expect(rows.map((r) => r.split(',')[2])).toEqual(['Arrangement', 'Firmafest', 'Ukjent']);
   });
 
   it('registrations: Norwegian headers and status labels', async () => {
