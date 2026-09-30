@@ -83,6 +83,8 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'course_learning_points', label: 'Hva du lærer (ett punkt per linje)', type: 'textarea' },
       { key: 'course_packing_list', label: 'Pakkeliste (ett punkt per linje)', type: 'textarea' },
+      { key: 'course_learning_points_adult', label: 'Hva du lærer – voksne/arrangementer (ett punkt per linje)', type: 'textarea' },
+      { key: 'course_packing_list_adult', label: 'Pakkeliste – voksne/arrangementer (ett punkt per linje)', type: 'textarea' },
       { key: 'instructor_description', label: 'Instruktørbeskrivelse', type: 'textarea' },
     ],
   },

@@ -23,7 +23,9 @@ export async function generateMetadata({
   const typeLabel = courseTypeLabel(parseCourseTypes(settings.course_types), course.type);
   return {
     title: course.name,
-    description: course.description || `${typeLabel} hos ${settings.site_name} for barn og unge.`,
+    description:
+      course.description ||
+      `${typeLabel} hos ${settings.site_name}${course.audience === 'voksen' ? '' : ' for barn og unge'}.`,
   };
 }
 
@@ -55,8 +57,13 @@ export default async function CourseDetailPage({
   const courseSlug = course.slug || generateSlug(course.name);
   const courseYear = course.startDate?.getFullYear() ?? new Date().getFullYear();
 
-  const learningPoints = (settings.course_learning_points || '').split('\n').filter(Boolean);
-  const packingList = (settings.course_packing_list || '').split('\n').filter(Boolean);
+  const isAdult = course.audience === 'voksen';
+  const learningPoints = ((isAdult ? settings.course_learning_points_adult : settings.course_learning_points) || '')
+    .split('\n')
+    .filter(Boolean);
+  const packingList = ((isAdult ? settings.course_packing_list_adult : settings.course_packing_list) || '')
+    .split('\n')
+    .filter(Boolean);
 
   return (
     <main className="min-h-screen bg-gray-50">
