@@ -6,7 +6,20 @@ import {
   validatePasswordChange,
   childDeleteBlockedError,
   validateEmailChange,
+  splitFullName,
 } from '@/lib/profile';
+
+describe('splitFullName', () => {
+  it('deler på siste ord', () => {
+    expect(splitFullName('Kari Nordmann')).toEqual({ first: 'Kari', last: 'Nordmann' });
+    expect(splitFullName('  Anne  Marie  Hansen ')).toEqual({ first: 'Anne Marie', last: 'Hansen' });
+  });
+
+  it('håndterer ett eller ingen navn', () => {
+    expect(splitFullName('Kari')).toEqual({ first: 'Kari', last: '' });
+    expect(splitFullName(null)).toEqual({ first: '', last: '' });
+  });
+});
 
 const NOW = new Date('2026-09-03T12:00:00Z');
 

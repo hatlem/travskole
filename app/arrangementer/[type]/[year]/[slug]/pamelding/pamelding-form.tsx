@@ -11,6 +11,7 @@ import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { trackClientEvent } from '@/components/Tracker';
 import { pushDataLayerEvent } from '@/lib/gtm';
 import { phoneSchema } from '@/lib/validation/phone';
+import { splitFullName } from '@/lib/profile';
 
 const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requireTerms: boolean) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
@@ -204,25 +205,11 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!session || isAdult) return;
-    fetch('/api/dashboard')
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data?.children?.length > 0) {
-          setExistingChildren(data.children.map((c: { id: number; name: string; birthdate: string }) => ({
-            id: String(c.id),
-            name: c.name,
-            birthdate: c.birthdate,
-          })));
-        }
-      })
-      .catch(() => {});
-  }, [session, isAdult]);
-
   const {
     register,
     handleSubmit,
+    getValues,
+    setValue,
     formState: { errors },
   } = useForm<RegistrationFormData>({
     resolver: zodResolver(buildRegistrationSchema(isAdult, requireAddress, requireTerms)),
@@ -238,6 +225,37 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
       consentRisk: false
     }
   });
+
+  // Innlogget: hent barn og forhåndsutfyll tomme kontaktfelt fra profilen.
+  useEffect(() => {
+    if (!session) return;
+    let active = true;
+    fetch('/api/dashboard')
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (!active || !data) return;
+        if (!isAdult && data.children?.length > 0) {
+          setExistingChildren(data.children.map((c: { id: number; name: string; birthdate: string }) => ({
+            id: String(c.id),
+            name: c.name,
+            birthdate: c.birthdate,
+          })));
+        }
+        const { first, last } = splitFullName(data.profile?.name);
+        const prefill: Partial<Record<'parentFirstName' | 'parentLastName' | 'parentEmail' | 'parentPhone' | 'parentAddress', string>> = {
+          parentFirstName: first,
+          parentLastName: last,
+          parentEmail: data.profile?.email ?? data.email,
+          parentPhone: data.profile?.phone,
+          parentAddress: data.profile?.address,
+        };
+        for (const [field, value] of Object.entries(prefill) as [keyof typeof prefill, string | undefined][]) {
+          if (value && !getValues(field)) setValue(field, value);
+        }
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [session, isAdult, getValues, setValue]);
 
   const onInvalid = () => {
     setConsentOpen(true);
@@ -642,7 +660,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                 className="w-full flex items-center justify-between text-left"
               >
                 <div>
-                  <h2 className="text-2xl font-semibold text-gray-900 mb-1">{t('reg.consent_heading')}</h2>
+                  <h2 className="text-2xl font-semibold text-gray-900 mb-1">{isAdult ? t('reg.consent_heading_adult') : t('reg.consent_heading')}</h2>
                   <p className="text-sm text-gray-500">
                     {isAdult
                       ? t('reg.consent_sub_adult')

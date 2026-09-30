@@ -147,3 +147,10 @@ export function childDeleteBlockedError(activeRegistrations: number): string | n
 
 /** Statuser som regnes som «aktive» påmeldinger for sletting av barn. */
 export const ACTIVE_REGISTRATION_STATUSES = ['pending', 'confirmed', 'waitlist'];
+
+/** Deler et fullt navn i fornavn (alt unntatt siste ord) og etternavn — for forhåndsutfylling. */
+export function splitFullName(name: string | null | undefined): { first: string; last: string } {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: parts[0] ?? '', last: '' };
+  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+}
