@@ -379,7 +379,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
               <button
                 onClick={addNote}
                 disabled={!noteText.trim()}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50"
+                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50"
               >
                 Lagre
               </button>

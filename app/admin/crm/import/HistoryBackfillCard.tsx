@@ -135,7 +135,7 @@ export function HistoryBackfillCard() {
       <button
         onClick={run}
         disabled={running || !remaining}
-        className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+        className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
       >
         {running ? 'Importerer …' : 'Importer historikk'}
       </button>

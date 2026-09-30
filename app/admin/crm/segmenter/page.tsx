@@ -459,7 +459,7 @@ export default function SegmenterPage() {
               <button
                 onClick={createSegment}
                 disabled={!segName.trim() || !rulesValid || segmentBusy}
-                className="ml-auto bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
+                className="ml-auto bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
               >
                 {segmentBusy ? 'Lagrer …' : 'Lagre segment'}
               </button>
@@ -505,7 +505,7 @@ export default function SegmenterPage() {
               <button
                 onClick={createList}
                 disabled={!listName.trim() || listBusy}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
               >
                 {listBusy ? 'Oppretter …' : 'Opprett'}
               </button>

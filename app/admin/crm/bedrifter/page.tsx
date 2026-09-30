@@ -130,7 +130,7 @@ export default function BedrifterPage() {
         <span className="text-sm text-gray-500">{total} bedrifter</span>
         <button
           onClick={() => setShowNew(true)}
-          className="ml-auto bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+          className="ml-auto bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
         >
           Ny bedrift
         </button>
@@ -166,7 +166,7 @@ export default function BedrifterPage() {
           <button
             onClick={createOrg}
             disabled={!newOrg.name || creating}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
           >
             {creating ? 'Lagrer …' : 'Lagre'}
           </button>

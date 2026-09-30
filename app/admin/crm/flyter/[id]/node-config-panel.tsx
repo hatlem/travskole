@@ -335,7 +335,7 @@ export function NodeConfigPanel({
               <button
                 onClick={sendTest}
                 disabled={!isPersisted || sending || !testEmail.trim()}
-                className="whitespace-nowrap bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+                className="whitespace-nowrap bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
               >
                 {sending ? 'Sender …' : 'Send test'}
               </button>

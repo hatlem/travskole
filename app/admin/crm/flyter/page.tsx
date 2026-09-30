@@ -437,7 +437,7 @@ export default function FlyterPage() {
           </button>
           <button
             onClick={() => { setShowGenerate(false); setShowFromTemplate(false); setShowNew(true); }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
           >
             Ny flyt
           </button>
@@ -550,7 +550,7 @@ export default function FlyterPage() {
             <button
               onClick={createFlow}
               disabled={!newSettings.name.trim() || creating}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
             >
               {creating ? 'Oppretter …' : 'Opprett'}
             </button>

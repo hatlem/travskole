@@ -169,7 +169,7 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
             <button
               onClick={renamePipeline}
               disabled={busy || !name.trim() || name.trim() === pipelineName}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 shrink-0"
+              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50 shrink-0"
             >
               Lagre
             </button>
@@ -223,7 +223,7 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
             <button
               type="submit"
               disabled={busy || !newStageName.trim()}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50"
             >
               Legg til
             </button>

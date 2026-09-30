@@ -93,7 +93,7 @@ export function FlowSettingsPanel({ flow, disabled, hasActiveEnrollments, onSave
           <button
             onClick={save}
             disabled={!dirty || saving || !values.name.trim()}
-            className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+            className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
           >
             {saving ? 'Lagrer …' : 'Lagre innstillinger'}
           </button>

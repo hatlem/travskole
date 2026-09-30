@@ -221,7 +221,7 @@ export default function OppgaverPage() {
               type="button"
               onClick={() => setAssigneeFilter(o.value)}
               aria-pressed={assigneeFilter === o.value}
-              className={`px-3 py-2 ${assigneeFilter === o.value ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+              className={`px-3 py-2 ${assigneeFilter === o.value ? 'bg-bjerke-blue text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
             >
               {o.label}
             </button>
@@ -274,7 +274,7 @@ export default function OppgaverPage() {
         <button
           type="submit"
           disabled={!title.trim() || creating}
-          className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+          className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
         >
           {creating ? 'Legger til …' : 'Legg til'}
         </button>
@@ -381,7 +381,7 @@ export default function OppgaverPage() {
                           <button
                             onClick={() => saveEdit(t)}
                             disabled={savingEdit || !editing.title.trim()}
-                            className="bg-blue-600 text-white px-3 py-1 rounded-md disabled:opacity-50"
+                            className="bg-bjerke-blue text-white px-3 py-1 rounded-md disabled:opacity-50"
                           >
                             {savingEdit ? 'Lagrer …' : 'Lagre'}
                           </button>

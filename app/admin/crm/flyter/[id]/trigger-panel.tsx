@@ -239,7 +239,7 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
         <button
           onClick={addTrigger}
           disabled={creating || !eventType}
-          className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
         >
           {creating ? 'Legger til …' : 'Legg til utløser'}
         </button>

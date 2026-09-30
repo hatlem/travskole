@@ -226,7 +226,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
           type="button"
           onClick={save}
           disabled={!valid || saving || loading}
-          className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
+          className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
         >
           {saving ? 'Lagrer …' : isEdit ? 'Lagre' : 'Opprett deal'}
         </button>

@@ -126,14 +126,16 @@ export default function KontakterPage() {
         <input
           type="search"
           placeholder="Søk navn, e-post, telefon …"
+          aria-label="Søk i kontakter"
           value={q}
           onChange={(e) => { setPage(1); setQ(e.target.value); }}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm w-64"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm w-full sm:w-64"
         />
         <select
           value={stage}
           onChange={(e) => { setPage(1); setStage(e.target.value); }}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          aria-label="Filtrer på stadium"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
         >
           <option value="">Alle stadier</option>
           {Object.entries(STAGE_LABELS).map(([value, label]) => (
@@ -143,7 +145,8 @@ export default function KontakterPage() {
         <select
           value={segmentId}
           onChange={(e) => { setPage(1); setSegmentId(e.target.value); }}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          aria-label="Filtrer på segment"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
         >
           <option value="">Alle segmenter</option>
           {segments.map((s) => (
@@ -154,7 +157,7 @@ export default function KontakterPage() {
           value={tag}
           onChange={(e) => { setPage(1); setTag(e.target.value); }}
           aria-label="Filtrer på tagg"
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
         >
           <option value="">Alle tagger</option>
           {/* Behold valgt tagg selv om gjeldende filtre ikke lenger gir den som fasett */}
@@ -166,7 +169,7 @@ export default function KontakterPage() {
           value={owner}
           onChange={(e) => { setPage(1); setOwner(e.target.value); }}
           aria-label="Filtrer på ansvarlig"
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm w-44 max-w-[12rem] truncate"
         >
           <option value="">Alle ansvarlige</option>
           <option value="me">Mine</option>
@@ -178,7 +181,7 @@ export default function KontakterPage() {
         <span className="text-sm text-gray-500">{total} kontakter</span>
         <button
           onClick={() => setShowNew(true)}
-          className="ml-auto bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+          className="ml-auto bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
         >
           Ny kontakt
         </button>
@@ -186,23 +189,23 @@ export default function KontakterPage() {
 
       {showNew && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50 flex flex-wrap gap-3 items-end">
-          <label className="text-sm">
-            <span className="block text-gray-600 mb-1">Navn *</span>
-            <input value={newContact.name} onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
+          <div className="text-sm">
+            <label htmlFor="new-contact-name" className="block text-gray-600 mb-1">Navn *</label>
+            <input id="new-contact-name" required value={newContact.name} onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm" />
-          </label>
-          <label className="text-sm">
-            <span className="block text-gray-600 mb-1">E-post</span>
-            <input type="email" value={newContact.email} onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
+          </div>
+          <div className="text-sm">
+            <label htmlFor="new-contact-email" className="block text-gray-600 mb-1">E-post</label>
+            <input id="new-contact-email" type="email" autoComplete="off" value={newContact.email} onChange={(e) => setNewContact({ ...newContact, email: e.target.value })}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm" />
-          </label>
-          <label className="text-sm">
-            <span className="block text-gray-600 mb-1">Telefon</span>
-            <input value={newContact.phone} onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
+          </div>
+          <div className="text-sm">
+            <label htmlFor="new-contact-phone" className="block text-gray-600 mb-1">Telefon</label>
+            <input id="new-contact-phone" type="tel" autoComplete="off" value={newContact.phone} onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm" />
-          </label>
+          </div>
           <button onClick={createContact} disabled={!newContact.name}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
             Lagre
           </button>
           <button onClick={() => setShowNew(false)} className="text-sm text-gray-600 px-2 py-2">Avbryt</button>
