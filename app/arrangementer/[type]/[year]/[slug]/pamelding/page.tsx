@@ -51,6 +51,11 @@ export default async function PameldingPage({
       courseName={course.name}
       isAdult={course.audience === 'voksen'}
       paymentMethods={parsePaymentMethods(course.paymentMethods)}
+      ageRule={{
+        ageMin: course.ageMin,
+        ageMax: course.ageMax,
+        courseStart: course.startDate ? course.startDate.toISOString() : null,
+      }}
     />
   );
 }

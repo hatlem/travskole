@@ -627,7 +627,7 @@ export default function AdminRegistrationsPage() {
 
               <fieldset>
                 <legend className="text-sm font-semibold text-gray-900 mb-3 border-b border-gray-100 pb-2 w-full">
-                  Kapasitet
+                  Kapasitet og aldersgrense
                 </legend>
                 <div className="space-y-2">
                   <label className="flex items-start gap-2 text-sm text-gray-700">
@@ -650,8 +650,8 @@ export default function AdminRegistrationsPage() {
                       className="mt-0.5 rounded border-gray-300"
                     />
                     <span>
-                      Overstyr kapasitet
-                      <span className="block text-xs text-gray-500">Bekrefter alle selv om kurset er fullt eller stengt.</span>
+                      Overstyr kapasitet og aldersgrense
+                      <span className="block text-xs text-gray-500">Bekrefter alle selv om kurset er fullt eller stengt, eller barnet er utenfor aldersgrensen.</span>
                     </span>
                   </label>
                 </div>

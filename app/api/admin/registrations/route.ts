@@ -6,7 +6,7 @@ import { logActivity } from '@/lib/activity';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
-import { planAdminPlacement } from '@/lib/registration-rules';
+import { courseAgeError, planAdminPlacement } from '@/lib/registration-rules';
 import { countOccupiedPlaces, markCourseFullIfAtCapacity } from '@/lib/registrations/capacity';
 import logger from '@/lib/logger';
 
@@ -58,6 +58,18 @@ export async function POST(request: NextRequest) {
     const course = await prisma.course.findUnique({ where: { id: data.courseId } });
     if (!course) {
       return NextResponse.json({ error: 'Kurset finnes ikke' }, { status: 404 });
+    }
+
+    if (!data.overrideCapacity && course.audience !== 'voksen') {
+      for (const child of data.children) {
+        const ageError = courseAgeError(course, child.birthdate || null, course.startDate);
+        if (ageError) {
+          return NextResponse.json(
+            { error: `${child.firstName}: ${ageError} Velg «Overstyr kapasitet og aldersgrense» for å legge til likevel.` },
+            { status: 409 },
+          );
+        }
+      }
     }
 
     const placement = planAdminPlacement({

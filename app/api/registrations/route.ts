@@ -9,7 +9,7 @@ import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
-import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
+import { requiredRegistrationConsentError, isWaitlist, courseAgeError } from '@/lib/registration-rules';
 import { markCourseFullIfAtCapacity } from '@/lib/registrations/capacity';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
@@ -221,6 +221,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Aldersgrense for nytt barn sjekkes før noe opprettes; eksisterende barn sjekkes når det er slått opp.
+    if (!isAdultCourse && data.childSelection === 'new' && data.childBirthdate) {
+      const ageError = courseAgeError(course, data.childBirthdate, course.startDate);
+      if (ageError) {
+        return NextResponse.json({ error: ageError }, { status: 400 });
+      }
+    }
+
     // SECURITY: hvis e-posten allerede har en passordbeskyttet konto, ikke fest en
     // anonym påmelding til den — krev innlogging som den brukeren. Hindrer påmelding
     // på vegne av andre / datapollusjon mot eksisterende kontoer.
@@ -308,6 +316,10 @@ export async function POST(request: NextRequest) {
           { error: 'Barnet ble ikke funnet' },
           { status: 404 }
         );
+      }
+      const ageError = courseAgeError(course, child.birthdate, course.startDate);
+      if (ageError) {
+        return NextResponse.json({ error: ageError }, { status: 400 });
       }
       childId = child.id;
       childName = child.name;

@@ -38,7 +38,10 @@ const BODY = {
 let nextId = 100;
 beforeEach(() => {
   vi.clearAllMocks();
-  prisma.course.findUnique.mockResolvedValue({ id: 9, name: 'Ponnikurs', status: 'open', maxParticipants: 10 });
+  prisma.course.findUnique.mockResolvedValue({
+    id: 9, name: 'Ponnikurs', status: 'open', maxParticipants: 10, audience: 'barn',
+    ageMin: null, ageMax: null, startDate: new Date('2026-06-15T08:00:00Z'),
+  });
   prisma.registration.count.mockResolvedValue(5);
   prisma.user.findUnique.mockResolvedValue(null);
   prisma.user.create.mockResolvedValue({ id: 1 });
@@ -110,6 +113,20 @@ describe('POST /api/admin/registrations', () => {
     expect(res.status).toBe(201);
     expect(prisma.registration.create.mock.calls[0][0].data.status).toBe('confirmed');
     expect(prisma.course.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { status: 'full' } });
+  });
+
+  it('rejects a child outside the age limits unless overridden', async () => {
+    prisma.course.findUnique.mockResolvedValue({
+      id: 9, name: 'Ponnikurs', status: 'open', maxParticipants: 10, audience: 'barn',
+      ageMin: 6, ageMax: 12, startDate: new Date('2026-06-15T08:00:00Z'),
+    });
+    const tooYoung = { ...BODY, children: [{ firstName: 'Ola', birthdate: '2023-01-10' }] };
+    const res = await POST(req(tooYoung));
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain('Ola: Kurset er for barn 6–12 år. Barnet er 3 år ved kursstart.');
+    expect(prisma.registration.create).not.toHaveBeenCalled();
+
+    expect((await POST(req({ ...tooYoung, overrideCapacity: true }))).status).toBe(201);
   });
 
   it('counts only place-occupying statuses', async () => {

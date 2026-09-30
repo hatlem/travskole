@@ -10,8 +10,20 @@ import { useSession } from 'next-auth/react';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { trackClientEvent } from '@/components/Tracker';
 import { pushDataLayerEvent } from '@/lib/gtm';
+import { courseAgeError, describeAgeLimits, type CourseAgeLimits } from '@/lib/registration-rules';
 
-const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requireTerms: boolean) => z.object({
+interface AgeRule extends CourseAgeLimits {
+  /** ISO-dato for kursstart; null = alder måles i dag. */
+  courseStart: string | null;
+}
+
+const buildRegistrationSchema = (
+  isAdult: boolean,
+  requireAddress: boolean,
+  requireTerms: boolean,
+  ageRule: AgeRule,
+  childBirthdates: Record<string, string>,
+) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
   parentLastName: z.string().min(2, 'Etternavn må være minst 2 tegn'),
   parentEmail: z.string().email('Ugyldig e-postadresse'),
@@ -76,6 +88,15 @@ const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requ
       });
     }
   }
+  const courseStart = ageRule.courseStart ? new Date(ageRule.courseStart) : null;
+  if (data.childSelection === 'new' && data.childBirthdate) {
+    const ageError = courseAgeError(ageRule, data.childBirthdate, courseStart);
+    if (ageError) ctx.addIssue({ code: z.ZodIssueCode.custom, message: ageError, path: ['childBirthdate'] });
+  }
+  if (data.childSelection === 'existing' && data.existingChildId) {
+    const ageError = courseAgeError(ageRule, childBirthdates[data.existingChildId] ?? null, courseStart);
+    if (ageError) ctx.addIssue({ code: z.ZodIssueCode.custom, message: ageError, path: ['existingChildId'] });
+  }
   if (data.childSelection === 'existing' && !data.existingChildId) {
     ctx.addIssue({
       code: z.ZodIssueCode.custom,
@@ -110,9 +131,10 @@ interface PameldingFormProps {
   courseName: string;
   isAdult: boolean;
   paymentMethods: string[];
+  ageRule: AgeRule;
 }
 
-export default function PameldingForm({ courseRef, courseName, isAdult, paymentMethods }: PameldingFormProps) {
+export default function PameldingForm({ courseRef, courseName, isAdult, paymentMethods, ageRule }: PameldingFormProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isWaitlist = searchParams.get('venteliste') === 'true';
@@ -124,6 +146,7 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
   const [childSelection, setChildSelection] = useState<'existing' | 'new'>('new');
   const [existingChildren, setExistingChildren] = useState<ChildData[]>([]);
   const [consentOpen, setConsentOpen] = useState(false);
+  const ageLimitText = describeAgeLimits(ageRule);
 
   // Betalingsvalg vises kun når kurset har flere enn én online-metode aktivert.
   const payableMethods = paymentMethods.filter(
@@ -224,7 +247,15 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
     handleSubmit,
     formState: { errors },
   } = useForm<RegistrationFormData>({
-    resolver: zodResolver(buildRegistrationSchema(isAdult, requireAddress, requireTerms)),
+    resolver: zodResolver(
+      buildRegistrationSchema(
+        isAdult,
+        requireAddress,
+        requireTerms,
+        ageRule,
+        Object.fromEntries(existingChildren.map((c) => [c.id, c.birthdate])),
+      )
+    ),
     defaultValues: {
       childSelection: 'new',
       parentAddress: '',
@@ -604,6 +635,9 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                     <label htmlFor="childBirthdate" className="block text-sm font-medium text-gray-700 mb-1">
                       {t('reg.birthdate')} *
                     </label>
+                    {ageLimitText && (
+                      <p className="text-xs text-gray-500 mb-1">Aldersgrense: {ageLimitText} ved kursstart</p>
+                    )}
                     <input
                       {...register('childBirthdate')}
                       type="date"

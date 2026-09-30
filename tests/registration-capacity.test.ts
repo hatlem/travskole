@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planAdminPlacement, planSeatRelease, occupiesPlace, isAtCapacity, type AdminPlacementInput } from '@/lib/registration-rules';
+import { planAdminPlacement, planSeatRelease, occupiesPlace, isAtCapacity, ageOn, courseAgeError, type AdminPlacementInput } from '@/lib/registration-rules';
 
 const base: AdminPlacementInput = {
   courseStatus: 'open',
@@ -94,5 +94,41 @@ describe('planSeatRelease', () => {
       .toEqual({ promote: 0, nextStatus: null });
     expect(planSeatRelease({ courseStatus: 'full', maxParticipants: null, occupied: 0, waitlisted: 4 }))
       .toEqual({ promote: 0, nextStatus: null });
+  });
+});
+
+describe('ageOn / courseAgeError', () => {
+  const start = new Date('2026-06-15T08:00:00Z');
+  const limits = { ageMin: 6, ageMax: 12 };
+
+  it('computes whole years on the course start day', () => {
+    expect(ageOn('2020-06-15', start)).toBe(6);
+    expect(ageOn('2020-06-16', start)).toBe(5);
+    expect(ageOn(new Date('2014-01-01T00:00:00Z'), start)).toBe(12);
+    expect(ageOn('ikke-en-dato', start)).toBeNull();
+  });
+
+  it('uses the Oslo calendar date of the course start', () => {
+    // 22:30 UTC 14. juni = 00:30 15. juni i Oslo (sommertid) → bursdagen har vært.
+    expect(ageOn('2020-06-15', new Date('2026-06-14T22:30:00Z'))).toBe(6);
+  });
+
+  it('rejects a 3-year-old on a 6–12 course with a clear message', () => {
+    expect(courseAgeError(limits, '2023-01-10', start)).toBe('Kurset er for barn 6–12 år. Barnet er 3 år ved kursstart.');
+  });
+
+  it('accepts children inside the range and courses without limits', () => {
+    expect(courseAgeError(limits, '2018-03-01', start)).toBeNull();
+    expect(courseAgeError({ ageMin: null, ageMax: null }, null, start)).toBeNull();
+  });
+
+  it('handles one-sided limits and a missing birthdate', () => {
+    expect(courseAgeError({ ageMin: 10, ageMax: null }, '2020-01-01', start)).toContain('10 år og eldre');
+    expect(courseAgeError({ ageMin: null, ageMax: 8 }, '2010-01-01', start)).toContain('opptil 8 år');
+    expect(courseAgeError(limits, null, start)).toBe('Kurset har aldersgrense (6–12 år). Oppgi barnets fødselsdato.');
+  });
+
+  it('measures age today for courses without a start date', () => {
+    expect(courseAgeError(limits, '2020-06-15', null, new Date('2026-06-14T12:00:00Z'))).toContain('5 år');
   });
 });
