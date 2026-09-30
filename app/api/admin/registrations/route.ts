@@ -164,20 +164,19 @@ export async function POST(request: NextRequest) {
 
 /**
  * Samme etterarbeid som det offentlige skjemaet: CRM-sync, deretter hendelsen
- * (kontakten må finnes). Uten `emit` synkes bare CRM — registration.created
- * starter e-postflyter til foresatt.
+ * (kontakten må finnes). Hendelsen logges alltid (CRM-tidslinje/innsikt), men
+ * uten automatiske e-poster merkes den suppressFlows så ingen flyt starter.
  */
 function syncAndEmitCreated(
   registrationId: number,
   courseId: number,
   courseName: string,
   parentEmail: string,
-  emit: boolean
+  sendEmails: boolean
 ): void {
   syncRegistrationToCrm(registrationId)
     .catch(() => {})
     .then(async () => {
-      if (!emit) return;
       const email = normalizeEmail(parentEmail);
       const contact = email
         ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
@@ -186,7 +185,7 @@ function syncAndEmitCreated(
         type: 'registration.created',
         source: 'server',
         contactId: contact?.id ?? null,
-        meta: { registrationId, courseId, courseName },
+        meta: { registrationId, courseId, courseName, ...(!sendEmails && { suppressFlows: true }) },
         dedupeKey: `registration.created:${registrationId}`,
       });
     })

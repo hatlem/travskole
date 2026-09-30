@@ -93,22 +93,28 @@ describe('POST /api/admin/registrations', () => {
     }));
   });
 
-  it('syncs CRM but emits no registration.created when emails are turned off', async () => {
+  it('still logs registration.created when emails are off, but flagged to suppress flows', async () => {
     await POST(req({ ...BODY, sendEmails: false }));
     await flush();
     expect(bridge.syncRegistrationToCrm).toHaveBeenCalledWith(expect.any(Number));
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'registration.created',
+      meta: expect.objectContaining({ suppressFlows: true }),
+    }));
   });
 
-  it('defaults emails off on override, but emits when explicitly ticked', async () => {
+  it('defaults emails off on override (suppressed), and starts flows when explicitly ticked', async () => {
     await POST(req({ ...BODY, overrideCapacity: true }));
     await flush();
     expect(bridge.syncRegistrationToCrm).toHaveBeenCalledTimes(1);
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvent).toHaveBeenLastCalledWith(expect.objectContaining({
+      meta: expect.objectContaining({ suppressFlows: true }),
+    }));
 
     await POST(req({ ...BODY, overrideCapacity: true, sendEmails: true }));
     await flush();
-    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'registration.created' }));
+    const lastMeta = (emitEvent.mock.calls.at(-1) as unknown as [{ meta: Record<string, unknown> }])[0].meta;
+    expect(lastMeta).not.toHaveProperty('suppressFlows');
   });
 
   it('returns 409 when the course is full and neither waitlist nor override is chosen', async () => {

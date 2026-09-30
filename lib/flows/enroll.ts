@@ -209,6 +209,8 @@ export async function enrollFromEvent(input: {
 }): Promise<void> {
   try {
     if (!input.contactId) return;
+    // Hendelsen logges, men avsender har bedt om at ingen flyt (e-post) startes.
+    if (input.meta.suppressFlows === true) return;
     const contactId = input.contactId;
 
     const triggers = await prisma.flowTrigger.findMany({

@@ -69,3 +69,14 @@ describe('enrollFromEvent: kurs-forankret gren', () => {
     expect(arg.registrationId).toBeUndefined();
   });
 });
+
+describe('enrollFromEvent: suppressFlows', () => {
+  it('logs-only events (meta.suppressFlows) never enroll into any flow', async () => {
+    prisma.flowTrigger.findMany.mockResolvedValue([
+      { flowId: 3, eventType: 'registration.created', filter: '{}', flow: { anchorMode: 'course' } },
+    ]);
+    await enrollFromEvent({ type: 'registration.created', contactId: 7, meta: { registrationId: 42, courseId: 9, suppressFlows: true } });
+    expect(prisma.flowTrigger.findMany).not.toHaveBeenCalled();
+    expect(prisma.flowEnrollment.create).not.toHaveBeenCalled();
+  });
+});
