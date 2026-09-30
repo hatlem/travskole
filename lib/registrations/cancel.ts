@@ -51,12 +51,13 @@ export async function promoteFromWaitlist(registrationId: number): Promise<void>
   if (reg) await releaseSeats(reg.courseId);
 }
 
-export async function releaseSeats(courseId: number): Promise<void> {
+/** Returnerer kursets status etter justeringen (null hvis kurset ikke finnes). */
+export async function releaseSeats(courseId: number): Promise<string | null> {
   const course = await prisma.course.findUnique({
     where: { id: courseId },
     select: { id: true, name: true, status: true, maxParticipants: true },
   });
-  if (!course) return;
+  if (!course) return null;
 
   const [occupied, waitlisted] = await Promise.all([
     countOccupiedPlaces(course.id),
@@ -104,4 +105,5 @@ export async function releaseSeats(courseId: number): Promise<void> {
   if (nextStatus) {
     await prisma.course.update({ where: { id: course.id }, data: { status: nextStatus } });
   }
+  return nextStatus ?? course.status;
 }

@@ -90,6 +90,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['faktura']);
 
   const [showDeleteCourseModal, setShowDeleteCourseModal] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Validation
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -207,6 +208,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   async function confirmDeleteCourse() {
     setShowDeleteCourseModal(false);
     setDeleting(true);
+    setDeleteError(null);
     try {
       const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
       if (!res.ok) {
@@ -216,7 +218,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       router.push('/admin/courses');
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setDeleteError(err instanceof Error ? err.message : 'Noe gikk galt');
       setDeleting(false);
     }
   }
@@ -693,7 +695,13 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
           <h2 className="text-lg font-semibold text-red-800 mb-2">Faresone</h2>
           <p className="text-sm text-red-600 mb-4">
             Sletting av kurset vil også slette alle påmeldinger knyttet til det. Denne handlingen kan ikke angres.
+            Kurs med betalte påmeldinger kan ikke slettes — sett status til «Stengt» i stedet.
           </p>
+          {deleteError && (
+            <p role="alert" className="text-sm text-red-800 bg-white border border-red-300 rounded-lg px-3 py-2 mb-4">
+              {deleteError}
+            </p>
+          )}
           <button
             type="button"
             onClick={handleDelete}

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { serializePaymentMethods } from '@/lib/payments';
+import { SETTLED_PAYMENT_STATUSES } from '@/lib/payments/transitions';
+import { releaseSeats } from '@/lib/registrations/cancel';
 import logger from '@/lib/logger';
 
 export async function GET(
@@ -86,6 +88,11 @@ export async function PUT(
       },
     });
 
+    // Endret maks-antall kan fylle eller frigjøre plasser: samme regel som ved avbestilling
+    // (stengte kurs og kurs uten maks røres ikke).
+    const settledStatus = await releaseSeats(course.id);
+    if (settledStatus) course.status = settledStatus;
+
     logActivity({ action: 'update', entity: 'course', entityId: Number(id), details: name, userEmail: session.user.email }).catch(() => {});
 
     return NextResponse.json({ course });
@@ -107,11 +114,27 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.course.delete({
-      where: { id: Number(id) },
-    });
+    const courseId = Number(id);
+    const course = await prisma.course.findUnique({ where: { id: courseId }, select: { id: true } });
+    if (!course) {
+      return NextResponse.json({ error: 'Kurs ikke funnet' }, { status: 404 });
+    }
 
-    logActivity({ action: 'delete', entity: 'course', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
+    const settled = await prisma.registration.count({
+      where: { courseId, paymentStatus: { in: [...SETTLED_PAYMENT_STATUSES] } },
+    });
+    if (settled > 0) {
+      return NextResponse.json(
+        {
+          error: `Kurset kan ikke slettes fordi ${settled === 1 ? 'én påmelding har' : `${settled} påmeldinger har`} betalt (eller fått refusjon), og betalingshistorikken må bevares. Sett status til «Stengt» i stedet for å stoppe påmeldingen.`,
+        },
+        { status: 409 },
+      );
+    }
+
+    await prisma.course.delete({ where: { id: courseId } });
+
+    logActivity({ action: 'delete', entity: 'course', entityId: courseId, userEmail: session.user.email }).catch(() => {});
 
     return NextResponse.json({ success: true });
   } catch (error) {
