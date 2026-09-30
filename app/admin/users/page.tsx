@@ -708,7 +708,7 @@ export default function AdminUsersPage() {
           }
           message={
             confirm.action === 'anonymize'
-              ? 'Persondata (navn, kontakt, barn) slettes permanent. Påmeldingshistorikk beholdes avidentifisert. Dette kan ikke angres.'
+              ? 'Persondata slettes permanent: navn, kontaktinfo og barn, CRM-kontakten (notater, samtykke, tagger), forespørsler og innholdet i sendte e-poster. Påmeldinger, bookinger og betalinger beholdes avidentifisert for regnskapet. Dette kan ikke angres.'
               : confirm.action === 'deactivate'
               ? 'Brukeren kan ikke logge inn før kontoen reaktiveres. All data beholdes.'
               : 'Brukeren kan logge inn igjen.'
