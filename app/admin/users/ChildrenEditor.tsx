@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
 
 export interface AdminChild {
   id: number;
@@ -41,6 +42,7 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
   const [form, setForm] = useState<ChildForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [busyId, setBusyId] = useState<number | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<AdminChild | null>(null);
 
   function startAdd() {
     setForm(emptyForm);
@@ -87,7 +89,6 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
   }
 
   async function remove(child: AdminChild) {
-    if (!window.confirm(`Fjern ${child.name}? Påmeldingshistorikken beholdes.`)) return;
     setBusyId(child.id);
     try {
       const res = await fetch(`/api/admin/users/${userId}/children/${child.id}`, {
@@ -101,6 +102,7 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
     } finally {
       setBusyId(null);
+      setConfirmRemove(null);
     }
   }
 
@@ -188,7 +190,7 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
                     Rediger
                   </button>
                   <button
-                    onClick={() => remove(child)}
+                    onClick={() => setConfirmRemove(child)}
                     disabled={busyId === child.id}
                     className="text-xs font-medium text-red-600 hover:underline disabled:opacity-50"
                   >
@@ -204,6 +206,17 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
           <p className="text-sm text-gray-400">Ingen barn registrert</p>
         )}
       </div>
+
+      <ConfirmModal
+        open={confirmRemove !== null}
+        title="Fjern barn"
+        message={`Fjern ${confirmRemove?.name ?? 'barnet'}? Påmeldingshistorikken beholdes.`}
+        confirmLabel="Fjern"
+        variant="danger"
+        loading={busyId !== null}
+        onConfirm={() => confirmRemove && remove(confirmRemove)}
+        onCancel={() => setConfirmRemove(null)}
+      />
     </div>
   );
 }
