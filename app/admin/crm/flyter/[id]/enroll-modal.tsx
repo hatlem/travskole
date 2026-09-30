@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 
 interface SegmentOption {
   id: number;
@@ -47,13 +48,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
   const [result, setResult] = useState<EnrollResult | null>(null);
   const searchAbort = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useModalEscape(true, onClose, submitting);
 
   useEffect(() => {
     const controller = new AbortController();

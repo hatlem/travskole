@@ -3,6 +3,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import type { AdminNotice } from '@/lib/admin-notices';
+import { useModalEscape } from './useModalEscape';
 
 /**
  * Dialog som viser gjenstående superadmin-oppgaver (fra lib/admin-notices.ts)
@@ -32,8 +33,6 @@ export default function SuperadminNoticesDialog({ notices }: { notices: AdminNot
     () => true,
   );
 
-  if (notices.length === 0 || dismissedEarlier || dismissedNow) return null;
-
   const dismiss = () => {
     try {
       sessionStorage.setItem(dismissKey, '1');
@@ -42,6 +41,11 @@ export default function SuperadminNoticesDialog({ notices }: { notices: AdminNot
     }
     setDismissedNow(true);
   };
+
+  const visible = notices.length > 0 && !dismissedEarlier && !dismissedNow;
+  useModalEscape(visible, dismiss);
+
+  if (!visible) return null;
 
   return (
     <div

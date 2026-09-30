@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useId } from 'react';
+import { useId } from 'react';
+import { useModalEscape } from '../useModalEscape';
 
 interface CrmDialogProps {
   open: boolean;
@@ -16,18 +17,7 @@ interface CrmDialogProps {
 export function CrmDialog({ open, title, onClose, busy = false, children, footer, maxWidth = 'max-w-lg' }: CrmDialogProps) {
   const titleId = useId();
 
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    document.body.style.overflow = 'hidden';
-    return () => {
-      document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = '';
-    };
-  }, [open, busy, onClose]);
+  useModalEscape(open, onClose, busy);
 
   if (!open) return null;
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { CardSkeleton } from '@/components/admin/Skeleton';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 
 interface EnrollmentRow {
   id: number;
@@ -37,6 +38,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  useModalEscape(modalOpen, () => setModalOpen(false));
   const abortRef = useRef<AbortController | null>(null);
   const pageSize = 50;
 

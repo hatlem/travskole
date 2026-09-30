@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 
 export interface EditableUser {
   id: number;
@@ -36,6 +37,7 @@ export function UserFormModal({ open, mode, user, isSuperAdmin, onClose, onSaved
   const [sendMagicLink, setSendMagicLink] = useState(!editing);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useModalEscape(open, onClose, saving);
 
   if (!open) return null;
 

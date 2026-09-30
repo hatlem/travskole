@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 import { useToast } from '@/components/admin/Toast';
 import { stageRole, type StageRole } from '@/lib/crm/stages';
 
@@ -43,6 +44,7 @@ interface PendingConfirm {
 export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChanged }: StageEditorProps) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  useModalEscape(true, onClose, busy);
   const [name, setName] = useState(pipelineName);
   const [newStageName, setNewStageName] = useState('');
   const [newStageRole, setNewStageRole] = useState<StageRole>('open');
@@ -275,7 +277,11 @@ function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMove
         onBlur={() => onRename(draft)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
-          if (e.key === 'Escape') setDraft(stage.name);
+          // Første Escape angrer navneendringen; uten endring lukker Escape dialogen.
+          if (e.key === 'Escape' && draft !== stage.name) {
+            e.stopPropagation();
+            setDraft(stage.name);
+          }
         }}
         maxLength={60}
         disabled={busy}

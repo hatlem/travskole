@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 
 export interface EditableRegistration {
   id: number;
@@ -39,6 +40,7 @@ export function RegistrationEditModal({ registration, onClose, onSaved }: Regist
   }));
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  useModalEscape(true, onClose, saving);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
