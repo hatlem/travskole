@@ -27,6 +27,9 @@ import { parsePaymentMethods, isTestMode, isStripeConfigured } from '@/lib/payme
 import { createStripeCheckout } from '@/lib/payments/stripe';
 import { isVippsConfigured, createVippsPayment } from '@/lib/payments/vipps';
 import { verifyCheckoutToken } from '@/lib/payments/checkout-token';
+import { SETTLED_PAYMENT_STATUSES, isSettledPaymentStatus } from '@/lib/payments/transitions';
+
+const ALREADY_PAID = 'Allerede betalt';
 
 const checkoutSchema = z
   .object({
@@ -47,6 +50,7 @@ interface CheckoutTarget {
   title: string;
   paymentMethodsRaw: string;
   ownerEmail: string;
+  paymentStatus: string;
 }
 
 type TargetResult = CheckoutTarget | 'not_found';
@@ -71,6 +75,7 @@ async function loadRegistrationTarget(id: number): Promise<TargetResult> {
     title: `${registration.course.name} — ${registration.child?.name ?? registration.parent.name}`,
     paymentMethodsRaw: registration.course.paymentMethods,
     ownerEmail: registration.parent.user.email.toLowerCase(),
+    paymentStatus: registration.paymentStatus,
   };
 }
 
@@ -89,6 +94,7 @@ async function loadBookingTarget(id: number): Promise<TargetResult> {
     title: `${booking.course.name} — ${booking.name}`,
     paymentMethodsRaw: booking.course.paymentMethods,
     ownerEmail: booking.email.toLowerCase(),
+    paymentStatus: booking.paymentStatus,
   };
 }
 
@@ -138,6 +144,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ingen tilgang' }, { status: 403 });
     }
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  if (isSettledPaymentStatus(target.paymentStatus)) {
+    return NextResponse.json({ error: ALREADY_PAID }, { status: 409 });
   }
 
   const methods = parsePaymentMethods(target.paymentMethodsRaw);
@@ -199,17 +209,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Betalingstjenesten er utilgjengelig — prøv igjen' }, { status: 502 });
   }
 
+  // Betinget skriving: en webhook kan ha markert raden betalt siden sjekken over.
+  const where = { id: target.id, paymentStatus: { notIn: SETTLED_PAYMENT_STATUSES } };
+  const data = { paymentRef: providerResult.ref, paymentProvider: provider, paymentStatus: 'pending' };
   try {
-    if (target.entity === 'registration') {
-      await prisma.registration.update({
-        where: { id: target.id },
-        data: { paymentRef: providerResult.ref, paymentProvider: provider, paymentStatus: 'pending' },
-      });
-    } else {
-      await prisma.bookingRequest.update({
-        where: { id: target.id },
-        data: { paymentRef: providerResult.ref, paymentProvider: provider, paymentStatus: 'pending' },
-      });
+    const { count } =
+      target.entity === 'registration'
+        ? await prisma.registration.updateMany({ where, data })
+        : await prisma.bookingRequest.updateMany({ where, data });
+    if (count === 0) {
+      return NextResponse.json({ error: ALREADY_PAID }, { status: 409 });
     }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
