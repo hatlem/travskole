@@ -62,17 +62,29 @@ export interface ProfileInput {
   address?: string | null;
 }
 
+export interface ProfileValidationOptions {
+  /** Lagret telefonnummer. Uendret nummer valideres ikke, så eldre data ikke blokkerer andre rettinger. */
+  storedPhone?: string | null;
+}
+
 /**
  * Validerer forelderprofilen. Meldingene er identiske med dem /api/dashboard
  * brukte fra før, slik at eksisterende klienter ser samme tekst.
  */
-export function validateProfileInput(input: ProfileInput): string | null {
+export function validateProfileInput(
+  input: ProfileInput,
+  options: ProfileValidationOptions = {}
+): string | null {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const phone = typeof input.phone === 'string' ? input.phone.trim() : '';
   const address = typeof input.address === 'string' ? input.address : '';
+  const phoneUnchanged =
+    typeof input.phone === 'string' &&
+    options.storedPhone !== undefined &&
+    phone === (options.storedPhone ?? '').trim();
 
   if (name.length < 2) return 'Navn må være minst 2 tegn';
-  if (!isValidPhone(phone)) return PHONE_ERROR;
+  if (!phoneUnchanged && !isValidPhone(phone)) return PHONE_ERROR;
   if (name.length > 100 || address.length > 200) return 'Feltet er for langt';
 
   return null;

@@ -97,6 +97,30 @@ describe('validateProfileInput', () => {
   });
 });
 
+describe('validateProfileInput med lagret telefon', () => {
+  it('godtar et uendret (eldre, ugyldig) nummer', () => {
+    expect(validateProfileInput({ name: 'Kari', phone: ' 1234 ' }, { storedPhone: '1234' })).toBeNull();
+    expect(validateProfileInput({ name: 'Kari', phone: '' }, { storedPhone: null })).toBeNull();
+  });
+
+  it('validerer et endret nummer', () => {
+    expect(validateProfileInput({ name: 'Kari', phone: '5678' }, { storedPhone: '1234' })).toBe(PHONE_ERROR);
+    expect(validateProfileInput({ name: 'Kari', phone: '12345678' }, { storedPhone: '1234' })).toBeNull();
+  });
+
+  it('validerer når telefon mangler i input eller ingen er lagret', () => {
+    const noPhone = { name: 'Kari' } as unknown as { name: string; phone: string };
+    expect(validateProfileInput(noPhone, { storedPhone: '' })).toBe(PHONE_ERROR);
+    expect(validateProfileInput({ name: 'Kari', phone: '1234' })).toBe(PHONE_ERROR);
+  });
+
+  it('sjekker fortsatt navnet selv om telefonen er uendret', () => {
+    expect(validateProfileInput({ name: 'K', phone: '1234' }, { storedPhone: '1234' })).toBe(
+      'Navn må være minst 2 tegn'
+    );
+  });
+});
+
 describe('validatePasswordChange', () => {
   it('accepts a valid change with the current password', () => {
     expect(

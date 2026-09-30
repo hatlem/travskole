@@ -79,11 +79,17 @@ export async function createChildForParent(
   return { ok: true, child: serializeChild(child) };
 }
 
-export async function updateChildForParent(
+export type ChildUpdateData = { name?: string; birthdate?: Date | null; allergies?: string | null };
+
+/**
+ * Validerer en barneendring uten å skrive, og gir tilbake dataene til
+ * child.update — slik at kallere kan validere alt før noe lagres.
+ */
+export async function prepareChildUpdate(
   parentId: number,
   childId: number,
   input: { name?: unknown; birthdate?: unknown; allergies?: unknown }
-): Promise<ChildActionResult<SerializedChild>> {
+): Promise<ChildActionResult<ChildUpdateData>> {
   const existing = await prisma.child.findFirst({
     where: { id: childId, parentId, deletedAt: null },
     select: { id: true, name: true, birthdate: true, allergies: true },
@@ -106,17 +112,27 @@ export async function updateChildForParent(
   if (error) return { ok: false, status: 400, error };
 
   const fields = cleanFields(input);
-  const child = await prisma.child.update({
-    where: { id: childId },
-    data: {
+  return {
+    ok: true,
+    child: {
       ...(fields.name !== undefined ? { name: fields.name } : {}),
       ...(fields.birthdate !== undefined
         ? { birthdate: fields.birthdate ? new Date(fields.birthdate) : null }
         : {}),
       ...(fields.allergies !== undefined ? { allergies: fields.allergies } : {}),
     },
-  });
+  };
+}
 
+export async function updateChildForParent(
+  parentId: number,
+  childId: number,
+  input: { name?: unknown; birthdate?: unknown; allergies?: unknown }
+): Promise<ChildActionResult<SerializedChild>> {
+  const prepared = await prepareChildUpdate(parentId, childId, input);
+  if (!prepared.ok) return prepared;
+
+  const child = await prisma.child.update({ where: { id: childId }, data: prepared.child });
   return { ok: true, child: serializeChild(child) };
 }
 

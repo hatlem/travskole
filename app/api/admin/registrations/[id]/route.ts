@@ -12,7 +12,7 @@ import {
 import { occupiesPlace } from '@/lib/registration-rules';
 import DOMPurify from 'isomorphic-dompurify';
 import { validateProfileInput } from '@/lib/profile';
-import { updateChildForParent } from '@/lib/children';
+import { prepareChildUpdate, type ChildUpdateData } from '@/lib/children';
 
 export async function PUT(
   request: NextRequest,
@@ -119,24 +119,26 @@ export async function PATCH(
       );
     }
 
-    // --- Deltaker (barn) ---
-    if (wantsChildEdit && registration.childId) {
-      const result = await updateChildForParent(registration.parentId, registration.childId, {
-        name: body.childName,
-        birthdate: body.childBirthdate,
-        allergies: body.childAllergies,
-      });
-      if (!result.ok) {
-        return NextResponse.json({ error: result.error }, { status: result.status });
-      }
-    }
-
-    // --- Forelderens kontaktinfo ---
     const wantsParentEdit =
       typeof body.parentName === 'string' ||
       typeof body.parentPhone === 'string' ||
       typeof body.parentAddress === 'string';
 
+    // Alt valideres før noe skrives, så en feil i ett felt ikke gir halvlagrede endringer.
+    let childData: ChildUpdateData | null = null;
+    if (wantsChildEdit && registration.childId) {
+      const prepared = await prepareChildUpdate(registration.parentId, registration.childId, {
+        name: body.childName,
+        birthdate: body.childBirthdate,
+        allergies: body.childAllergies,
+      });
+      if (!prepared.ok) {
+        return NextResponse.json({ error: prepared.error }, { status: prepared.status });
+      }
+      childData = prepared.child;
+    }
+
+    let parentData: { name: string; phone: string; address: string | null } | null = null;
     if (wantsParentEdit) {
       const merged = {
         name: typeof body.parentName === 'string' ? body.parentName : registration.parent.name,
@@ -144,20 +146,26 @@ export async function PATCH(
         address:
           typeof body.parentAddress === 'string' ? body.parentAddress : registration.parent.address,
       };
-      const error = validateProfileInput(merged);
+      const error = validateProfileInput(merged, { storedPhone: registration.parent.phone });
       if (error) {
         return NextResponse.json({ error }, { status: 400 });
       }
-
-      await prisma.parent.update({
-        where: { id: registration.parentId },
-        data: {
-          name: DOMPurify.sanitize(merged.name.trim()),
-          phone: merged.phone.trim(),
-          address: merged.address?.trim() ? DOMPurify.sanitize(merged.address.trim()) : null,
-        },
-      });
+      parentData = {
+        name: DOMPurify.sanitize(merged.name.trim()),
+        phone: merged.phone.trim(),
+        address: merged.address?.trim() ? DOMPurify.sanitize(merged.address.trim()) : null,
+      };
     }
+
+    const writes = [
+      ...(childData && registration.childId
+        ? [prisma.child.update({ where: { id: registration.childId }, data: childData })]
+        : []),
+      ...(parentData
+        ? [prisma.parent.update({ where: { id: registration.parentId }, data: parentData })]
+        : []),
+    ];
+    if (writes.length > 0) await prisma.$transaction(writes);
 
     logActivity({
       action: 'update',
