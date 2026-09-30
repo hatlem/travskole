@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { validateCourseForm } from '@/lib/course-form';
 import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
 import { useSettings } from '@/components/SettingsProvider';
@@ -61,19 +62,19 @@ export default function NewCoursePage() {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
-  const validationErrors: Record<string, string> = {};
-  if (!name.trim()) validationErrors.name = 'Kursnavn er påkrevd';
-  if (registrationMode !== 'request' && !startDate) validationErrors.startDate = 'Startdato er påkrevd';
-  if (endDate && startDate && endDate < startDate)
-    validationErrors.endDate = 'Sluttdato kan ikke være før startdato';
-  if (ageMin && ageMax && Number(ageMin) > Number(ageMax))
-    validationErrors.ageMax = 'Maksimumsalder kan ikke være lavere enn minimumsalder';
+  const validationErrors = validateCourseForm({ name, registrationMode, startDate, endDate, ageMin, ageMax });
+  const invalidFields = Object.keys(validationErrors);
 
   const effectiveSlug = slug || slugify(name);
   const currentYear = startDate ? new Date(startDate).getFullYear() : new Date().getFullYear();
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (invalidFields.length > 0) {
+      setTouched((prev) => ({ ...prev, ...Object.fromEntries(invalidFields.map((f) => [f, true])) }));
+      document.getElementById(invalidFields[0])?.focus();
+      return;
+    }
     setLoading(true);
     setError(null);
     setSuccess(false);
@@ -484,11 +485,18 @@ export default function NewCoursePage() {
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <button
                 type="submit"
-                disabled={loading || Object.keys(validationErrors).length > 0}
+                disabled={loading}
                 className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
               >
                 {loading ? 'Oppretter...' : 'Opprett kurs'}
               </button>
+              {invalidFields.some((f) => touched[f]) && (
+                <ul role="alert" className="mt-3 text-sm text-red-600 list-disc pl-5 space-y-0.5">
+                  {invalidFields.map((f) => (
+                    <li key={f}>{validationErrors[f]}</li>
+                  ))}
+                </ul>
+              )}
               <Link
                 href="/admin/courses"
                 className="block text-center text-gray-600 hover:text-gray-800 px-4 py-2.5 text-sm font-medium mt-2"
