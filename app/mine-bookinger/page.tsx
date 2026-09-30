@@ -5,7 +5,7 @@ import { getServerSession } from '@/lib/auth';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { bookingOwnershipWhere } from '@/lib/bookings/ownership';
 import { parsePaymentMethods } from '@/lib/payments';
-import { paymentStatusBadge } from '@/lib/payments/badge';
+import { buyerPaymentBadge, isUnpaidStatus } from '@/lib/payments/badge';
 import { BookingCheckout } from '@/components/BookingCheckout';
 import { BookingCancel } from '@/components/BookingCancel';
 import { selfCancelBookingError } from '@/lib/registrations/cancel-rules';
@@ -49,12 +49,11 @@ export default async function MineBookingerPage() {
             const providers = parsePaymentMethods(b.course?.paymentMethods ?? '').filter(
               (m): m is 'stripe' | 'vipps' => m === 'stripe' || m === 'vipps'
             );
-            const badge = paymentStatusBadge(b.paymentStatus);
-            const canPay =
-              b.status === 'confirmed' &&
-              providers.length > 0 &&
-              amountKr != null && amountKr > 0 &&
-              (b.paymentStatus === 'none' || b.paymentStatus === 'pending');
+            const requiresPayment =
+              b.status === 'confirmed' && providers.length > 0 && amountKr != null && amountKr > 0;
+            const badge = buyerPaymentBadge(b.paymentStatus, requiresPayment);
+            // Også etter avbrutt/feilet/utløpt betaling kan kunden prøve igjen.
+            const canPay = requiresPayment && isUnpaidStatus(b.paymentStatus);
             // Samme regel som avbestillings-endepunktet bruker.
             const canCancel = selfCancelBookingError(b) === null;
             return (
