@@ -1,5 +1,5 @@
 import nodemailer from 'nodemailer';
-import { getSetting, getSettings } from '@/lib/settings';
+import { getSetting, getSettings, SETTING_DEFAULTS } from '@/lib/settings';
 import { makeT } from '@/lib/strings';
 import logger from '@/lib/logger';
 import { getBaseUrl } from '@/lib/site';
@@ -33,8 +33,12 @@ function htmlToText(html: string): string {
     .trim();
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// En ugyldig contact_email i innstillingene skal aldri gi ugyldig reply-to/mottaker.
 async function getAdminEmail() {
-  return getSetting('contact_email');
+  const value = (await getSetting('contact_email')).trim();
+  return EMAIL_RE.test(value) ? value : SETTING_DEFAULTS.contact_email;
 }
 
 async function getSiteName() {
@@ -416,6 +420,61 @@ export async function sendBookingAdminNotification(data: BookingEmail) {
       </table>
     </div>`,
   );
+}
+
+export interface PaymentReceiptEmail {
+  to: string;
+  payerName: string;
+  courseName: string;
+  participant: string;
+  amountKr: number | null;
+  paidAt: Date;
+  provider: 'stripe' | 'vipps';
+  reference: string;
+}
+
+const PROVIDER_LABELS: Record<PaymentReceiptEmail['provider'], string> = {
+  stripe: 'Kort (Stripe)',
+  vipps: 'Vipps',
+};
+
+export function formatKr(amount: number): string {
+  return `${amount.toLocaleString('nb-NO', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kr`;
+}
+
+export function buildPaymentReceiptEmail(data: PaymentReceiptEmail, siteName: string, contactEmail: string) {
+  const paidAt = data.paidAt.toLocaleString('nb-NO', {
+    timeZone: 'Europe/Oslo',
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+  const rows: [string, string][] = [
+    ['Gjelder', data.courseName],
+    ['Deltaker', data.participant],
+    ...(data.amountKr !== null ? ([['Beløp', formatKr(data.amountKr)]] as [string, string][]) : []),
+    ['Betalt', paidAt],
+    ['Betalingsmåte', PROVIDER_LABELS[data.provider]],
+    ['Referanse', data.reference],
+  ];
+  return {
+    subject: `Kvittering for betaling — ${data.courseName}`,
+    html: `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Hei ${escapeHtml(data.payerName)}!</h2>
+      <p>Takk for betalingen. Dette er kvitteringen din.</p>
+      <table style="border-collapse:collapse;margin:16px 0">
+        ${rows.map(([label, value]) => `<tr><td style="padding:4px 12px 4px 0;color:#666">${label}:</td><td>${escapeHtml(value)}</td></tr>`).join('\n        ')}
+      </table>
+      <p>Ta vare på denne e-posten som dokumentasjon på betalingen.</p>
+      <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(contactEmail)}">${escapeHtml(contactEmail)}</a></p>
+      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
+    </div>`,
+  };
+}
+
+export async function sendPaymentReceiptEmail(data: PaymentReceiptEmail) {
+  const [siteName, contactEmail] = await Promise.all([getSiteName(), getAdminEmail()]);
+  const { subject, html } = buildPaymentReceiptEmail(data, siteName, contactEmail);
+  await sendMail(data.to, subject, html);
 }
 
 export async function sendAdminEmail(to: string, subject: string, htmlBody: string) {

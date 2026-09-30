@@ -21,11 +21,13 @@ export interface EmitEventInput {
   occurredAt?: Date;
 }
 
-export async function emitEvent(input: EmitEventInput): Promise<void> {
+/** true kun når hendelsen faktisk ble lagret nå (ikke dedup-treff, avvist eller feilet). */
+export async function emitEvent(input: EmitEventInput): Promise<boolean> {
+  let inserted = false;
   try {
     if (!isEventType(input.type)) {
       logger.warn(`emitEvent: ukjent hendelsestype avvist: ${input.type}`);
-      return;
+      return false;
     }
 
     try {
@@ -42,10 +44,11 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
       });
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        return; // dedup — hendelsen finnes allerede, idempotent no-op
+        return false; // dedup — hendelsen finnes allerede, idempotent no-op
       }
       throw error;
     }
+    inserted = true;
 
     // Best-effort-bivirkninger etter innsettingen.
     const now = input.occurredAt ?? new Date();
@@ -89,6 +92,7 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
   } catch (error) {
     logger.error('emitEvent feilet', error);
   }
+  return inserted;
 }
 
 /**

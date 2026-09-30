@@ -18,6 +18,7 @@ import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import type { PaymentEventInput } from './mapping';
 import { planStatusTransition, type PaymentStatus } from './transitions';
+import { sendPaymentReceipt } from './receipt';
 
 const STATUS_MAP: Record<PaymentEventInput['type'], string> = {
   'payment.succeeded': 'paid',
@@ -169,8 +170,8 @@ async function moveWonDeal(row: ResolvedRow): Promise<void> {
 /**
  * Vellykket betaling dedupes per rad, ikke per leverandør-event: webhooken
  * (evt_…), takk-sidens avstemming og Vipps AUTHORIZED+CAPTURED gjelder samme
- * betaling og skal gi nøyaktig én payment.succeeded (og dermed én kvittering
- * via flytene). Status er monoton, så raden kan ikke bli betalt to ganger.
+ * betaling og skal gi nøyaktig én payment.succeeded (og dermed én kvittering,
+ * se sendPaymentReceipt). Status er monoton, så raden kan ikke bli betalt to ganger.
  */
 export function paymentEventDedupeKey(
   input: Pick<PaymentEventInput, 'type' | 'provider' | 'eventId'>,
@@ -241,7 +242,7 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
     .then((contact) => contact?.id ?? null)
     .catch(() => null);
 
-  await emitEvent({
+  const emitted = await emitEvent({
     type: input.type,
     source: 'webhook',
     contactId,
@@ -251,9 +252,11 @@ export async function applyPaymentEvent(input: PaymentEventInput): Promise<'appl
       ...(row.kind === 'registration' ? { registrationId: row.id } : { bookingRequestId: row.id }),
     },
     dedupeKey: paymentEventDedupeKey(input, row),
-  }).catch(() => {});
+  }).catch(() => false);
 
   if (input.type === 'payment.succeeded') {
+    // Samme dedupe-punkt som payment.succeeded: kun den som satte inn raden sender.
+    if (emitted) await sendPaymentReceipt(row, input);
     await moveWonDeal(row);
   }
 
