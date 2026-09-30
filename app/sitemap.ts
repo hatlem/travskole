@@ -3,6 +3,9 @@ import { getBaseUrl } from '@/lib/site';
 import { prisma } from '@/lib/prisma';
 import { courseSitemapEntries } from '@/lib/sitemap';
 
+// Bygges uten DB-tilgang (brannmur) — må genereres ved forespørsel for å få med kursene.
+export const dynamic = 'force-dynamic';
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const baseUrl = getBaseUrl();
   const now = new Date();
