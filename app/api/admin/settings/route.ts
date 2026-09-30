@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { SETTING_DEFAULTS } from '@/lib/settings';
-import { ADMIN_EDITABLE_SETTINGS, isAdmin, isSuperAdmin, validateSettingValue } from '@/lib/settings-shared';
+import { ADMIN_EDITABLE_SETTINGS, isAdmin, isSuperAdmin, normalizeSettingValue, validateSettingValue } from '@/lib/settings-shared';
 import { hasGraphCredentials } from '@/lib/tracking/poller';
 
 const putSchema = z.object({
@@ -51,7 +51,8 @@ export async function PUT(request: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const { key, value } = parsed.data;
+  const { key } = parsed.data;
+  const value = normalizeSettingValue(key, parsed.data.value);
 
   // Graded tilgang: vanlige admins kan kun endre allowlistede nøkler
   // (samtykketekster + påmeldingsskjema). Alt annet krever superadmin.

@@ -181,6 +181,17 @@ const FIELD_LABELS: Record<string, string> = Object.fromEntries(
   SETTING_GROUPS.flatMap((g) => g.fields.map((f) => [f.key, f.label])),
 );
 
+/** Nettleserens egen validering (type="email" o.l.), med norsk tekst. */
+function nativeFieldError(key: string): string | null {
+  const el = document.getElementById(key);
+  if (!(el instanceof HTMLInputElement) || el.validity.valid) return null;
+  return el.validity.typeMismatch && el.type === 'email' ? 'Ugyldig e-postadresse' : 'Ugyldig verdi';
+}
+
+function fieldError(key: string, value: string): string | null {
+  return validateSettingValue(key, value) ?? nativeFieldError(key);
+}
+
 export default function AdminSettingsPage() {
   const { data: session } = useSession();
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -225,7 +236,7 @@ export default function AdminSettingsPage() {
       (superadmin ? SETTING_GROUPS : SETTING_GROUPS.filter(g => g.adminEditable))
         .flatMap(g => g.fields.map(f => f.key))
     );
-    const plan = planSettingsSave(dirty, allowedKeys, (key) => settings[key] ?? '', validateSettingValue);
+    const plan = planSettingsSave(dirty, allowedKeys, (key) => settings[key] ?? '', fieldError);
     const errors: Record<string, string> = { ...plan.errors };
 
     // Alle gyldige felt lagres selv om andre feiler — feilene vises ved hvert felt.
@@ -278,6 +289,21 @@ export default function AdminSettingsPage() {
         return next;
       });
     }
+  }
+
+  // Feilen vises under feltet straks man forlater det, ikke først ved lagring.
+  function validateOnBlur(key: string, value: string) {
+    if (!dirty.has(key)) return;
+    const message = fieldError(key, value);
+    setFieldErrors(prev => {
+      if (!message) {
+        if (!(key in prev)) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: message };
+    });
   }
 
   // Effektiv verdi: lagret verdi, ellers standardverdien fra koden.
@@ -362,6 +388,7 @@ export default function AdminSettingsPage() {
                       id={field.key}
                       value={valueOf(field.key)}
                       onChange={(e) => updateSetting(field.key, e.target.value)}
+                      onBlur={(e) => validateOnBlur(field.key, e.target.value)}
                       placeholder={field.placeholder}
                       rows={3}
                       aria-invalid={!!fieldErrors[field.key]}
@@ -374,7 +401,9 @@ export default function AdminSettingsPage() {
                       type={field.type}
                       value={valueOf(field.key)}
                       onChange={(e) => updateSetting(field.key, e.target.value)}
+                      onBlur={(e) => validateOnBlur(field.key, e.target.value)}
                       placeholder={field.placeholder}
+                      required={field.key === 'contact_email' || field.key === 'site_name'}
                       aria-invalid={!!fieldErrors[field.key]}
                       aria-describedby={fieldErrors[field.key] ? `${field.key}-error` : undefined}
                       className={`w-full border rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent ${fieldErrors[field.key] ? 'border-red-400' : 'border-gray-300'}`}

@@ -5,6 +5,7 @@
  */
 
 import { parseOriginEntry, splitOriginEntries } from '@/lib/tracking/origins';
+import { PHONE_ERROR, isValidPhone } from '@/lib/validation/phone';
 
 export type SiteSettings = Record<string, string>;
 
@@ -92,6 +93,23 @@ const TOGGLE_SETTINGS: readonly string[] = [
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const GTM_ID_RE = /^GTM-[A-Z0-9]+$/;
+const DOMAIN_RE = /^(?=.{1,253}$)(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
+const COURSE_TYPE_VALUE_RE = /^[a-z0-9æøå-]+$/;
+
+/** Innstillinger med fast format lagres trimmet (og GTM-ID med store bokstaver). */
+export function normalizeSettingValue(key: string, value: string): string {
+  switch (key) {
+    case 'contact_email':
+    case 'contact_phone':
+    case 'sender_allowed_domains':
+      return value.trim();
+    case 'gtm_id':
+      return value.trim().toUpperCase();
+    default:
+      return value;
+  }
+}
 
 /** Kommaseparert e-postliste → trimmede, små bokstaver, uten tomme. */
 export function parseEmailList(value: string | undefined): string[] {
@@ -131,6 +149,38 @@ export function validateSettingValue(key: string, value: string): string | null 
     case 'ai_review_timeout_hours': {
       const n = Number(value);
       return value.trim() !== '' && Number.isInteger(n) && n >= 1 && n <= 720 ? null : 'Må være et heltall mellom 1 og 720';
+    }
+    case 'site_name':
+      return value.trim() === '' ? 'Navnet kan ikke være tomt (det brukes som avsendernavn i e-post)' : null;
+    case 'contact_email':
+      return EMAIL_RE.test(value.trim()) ? null : 'Oppgi en gyldig e-postadresse, f.eks. registrering@bjerke.no';
+    case 'contact_phone':
+      return value.trim() === '' || isValidPhone(value) ? null : PHONE_ERROR;
+    case 'gtm_id': {
+      const id = value.trim().toUpperCase();
+      return id === '' || GTM_ID_RE.test(id) ? null : 'Må ha formatet GTM-XXXXXXX (bokstaver og tall), eller være tomt';
+    }
+    case 'sender_allowed_domains': {
+      const invalid = value
+        .split(/[\s,;]+/)
+        .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+        .filter(Boolean)
+        .find((d) => !DOMAIN_RE.test(d));
+      return invalid ? `Ugyldig domene: ${invalid} (bruk f.eks. bjerke.no)` : null;
+    }
+    case 'course_types': {
+      const lines = settingToList(value);
+      if (lines.length === 0) return 'Oppgi minst én arrangementstype';
+      const values = new Set<string>();
+      for (const line of lines) {
+        const typeValue = (line.split('|')[0] ?? '').trim().toLowerCase();
+        if (!COURSE_TYPE_VALUE_RE.test(typeValue)) {
+          return `Ugyldig verdi «${typeValue}» — bruk små bokstaver, tall og bindestrek (verdi|Navn|flertall)`;
+        }
+        if (values.has(typeValue)) return `Typen «${typeValue}» står flere ganger`;
+        values.add(typeValue);
+      }
+      return null;
     }
     case 'marketing_optin_text':
       return value.trim() === '' ? 'Samtykketeksten kan ikke være tom' : null;
