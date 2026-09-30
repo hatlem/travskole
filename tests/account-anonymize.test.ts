@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const { prisma, purgeReviewDraftsForContact } = vi.hoisted(() => {
   const model = () => ({
     findUnique: vi.fn(),
+    count: vi.fn<(args?: unknown) => Promise<number>>(async () => 0),
     findMany: vi.fn(async (): Promise<unknown[]> => []),
     update: vi.fn(async () => ({})),
     updateMany: vi.fn(async () => ({ count: 0 })),
@@ -80,7 +81,9 @@ describe('anonymizeAccount', () => {
     }));
     expect(prisma.contact.update).toHaveBeenCalledWith({
       where: { id: 11 },
-      data: expect.objectContaining({ name: 'Anonymisert', email: null, phone: null, tags: '[]', customFields: '{}' }),
+      data: expect.objectContaining({
+        name: 'Anonymisert', email: null, phone: null, tags: '[]', customFields: '{}', organizationId: null,
+      }),
     });
     expect(prisma.consent.deleteMany).toHaveBeenCalledWith({ where: { contactId: { in: [11] } } });
     expect(prisma.note.deleteMany).toHaveBeenCalledWith({ where: { contactId: { in: [11] } } });
@@ -124,9 +127,25 @@ describe('anonymizeAccount', () => {
     expect(prisma.appEvent.update).toHaveBeenCalledWith({ where: { id: 71 }, data: { meta: '{"email":"Anonymisert"}' } });
     expect(prisma.deal.findMany).toHaveBeenCalledWith({
       where: { OR: [{ contactId: { in: [11] } }, { bookingRequestId: { in: [21] } }, { registrationId: { in: [30] } }] },
-      select: { id: true, title: true },
+      select: { id: true, title: true, organizationId: true },
     });
     expect(prisma.deal.update).toHaveBeenCalledWith({ where: { id: 81 }, data: { title: 'Ponniskole — Anonymisert' } });
+  });
+
+  it('keeps a deal\'s organization when it has other contacts, drops it when the person was the only one', async () => {
+    prisma.deal.findMany.mockResolvedValue([
+      { id: 81, title: 'Julebord', organizationId: 5 },
+      { id: 82, title: 'Firmafest', organizationId: 6 },
+      { id: 83, title: 'Kurs', organizationId: null },
+    ]);
+    prisma.contact.count.mockImplementation(async (args) =>
+      (args as { where: { organizationId: number } }).where.organizationId === 5 ? 3 : 0,
+    );
+    await anonymizeAccount(9);
+    expect(prisma.contact.count).toHaveBeenCalledWith({ where: { organizationId: 5, id: { notIn: [11] } } });
+    expect(prisma.contact.count).toHaveBeenCalledTimes(2);
+    expect(prisma.deal.update).toHaveBeenCalledTimes(1);
+    expect(prisma.deal.update).toHaveBeenCalledWith({ where: { id: 82 }, data: { title: 'Firmafest', organizationId: null } });
   });
 
   it('scrubs parent/children and closes the login', async () => {

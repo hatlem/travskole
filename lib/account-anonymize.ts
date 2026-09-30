@@ -10,7 +10,9 @@ import { normalizeEmail } from '@/lib/crm/normalize';
  * (navn, e-post, telefon, tagger, egne felt, notater, samtykke, lister,
  * besøkskobling), bookingforespørsler, sendte e-poster og tidslinjetekster.
  * Påmeldinger, bookinger, deals og betalingsstatus beholdes avidentifisert,
- * slik at deltakertall og regnskap fortsatt stemmer. Kan ikke angres.
+ * slik at deltakertall og regnskap fortsatt stemmer. Kontakten kobles fra
+ * bedriften sin; deals beholder bedriften bare når den har andre kontakter.
+ * Kan ikke angres.
  */
 
 export const ANONYMIZED_NAME = 'Anonymisert';
@@ -143,6 +145,7 @@ export async function anonymizeAccount(userId: number): Promise<void> {
             customFields: '{}',
             userId: null,
             parentId: null,
+            organizationId: null,
           },
         });
       }
@@ -195,11 +198,24 @@ export async function anonymizeAccount(userId: number): Promise<void> {
     ];
     const deals =
       dealFilters.length > 0
-        ? await tx.deal.findMany({ where: { OR: dealFilters }, select: { id: true, title: true } })
+        ? await tx.deal.findMany({ where: { OR: dealFilters }, select: { id: true, title: true, organizationId: true } })
         : [];
+    // En bedrift med andre kontakter er en reell motpart og beholdes på dealen; var personen
+    // eneste kontakt (f.eks. enkeltpersonforetak), ville bedriften peke rett tilbake på personen.
+    const orgHasOtherContacts = new Map<number, boolean>();
+    for (const orgId of new Set(deals.map((d) => d.organizationId).filter((o): o is number => o != null))) {
+      const others = await tx.contact.count({ where: { organizationId: orgId, id: { notIn: contactIds } } });
+      orgHasOtherContacts.set(orgId, others > 0);
+    }
     for (const deal of deals) {
       const title = scrub(deal.title);
-      if (title !== deal.title) await tx.deal.update({ where: { id: deal.id }, data: { title } });
+      const dropOrg = deal.organizationId != null && !orgHasOtherContacts.get(deal.organizationId);
+      if (title !== deal.title || dropOrg) {
+        await tx.deal.update({
+          where: { id: deal.id },
+          data: dropOrg ? { title, organizationId: null } : { title },
+        });
+      }
     }
 
     // Frigjør e-posten og fjern innloggingsmuligheten.
