@@ -1,6 +1,6 @@
 /**
  * Stripe-webhooken verifiseres mot både live- og test-secret, uavhengig av
- * dagens payment_test_mode.
+ * dagens payment_test_mode, og eventets livemode må matche secreten.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import Stripe from 'stripe';
@@ -34,34 +34,57 @@ describe('verifyStripeWebhook', () => {
     process.env.STRIPE_WEBHOOK_SECRET = LIVE;
     process.env.STRIPE_WEBHOOK_SECRET_TEST = TEST;
     const { payload, header } = signed(TEST, false);
-    const event = verifyStripeWebhook(payload, header);
-    expect(event?.id).toBe('evt_1');
-    expect(event?.livemode).toBe(false);
+    const result = verifyStripeWebhook(payload, header);
+    expect(result.ok && result.event.id).toBe('evt_1');
+    expect(result.ok && result.event.livemode).toBe(false);
   });
 
   it('godtar events signert med live-secret', () => {
     process.env.STRIPE_WEBHOOK_SECRET = LIVE;
     process.env.STRIPE_WEBHOOK_SECRET_TEST = TEST;
     const { payload, header } = signed(LIVE, true);
-    expect(verifyStripeWebhook(payload, header)?.livemode).toBe(true);
+    const result = verifyStripeWebhook(payload, header);
+    expect(result.ok && result.event.livemode).toBe(true);
   });
 
   it('virker når bare én secret er satt', () => {
     process.env.STRIPE_WEBHOOK_SECRET = LIVE;
     delete process.env.STRIPE_WEBHOOK_SECRET_TEST;
     const { payload, header } = signed(LIVE, true);
-    expect(verifyStripeWebhook(payload, header)).not.toBeNull();
+    expect(verifyStripeWebhook(payload, header).ok).toBe(true);
   });
 
   it('avviser ukjent secret, manglende signatur og manglende konfig', () => {
     process.env.STRIPE_WEBHOOK_SECRET = LIVE;
     process.env.STRIPE_WEBHOOK_SECRET_TEST = TEST;
     const { payload, header } = signed('whsec_annen', true);
-    expect(verifyStripeWebhook(payload, header)).toBeNull();
-    expect(verifyStripeWebhook(payload, null)).toBeNull();
+    const invalid = { ok: false, reason: 'invalid_signature' };
+    expect(verifyStripeWebhook(payload, header)).toEqual(invalid);
+    expect(verifyStripeWebhook(payload, null)).toEqual(invalid);
     delete process.env.STRIPE_WEBHOOK_SECRET;
     delete process.env.STRIPE_WEBHOOK_SECRET_TEST;
-    expect(verifyStripeWebhook(payload, header)).toBeNull();
+    expect(verifyStripeWebhook(payload, header)).toEqual(invalid);
+  });
+
+  it('avviser live-event signert med test-secret', () => {
+    process.env.STRIPE_WEBHOOK_SECRET = LIVE;
+    process.env.STRIPE_WEBHOOK_SECRET_TEST = TEST;
+    const { payload, header } = signed(TEST, true);
+    expect(verifyStripeWebhook(payload, header)).toEqual({ ok: false, reason: 'mode_mismatch' });
+  });
+
+  it('avviser test-event signert med live-secret', () => {
+    process.env.STRIPE_WEBHOOK_SECRET = LIVE;
+    process.env.STRIPE_WEBHOOK_SECRET_TEST = TEST;
+    const { payload, header } = signed(LIVE, false);
+    expect(verifyStripeWebhook(payload, header)).toEqual({ ok: false, reason: 'mode_mismatch' });
+  });
+
+  it('godtar riktig modus når samme secret er satt for begge', () => {
+    process.env.STRIPE_WEBHOOK_SECRET = TEST;
+    process.env.STRIPE_WEBHOOK_SECRET_TEST = TEST;
+    const { payload, header } = signed(TEST, false);
+    expect(verifyStripeWebhook(payload, header).ok).toBe(true);
   });
 });
 

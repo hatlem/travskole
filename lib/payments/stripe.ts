@@ -81,41 +81,55 @@ export async function createStripeCheckout(
   }
 }
 
-/** Konfigurerte webhook-secrets, uavhengig av dagens test/live-innstilling. */
-function stripeWebhookSecrets(): string[] {
-  return [process.env.STRIPE_WEBHOOK_SECRET, process.env.STRIPE_WEBHOOK_SECRET_TEST].filter(
-    (secret): secret is string => !!secret
-  );
+/** Konfigurerte webhook-secrets med modusen events signert med dem må ha. */
+function stripeWebhookSecrets(): { secret: string; livemode: boolean }[] {
+  const entries = [
+    { secret: process.env.STRIPE_WEBHOOK_SECRET, livemode: true },
+    { secret: process.env.STRIPE_WEBHOOK_SECRET_TEST, livemode: false },
+  ];
+  return entries.filter((e): e is { secret: string; livemode: boolean } => !!e.secret);
 }
 
+export type StripeWebhookVerification =
+  | { ok: true; event: VerifiedStripeEvent }
+  | { ok: false; reason: 'invalid_signature' | 'mode_mismatch' };
+
 /**
- * Verifiserer signatur og parser Stripe-webhook-eventet. Aldri throw — null ved feil.
+ * Verifiserer signatur og parser Stripe-webhook-eventet. Aldri throw.
  *
  * Prøver både live- og test-secret: hvilken modus betalingen ble startet i
  * trenger ikke være dagens `payment_test_mode` (admin kan ha byttet i
- * mellomtiden). `event.livemode` sier hvilken modus eventet faktisk gjelder.
+ * mellomtiden). Et event må ha `livemode` som matcher secreten det er signert
+ * med, ellers kunne en lekket test-secret brukes til å forfalske live-betalinger.
  */
-export function verifyStripeWebhook(rawBody: string, signature: string | null): VerifiedStripeEvent | null {
+export function verifyStripeWebhook(rawBody: string, signature: string | null): StripeWebhookVerification {
   if (!signature) {
     logger.error('Stripe webhook mangler signatur');
-    return null;
+    return { ok: false, reason: 'invalid_signature' };
   }
   const secrets = stripeWebhookSecrets();
   if (secrets.length === 0) {
     logger.error('Stripe webhook-secret ikke konfigurert');
-    return null;
+    return { ok: false, reason: 'invalid_signature' };
   }
-  for (const secret of secrets) {
+  let modeMismatch = false;
+  for (const { secret, livemode } of secrets) {
+    let event: VerifiedStripeEvent;
     try {
-      const event = Stripe.webhooks.constructEvent(rawBody, signature, secret);
       // Verifiseringsgrensen: cast slik at konsumenter kan komponere med mapStripeEvent.
-      return event as unknown as VerifiedStripeEvent;
+      event = Stripe.webhooks.constructEvent(rawBody, signature, secret) as unknown as VerifiedStripeEvent;
     } catch {
-      // Prøv neste secret.
+      continue;
     }
+    if (event.livemode === livemode) return { ok: true, event };
+    modeMismatch = true;
+  }
+  if (modeMismatch) {
+    logger.error('Stripe webhook: livemode matcher ikke secreten eventet er signert med');
+    return { ok: false, reason: 'mode_mismatch' };
   }
   logger.error('Stripe webhook-verifisering feilet for alle konfigurerte secrets');
-  return null;
+  return { ok: false, reason: 'invalid_signature' };
 }
 
 /** Test/live ut fra checkout-sesjonens ID (cs_test_… / cs_live_…). Null = ikke en sesjons-ID. */

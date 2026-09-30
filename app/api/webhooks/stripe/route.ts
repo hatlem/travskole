@@ -21,10 +21,13 @@ export async function POST(request: NextRequest) {
 
   // Signaturen prøves mot både live- og test-secret — ikke valgt ut fra dagens
   // payment_test_mode, som kan avvike fra modusen betalingen ble startet i.
-  const event = verifyStripeWebhook(rawBody, signature);
-  if (!event) {
-    return NextResponse.json({ error: 'Ugyldig signatur' }, { status: 401 });
+  const verification = verifyStripeWebhook(rawBody, signature);
+  if (!verification.ok) {
+    return verification.reason === 'mode_mismatch'
+      ? NextResponse.json({ error: 'Feil modus for webhook-secret' }, { status: 400 })
+      : NextResponse.json({ error: 'Ugyldig signatur' }, { status: 401 });
   }
+  const { event } = verification;
 
   const mapped = mapStripeEvent(event);
   if (!mapped) {
