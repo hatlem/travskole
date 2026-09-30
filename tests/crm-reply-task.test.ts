@@ -172,6 +172,16 @@ describe('recordReply → task idempotency', () => {
     expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'email.replied' }));
   });
 
+  it('includes the send, enrollment and flow ids in the email.replied meta', async () => {
+    prisma.messageSend.updateMany.mockResolvedValue({ count: 0 });
+    prisma.flowEnrollment.findUnique.mockResolvedValue({ id: 5, flowId: 2, status: 'completed' });
+    await recordReply('<abc@bjerke.no>', {});
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'email.replied',
+      meta: { messageSendId: 10, enrollmentId: 5, flowId: 2 },
+    }));
+  });
+
   it('does not create another task when the send was already marked replied', async () => {
     prisma.messageSend.updateMany.mockResolvedValue({ count: 0 });
     await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });

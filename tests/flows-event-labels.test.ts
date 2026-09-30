@@ -6,6 +6,7 @@ import {
   courseFilterKeyFor,
   describeTriggerFilter,
   eventLabel,
+  eventSourceLabel,
   groupedEventTypes,
   splitTriggerFilter,
   type CourseOption,
@@ -61,5 +62,13 @@ describe('trigger-filter', () => {
     expect(describeTriggerFilter('course.viewed', { courseSlug: 'ponniskole-host' }, courses)).toEqual(['Kurs: Ponniskole høst']);
     expect(describeTriggerFilter('registration.created', { courseId: 99, x: true }, courses)).toEqual(['Kurs: 99', 'x = true']);
     expect(describeTriggerFilter('payment.succeeded', {}, courses)).toEqual([]);
+  });
+});
+
+describe('eventSourceLabel', () => {
+  it('translates known sources and passes unknown through', () => {
+    expect(eventSourceLabel('web')).toBe('Nettsted');
+    expect(eventSourceLabel('server')).toBe('Server');
+    expect(eventSourceLabel('ukjent')).toBe('ukjent');
   });
 });
