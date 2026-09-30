@@ -513,6 +513,7 @@ export function FlowEditor({
               segments={segments}
               adminUsers={adminUsers}
               isMarketing={flow.isMarketing}
+              anchorMode={flow.anchorMode}
               disabled={editingDisabled}
               onChangeConfig={updateNodeConfig}
               onDeleteNode={deleteNode}

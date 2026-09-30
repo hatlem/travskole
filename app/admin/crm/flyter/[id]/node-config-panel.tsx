@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
-import { MERGE_TAGS } from '@/lib/email-templates';
+import { mergeTagsForAnchor } from '@/lib/email-templates';
 import type { EntityRef } from '@/components/admin/crm/EntityPicker';
 import type { FlowRFNode } from './node-types';
 import { AiPersonalizationSection } from './ai-personalization-section';
@@ -24,7 +24,7 @@ export interface AdminUserOption {
 }
 
 const MERGE_TAG_LABELS_NO: Record<string, string> = {
-  '{{forelder_navn}}': 'Foresattes navn',
+  '{{forelder_navn}}': 'Foresattes/kontaktens navn',
   '{{barnets_navn}}': 'Barnets navn',
   '{{kurs_navn}}': 'Kursnavn',
   '{{kurs_startdato}}': 'Kursets startdato',
@@ -90,6 +90,7 @@ interface NodeConfigPanelProps {
   segments: SegmentOption[];
   adminUsers: AdminUserOption[];
   isMarketing: boolean;
+  anchorMode: string;
   disabled: boolean;
   onChangeConfig: (rfId: string, config: Record<string, unknown>) => void;
   onDeleteNode: (rfId: string) => void;
@@ -102,6 +103,7 @@ export function NodeConfigPanel({
   segments,
   adminUsers,
   isMarketing,
+  anchorMode,
   disabled,
   onChangeConfig,
   onDeleteNode,
@@ -248,7 +250,8 @@ export function NodeConfigPanel({
             />
             <p className="mt-1 text-[11px] text-gray-500">
               Tilgjengelige merge-tags:{' '}
-              {MERGE_TAGS.map((t) => `${t.tag} (${MERGE_TAG_LABELS_NO[t.tag] ?? t.description})`).join(', ')}
+              {mergeTagsForAnchor(anchorMode).map((t) => `${t.tag} (${MERGE_TAG_LABELS_NO[t.tag] ?? t.description})`).join(', ')}
+              {anchorMode !== 'course' && '. Kursfelt (barnets navn, kursnavn, datoer, allergier) finnes kun i kursflyter.'}
             </p>
           </div>
           <div>

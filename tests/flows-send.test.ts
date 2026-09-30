@@ -329,6 +329,19 @@ describe('sendFlowEmail', () => {
     expect(resolveCourseMergeContext).toHaveBeenCalledWith(42);
   });
 
+  it('10. fills {{kontakt_epost}} from the contact_email setting in contact-anchored flows', async () => {
+    const result = await sendFlowEmail({
+      ...baseInput,
+      bodyHtml: '<p>Spørsmål? Skriv til {{kontakt_epost}}</p>',
+      registrationId: null,
+    });
+
+    expect(result).toBe('sent');
+    const created = prisma.messageSend.create.mock.calls.at(-1)?.[0]?.data?.bodyHtml as string;
+    expect(created).toContain('Skriv til registrering@bjerke.no');
+    expect(resolveCourseMergeContext).not.toHaveBeenCalled();
+  });
+
   describe('defensive failure paths', () => {
     it('returns failed when the contact has no email', async () => {
       prisma.contact.findUnique.mockResolvedValue({ ...CONTACT, email: '' });
