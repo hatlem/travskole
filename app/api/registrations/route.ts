@@ -7,6 +7,7 @@ import logger, { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { phoneSchema, PHONE_ERROR } from '@/lib/validation/phone';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
 import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
@@ -62,7 +63,6 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Backend validation with Zod
     const emailSchema = z.string().email();
-    const phoneSchema = z.string().min(8);
     const nameSchema = z.string().min(2).max(100);
 
     // SECURITY: guard against missing/non-string parentEmail before any dereference
@@ -90,10 +90,11 @@ export async function POST(request: NextRequest) {
     const phoneValidation = phoneSchema.safeParse(data.parentPhone);
     if (!phoneValidation.success) {
       return NextResponse.json(
-        { error: 'Ugyldig telefonnummer' },
+        { error: PHONE_ERROR },
         { status: 400 }
       );
     }
+    data.parentPhone = phoneValidation.data;
 
     // Validate names
     if (!nameSchema.safeParse(data.parentName).success) {

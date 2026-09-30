@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { PHONE_ERROR } from '@/lib/validation/phone';
 import {
   validateChildInput,
   validateProfileInput,
@@ -69,7 +70,7 @@ describe('validateProfileInput', () => {
   it('rejects short name and short phone', () => {
     expect(validateProfileInput({ name: 'K', phone: '12345678' })).toBe('Navn må være minst 2 tegn');
     expect(validateProfileInput({ name: 'Kari', phone: '1234' })).toBe(
-      'Telefonnummer må være minst 8 tegn'
+      PHONE_ERROR
     );
   });
 

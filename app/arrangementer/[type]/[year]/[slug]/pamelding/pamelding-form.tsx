@@ -10,12 +10,13 @@ import { useSession } from 'next-auth/react';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { trackClientEvent } from '@/components/Tracker';
 import { pushDataLayerEvent } from '@/lib/gtm';
+import { phoneSchema } from '@/lib/validation/phone';
 
 const buildRegistrationSchema = (isAdult: boolean, requireAddress: boolean, requireTerms: boolean) => z.object({
   parentFirstName: z.string().min(2, 'Fornavn må være minst 2 tegn'),
   parentLastName: z.string().min(2, 'Etternavn må være minst 2 tegn'),
   parentEmail: z.string().email('Ugyldig e-postadresse'),
-  parentPhone: z.string().min(8, 'Ugyldig telefonnummer'),
+  parentPhone: phoneSchema,
   parentAddress: z.string().optional(),
   childSelection: z.enum(['existing', 'new']),
   existingChildId: z.string().optional(),

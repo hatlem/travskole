@@ -5,6 +5,7 @@
  * en forelder og en administrator får nøyaktig samme regler og feilmeldinger.
  * Ingen DB/IO her — alt kan unit-testes direkte (se tests/profile.test.ts).
  */
+import { isValidPhone, PHONE_ERROR } from '@/lib/validation/phone';
 
 export interface ChildInput {
   name: string;
@@ -71,7 +72,7 @@ export function validateProfileInput(input: ProfileInput): string | null {
   const address = typeof input.address === 'string' ? input.address : '';
 
   if (name.length < 2) return 'Navn må være minst 2 tegn';
-  if (phone.length < 8 || phone.length > 20) return 'Telefonnummer må være minst 8 tegn';
+  if (!isValidPhone(phone)) return PHONE_ERROR;
   if (name.length > 100 || address.length > 200) return 'Feltet er for langt';
 
   return null;
