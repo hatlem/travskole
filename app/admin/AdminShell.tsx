@@ -274,7 +274,8 @@ export function AdminShell({
             </nav>
           </header>
 
-          <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-auto">
+          {/* Ingen overflow her: vinduet er scroll-containeren, så sticky (f.eks. lagre-linja) følger viewporten. Brede tabeller/kanban har egen overflow-x-auto. */}
+          <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
             <BreadcrumbLabelProvider value={setBreadcrumbLabel}>{children}</BreadcrumbLabelProvider>
           </main>
         </div>
