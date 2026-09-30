@@ -7,6 +7,7 @@ import {
   stripePublishableKey,
   isStripeConfigured,
   kronerToOre,
+  resolveCheckoutPlan,
   STRIPE_PUBLISHABLE_KEYS,
 } from '@/lib/payments';
 
@@ -71,5 +72,25 @@ describe('stripe key selection', () => {
     expect(isStripeConfigured(false)).toBe(true);
     expect(stripeSecretKey(true)).toBeUndefined();
     expect(isStripeConfigured(true)).toBe(false);
+  });
+});
+
+describe('resolveCheckoutPlan', () => {
+  it('skips the payment step for invoice-only courses', () => {
+    expect(resolveCheckoutPlan(['faktura'])).toEqual({ kind: 'invoice' });
+    expect(resolveCheckoutPlan([])).toEqual({ kind: 'invoice' });
+  });
+  it('redirects straight to the only online method when invoice is not allowed', () => {
+    expect(resolveCheckoutPlan(['stripe'])).toEqual({ kind: 'redirect', provider: 'stripe' });
+    expect(resolveCheckoutPlan(['vipps'])).toEqual({ kind: 'redirect', provider: 'vipps' });
+  });
+  it('offers invoice alongside online methods when the course allows it', () => {
+    expect(resolveCheckoutPlan(['faktura', 'stripe'])).toEqual({ kind: 'choice', providers: ['stripe'], invoice: true });
+    expect(resolveCheckoutPlan(['stripe', 'vipps', 'faktura'])).toEqual({
+      kind: 'choice', providers: ['stripe', 'vipps'], invoice: true,
+    });
+  });
+  it('lets the buyer pick between online methods without invoice', () => {
+    expect(resolveCheckoutPlan(['stripe', 'vipps'])).toEqual({ kind: 'choice', providers: ['stripe', 'vipps'], invoice: false });
   });
 });

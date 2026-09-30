@@ -32,6 +32,26 @@ export function serializePaymentMethods(methods: string[] | null | undefined): s
   return (list.length ? Array.from(new Set(list)) : ['faktura']).join(',');
 }
 
+export type OnlineProvider = Exclude<PaymentMethod, 'faktura'>;
+
+export type CheckoutPlan =
+  | { kind: 'invoice' }
+  | { kind: 'redirect'; provider: OnlineProvider }
+  | { kind: 'choice'; providers: OnlineProvider[]; invoice: boolean };
+
+/**
+ * Hva kjøperen møter etter påmelding: bare faktura → ingen betalingssteg; én
+ * nettbetaling uten faktura → rett videre; ellers et valg der faktura er med
+ * når kurset tillater det.
+ */
+export function resolveCheckoutPlan(methods: readonly string[]): CheckoutPlan {
+  const providers = methods.filter((m): m is OnlineProvider => m === 'stripe' || m === 'vipps');
+  const invoice = methods.includes('faktura');
+  if (providers.length === 0) return { kind: 'invoice' };
+  if (providers.length === 1 && !invoice) return { kind: 'redirect', provider: providers[0] };
+  return { kind: 'choice', providers, invoice };
+}
+
 // Publiserbare nøkler — offentlige, trygge i repo/bundle.
 export const STRIPE_PUBLISHABLE_KEYS = {
   live: 'pk_live_51TogqXFr8zej7iQSj0usaP5JKQ4yLlg3YUOLIq4iWctvAAMvzghLyHlO9vLoZJbf2CdMCKaHuWC5NVFvo1jhpeJH00PjyiriIK',

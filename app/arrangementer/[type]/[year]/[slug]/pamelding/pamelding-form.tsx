@@ -13,6 +13,7 @@ import { pushDataLayerEvent } from '@/lib/gtm';
 import { courseAgeError, describeAgeLimits, existingChildAgeIssue, type CourseAgeLimits } from '@/lib/registration-rules';
 import { phoneSchema } from '@/lib/validation/phone';
 import { splitFullName } from '@/lib/profile';
+import { resolveCheckoutPlan, type OnlineProvider } from '@/lib/payments';
 
 interface AgeRule extends CourseAgeLimits {
   /** ISO-dato for kursstart; null = alder måles i dag. */
@@ -122,7 +123,7 @@ interface ChildData {
   birthdate: string | null;
 }
 
-type PayableProvider = 'stripe' | 'vipps';
+type PayableProvider = OnlineProvider;
 
 const CHECKOUT_FALLBACK_ERROR = 'Kunne ikke starte betaling. Prøv igjen fra dashbordet.';
 
@@ -156,15 +157,16 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
   const [consentOpen, setConsentOpen] = useState(false);
   const ageLimitText = describeAgeLimits(ageRule);
 
-  // Betalingsvalg vises kun når kurset har flere enn én online-metode aktivert.
-  const payableMethods = paymentMethods.filter(
-    (m): m is PayableProvider => m === 'stripe' || m === 'vipps'
-  );
+  // Valgskjermen vises når kjøperen har mer enn én vei å betale (faktura teller med).
+  const checkoutPlan = resolveCheckoutPlan(paymentMethods);
+  const payableMethods: PayableProvider[] =
+    checkoutPlan.kind === 'choice' ? checkoutPlan.providers : checkoutPlan.kind === 'redirect' ? [checkoutPlan.provider] : [];
   const [pendingRegistrationId, setPendingRegistrationId] = useState<string | null>(null);
   const [checkoutToken, setCheckoutToken] = useState<string | null>(null);
   const [checkoutProvider, setCheckoutProvider] = useState<PayableProvider | null>(null);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const showPaymentChoice = payableMethods.length > 1;
+  const [invoiceChosen, setInvoiceChosen] = useState(false);
+  const showPaymentChoice = checkoutPlan.kind === 'choice';
 
   const startCheckout = useCallback(async (registrationId: string, provider: PayableProvider, token: string | null) => {
     setCheckoutProvider(provider);
@@ -347,13 +349,13 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
       });
 
       // Faktura-only, eller ukjent registrerings-id (bør ikke skje): uendret dashboard-redirect.
-      if (!newRegistrationId || payableMethods.length === 0) {
+      if (!newRegistrationId || checkoutPlan.kind === 'invoice') {
         router.push('/dashboard?success=registration');
         return;
       }
 
       // Flere metoder: vis valg-skjermen og la brukeren velge.
-      if (payableMethods.length > 1) {
+      if (checkoutPlan.kind === 'choice') {
         setPendingRegistrationId(newRegistrationId);
         setCheckoutToken(newCheckoutToken ?? null);
         return;
@@ -370,7 +372,37 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
     }
   };
 
-  // Kurset tillater begge betalingsmåter: la brukeren velge før vi sender videre.
+  // Som faktura-only-kurs: påmeldingen står ubetalt, og faktura sendes i etterkant.
+  function chooseInvoice() {
+    if (session) {
+      router.push('/dashboard?success=registration');
+      return;
+    }
+    setInvoiceChosen(true);
+  }
+
+  if (invoiceChosen) {
+    return (
+      <main className="min-h-screen bg-gray-50 py-12">
+        <div className="max-w-3xl mx-auto px-4">
+          <div role="status" className="bg-green-50 border border-green-200 rounded-lg p-8">
+            <h1 className="text-green-800 font-semibold text-2xl mb-2">Påmeldingen er registrert!</h1>
+            <p className="text-green-700 mb-6">Du har valgt å betale med faktura. Fakturaen sendes til deg i etterkant.</p>
+            <div className="flex flex-col sm:flex-row gap-4">
+              <Link href="/" className="text-bjerke-blue hover:underline font-medium">
+                Til forsiden
+              </Link>
+              <Link href="/login" className="text-bjerke-blue hover:underline font-medium">
+                Logg inn
+              </Link>
+            </div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Flere betalingsmåter: la brukeren velge før vi sender videre.
   if (pendingRegistrationId) {
     return (
       <main className="min-h-screen bg-gray-50 py-12">
@@ -438,6 +470,20 @@ export default function PameldingForm({ courseRef, courseName, isAdult, paymentM
                     }`}
                   >
                     {checkoutProvider === 'vipps' ? 'Starter betaling…' : 'Betal med Vipps'}
+                  </button>
+                )}
+                {checkoutPlan.kind === 'choice' && checkoutPlan.invoice && (
+                  <button
+                    type="button"
+                    onClick={chooseInvoice}
+                    disabled={checkoutProvider !== null}
+                    className={`px-6 py-3 rounded-lg font-semibold transition border ${
+                      checkoutProvider !== null
+                        ? 'border-gray-300 text-gray-400 cursor-not-allowed'
+                        : 'border-bjerke-blue text-bjerke-blue hover:bg-blue-50'
+                    }`}
+                  >
+                    Betal med faktura
                   </button>
                 )}
               </div>
