@@ -30,7 +30,7 @@ const MERGE_TAG_LABELS_NO: Record<string, string> = {
   '{{kurs_startdato}}': 'Kursets startdato',
   '{{kurs_sluttdato}}': 'Kursets sluttdato',
   '{{allergier}}': 'Allergier',
-  '{{kontakt_epost}}': 'Kontakt-e-post',
+  '{{kontakt_epost}}': 'Bjerkes kontakt-e-post',
 };
 
 const STAGE_OPTIONS = [
@@ -252,6 +252,9 @@ export function NodeConfigPanel({
               Tilgjengelige merge-tags:{' '}
               {mergeTagsForAnchor(anchorMode).map((t) => `${t.tag} (${MERGE_TAG_LABELS_NO[t.tag] ?? t.description})`).join(', ')}
               {anchorMode !== 'course' && '. Kursfelt (barnets navn, kursnavn, datoer, allergier) finnes kun i kursflyter.'}
+            </p>
+            <p className="mt-1 text-[11px] text-gray-500">
+              {'{{kontakt_epost}}'} er Bjerkes egen kontaktadresse (Innstillinger → Kontaktinformasjon), ikke mottakerens e-post.
             </p>
           </div>
           <div>

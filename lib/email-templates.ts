@@ -5,7 +5,7 @@ export const MERGE_TAGS = [
   { tag: '{{kurs_startdato}}', description: 'Course start date (dd.mm.yyyy format)' },
   { tag: '{{kurs_sluttdato}}', description: 'Course end date (dd.mm.yyyy format)' },
   { tag: '{{allergier}}', description: 'Child allergies or "Ingen"' },
-  { tag: '{{kontakt_epost}}', description: 'Site contact email' },
+  { tag: '{{kontakt_epost}}', description: "Bjerke's contact email (site setting), not the recipient's" },
 ] as const;
 
 /** Fylles kun i kurs-forankrede flyter (fra påmeldingen); tomme i kontaktflyter. */
