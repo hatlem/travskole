@@ -2,6 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
@@ -9,6 +10,8 @@ import { CardSkeleton } from '@/components/admin/Skeleton';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
+import { CrmDialog, Field } from '@/components/admin/crm/CrmDialog';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
 
 interface OrgDetail {
   id: number;
@@ -53,6 +56,16 @@ const STAGES = [
   { value: 'lost', label: 'Tapt' },
 ];
 
+interface OrgEditValues {
+  name: string;
+  domain: string;
+  phone: string;
+  stage: string;
+}
+
+const blankToNull = (v: string) => (v.trim() === '' ? null : v.trim());
+const inputCls = 'border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white';
+
 function fmtDate(d: string | null): string {
   return d ? new Date(d).toLocaleDateString('nb-NO') : '—';
 }
@@ -64,8 +77,13 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');
   const [dealDialog, setDealDialog] = useState<{ dealId: number | null } | null>(null);
+  const [editValues, setEditValues] = useState<OrgEditValues | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const { currentUserId } = useAssignees();
   const { toast } = useToast();
+  const router = useRouter();
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
@@ -100,7 +118,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
     return () => abortRef.current?.abort();
   }, []);
 
-  async function patchOrg(body: Record<string, unknown>, okMsg: string) {
+  async function patchOrg(body: Record<string, unknown>, okMsg: string): Promise<boolean> {
     try {
       const res = await fetch(`/api/admin/crm/organizations/${id}`, {
         method: 'PATCH',
@@ -110,12 +128,55 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
         toast(data.error || 'Noe gikk galt', 'error');
-        return;
+        return false;
       }
       toast(okMsg, 'success');
       load();
+      return true;
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      return false;
+    }
+  }
+
+  function openEdit() {
+    if (!org) return;
+    setEditValues({ name: org.name, domain: org.domain ?? '', phone: org.phone ?? '', stage: org.stage });
+  }
+
+  async function saveEdit() {
+    if (!org || !editValues || !editValues.name.trim()) return;
+    const changed: Record<string, unknown> = {};
+    if (editValues.name.trim() !== org.name) changed.name = editValues.name.trim();
+    if (blankToNull(editValues.domain) !== org.domain) changed.domain = blankToNull(editValues.domain);
+    if (blankToNull(editValues.phone) !== org.phone) changed.phone = blankToNull(editValues.phone);
+    if (editValues.stage !== org.stage) changed.stage = editValues.stage;
+    if (Object.keys(changed).length === 0) {
+      setEditValues(null);
+      return;
+    }
+    setSaving(true);
+    const ok = await patchOrg(changed, 'Bedrift oppdatert');
+    setSaving(false);
+    if (ok) setEditValues(null);
+  }
+
+  async function deleteOrg() {
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/admin/crm/organizations/${id}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        toast(data.error || 'Kunne ikke slette bedriften', 'error');
+        return;
+      }
+      toast('Bedrift slettet', 'success');
+      router.push('/admin/crm/bedrifter');
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Kunne ikke slette bedriften', 'error');
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
     }
   }
 
@@ -221,6 +282,20 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
               className="border border-gray-300 rounded-md px-2 py-1 text-sm"
             />
           </label>
+          <button
+            type="button"
+            onClick={openEdit}
+            className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
+          >
+            Rediger
+          </button>
+          <button
+            type="button"
+            onClick={() => setConfirmDelete(true)}
+            className="border border-red-200 text-red-700 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-red-50"
+          >
+            Slett
+          </button>
         </div>
       </div>
 
@@ -340,6 +415,98 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
         onClose={() => setDealDialog(null)}
         onSaved={() => load()}
         onDeleted={() => load()}
+      />
+
+      <CrmDialog
+        open={editValues !== null}
+        title="Rediger bedrift"
+        busy={saving}
+        onClose={() => setEditValues(null)}
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setEditValues(null)}
+              disabled={saving}
+              className="border border-gray-300 px-4 py-1.5 rounded-md text-sm hover:bg-white disabled:opacity-50"
+            >
+              Avbryt
+            </button>
+            <button
+              type="submit"
+              form="org-edit-form"
+              disabled={saving || !editValues?.name.trim()}
+              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
+            >
+              {saving ? 'Lagrer …' : 'Lagre'}
+            </button>
+          </div>
+        }
+      >
+        {editValues && (
+          <form
+            id="org-edit-form"
+            className="grid gap-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              saveEdit();
+            }}
+          >
+            <Field label="Navn *" htmlFor="org-name" hint={editValues.name.trim() ? undefined : 'Navn er påkrevd'}>
+              <input
+                id="org-name"
+                value={editValues.name}
+                maxLength={200}
+                onChange={(e) => setEditValues({ ...editValues, name: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Domene" htmlFor="org-domain" hint="F.eks. firma.no — brukes til å koble kontakter automatisk">
+              <input
+                id="org-domain"
+                value={editValues.domain}
+                maxLength={200}
+                onChange={(e) => setEditValues({ ...editValues, domain: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Telefon" htmlFor="org-phone">
+              <input
+                id="org-phone"
+                type="tel"
+                value={editValues.phone}
+                maxLength={20}
+                onChange={(e) => setEditValues({ ...editValues, phone: e.target.value })}
+                className={inputCls}
+              />
+            </Field>
+            <Field label="Stadium" htmlFor="org-stage">
+              <select
+                id="org-stage"
+                value={editValues.stage}
+                onChange={(e) => setEditValues({ ...editValues, stage: e.target.value })}
+                className={inputCls}
+              >
+                {STAGES.map((st) => (
+                  <option key={st.value} value={st.value}>
+                    {st.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </form>
+        )}
+      </CrmDialog>
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Slett bedrift"
+        message={`Er du sikker på at du vil slette «${org.name}»? Kontaktpersoner, deals og kontaktenes tidslinjer beholdes, men kobles fra bedriften. Notater som kun gjelder bedriften slettes. Dette kan ikke angres.`}
+        confirmLabel="Slett"
+        variant="danger"
+        loading={deleting}
+        onConfirm={deleteOrg}
+        onCancel={() => setConfirmDelete(false)}
       />
     </div>
   );

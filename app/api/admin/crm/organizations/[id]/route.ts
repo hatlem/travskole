@@ -158,7 +158,15 @@ export async function DELETE(
   }
 
   try {
-    await prisma.organization.delete({ where: { id: orgId } });
+    // Aktiviteter som også hører til en kontakt skal bli stående i kontaktens tidslinje
+    // (relasjonen til bedriften er onDelete: Cascade).
+    await prisma.$transaction([
+      prisma.contactActivity.updateMany({
+        where: { organizationId: orgId, contactId: { not: null } },
+        data: { organizationId: null },
+      }),
+      prisma.organization.delete({ where: { id: orgId } }),
+    ]);
     logActivity({
       action: 'delete',
       entity: 'organization',
