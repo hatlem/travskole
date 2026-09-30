@@ -55,6 +55,7 @@ async function loadRegistrationTarget(id: number): Promise<TargetResult> {
     where: { id },
     include: {
       course: true,
+      child: { select: { name: true } },
       parent: { include: { user: { select: { email: true } } } },
     },
   });
@@ -64,7 +65,8 @@ async function loadRegistrationTarget(id: number): Promise<TargetResult> {
     entity: 'registration',
     id: registration.id,
     amountKr: registration.course.price,
-    title: `${registration.course.name} — ${registration.parent.name}`,
+    // Deltakeren: barnet, eller den voksne selv på voksen-arrangementer.
+    title: `${registration.course.name} — ${registration.child?.name ?? registration.parent.name}`,
     paymentMethodsRaw: registration.course.paymentMethods,
     ownerEmail: registration.parent.user.email.toLowerCase(),
   };
@@ -169,6 +171,7 @@ export async function POST(request: NextRequest) {
       successUrl: `${origin}/betaling/takk?ref={CHECKOUT_SESSION_ID}`,
       cancelUrl: `${origin}/betaling/avbrutt`,
       testMode,
+      customerEmail: target.ownerEmail,
     });
   } else {
     if (!isVippsConfigured(testMode)) {

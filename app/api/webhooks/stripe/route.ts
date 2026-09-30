@@ -11,8 +11,6 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import logger from '@/lib/logger';
-import { getSetting } from '@/lib/settings';
-import { isTestMode } from '@/lib/payments';
 import { verifyStripeWebhook } from '@/lib/payments/stripe';
 import { mapStripeEvent } from '@/lib/payments/mapping';
 import { applyPaymentEvent } from '@/lib/payments/apply';
@@ -21,8 +19,9 @@ export async function POST(request: NextRequest) {
   const rawBody = await request.text();
   const signature = request.headers.get('stripe-signature');
 
-  const testMode = isTestMode(await getSetting('payment_test_mode'));
-  const event = verifyStripeWebhook(rawBody, signature, testMode);
+  // Signaturen prøves mot både live- og test-secret — ikke valgt ut fra dagens
+  // payment_test_mode, som kan avvike fra modusen betalingen ble startet i.
+  const event = verifyStripeWebhook(rawBody, signature);
   if (!event) {
     return NextResponse.json({ error: 'Ugyldig signatur' }, { status: 401 });
   }
@@ -38,6 +37,7 @@ export async function POST(request: NextRequest) {
       logger.warn('Stripe webhook: fant ikke rad for betalingsevent', {
         eventId: mapped.eventId,
         type: mapped.type,
+        livemode: event.livemode,
       });
     }
     return NextResponse.json({ received: true });
