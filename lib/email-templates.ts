@@ -8,6 +8,19 @@ export const MERGE_TAGS = [
   { tag: '{{kontakt_epost}}', description: 'Site contact email' },
 ] as const;
 
+/** Fylles kun i kurs-forankrede flyter (fra påmeldingen); tomme i kontaktflyter. */
+export const COURSE_ONLY_MERGE_TAGS: ReadonlySet<string> = new Set([
+  '{{barnets_navn}}',
+  '{{kurs_navn}}',
+  '{{kurs_startdato}}',
+  '{{kurs_sluttdato}}',
+  '{{allergier}}',
+]);
+
+export function mergeTagsForAnchor(anchorMode: string) {
+  return anchorMode === 'course' ? [...MERGE_TAGS] : MERGE_TAGS.filter((t) => !COURSE_ONLY_MERGE_TAGS.has(t.tag));
+}
+
 export interface MergeTagData {
   forelder_navn: string;
   barnets_navn: string;

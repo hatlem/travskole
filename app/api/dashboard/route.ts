@@ -24,11 +24,6 @@ export async function PUT(request: NextRequest) {
   const body = await request.json().catch(() => ({}));
   const { name, phone, address } = body;
 
-  const validationError = validateProfileInput({ name, phone, address });
-  if (validationError) {
-    return NextResponse.json({ error: validationError }, { status: 400 });
-  }
-
   const user = await prisma.user.findUnique({
     where: { email: session.user.email },
     include: { parent: true },
@@ -36,6 +31,12 @@ export async function PUT(request: NextRequest) {
 
   if (!user) {
     return NextResponse.json({ error: 'Profil ikke funnet' }, { status: 404 });
+  }
+
+  const storedPhone = user.parent && !user.parent.deletedAt ? user.parent.phone : undefined;
+  const validationError = validateProfileInput({ name, phone, address }, { storedPhone });
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   const data = {

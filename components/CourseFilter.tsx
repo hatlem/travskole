@@ -26,6 +26,7 @@ export default function CourseFilter({ courses }: CourseFilterProps) {
 
   const activeType = courseTypes.find((ct) => ct.value === activeFilter);
   const countLabel = activeType?.plural ?? t('list.fallback_plural');
+  const singularLabel = activeType ? activeType.label.toLowerCase() : t('list.fallback_singular');
 
   const tabClass = (isActive: boolean) =>
     `px-6 py-2 rounded-lg font-semibold transition ${
@@ -60,7 +61,8 @@ export default function CourseFilter({ courses }: CourseFilterProps) {
       <section className="max-w-6xl mx-auto px-4 py-12">
         <div className="mb-6">
           <p className="text-gray-600">
-            {t('list.showing')} <span className="font-semibold">{filteredCourses.length}</span> {countLabel}
+            {t('list.showing')} <span className="font-semibold">{filteredCourses.length}</span>{' '}
+            {filteredCourses.length === 1 ? singularLabel : countLabel}
           </p>
         </div>
 

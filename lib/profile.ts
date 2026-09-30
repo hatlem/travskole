@@ -5,6 +5,7 @@
  * en forelder og en administrator får nøyaktig samme regler og feilmeldinger.
  * Ingen DB/IO her — alt kan unit-testes direkte (se tests/profile.test.ts).
  */
+import { isValidPhone, PHONE_ERROR } from '@/lib/validation/phone';
 
 export interface ChildInput {
   name: string;
@@ -26,6 +27,15 @@ export const MAX_ALLERGIES = 500;
 /** Tidligste fødselsår vi godtar — fanger opp tastefeil som «0202» og «1899». */
 const MIN_BIRTH_YEAR = 1900;
 
+/** Validerer en oppgitt fødselsdato (yyyy-mm-dd). Null når den er gyldig. */
+export function validateBirthdate(birthdate: string, now: Date = new Date()): string | null {
+  const parsed = new Date(birthdate.trim());
+  if (Number.isNaN(parsed.getTime())) return 'Ugyldig fødselsdato';
+  if (parsed.getUTCFullYear() < MIN_BIRTH_YEAR) return 'Ugyldig fødselsdato';
+  if (parsed.getTime() > now.getTime()) return 'Fødselsdato kan ikke være frem i tid';
+  return null;
+}
+
 /** Returnerer første feilmelding, eller null når barnet er gyldig. */
 export function validateChildInput(
   input: ChildInput,
@@ -41,10 +51,8 @@ export function validateChildInput(
   if (!birthdate) {
     if (requireBirthdate) return 'Fødselsdato er påkrevd';
   } else {
-    const parsed = new Date(birthdate);
-    if (Number.isNaN(parsed.getTime())) return 'Ugyldig fødselsdato';
-    if (parsed.getUTCFullYear() < MIN_BIRTH_YEAR) return 'Ugyldig fødselsdato';
-    if (parsed.getTime() > now.getTime()) return 'Fødselsdato kan ikke være frem i tid';
+    const birthdateError = validateBirthdate(birthdate, now);
+    if (birthdateError) return birthdateError;
   }
 
   const allergies = (input.allergies ?? '').trim();
@@ -61,17 +69,29 @@ export interface ProfileInput {
   address?: string | null;
 }
 
+export interface ProfileValidationOptions {
+  /** Lagret telefonnummer. Uendret nummer valideres ikke, så eldre data ikke blokkerer andre rettinger. */
+  storedPhone?: string | null;
+}
+
 /**
  * Validerer forelderprofilen. Meldingene er identiske med dem /api/dashboard
  * brukte fra før, slik at eksisterende klienter ser samme tekst.
  */
-export function validateProfileInput(input: ProfileInput): string | null {
+export function validateProfileInput(
+  input: ProfileInput,
+  options: ProfileValidationOptions = {}
+): string | null {
   const name = typeof input.name === 'string' ? input.name.trim() : '';
   const phone = typeof input.phone === 'string' ? input.phone.trim() : '';
   const address = typeof input.address === 'string' ? input.address : '';
+  const phoneUnchanged =
+    typeof input.phone === 'string' &&
+    options.storedPhone !== undefined &&
+    phone === (options.storedPhone ?? '').trim();
 
   if (name.length < 2) return 'Navn må være minst 2 tegn';
-  if (phone.length < 8 || phone.length > 20) return 'Telefonnummer må være minst 8 tegn';
+  if (!phoneUnchanged && !isValidPhone(phone)) return PHONE_ERROR;
   if (name.length > 100 || address.length > 200) return 'Feltet er for langt';
 
   return null;
@@ -146,3 +166,10 @@ export function childDeleteBlockedError(activeRegistrations: number): string | n
 
 /** Statuser som regnes som «aktive» påmeldinger for sletting av barn. */
 export const ACTIVE_REGISTRATION_STATUSES = ['pending', 'confirmed', 'waitlist'];
+
+/** Deler et fullt navn i fornavn (alt unntatt siste ord) og etternavn — for forhåndsutfylling. */
+export function splitFullName(name: string | null | undefined): { first: string; last: string } {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: parts[0] ?? '', last: '' };
+  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+}

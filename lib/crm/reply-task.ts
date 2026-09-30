@@ -28,21 +28,30 @@ export function replyTaskDueAt(now: Date, rawDays: string): Date {
   return new Date(now.getTime() + safeDays * DAY_MS);
 }
 
+const STAFF_SELECT = { id: true, role: true, deactivatedAt: true, anonymizedAt: true } as const;
+
+type StaffCandidate = { id: number; role: string; deactivatedAt: Date | null; anonymizedAt: Date | null } | null;
+
 /** Kun aktive admin-brukere kan få oppgaver — ellers blir de usynlige. */
-async function findStaffUserId(email: string | null | undefined): Promise<number | null> {
-  const normalized = email?.trim().toLowerCase();
-  if (!normalized) return null;
-  const user = await prisma.user.findUnique({
-    where: { email: normalized },
-    select: { id: true, role: true, deactivatedAt: true, anonymizedAt: true },
-  });
+function activeStaffId(user: StaffCandidate): number | null {
   if (!user || !isAdmin(user.role) || user.deactivatedAt || user.anonymizedAt) return null;
   return user.id;
 }
 
+async function findStaffUserIdByEmail(email: string | null | undefined): Promise<number | null> {
+  const normalized = email?.trim().toLowerCase();
+  if (!normalized) return null;
+  return activeStaffId(await prisma.user.findUnique({ where: { email: normalized }, select: STAFF_SELECT }));
+}
+
+async function findStaffUserIdById(id: number | null | undefined): Promise<number | null> {
+  if (id == null) return null;
+  return activeStaffId(await prisma.user.findUnique({ where: { id }, select: STAFF_SELECT }));
+}
+
 /**
- * Tildeling: avsenderidentitetens bruker → standardmottaker fra innstillinger →
- * ingen. Kalleren sørger for idempotens (kun ved første registrerte svar).
+ * Tildeling: avsenderidentitetens bruker → kontaktens eier → bedriftens eier →
+ * standardmottaker fra innstillinger → ingen. Kalleren sørger for idempotens.
  */
 export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: string | null): Promise<void> {
   try {
@@ -55,7 +64,7 @@ export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: stri
 
     const contact = await prisma.contact.findUnique({
       where: { id: send.contactId },
-      select: { name: true, organizationId: true },
+      select: { name: true, organizationId: true, ownerId: true, organization: { select: { ownerId: true } } },
     });
     if (!contact) return;
 
@@ -77,7 +86,11 @@ export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: stri
       senderEmail = identity?.email ?? null;
     }
 
-    const assigneeId = (await findStaffUserId(senderEmail)) ?? (await findStaffUserId(defaultAssignee));
+    const assigneeId =
+      (await findStaffUserIdByEmail(senderEmail)) ??
+      (await findStaffUserIdById(contact.ownerId)) ??
+      (await findStaffUserIdById(contact.organization?.ownerId)) ??
+      (await findStaffUserIdByEmail(defaultAssignee));
     const topic = inboundSubject?.trim() || send.subject.trim() || flowName || '';
 
     await prisma.task.create({

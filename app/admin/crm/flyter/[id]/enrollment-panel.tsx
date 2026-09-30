@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { CardSkeleton } from '@/components/admin/Skeleton';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 
 interface EnrollmentRow {
   id: number;
@@ -32,10 +33,12 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
   const { toast } = useToast();
   const [enrollments, setEnrollments] = useState<EnrollmentRow[]>([]);
   const [total, setTotal] = useState<number | null>(null);
+  const [active, setActive] = useState<number | null>(null);
   const [page, setPage] = useState(1);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  useModalEscape(modalOpen, () => setModalOpen(false));
   const abortRef = useRef<AbortController | null>(null);
   const pageSize = 50;
 
@@ -53,6 +56,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
         const data = await res.json();
         setEnrollments(data.enrollments ?? []);
         setTotal(data.total ?? 0);
+        setActive(data.active ?? 0);
         setPage(data.page ?? targetPage);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -80,9 +84,10 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
     <>
       <button
         onClick={() => setModalOpen(true)}
-        className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
+        className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+        title="Aktive påmeldinger er kontakter som fortsatt er underveis i flyten"
       >
-        {total ?? 0} påmeldinger
+        {active ?? 0} aktive · {total ?? 0} totalt
       </button>
 
       {modalOpen && (

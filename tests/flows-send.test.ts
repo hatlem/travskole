@@ -165,7 +165,7 @@ describe('sendFlowEmail', () => {
 
     expect(mockedSendMailAs).toHaveBeenCalledTimes(1);
     const mailArg = mockedSendMailAs.mock.calls[0][0];
-    expect(mailArg.from).toBe('"Bjerke Travbane" <send@bjerke.no>');
+    expect(mailArg.from).toEqual({ name: 'Bjerke Travbane', address: 'send@bjerke.no' });
     // Reply-To sentraliseres alltid til fellespostboksen (minste-privilegium
     // for Graph-pollingen) — uavhengig av avsenderidentiteten i From.
     expect(mailArg.replyTo).toBe('registrering@bjerke.no');
@@ -327,6 +327,19 @@ describe('sendFlowEmail', () => {
     expect(created).toContain('Ola');
     expect(created).toContain('Ponni');
     expect(resolveCourseMergeContext).toHaveBeenCalledWith(42);
+  });
+
+  it('10. fills {{kontakt_epost}} from the contact_email setting in contact-anchored flows', async () => {
+    const result = await sendFlowEmail({
+      ...baseInput,
+      bodyHtml: '<p>Spørsmål? Skriv til {{kontakt_epost}}</p>',
+      registrationId: null,
+    });
+
+    expect(result).toBe('sent');
+    const created = prisma.messageSend.create.mock.calls.at(-1)?.[0]?.data?.bodyHtml as string;
+    expect(created).toContain('Skriv til registrering@bjerke.no');
+    expect(resolveCourseMergeContext).not.toHaveBeenCalled();
   });
 
   describe('defensive failure paths', () => {

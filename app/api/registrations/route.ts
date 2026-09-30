@@ -7,17 +7,21 @@ import logger, { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { generateSlug } from '@/lib/slug';
+import { phoneSchema, PHONE_ERROR } from '@/lib/validation/phone';
 import { sendRegistrationConfirmation, sendRegistrationAdminNotification } from '@/lib/mail';
 import { getSetting, getSettings } from '@/lib/settings';
-import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
+import { requiredRegistrationConsentError, isWaitlist, courseAgeError } from '@/lib/registration-rules';
+import { markCourseFullIfAtCapacity } from '@/lib/registrations/capacity';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { recordMarketingOptIn } from '@/lib/crm/marketing-consent';
 import { parsePaymentMethods } from '@/lib/payments';
 import { signCheckoutToken } from '@/lib/payments/checkout-token';
+import { validateBirthdate } from '@/lib/profile';
 
 const CHECKOUT_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 time
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface RegistrationData {
   courseType: string;
@@ -29,6 +33,8 @@ interface RegistrationData {
   parentAddress?: string;
   childSelection: 'existing' | 'new';
   existingChildId?: string;
+  /** Fødselsdato for et eksisterende barn som mangler den (kurs med aldersgrense). */
+  existingChildBirthdate?: string;
   childName?: string;
   childBirthdate?: string;
   childAllergies?: string;
@@ -62,7 +68,6 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Backend validation with Zod
     const emailSchema = z.string().email();
-    const phoneSchema = z.string().min(8);
     const nameSchema = z.string().min(2).max(100);
 
     // SECURITY: guard against missing/non-string parentEmail before any dereference
@@ -90,10 +95,11 @@ export async function POST(request: NextRequest) {
     const phoneValidation = phoneSchema.safeParse(data.parentPhone);
     if (!phoneValidation.success) {
       return NextResponse.json(
-        { error: 'Ugyldig telefonnummer' },
+        { error: PHONE_ERROR },
         { status: 400 }
       );
     }
+    data.parentPhone = phoneValidation.data;
 
     // Validate names
     if (!nameSchema.safeParse(data.parentName).success) {
@@ -220,6 +226,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Aldersgrense for nytt barn sjekkes før noe opprettes; eksisterende barn sjekkes når det er slått opp.
+    if (!isAdultCourse && data.childSelection === 'new' && data.childBirthdate) {
+      const ageError = courseAgeError(course, data.childBirthdate, course.startDate);
+      if (ageError) {
+        return NextResponse.json({ error: ageError }, { status: 400 });
+      }
+    }
+
     // SECURITY: hvis e-posten allerede har en passordbeskyttet konto, ikke fest en
     // anonym påmelding til den — krev innlogging som den brukeren. Hindrer påmelding
     // på vegne av andre / datapollusjon mot eksisterende kontoer.
@@ -308,9 +322,31 @@ export async function POST(request: NextRequest) {
           { status: 404 }
         );
       }
+      let birthdate = child.birthdate;
+      const suppliedBirthdate =
+        typeof data.existingChildBirthdate === 'string' ? data.existingChildBirthdate.trim() : '';
+      if (!birthdate && suppliedBirthdate) {
+        const birthdateError = ISO_DATE.test(suppliedBirthdate)
+          ? validateBirthdate(suppliedBirthdate)
+          : 'Ugyldig fødselsdato';
+        if (birthdateError) {
+          return NextResponse.json({ error: birthdateError }, { status: 400 });
+        }
+        // Lagres før alderssjekken: fødselsdatoen er riktig uansett om barnet passer kurset.
+        const updated = await prisma.child.update({
+          where: { id: child.id },
+          data: { birthdate: new Date(suppliedBirthdate) },
+          select: { birthdate: true },
+        });
+        birthdate = updated.birthdate;
+      }
+      const ageError = courseAgeError(course, birthdate, course.startDate);
+      if (ageError) {
+        return NextResponse.json({ error: ageError }, { status: 400 });
+      }
       childId = child.id;
       childName = child.name;
-      childBirthdate = child.birthdate ? child.birthdate.toISOString().split('T')[0] : '';
+      childBirthdate = birthdate ? birthdate.toISOString().split('T')[0] : '';
       childAllergies = child.allergies ?? undefined;
     }
 
@@ -378,21 +414,7 @@ export async function POST(request: NextRequest) {
       })
       .catch(() => {});
 
-    // Auto-set course to "full" when maxParticipants reached
-    if (course.maxParticipants && course.status === 'open') {
-      const activeCount = await prisma.registration.count({
-        where: {
-          courseId: course.id,
-          status: { in: ['pending', 'confirmed'] },
-        },
-      });
-      if (activeCount >= course.maxParticipants) {
-        await prisma.course.update({
-          where: { id: course.id },
-          data: { status: 'full' },
-        });
-      }
-    }
+    await markCourseFullIfAtCapacity(course);
 
     // SECURITY: Log registration
     logRegistration(data.parentEmail, course.slug || data.courseSlug);

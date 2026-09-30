@@ -3,8 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
-import { emitEvent } from '@/lib/events/bus';
-import { normalizeEmail } from '@/lib/crm/normalize';
+import { emitBookingStatusEvent } from '@/lib/bookings/status-event';
 import { decideBookingApprovalEmail, BOOKING_CHECKOUT_TOKEN_TTL_MS } from '@/lib/bookings/approval-email';
 import { sendBookingApprovedPayEmail, sendBookingApprovedEmail } from '@/lib/mail';
 import { signCheckoutToken } from '@/lib/payments/checkout-token';
@@ -44,21 +43,7 @@ export async function PUT(
   logActivity({ action: 'status_change', entity: 'booking', entityId: Number(id), details: JSON.stringify({ status: body.status }), userEmail: session.user.email }).catch(() => {});
   syncBookingToCrm(Number(id)).catch(() => {});
 
-  // Hendelsesbuss: bookingstatus endret (fire-safe)
-  (async () => {
-    const email = normalizeEmail(booking.email);
-    const contact = email
-      ? await prisma.contact.findUnique({ where: { email }, select: { id: true } })
-      : null;
-    // Ingen dedupeKey her: statusendringer er tilsiktet append-only — samme
-    // status kan settes flere ganger og skal hver gang gi et eget hendelses-innslag.
-    await emitEvent({
-      type: 'booking.status_changed',
-      source: 'server',
-      contactId: contact?.id ?? null,
-      meta: { bookingRequestId: booking.id, status: booking.status },
-    });
-  })().catch(() => {});
+  emitBookingStatusEvent(booking).catch(() => {});
 
   // Godkjenning-e-post (fire-safe): kun ved overgang inn i confirmed.
   (async () => {

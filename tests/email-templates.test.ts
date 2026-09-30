@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { replaceMergeTags, wrapEmailHtml, mergeTagsForAnchor, MERGE_TAGS, type MergeTagData } from '@/lib/email-templates';
 
 const data: MergeTagData = {
   forelder_navn: 'Kari Nordmann',
@@ -37,5 +37,12 @@ describe('wrapEmailHtml', () => {
     expect(html).toContain('<p>Innhold</p>');
     expect(html).toContain('Bjerke Ponniskole');
     expect(html).toContain('<!DOCTYPE html>');
+  });
+});
+
+describe('mergeTagsForAnchor', () => {
+  it('offers every tag in course flows and hides course-only tags in contact flows', () => {
+    expect(mergeTagsForAnchor('course')).toHaveLength(MERGE_TAGS.length);
+    expect(mergeTagsForAnchor('contact').map((t) => t.tag)).toEqual(['{{forelder_navn}}', '{{kontakt_epost}}']);
   });
 });

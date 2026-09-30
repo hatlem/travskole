@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
 import { logActivity } from '@/lib/activity';
 import { serializePaymentMethods } from '@/lib/payments';
 import logger from '@/lib/logger';
@@ -14,9 +15,7 @@ export async function GET() {
   try {
     const courses = await prisma.course.findMany({
       orderBy: { startDate: 'desc' },
-      include: {
-        _count: { select: { registrations: true } },
-      },
+      include: occupiedRegistrationsCount,
     });
 
     return NextResponse.json({ courses });

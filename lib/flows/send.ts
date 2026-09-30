@@ -82,7 +82,8 @@ function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
   return `flow:${enrollmentId}:${nodeId}`;
 }
 
-export function contactMergeTagData(contact: { name: string }): MergeTagData {
+/** Kurs-feltene er tomme utenfor kursflyter; kontakt_epost er sidens kontaktadresse for alle flyter. */
+export function contactMergeTagData(contact: { name: string }, contactEmail: string): MergeTagData {
   return {
     forelder_navn: contact.name,
     barnets_navn: '',
@@ -90,7 +91,7 @@ export function contactMergeTagData(contact: { name: string }): MergeTagData {
     kurs_startdato: '',
     kurs_sluttdato: '',
     allergier: '',
-    kontakt_epost: '',
+    kontakt_epost: contactEmail,
   };
 }
 
@@ -265,7 +266,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const identity = await prisma.senderIdentity.findUnique({ where: { id: input.senderIdentityId } });
   if (!identity?.active) return 'failed';
 
-  let mergeData = contactMergeTagData(contact);
+  let mergeData = contactMergeTagData(contact, await getSetting('contact_email'));
   if (input.registrationId != null) {
     const courseCtx = await resolveCourseMergeContext(input.registrationId);
     if (courseCtx) mergeData = { ...mergeData, ...courseCtx };
@@ -345,7 +346,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
 
   try {
     const { messageId } = await sendMailAs({
-      from: `"${identity.displayName}" <${identity.email}>`,
+      from: { name: identity.displayName, address: identity.email },
       // Reply-To sentraliseres til fellespostboksen uansett avsenderidentitet:
       // svar-/bounce-pollingen (Graph) trenger da kun lesetilgang til ÉN
       // postboks (registrering@) i stedet for alle syv avsenderpostboksene —

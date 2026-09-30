@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
-import { EVENT_TYPES } from '@/lib/events/taxonomy';
+import { EVENT_LABELS, eventLabel, eventSourceLabel, groupedEventTypes } from '@/lib/flows/event-labels';
 
 interface EventRow {
   id: number;
@@ -31,7 +31,7 @@ function EventDetails({ meta }: { meta: string }) {
   }
   return (
     <details>
-      <summary className="cursor-pointer text-blue-700 hover:underline">meta</summary>
+      <summary className="cursor-pointer text-blue-700 hover:underline">Vis detaljer</summary>
       <pre className="mt-1 max-w-md whitespace-pre-wrap break-words text-xs text-gray-600">{formatted}</pre>
     </details>
   );
@@ -105,8 +105,12 @@ function HendelserContent() {
           className="border border-gray-300 rounded-md px-3 py-2 text-sm"
         >
           <option value="">Alle typer</option>
-          {EVENT_TYPES.map((t) => (
-            <option key={t} value={t}>{t}</option>
+          {groupedEventTypes().map(({ group, types }) => (
+            <optgroup key={group} label={group}>
+              {types.map((t) => (
+                <option key={t} value={t}>{EVENT_LABELS[t]}</option>
+              ))}
+            </optgroup>
           ))}
         </select>
         <select
@@ -116,7 +120,7 @@ function HendelserContent() {
         >
           <option value="">Alle kilder</option>
           {SOURCES.map((s) => (
-            <option key={s} value={s}>{s}</option>
+            <option key={s} value={s}>{eventSourceLabel(s)}</option>
           ))}
         </select>
         <label className="text-sm flex items-center gap-1">
@@ -184,8 +188,11 @@ function HendelserContent() {
                   <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
                     {new Date(e.occurredAt).toLocaleString('nb-NO')}
                   </td>
-                  <td className="px-4 py-3 font-medium">{e.type}</td>
-                  <td className="px-4 py-3 text-gray-600">{e.source}</td>
+                  <td className="px-4 py-3">
+                    <span className="font-medium">{eventLabel(e.type)}</span>
+                    <span className="block text-xs text-gray-400 font-mono">{e.type}</span>
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{eventSourceLabel(e.source)}</td>
                   <td className="px-4 py-3">
                     {e.contact ? (
                       <Link href={`/admin/crm/kontakter/${e.contact.id}`} className="text-blue-700 hover:underline">

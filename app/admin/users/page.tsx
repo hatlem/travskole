@@ -367,7 +367,7 @@ export default function AdminUsersPage() {
               type="text"
               value={searchInput}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Sok etter e-post, navn eller telefon..."
+              placeholder="Søk etter e-post, navn eller telefon …"
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
             />
             <select
@@ -432,7 +432,7 @@ export default function AdminUsersPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                   <tr>
-                    <th className="px-6 py-3 text-left w-10">
+                    <th className="px-4 py-3 text-left w-10">
                       <input
                         type="checkbox"
                         checked={allVisibleSelected}
@@ -442,14 +442,14 @@ export default function AdminUsersPage() {
                         className="h-4 w-4 cursor-pointer rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue"
                       />
                     </th>
-                    <th className="px-6 py-3 text-left">Bruker</th>
-                    <th className="px-6 py-3 text-left">Kontakt</th>
-                    <th className="px-6 py-3 text-left">Barn</th>
-                    <th className="px-6 py-3 text-left">Pam.</th>
-                    <th className="px-6 py-3 text-left">Rolle</th>
-                    <th className="px-6 py-3 text-left">Status</th>
-                    <th className="px-6 py-3 text-left">Opprettet</th>
-                    <th className="px-6 py-3 text-right">Handlinger</th>
+                    <th className="px-4 py-3 text-left">Bruker</th>
+                    <th className="px-4 py-3 text-left hidden lg:table-cell">Kontakt</th>
+                    <th className="px-4 py-3 text-left hidden xl:table-cell">Barn</th>
+                    <th className="px-4 py-3 text-left hidden xl:table-cell" title="Påmeldinger">Påm.</th>
+                    <th className="px-4 py-3 text-left">Rolle</th>
+                    <th className="px-4 py-3 text-left">Status</th>
+                    <th className="px-4 py-3 text-left hidden xl:table-cell">Opprettet</th>
+                    <th className="px-4 py-3 text-right">Handlinger</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -464,7 +464,7 @@ export default function AdminUsersPage() {
                           onClick={() => toggleExpanded(user.id)}
                           className={`cursor-pointer transition-colors ${isExpanded ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
                         >
-                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={selectedIds.has(user.id)}
@@ -474,29 +474,32 @@ export default function AdminUsersPage() {
                               className="h-4 w-4 cursor-pointer rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue disabled:cursor-not-allowed disabled:opacity-40"
                             />
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4">
                             <div className="flex items-center gap-3">
                               <div className="h-9 w-9 rounded-full bg-bjerke-blue flex items-center justify-center text-white text-xs font-bold shrink-0">
                                 {initials}
                               </div>
-                              <div className="min-w-0">
+                              <div className="min-w-0 max-w-[14rem] xl:max-w-[18rem]">
                                 <p className="font-medium text-gray-900 truncate">{user.parent?.name || '-'}</p>
-                                <p className="text-gray-500 text-xs truncate">{user.email}</p>
+                                <p className="text-gray-500 text-xs truncate" title={user.email}>{user.email}</p>
+                                {user.parent?.phone && (
+                                  <p className="text-gray-400 text-xs lg:hidden">{user.parent.phone}</p>
+                                )}
                               </div>
                             </div>
                           </td>
-                          <td className="px-6 py-4 text-gray-500">{user.parent?.phone || '-'}</td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4 text-gray-500 hidden lg:table-cell whitespace-nowrap">{user.parent?.phone || '-'}</td>
+                          <td className="px-4 py-4 hidden xl:table-cell">
                             <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
                               {user.parent?._count?.children ?? 0}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4 hidden xl:table-cell">
                             <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
                               {user.parent?._count?.registrations ?? 0}
                             </span>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4">
                             <select
                               value={user.role}
                               onChange={(e) => {
@@ -526,7 +529,7 @@ export default function AdminUsersPage() {
                               )}
                             </select>
                           </td>
-                          <td className="px-6 py-4">
+                          <td className="px-4 py-4">
                             <span
                               className={`text-xs font-medium rounded-full px-2.5 py-1 ${
                                 status === 'anonymized'
@@ -539,12 +542,12 @@ export default function AdminUsersPage() {
                               {status === 'anonymized' ? 'Anonymisert' : status === 'deactivated' ? 'Deaktivert' : 'Aktiv'}
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-gray-500">
+                          <td className="px-4 py-4 text-gray-500 hidden xl:table-cell whitespace-nowrap">
                             {new Date(user.createdAt).toLocaleDateString('nb-NO')}
                           </td>
-                          <td className="px-6 py-4" onClick={(e) => e.stopPropagation()}>
+                          <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
                             {manageable ? (
-                              <div className="flex items-center justify-end gap-2">
+                              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
                                 <button
                                   onClick={() => openEdit(user)}
                                   className="text-xs font-medium text-bjerke-blue hover:underline"
@@ -585,7 +588,7 @@ export default function AdminUsersPage() {
                         {/* Expanded detail row */}
                         {isExpanded && (
                           <tr className="bg-blue-50/50">
-                            <td colSpan={9} className="px-6 py-4">
+                            <td colSpan={9} className="px-4 py-4">
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 {/* Address */}
                                 {user.parent?.address && (
@@ -614,7 +617,7 @@ export default function AdminUsersPage() {
                                 {/* Recent registrations */}
                                 <div>
                                   <p className="text-xs font-semibold text-gray-500 uppercase mb-2">
-                                    Siste pameldinger ({user.parent?._count?.registrations ?? 0} totalt)
+                                    Siste påmeldinger ({user.parent?._count?.registrations ?? 0} totalt)
                                   </p>
                                   {user.parent?.registrations && user.parent.registrations.length > 0 ? (
                                     <div className="space-y-2">
@@ -634,7 +637,7 @@ export default function AdminUsersPage() {
                                       ))}
                                     </div>
                                   ) : (
-                                    <p className="text-sm text-gray-400">Ingen pameldinger</p>
+                                    <p className="text-sm text-gray-400">Ingen påmeldinger</p>
                                   )}
                                 </div>
                               </div>
@@ -646,7 +649,7 @@ export default function AdminUsersPage() {
                   })}
                   {users.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-6 py-12 text-center text-gray-400">
+                      <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
                         Ingen brukere matcher filteret.
                       </td>
                     </tr>

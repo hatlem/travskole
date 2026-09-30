@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   computeRates, isoWeekStart, weekStarts, bucketCountsByWeek,
-  monthKey, monthKeys, bucketSumByMonth,
+  monthKey, monthKeys, bucketSumByMonth, wonChartMessage,
 } from '@/lib/crm/insights';
 
 const NOW = new Date('2026-07-18T12:00:00Z'); // lørdag; ISO-uke starter mandag 2026-07-13
@@ -79,5 +79,19 @@ describe('bucketSumByMonth', () => {
       { month: '2026-06', sum: 1500, count: 2 },
       { month: '2026-07', sum: 200, count: 1 },
     ]);
+  });
+});
+
+describe('wonChartMessage', () => {
+  const empty = [{ value: 0, count: 0 }, { value: 0, count: 0 }];
+  it('explains an empty chart when wins exist outside the window', () => {
+    expect(wonChartMessage(empty, 1)).toBe('Ingen vunne deals de siste 6 månedene (1 vunnet tidligere).');
+    expect(wonChartMessage(empty, 0)).toBe('Ingen vunne deals ennå.');
+  });
+  it('does not claim there are no wins when the wins have no value', () => {
+    expect(wonChartMessage([{ value: 0, count: 1 }], 1)).toBe('1 vunnet deal de siste 6 månedene, men uten registrert verdi.');
+  });
+  it('returns null so the chart is shown when there is won value', () => {
+    expect(wonChartMessage([{ value: 1234, count: 1 }], 1)).toBeNull();
   });
 });

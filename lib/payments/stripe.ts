@@ -1,5 +1,5 @@
 /**
- * Stripe-integrasjon: Checkout-sesjon + webhook-verifisering.
+ * Stripe-integrasjon: Checkout-sesjon, sesjonsoppslag og webhook-verifisering.
  *
  * Tynn wrapper rundt Stripe SDK — ingen forretningslogikk her (den ligger i
  * mapping.ts). Klienten instansieres per kall siden secret-nøkkelen avhenger
@@ -14,6 +14,7 @@ import { stripeSecretKey, isStripeConfigured, kronerToOre } from '@/lib/payments
 export interface VerifiedStripeEvent {
   id: string;
   type: string;
+  livemode: boolean;
   data: { object: Record<string, unknown> };
 }
 
@@ -31,13 +32,15 @@ export interface CreateStripeCheckoutInput {
   successUrl: string;
   cancelUrl: string;
   testMode: boolean;
+  /** Forhåndsutfyller e-post i Stripe Checkout. */
+  customerEmail?: string;
 }
 
 /** Oppretter en Stripe Checkout Session for påmelding eller bestillingsforespørsel. */
 export async function createStripeCheckout(
   input: CreateStripeCheckoutInput
 ): Promise<{ url: string; ref: string } | null> {
-  const { kind, id, title, amountKr, successUrl, cancelUrl, testMode } = input;
+  const { kind, id, title, amountKr, successUrl, cancelUrl, testMode, customerEmail } = input;
   if (!isStripeConfigured(testMode)) {
     logger.error('Stripe ikke konfigurert — kan ikke opprette checkout', { testMode });
     return null;
@@ -63,6 +66,7 @@ export async function createStripeCheckout(
       ],
       metadata,
       payment_intent_data: { metadata },
+      ...(customerEmail && { customer_email: customerEmail }),
       success_url: successUrl,
       cancel_url: cancelUrl,
     });
@@ -77,37 +81,88 @@ export async function createStripeCheckout(
   }
 }
 
-/** Webhook-secret for gjeldende modus. Undefined = ikke konfigurert. */
-function stripeWebhookSecret(testMode: boolean): string | undefined {
-  return testMode ? process.env.STRIPE_WEBHOOK_SECRET_TEST : process.env.STRIPE_WEBHOOK_SECRET;
+/** Konfigurerte webhook-secrets med modusen events signert med dem må ha. */
+function stripeWebhookSecrets(): { secret: string; livemode: boolean }[] {
+  const entries = [
+    { secret: process.env.STRIPE_WEBHOOK_SECRET, livemode: true },
+    { secret: process.env.STRIPE_WEBHOOK_SECRET_TEST, livemode: false },
+  ];
+  return entries.filter((e): e is { secret: string; livemode: boolean } => !!e.secret);
 }
 
-/** Verifiserer signatur og parser Stripe-webhook-eventet. Aldri throw — null ved feil. */
-export function verifyStripeWebhook(
-  rawBody: string,
-  signature: string | null,
-  testMode: boolean
-): VerifiedStripeEvent | null {
+export type StripeWebhookVerification =
+  | { ok: true; event: VerifiedStripeEvent }
+  | { ok: false; reason: 'invalid_signature' | 'mode_mismatch' };
+
+/**
+ * Verifiserer signatur og parser Stripe-webhook-eventet. Aldri throw.
+ *
+ * Prøver både live- og test-secret: hvilken modus betalingen ble startet i
+ * trenger ikke være dagens `payment_test_mode` (admin kan ha byttet i
+ * mellomtiden). Et event må ha `livemode` som matcher secreten det er signert
+ * med, ellers kunne en lekket test-secret brukes til å forfalske live-betalinger.
+ */
+export function verifyStripeWebhook(rawBody: string, signature: string | null): StripeWebhookVerification {
   if (!signature) {
     logger.error('Stripe webhook mangler signatur');
-    return null;
+    return { ok: false, reason: 'invalid_signature' };
   }
-  const webhookSecret = stripeWebhookSecret(testMode);
-  if (!webhookSecret) {
-    logger.error('Stripe webhook-secret ikke konfigurert', { testMode });
-    return null;
+  const secrets = stripeWebhookSecrets();
+  if (secrets.length === 0) {
+    logger.error('Stripe webhook-secret ikke konfigurert');
+    return { ok: false, reason: 'invalid_signature' };
   }
+  let modeMismatch = false;
+  for (const { secret, livemode } of secrets) {
+    let event: VerifiedStripeEvent;
+    try {
+      // Verifiseringsgrensen: cast slik at konsumenter kan komponere med mapStripeEvent.
+      event = Stripe.webhooks.constructEvent(rawBody, signature, secret) as unknown as VerifiedStripeEvent;
+    } catch {
+      continue;
+    }
+    if (event.livemode === livemode) return { ok: true, event };
+    modeMismatch = true;
+  }
+  if (modeMismatch) {
+    logger.error('Stripe webhook: livemode matcher ikke secreten eventet er signert med');
+    return { ok: false, reason: 'mode_mismatch' };
+  }
+  logger.error('Stripe webhook-verifisering feilet for alle konfigurerte secrets');
+  return { ok: false, reason: 'invalid_signature' };
+}
+
+/** Test/live ut fra checkout-sesjonens ID (cs_test_… / cs_live_…). Null = ikke en sesjons-ID. */
+export function stripeSessionTestMode(sessionId: string): boolean | null {
+  if (sessionId.startsWith('cs_test_')) return true;
+  if (sessionId.startsWith('cs_live_')) return false;
+  return null;
+}
+
+/**
+ * Henter en checkout-sesjon direkte fra Stripe med nøkkelen for sesjonens egen
+ * modus. Brukes som fallback på takk-siden når webhooken ikke har kommet.
+ * Aldri throw — null ved feil/manglende konfig.
+ */
+export async function retrieveStripeCheckoutSession(
+  sessionId: string
+): Promise<{ id: string; paymentStatus: string; object: Record<string, unknown> } | null> {
+  const testMode = stripeSessionTestMode(sessionId);
+  if (testMode === null) return null;
   const client = stripeClient(testMode);
   if (!client) {
-    logger.error('Stripe ikke konfigurert — kan ikke verifisere webhook', { testMode });
+    logger.error('Stripe ikke konfigurert — kan ikke hente checkout-sesjon', { testMode });
     return null;
   }
   try {
-    const event = client.webhooks.constructEvent(rawBody, signature, webhookSecret);
-    // Verifiseringsgrensen: cast til VerifiedStripeEvent slik at konsumenter kan komponere med mapStripeEvent.
-    return event as unknown as VerifiedStripeEvent;
+    const session = await client.checkout.sessions.retrieve(sessionId);
+    return {
+      id: session.id,
+      paymentStatus: session.payment_status,
+      object: session as unknown as Record<string, unknown>,
+    };
   } catch (error) {
-    logger.error('Stripe webhook-verifisering feilet', { error });
+    logger.error('Stripe: henting av checkout-sesjon feilet', { error, sessionId });
     return null;
   }
 }

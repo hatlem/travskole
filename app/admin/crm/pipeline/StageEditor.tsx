@@ -2,8 +2,9 @@
 
 import { useState } from 'react';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 import { useToast } from '@/components/admin/Toast';
-import { stageRole, type StageRole } from '@/lib/crm/stages';
+import { stageDeleteBlockedReason, stageRole, type StageRole } from '@/lib/crm/stages';
 
 export interface EditableStage {
   id: number;
@@ -43,6 +44,7 @@ interface PendingConfirm {
 export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChanged }: StageEditorProps) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
+  useModalEscape(true, onClose, busy);
   const [name, setName] = useState(pipelineName);
   const [newStageName, setNewStageName] = useState('');
   const [newStageRole, setNewStageRole] = useState<StageRole>('open');
@@ -167,7 +169,7 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
             <button
               onClick={renamePipeline}
               disabled={busy || !name.trim() || name.trim() === pipelineName}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50 shrink-0"
+              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50 shrink-0"
             >
               Lagre
             </button>
@@ -221,7 +223,7 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
             <button
               type="submit"
               disabled={busy || !newStageName.trim()}
-              className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm hover:bg-blue-700 disabled:opacity-50"
+              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50"
             >
               Legg til
             </button>
@@ -262,6 +264,8 @@ interface StageRowProps {
 
 function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMoveUp, onMoveDown, onDelete }: StageRowProps) {
   const [draft, setDraft] = useState(stage.name);
+  const [showBlocked, setShowBlocked] = useState(false);
+  const blockedReason = stageDeleteBlockedReason(stage.dealCount);
   const role = stageRole(stage);
   const dot = role === 'won' ? 'bg-green-500' : role === 'lost' ? 'bg-red-500' : 'bg-gray-400';
   const iconButton = 'px-2 py-1 text-sm text-gray-600 hover:bg-gray-100 rounded disabled:opacity-30 disabled:hover:bg-transparent';
@@ -275,7 +279,11 @@ function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMove
         onBlur={() => onRename(draft)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') e.currentTarget.blur();
-          if (e.key === 'Escape') setDraft(stage.name);
+          // Første Escape angrer navneendringen; uten endring lukker Escape dialogen.
+          if (e.key === 'Escape' && draft !== stage.name) {
+            e.stopPropagation();
+            setDraft(stage.name);
+          }
         }}
         maxLength={60}
         disabled={busy}
@@ -298,14 +306,22 @@ function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMove
         <button onClick={onMoveUp} disabled={busy || isFirst} className={iconButton} aria-label="Flytt opp" title="Flytt opp">↑</button>
         <button onClick={onMoveDown} disabled={busy || isLast} className={iconButton} aria-label="Flytt ned" title="Flytt ned">↓</button>
         <button
-          onClick={onDelete}
-          disabled={busy || stage.dealCount > 0}
-          className="px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded disabled:opacity-30 disabled:hover:bg-transparent"
-          title={stage.dealCount > 0 ? 'Flytt dealene til et annet stadium før du sletter' : 'Slett stadium'}
+          onClick={() => (blockedReason ? setShowBlocked(true) : onDelete())}
+          disabled={busy}
+          aria-disabled={blockedReason !== null}
+          className={`px-2 py-1 text-sm rounded disabled:opacity-30 ${
+            blockedReason ? 'text-red-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'
+          }`}
+          title={blockedReason ?? 'Slett stadium'}
         >
           Slett
         </button>
       </div>
+      {showBlocked && blockedReason && (
+        <p role="alert" className="basis-full text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">
+          {blockedReason}
+        </p>
+      )}
     </li>
   );
 }

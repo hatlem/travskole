@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
+import { FLOW_STATUS_LABELS, canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
 import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
 import { DEFAULT_FLOW_SETTINGS, FlowSettingsFields, type FlowSettingsValues } from './flow-settings-fields';
 
@@ -36,13 +36,7 @@ interface ValidationError {
   message: string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Utkast',
-  active: 'Aktiv',
-  paused: 'Pauset',
-  archived: 'Arkivert',
-  template: 'Mal',
-};
+const STATUS_LABELS = FLOW_STATUS_LABELS;
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
@@ -390,7 +384,12 @@ export default function FlyterPage() {
           toast(data.error || 'Kunne ikke arkivere flyt', 'error');
           return;
         }
-        toast('Flyt arkivert', 'success');
+        toast(
+          data.exitedEnrollments > 0
+            ? `Flyt arkivert — ${data.exitedEnrollments} aktive påmeldinger avsluttet`
+            : 'Flyt arkivert',
+          'success'
+        );
       } else {
         const res = await fetch(`/api/admin/crm/flows/${flow.id}`, { method: 'DELETE' });
         const data = await res.json();
@@ -438,7 +437,7 @@ export default function FlyterPage() {
           </button>
           <button
             onClick={() => { setShowGenerate(false); setShowFromTemplate(false); setShowNew(true); }}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
           >
             Ny flyt
           </button>
@@ -551,7 +550,7 @@ export default function FlyterPage() {
             <button
               onClick={createFlow}
               disabled={!newSettings.name.trim() || creating}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
             >
               {creating ? 'Oppretter …' : 'Opprett'}
             </button>
@@ -902,7 +901,7 @@ export default function FlyterPage() {
         message={
           confirmAction?.type === 'delete'
             ? `Er du sikker på at du vil slette «${confirmAction.flow.name}»? Dette kan ikke angres.`
-            : `Er du sikker på at du vil arkivere «${confirmAction?.flow.name}»?`
+            : `Er du sikker på at du vil arkivere «${confirmAction?.flow.name}»? Kontakter som er underveis i flyten blir avsluttet, og arkivering kan ikke angres.`
         }
         confirmLabel={confirmAction?.type === 'delete' ? 'Slett' : 'Arkiver'}
         variant={confirmAction?.type === 'delete' ? 'danger' : 'warning'}

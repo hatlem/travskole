@@ -1,19 +1,12 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
+import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
+import { REGISTRATION_STATUS_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
 
-function escapeCsvField(value: string): string {
-  // SECURITY: nøytraliser formelinjeksjon i Excel/Sheets (=, +, -, @, tab, CR)
-  let v = value;
-  if (/^[=+\-@\t\r]/.test(v)) {
-    v = `'${v}`;
-  }
-  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-    return `"${v.replace(/"/g, '""')}"`;
-  }
-  return v;
-}
+const yesNo = (value: boolean) => (value ? 'Ja' : 'Nei');
 
 export async function GET() {
   const session = await requireAdmin();
@@ -25,10 +18,7 @@ export async function GET() {
     const registrations = await prisma.registration.findMany({
       where: {
         parent: { deletedAt: null },
-        OR: [
-          { childId: null },
-          { child: { deletedAt: null } },
-        ],
+        OR: [{ childId: null }, { child: { deletedAt: null } }],
       },
       orderBy: { createdAt: 'desc' },
       include: {
@@ -47,56 +37,46 @@ export async function GET() {
     const headers = [
       'ID',
       'Kurs',
-      'Barn',
-      'Fodselsdato',
-      'Forelder',
+      'Deltaker',
+      'Fødselsdato',
+      'Foresatt',
       'E-post',
       'Telefon',
       'Allergier',
       'Status',
       'Samtykke aktiviteter',
-      'Samtykke media',
+      'Samtykke bilder/video',
       'Samtykke risiko',
-      'Dato',
+      'Påmeldt',
     ];
 
+    // Fødselsdato er en ren dato (UTC-midnatt) — formateres i UTC for å unngå dagsforskyvning.
     const rows = registrations.map((reg) => [
-      String(reg.id),
-      escapeCsvField(reg.course.name),
-      escapeCsvField(reg.child?.name ?? `${reg.parent.name} (voksen)`),
-      reg.child?.birthdate
-        ? new Date(reg.child.birthdate).toLocaleDateString('nb-NO')
-        : '',
-      escapeCsvField(reg.parent.name),
-      escapeCsvField(reg.parent.user.email),
-      escapeCsvField(reg.parent.phone),
-      reg.child?.allergies ? escapeCsvField(reg.child.allergies) : '',
-      reg.status,
-      reg.consentActivities ? 'Ja' : 'Nei',
-      reg.consentMedia ? 'Ja' : 'Nei',
-      reg.consentRisk ? 'Ja' : 'Nei',
-      new Date(reg.createdAt).toLocaleDateString('nb-NO'),
+      reg.id,
+      reg.course.name,
+      reg.child?.name ?? `${reg.parent.name} (voksen)`,
+      reg.child?.birthdate ? reg.child.birthdate.toLocaleDateString('nb-NO', { timeZone: 'UTC', day: '2-digit', month: '2-digit', year: 'numeric' }) : '',
+      reg.parent.name,
+      reg.parent.user.email,
+      reg.parent.phone,
+      reg.child?.allergies ?? '',
+      label(REGISTRATION_STATUS_LABELS, reg.status),
+      yesNo(reg.consentActivities),
+      yesNo(reg.consentMedia),
+      yesNo(reg.consentRisk),
+      formatOsloDate(reg.createdAt),
     ]);
 
-    const csv =
-      '\uFEFF' +
-      [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    logActivity({
+      action: 'export',
+      entity: 'registration',
+      details: JSON.stringify({ rows: rows.length }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
-    const today = new Date().toISOString().split('T')[0];
-    const filename = `pameldinger-${today}.csv`;
-
-    return new NextResponse(csv, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    });
+    return csvResponse(toCsv(headers, rows), csvFilename('pameldinger'));
   } catch (error) {
     logger.error('Error exporting registrations', { error });
-    return NextResponse.json(
-      { error: 'Kunne ikke eksportere påmeldinger' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Kunne ikke eksportere påmeldinger' }, { status: 500 });
   }
 }

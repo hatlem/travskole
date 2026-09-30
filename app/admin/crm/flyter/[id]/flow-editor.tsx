@@ -20,6 +20,7 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import type { CourseOption } from '@/lib/flows/event-labels';
 import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
+import { freeNodePosition, validateEditorGraph } from '@/lib/flows/editor';
 import { nodeTypes, NODE_TYPE_ORDER, NODE_LABELS, type FlowRFNode, type FlowNodeType } from './node-types';
 import { edgeTypes, type FlowRFEdge } from './deletable-edge';
 import {
@@ -146,6 +147,16 @@ export function FlowEditor({
     [edges, editingDisabled],
   );
 
+  // Samme validering som aktiveringen, kjørt på grafen slik den ligger i editoren.
+  const liveErrors = useMemo(() => validateEditorGraph(nodes, edges), [nodes, edges]);
+  const nodeLabel = useCallback(
+    (nodeId: number) => {
+      const node = nodes.find((n) => n.id === String(nodeId));
+      return node ? NODE_LABELS[node.type as FlowNodeType] ?? 'Node' : `Node #${nodeId}`;
+    },
+    [nodes],
+  );
+
   const clearErrors = useCallback(() => {
     setErrorNodeIds((prev) => (prev.size === 0 ? prev : new Set()));
     setActivationErrors((prev) => (prev.length === 0 ? prev : []));
@@ -203,10 +214,7 @@ export function FlowEditor({
     if (editingDisabled) return;
     tempIdRef.current -= 1;
     const id = String(tempIdRef.current);
-    const pos = position ?? {
-      x: 120 + (nodes.length % 4) * 200,
-      y: 80 + Math.floor(nodes.length / 4) * 140,
-    };
+    const pos = position ?? freeNodePosition(nodes.map((n) => n.position));
     const defaultConfig: Record<string, unknown> = type === 'wait' ? { days: 0, hours: 0 } : {};
     setNodes((nds) => [...nds, { id, type, position: pos, data: { config: defaultConfig, hasError: false } }]);
     setSelectedNodeId(id);
@@ -320,6 +328,11 @@ export function FlowEditor({
 
   async function handleActivate() {
     if (activatingRef.current || dirty) return;
+    if (liveErrors.length > 0) {
+      applyValidationErrors(liveErrors);
+      toast('Flyten kan ikke aktiveres — se feilene under', 'error');
+      return;
+    }
     activatingRef.current = true;
     setActivating(true);
     try {
@@ -348,6 +361,11 @@ export function FlowEditor({
   async function handleStatusChange(nextStatus: 'active' | 'paused') {
     if (statusChangeRef.current) return;
     if (nextStatus === 'active' && dirty) return;
+    if (nextStatus === 'active' && liveErrors.length > 0) {
+      applyValidationErrors(liveErrors);
+      toast('Kan ikke gjenoppta — se feilene under', 'error');
+      return;
+    }
     statusChangeRef.current = true;
     setChangingStatus(true);
     try {
@@ -414,6 +432,8 @@ export function FlowEditor({
         activating={activating}
         changingStatus={changingStatus}
         activationErrors={activationErrors}
+        pendingProblems={flow.status === 'draft' || flow.status === 'paused' ? liveErrors.length : 0}
+        nodeLabel={nodeLabel}
         onSave={handleSave}
         onActivate={handleActivate}
         onPause={() => handleStatusChange('paused')}
@@ -424,9 +444,9 @@ export function FlowEditor({
         enrollmentCounter={<EnrollmentPanel key={enrollmentsVersion} flowId={flow.id} />}
       />
 
-      <div className="grid grid-cols-[160px_1fr_320px] gap-4">
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold uppercase text-gray-500">Legg til node</h3>
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[160px_minmax(0,1fr)_320px]">
+        <div className="flex flex-wrap items-center gap-2 lg:block lg:space-y-2">
+          <h3 className="w-full text-xs font-semibold uppercase text-gray-500">Legg til node</h3>
           {NODE_TYPE_ORDER.map((type) => (
             <button
               key={type}
@@ -435,20 +455,20 @@ export function FlowEditor({
               onDragStart={(e) => onPaletteDragStart(e, type)}
               disabled={editingDisabled}
               title="Klikk for å legge til, eller dra inn på lerretet"
-              className="w-full text-left border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 cursor-grab active:cursor-grabbing disabled:cursor-not-allowed"
+              className="lg:w-full text-left border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 cursor-grab active:cursor-grabbing disabled:cursor-not-allowed"
             >
               {NODE_LABELS[type]}
             </button>
           ))}
           {!editingDisabled && (
-            <p className="text-[11px] text-gray-500 pt-1">
+            <p className="w-full text-[11px] text-gray-500 pt-1">
               Klikk eller dra en node inn på lerretet. Velg en kobling og trykk Delete/Backspace (eller ×) for å slette den.
             </p>
           )}
         </div>
 
         <div
-          className="h-[600px] rounded-lg border border-gray-200 bg-gray-50"
+          className="h-[420px] lg:h-[600px] min-w-0 rounded-lg border border-gray-200 bg-gray-50"
           onDragOver={onCanvasDragOver}
           onDrop={onCanvasDrop}
         >
@@ -513,6 +533,7 @@ export function FlowEditor({
               segments={segments}
               adminUsers={adminUsers}
               isMarketing={flow.isMarketing}
+              anchorMode={flow.anchorMode}
               disabled={editingDisabled}
               onChangeConfig={updateNodeConfig}
               onDeleteNode={deleteNode}

@@ -1,20 +1,10 @@
 import { notFound } from 'next/navigation';
-import { prisma } from '@/lib/prisma';
-import { generateSlug } from '@/lib/slug';
+import { findCourseBySlug } from '@/lib/course-lookup';
 import { parsePaymentMethods } from '@/lib/payments';
 import PameldingForm from './pamelding-form';
 import RequestForm from './request-form';
 
 export const dynamic = 'force-dynamic';
-
-async function getCourse(type: string, slug: string) {
-  if (!/^[a-z0-9-]+$/.test(type)) return null;
-  const course = await prisma.course.findFirst({ where: { type, slug } });
-  if (course) return course;
-  // Legacy fallback: courses created before slugs were stored.
-  const candidates = await prisma.course.findMany({ where: { type } });
-  return candidates.find((c) => (c.slug || generateSlug(c.name)) === slug) ?? null;
-}
 
 export default async function PameldingPage({
   params,
@@ -22,7 +12,7 @@ export default async function PameldingPage({
   params: Promise<{ type: string; year: string; slug: string }>;
 }) {
   const { type, year, slug } = await params;
-  const course = await getCourse(type, slug);
+  const course = await findCourseBySlug(type, slug);
 
   if (!course) {
     notFound();
@@ -51,6 +41,11 @@ export default async function PameldingPage({
       courseName={course.name}
       isAdult={course.audience === 'voksen'}
       paymentMethods={parsePaymentMethods(course.paymentMethods)}
+      ageRule={{
+        ageMin: course.ageMin,
+        ageMax: course.ageMax,
+        courseStart: course.startDate ? course.startDate.toISOString() : null,
+      }}
     />
   );
 }

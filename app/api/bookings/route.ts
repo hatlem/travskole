@@ -10,15 +10,24 @@ import { syncBookingToCrm } from '@/lib/crm/bridge';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { recordMarketingOptIn } from '@/lib/crm/marketing-consent';
+import { phoneSchema } from '@/lib/validation/phone';
+import { preferredDateError } from '@/lib/validation/date';
 import { getSetting } from '@/lib/settings';
 
 const bookingSchema = z.object({
   courseId: z.coerce.number().int().positive(),
   name: z.string().min(1, 'Navn er påkrevd').max(200),
   email: z.string().email('Ugyldig e-postadresse'),
-  phone: z.string().min(8, 'Ugyldig telefonnummer').max(20),
+  phone: phoneSchema,
   participants: z.coerce.number().int().min(1).max(20).default(1),
-  preferredDate: z.string().nullable().optional(),
+  preferredDate: z
+    .string()
+    .nullable()
+    .optional()
+    .superRefine((value, ctx) => {
+      const error = preferredDateError(value);
+      if (error) ctx.addIssue({ code: 'custom', message: error });
+    }),
   message: z.string().max(2000).nullable().optional(),
   consentRisk: z.boolean().default(false),
   consentTerms: z.boolean().default(false),

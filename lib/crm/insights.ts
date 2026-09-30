@@ -77,3 +77,17 @@ export function bucketSumByMonth(
   }
   return keys.map((month) => ({ month, ...(acc.get(month) as { sum: number; count: number }) }));
 }
+
+/** Tekst i stedet for «vunnet per måned»-grafen når den ville vært tom; null = vis grafen. */
+export function wonChartMessage(months: { value: number; count: number }[], totalWon: number): string | null {
+  const count = months.reduce((sum, m) => sum + m.count, 0);
+  if (count === 0) {
+    return totalWon > 0
+      ? `Ingen vunne deals de siste 6 månedene (${totalWon} vunnet tidligere).`
+      : 'Ingen vunne deals ennå.';
+  }
+  if (months.every((m) => m.value === 0)) {
+    return `${count === 1 ? '1 vunnet deal' : `${count} vunne deals`} de siste 6 månedene, men uten registrert verdi.`;
+  }
+  return null;
+}

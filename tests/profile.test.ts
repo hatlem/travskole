@@ -1,11 +1,25 @@
 import { describe, it, expect } from 'vitest';
+import { PHONE_ERROR } from '@/lib/validation/phone';
 import {
   validateChildInput,
   validateProfileInput,
   validatePasswordChange,
   childDeleteBlockedError,
   validateEmailChange,
+  splitFullName,
 } from '@/lib/profile';
+
+describe('splitFullName', () => {
+  it('deler på siste ord', () => {
+    expect(splitFullName('Kari Nordmann')).toEqual({ first: 'Kari', last: 'Nordmann' });
+    expect(splitFullName('  Anne  Marie  Hansen ')).toEqual({ first: 'Anne Marie', last: 'Hansen' });
+  });
+
+  it('håndterer ett eller ingen navn', () => {
+    expect(splitFullName('Kari')).toEqual({ first: 'Kari', last: '' });
+    expect(splitFullName(null)).toEqual({ first: '', last: '' });
+  });
+});
 
 const NOW = new Date('2026-09-03T12:00:00Z');
 
@@ -69,7 +83,7 @@ describe('validateProfileInput', () => {
   it('rejects short name and short phone', () => {
     expect(validateProfileInput({ name: 'K', phone: '12345678' })).toBe('Navn må være minst 2 tegn');
     expect(validateProfileInput({ name: 'Kari', phone: '1234' })).toBe(
-      'Telefonnummer må være minst 8 tegn'
+      PHONE_ERROR
     );
   });
 
@@ -80,6 +94,30 @@ describe('validateProfileInput', () => {
     expect(
       validateProfileInput({ name: 'Kari', phone: '12345678', address: 'a'.repeat(201) })
     ).toBe('Feltet er for langt');
+  });
+});
+
+describe('validateProfileInput med lagret telefon', () => {
+  it('godtar et uendret (eldre, ugyldig) nummer', () => {
+    expect(validateProfileInput({ name: 'Kari', phone: ' 1234 ' }, { storedPhone: '1234' })).toBeNull();
+    expect(validateProfileInput({ name: 'Kari', phone: '' }, { storedPhone: null })).toBeNull();
+  });
+
+  it('validerer et endret nummer', () => {
+    expect(validateProfileInput({ name: 'Kari', phone: '5678' }, { storedPhone: '1234' })).toBe(PHONE_ERROR);
+    expect(validateProfileInput({ name: 'Kari', phone: '12345678' }, { storedPhone: '1234' })).toBeNull();
+  });
+
+  it('validerer når telefon mangler i input eller ingen er lagret', () => {
+    const noPhone = { name: 'Kari' } as unknown as { name: string; phone: string };
+    expect(validateProfileInput(noPhone, { storedPhone: '' })).toBe(PHONE_ERROR);
+    expect(validateProfileInput({ name: 'Kari', phone: '1234' })).toBe(PHONE_ERROR);
+  });
+
+  it('sjekker fortsatt navnet selv om telefonen er uendret', () => {
+    expect(validateProfileInput({ name: 'K', phone: '1234' }, { storedPhone: '1234' })).toBe(
+      'Navn må være minst 2 tegn'
+    );
   });
 });
 

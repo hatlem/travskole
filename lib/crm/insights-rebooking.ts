@@ -67,7 +67,10 @@ export interface RebookingYearStats {
   previousYearCustomers: number;
   returning: number;
   newCustomers: number;
-  /** Andel av fjorårets kunder som booket igjen, i prosent med én desimal. null uten fjorårskunder. */
+  /**
+   * Andel av fjorårets kunder som booket igjen, i prosent med én desimal. null uten
+   * fjorårskunder, og for fremtidige sesonger som ennå ikke har noen bookinger.
+   */
   rebookingRate: number | null;
   returningValue: number;
   newValue: number;
@@ -78,7 +81,9 @@ export function rebookingByYear(
   deals: RebookingDealRow[],
   dimension: CustomerDimension,
   years: number[],
+  now: Date = new Date(),
 ): RebookingYearStats[] {
+  const currentYear = osloYear(now);
   const byYear = customersByYear(deals, dimension);
   const valueByYear = new Map<number, { returning: number; fresh: number }>();
   for (const deal of deals) {
@@ -103,7 +108,10 @@ export function rebookingByYear(
       previousYearCustomers: previous.size,
       returning,
       newCustomers: current.size - returning,
-      rebookingRate: previous.size > 0 ? Math.round((returning / previous.size) * 1000) / 10 : null,
+      rebookingRate:
+        previous.size === 0 || (year > currentYear && current.size === 0)
+          ? null
+          : Math.round((returning / previous.size) * 1000) / 10,
       returningValue: value.returning,
       newValue: value.fresh,
     };
@@ -203,7 +211,7 @@ export interface RebookingReport {
 /** Samler hele gjenbookingsfanen. `years` = kandidatår; år uten data (i år eller året før) droppes. */
 export function buildRebookingReport(
   deals: RebookingDealRow[],
-  { year, eventType, years }: { year: number; eventType: string | null; years: number[] },
+  { year, eventType, years, now = new Date() }: { year: number; eventType: string | null; years: number[]; now?: Date },
 ): RebookingReport {
   const all = bookingDeals(deals, null);
   const filtered = bookingDeals(all, eventType);
@@ -214,8 +222,8 @@ export function buildRebookingReport(
     eventType,
     availableYears,
     eventTypes: [...new Set(all.map((d) => eventTypeKey(d.eventType)))].sort((a, b) => a.localeCompare(b, 'nb')),
-    contacts: rebookingByYear(filtered, 'contact', availableYears),
-    organizations: rebookingByYear(filtered, 'organization', availableYears),
+    contacts: rebookingByYear(filtered, 'contact', availableYears, now),
+    organizations: rebookingByYear(filtered, 'organization', availableYears, now),
     byEventType: rebookingByEventType(all, year),
     notRebooked: notYetRebooked(filtered, year),
   };

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { useModalEscape } from '@/components/admin/useModalEscape';
 
 interface SegmentOption {
   id: number;
@@ -47,13 +48,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
   const [result, setResult] = useState<EnrollResult | null>(null);
   const searchAbort = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  useModalEscape(true, onClose, submitting);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -147,7 +142,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
   }
 
   const tabCls = (active: boolean) =>
-    `px-3 py-1.5 text-sm rounded-md ${active ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-100'}`;
+    `px-3 py-1.5 text-sm rounded-md ${active ? 'bg-bjerke-blue text-white' : 'text-gray-700 hover:bg-gray-100'}`;
 
   return (
     <div
@@ -184,7 +179,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
               <button onClick={() => { setResult(null); setSelected([]); }} className="text-sm text-gray-700 px-3 py-1.5">
                 Meld inn flere
               </button>
-              <button onClick={onClose} className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm">
+              <button onClick={onClose} className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm">
                 Ferdig
               </button>
             </div>
@@ -273,7 +268,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
               <button
                 onClick={submit}
                 disabled={!canSubmit}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
               >
                 {submitting
                   ? 'Melder inn …'

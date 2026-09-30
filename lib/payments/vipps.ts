@@ -151,6 +151,55 @@ export async function createVippsPayment(
   }
 }
 
+export interface VippsPaymentSnapshot {
+  /** CREATED | AUTHORIZED | ABORTED | EXPIRED | TERMINATED */
+  state: string;
+  amountOre: number | null;
+}
+
+/**
+ * Henter en Vipps-betalings nåværende tilstand. `'not_found'` når betalingen
+ * ikke finnes i dette miljøet (kan være opprettet i den andre modusen), null
+ * ved øvrige feil. Aldri throw.
+ */
+export async function getVippsPayment(
+  reference: string,
+  testMode: boolean
+): Promise<VippsPaymentSnapshot | 'not_found' | null> {
+  if (!isVippsConfigured(testMode)) return null;
+  const accessToken = await getVippsAccessToken(testMode);
+  if (!accessToken) return null;
+
+  try {
+    const env = vippsEnv(testMode);
+    const res = await fetch(
+      `${vippsBaseUrl(testMode)}/epayment/v1/payments/${encodeURIComponent(reference)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Ocp-Apim-Subscription-Key': env.subscriptionKey as string,
+          'Merchant-Serial-Number': env.msn as string,
+        },
+      }
+    );
+    if (res.status === 404) return 'not_found';
+    if (!res.ok) {
+      logger.error('Vipps statusoppslag feilet', { status: res.status, reference });
+      return null;
+    }
+    const json = (await res.json()) as { state?: unknown; amount?: { value?: unknown } };
+    if (typeof json.state !== 'string') {
+      logger.error('Vipps statusoppslag mangler state', { reference });
+      return null;
+    }
+    const value = json.amount?.value;
+    return { state: json.state, amountOre: typeof value === 'number' ? value : null };
+  } catch (error) {
+    logger.error('Vipps statusoppslag kastet feil', { error, reference });
+    return null;
+  }
+}
+
 export interface VippsWebhookHeaders {
   date: string | null;
   contentSha256: string | null;

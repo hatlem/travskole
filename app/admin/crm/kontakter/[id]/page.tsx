@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { CrmTabs } from '@/components/admin/CrmTabs';
+import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CardSkeleton } from '@/components/admin/Skeleton';
@@ -55,7 +56,7 @@ const SUPPRESSION_REASONS: Record<string, string> = {
 
 const ACTIVITY_ICONS: Record<string, string> = {
   booking: '📅', registration: '📝', note: '🗒️', task: '✅',
-  deal_change: '💼', import: '📥', event: '⚡',
+  deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄',
 };
 
 function fmtDate(d: string | null): string {
@@ -70,6 +71,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const canUnsuppress = isSuperAdmin(session?.user?.role);
   const { assignees, currentUserId } = useAssignees();
   const [contact, setContact] = useState<ContactDetail | null>(null);
+  useBreadcrumbLabel(contact?.name);
   const [initialLoading, setInitialLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
   const [noteText, setNoteText] = useState('');
@@ -549,7 +551,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                 onChange={(v) => { setTaskAssignee(v); setTaskAssigneeTouched(true); }}
               />
               <button onClick={addTask} disabled={!taskTitle.trim()}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Legg til</button>
+                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Legg til</button>
             </div>
             <ul className="space-y-1">
               {contact.tasks.map((t) => (
@@ -581,7 +583,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
               <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat …"
                 rows={2} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1" />
               <button onClick={addNote} disabled={!noteText.trim()}
-                className="bg-blue-600 text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre</button>
+                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre</button>
             </div>
             <ul className="space-y-2">
               {contact.notes.map((n) => (

@@ -22,3 +22,14 @@ export function csvFilename(base: string, date = new Date()): string {
     .replace(/^-+|-+$/g, '') || 'eksport';
   return `${slug}-${date.toISOString().slice(0, 10)}.csv`;
 }
+
+/** Nedlastbar CSV-respons (UTF-8 med BOM fra toCsv, så Excel viser æøå riktig). */
+export function csvResponse(csv: string, filename: string): Response {
+  return new Response(csv, {
+    status: 200,
+    headers: {
+      'Content-Type': 'text/csv; charset=utf-8',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    },
+  });
+}

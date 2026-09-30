@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
+import { FLOW_STATUS_LABELS, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 
 export interface ValidationError {
   nodeId: number | null;
@@ -9,13 +9,7 @@ export interface ValidationError {
   message: string;
 }
 
-const STATUS_LABELS: Record<string, string> = {
-  draft: 'Utkast',
-  active: 'Aktiv',
-  paused: 'Pauset',
-  archived: 'Arkivert',
-  template: 'Mal',
-};
+const STATUS_LABELS = FLOW_STATUS_LABELS;
 
 const STATUS_STYLES: Record<string, string> = {
   draft: 'bg-gray-100 text-gray-600',
@@ -33,6 +27,9 @@ interface FlowToolbarProps {
   activating: boolean;
   changingStatus: boolean;
   activationErrors: ValidationError[];
+  /** Valideringsfeil i grafen slik den er nå (vises før aktivering). */
+  pendingProblems: number;
+  nodeLabel: (nodeId: number) => string;
   onSave: () => void;
   onActivate: () => void;
   onPause: () => void;
@@ -52,6 +49,8 @@ export function FlowToolbar({
   activating,
   changingStatus,
   activationErrors,
+  pendingProblems,
+  nodeLabel,
   onSave,
   onActivate,
   onPause,
@@ -108,12 +107,17 @@ export function FlowToolbar({
           <button
             onClick={onSave}
             disabled={saving || !dirty || editingDisabled}
-            className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
           >
             {saving ? 'Lagrer …' : 'Lagre'}
           </button>
           {status === 'active' && (
             <span className="text-xs text-gray-500">Sett på pause for å redigere</span>
+          )}
+          {pendingProblems > 0 && activationErrors.length === 0 && (
+            <span className="text-xs text-amber-700" role="status">
+              ⚠ {pendingProblems === 1 ? '1 problem' : `${pendingProblems} problemer`} må rettes før aktivering
+            </span>
           )}
           {status === 'draft' && (
             <button
@@ -153,7 +157,7 @@ export function FlowToolbar({
           <ul className="list-disc list-inside space-y-0.5">
             {activationErrors.map((e, i) => (
               <li key={i}>
-                {e.nodeId !== null ? `Node #${e.nodeId}: ` : ''}
+                {e.nodeId !== null ? `${nodeLabel(e.nodeId)}: ` : ''}
                 {e.message}
               </li>
             ))}

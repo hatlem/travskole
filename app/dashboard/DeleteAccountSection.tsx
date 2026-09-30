@@ -41,7 +41,7 @@ export function DeleteAccountSection({ hasPassword }: DeleteAccountSectionProps)
         return;
       }
       // Kontoen kan ikke lenger logge inn — avslutt sesjonen med én gang.
-      signOut({ callbackUrl: '/' });
+      signOut({ callbackUrl: '/?konto=slettet' });
     } catch {
       setError('Noe gikk galt. Prøv igjen.');
     } finally {

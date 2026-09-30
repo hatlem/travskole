@@ -87,8 +87,14 @@ async function sendMail(to: string, subject: string, html: string) {
   });
 }
 
+/** Navn + adresse som objekt: nodemailer tar seg av quoting og koding av æøå. */
+export interface MailSender {
+  name: string;
+  address: string;
+}
+
 interface SendMailAsInput {
-  from: string;
+  from: MailSender;
   replyTo?: string;
   to: string;
   subject: string;
@@ -305,7 +311,7 @@ export async function sendBookingApprovedEmail(data: BookingEmail) {
 export async function sendPasswordResetEmail(email: string, token: string) {
   const siteName = await getSiteName();
   const baseUrl = getBaseUrl();
-  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
   await sendMail(
     email,
     `Tilbakestill passord — ${siteName}`,
@@ -327,7 +333,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
 export async function sendMagicLinkEmail(email: string, token: string) {
   const siteName = await getSiteName();
   const baseUrl = getBaseUrl();
-  const url = `${baseUrl}/magic-link?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const url = `${baseUrl}/magic-link?token=${encodeURIComponent(token)}`;
   await sendMail(
     email,
     `Innloggingslenke — ${siteName}`,

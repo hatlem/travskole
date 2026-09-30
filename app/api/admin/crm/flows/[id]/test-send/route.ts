@@ -185,7 +185,7 @@ export async function POST(
 
   try {
     await sendMailAs({
-      from: `"${identity.displayName}" <${identity.email}>`,
+      from: { name: identity.displayName, address: identity.email },
       replyTo: identity.email,
       to: toEmail,
       subject: renderedSubject,

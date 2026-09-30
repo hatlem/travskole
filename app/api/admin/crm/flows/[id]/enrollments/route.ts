@@ -29,7 +29,7 @@ export async function GET(
 
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1);
 
-  const [enrollments, total] = await Promise.all([
+  const [enrollments, total, active] = await Promise.all([
     prisma.flowEnrollment.findMany({
       where: { flowId },
       include: { contact: { select: { id: true, name: true } } },
@@ -38,9 +38,10 @@ export async function GET(
       take: PAGE_SIZE,
     }),
     prisma.flowEnrollment.count({ where: { flowId } }),
+    prisma.flowEnrollment.count({ where: { flowId, status: 'active' } }),
   ]);
 
-  return NextResponse.json({ enrollments, total, page, pageSize: PAGE_SIZE });
+  return NextResponse.json({ enrollments, total, active, page, pageSize: PAGE_SIZE });
 }
 
 const MAX_CONTACT_IDS = 500;

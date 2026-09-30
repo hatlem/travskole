@@ -7,6 +7,7 @@ import {
   emitRegistrationStatusEvent,
   promoteFromWaitlist,
 } from '@/lib/registrations/cancel';
+import { syncRegistrationToCrm } from '@/lib/crm/bridge';
 import logger from '@/lib/logger';
 
 /**
@@ -67,7 +68,10 @@ export async function POST(
       userEmail: session.user.email,
     }).catch(() => {});
 
-    emitRegistrationStatusEvent(id, registration.courseId, 'cancelled').catch(() => {});
+    syncRegistrationToCrm(id)
+      .catch(() => {})
+      .then(() => emitRegistrationStatusEvent(id, registration.courseId, 'cancelled'))
+      .catch(() => {});
     await promoteFromWaitlist(id);
 
     return NextResponse.json({ ok: true, status: 'cancelled' });

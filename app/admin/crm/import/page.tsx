@@ -206,7 +206,7 @@ export default function ImportPage() {
                 + Ny liste
               </button>
               <button onClick={preview} disabled={previewBusy || (mapping.name === null && mapping.email === null)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
+                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
                 {previewBusy ? 'Leser …' : 'Forhåndsvis'}
               </button>
             </div>
@@ -264,7 +264,7 @@ export default function ImportPage() {
           <section className="border border-green-200 bg-green-50 rounded-lg p-4 text-sm">
             <p className="mb-3">Import fullført: {result.created} nye, {result.updated} oppdatert, {result.skipped} hoppet over.</p>
             <button onClick={resetImport}
-              className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700">
+              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark">
               Ny import
             </button>
           </section>

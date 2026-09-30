@@ -75,8 +75,12 @@ async function pipelineSection(now: Date) {
     prisma.deal.groupBy({ by: ['stageId'], where: { status: 'open' }, _sum: { value: true }, _count: { _all: true } }),
     prisma.stage.findMany({ select: { id: true, name: true, pipeline: { select: { name: true } } } }),
     prisma.deal.findMany({
-      where: { status: 'won', closedAt: { gte: sixMonthsAgo, not: null } },
-      select: { closedAt: true, value: true },
+      // Eldre/importerte vunne deals mangler closedAt — da brukes sist endret.
+      where: {
+        status: 'won',
+        OR: [{ closedAt: { gte: sixMonthsAgo } }, { closedAt: null, updatedAt: { gte: sixMonthsAgo } }],
+      },
+      select: { closedAt: true, updatedAt: true, value: true },
     }),
     prisma.deal.groupBy({ by: ['status'], _count: { _all: true } }),
   ]);
@@ -94,7 +98,7 @@ async function pipelineSection(now: Date) {
   });
 
   const wonBuckets = bucketSumByMonth(
-    wonDeals.map((d) => ({ at: d.closedAt as Date, value: d.value ?? 0 })), 6, now,
+    wonDeals.map((d) => ({ at: d.closedAt ?? d.updatedAt, value: d.value ?? 0 })), 6, now,
   );
   const wonByMonth = wonBuckets.map((b) => ({ month: b.month, value: b.sum, count: b.count }));
 

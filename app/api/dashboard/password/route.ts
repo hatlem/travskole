@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession, hashPassword, verifyPassword } from '@/lib/auth';
 import { validatePasswordChange } from '@/lib/profile';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { passwordChangeLimiter, checkRateLimit } from '@/lib/rate-limiter';
 
 /**
  * Bytt (eller sett) passord mens man er innlogget.
@@ -20,10 +20,10 @@ export async function PUT(request: NextRequest) {
   }
 
   // SECURITY: rate limiting — bremser gjetting av det nåværende passordet.
-  const ip = getClientIp(request.headers);
-  const rateLimit = await checkRateLimit(passwordResetLimiter, ip);
+  const userKey = `user:${session.user.id || session.user.email}`;
+  const rateLimit = await checkRateLimit(passwordChangeLimiter, userKey);
   if (!rateLimit.allowed) {
-    logRateLimitExceeded('/api/dashboard/password', ip);
+    logRateLimitExceeded('/api/dashboard/password', userKey);
     return NextResponse.json({ error: rateLimit.error }, { status: 429 });
   }
 

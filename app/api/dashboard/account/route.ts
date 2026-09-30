@@ -4,7 +4,7 @@ import { getServerSession, verifyPassword } from '@/lib/auth';
 import { anonymizeAccount, countActiveSuperadmins } from '@/lib/account-anonymize';
 import { logActivity } from '@/lib/activity';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { passwordResetLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { accountDeleteLimiter, checkRateLimit } from '@/lib/rate-limiter';
 
 /**
  * Brukeren sletter sin egen konto (GDPR art. 17).
@@ -22,10 +22,10 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const ip = getClientIp(request.headers);
-  const rateLimit = await checkRateLimit(passwordResetLimiter, ip);
+  const userKey = `user:${session.user.id || session.user.email}`;
+  const rateLimit = await checkRateLimit(accountDeleteLimiter, userKey);
   if (!rateLimit.allowed) {
-    logRateLimitExceeded('/api/dashboard/account', ip);
+    logRateLimitExceeded('/api/dashboard/account', userKey);
     return NextResponse.json({ error: rateLimit.error }, { status: 429 });
   }
 

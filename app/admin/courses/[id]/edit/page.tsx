@@ -6,6 +6,8 @@ import Link from 'next/link';
 import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
+import { validateCourseForm } from '@/lib/course-form';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
@@ -57,6 +59,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const { id } = use(params);
   const router = useRouter();
   const [course, setCourse] = useState<CourseData | null>(null);
+  useBreadcrumbLabel(course?.name, `/admin/courses/${id}`);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -94,13 +97,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
-  const validationErrors: Record<string, string> = {};
-  if (!name.trim()) validationErrors.name = 'Kursnavn er påkrevd';
-  if (registrationMode !== 'request' && !startDate) validationErrors.startDate = 'Startdato er påkrevd';
-  if (endDate && startDate && endDate < startDate)
-    validationErrors.endDate = 'Sluttdato kan ikke være før startdato';
-  if (ageMin && ageMax && Number(ageMin) > Number(ageMax))
-    validationErrors.ageMax = 'Maksimumsalder kan ikke være lavere enn minimumsalder';
+  const validationErrors = validateCourseForm({ name, registrationMode, startDate, endDate, ageMin, ageMax });
+  const invalidFields = Object.keys(validationErrors);
 
   const effectiveSlug = slug || slugify(name);
   const currentYear = startDate ? new Date(startDate).getFullYear() : new Date().getFullYear();
@@ -145,6 +143,11 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (invalidFields.length > 0) {
+      setTouched((prev) => ({ ...prev, ...Object.fromEntries(invalidFields.map((f) => [f, true])) }));
+      document.getElementById(invalidFields[0])?.focus();
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(false);
@@ -608,11 +611,18 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <button
                 type="submit"
-                disabled={saving || Object.keys(validationErrors).length > 0}
+                disabled={saving}
                 className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
               >
                 {saving ? 'Lagrer...' : 'Lagre endringer'}
               </button>
+              {invalidFields.some((f) => touched[f]) && (
+                <ul role="alert" className="mt-3 text-sm text-red-600 list-disc pl-5 space-y-0.5">
+                  {invalidFields.map((f) => (
+                    <li key={f}>{validationErrors[f]}</li>
+                  ))}
+                </ul>
+              )}
               <Link
                 href="/admin/courses"
                 className="block text-center text-gray-600 hover:text-gray-800 px-4 py-2.5 text-sm font-medium mt-2"

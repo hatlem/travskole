@@ -8,7 +8,7 @@ import {
 import type { RebookingReport, RebookingYearStats, NotRebookedCustomer } from '@/lib/crm/insights-rebooking';
 
 const kr = (n: number) => `${Math.round(n).toLocaleString('nb-NO')} kr`;
-const rate = (r: number | null) => (r === null ? '–' : `${r.toLocaleString('nb-NO')} %`);
+const rate = (r: number | null) => (r === null ? '—' : `${r.toLocaleString('nb-NO')} %`);
 const osloDate = (iso: string) =>
   new Date(iso).toLocaleDateString('nb-NO', { timeZone: 'Europe/Oslo', day: '2-digit', month: '2-digit', year: 'numeric' });
 const typeLabel = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);

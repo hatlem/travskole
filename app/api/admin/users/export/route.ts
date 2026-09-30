@@ -1,19 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
+import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
+import { ROLE_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
-
-function escapeCsvField(value: string): string {
-  // SECURITY: nøytraliser formelinjeksjon i Excel/Sheets (=, +, -, @, tab, CR)
-  let v = value;
-  if (/^[=+\-@\t\r]/.test(v)) {
-    v = `'${v}`;
-  }
-  if (v.includes(',') || v.includes('"') || v.includes('\n')) {
-    return `"${v.replace(/"/g, '""')}"`;
-  }
-  return v;
-}
 
 export async function GET() {
   const session = await requireAdmin();
@@ -42,41 +33,26 @@ export async function GET() {
 
     const headers = ['ID', 'E-post', 'Navn', 'Telefon', 'Adresse', 'Rolle', 'Opprettet'];
 
-    const roleLabels: Record<string, string> = {
-      parent: 'Forelder',
-      admin: 'Administrator',
-      superadmin: 'Superadmin',
-    };
-
     const rows = users.map((user) => [
-      String(user.id),
-      escapeCsvField(user.email),
-      user.parent ? escapeCsvField(user.parent.name) : '',
-      user.parent?.phone || '',
-      user.parent?.address ? escapeCsvField(user.parent.address) : '',
-      roleLabels[user.role] || user.role,
-      new Date(user.createdAt).toLocaleDateString('nb-NO'),
+      user.id,
+      user.email,
+      user.parent?.name ?? '',
+      user.parent?.phone ?? '',
+      user.parent?.address ?? '',
+      label(ROLE_LABELS, user.role),
+      formatOsloDate(user.createdAt),
     ]);
 
-    const csv =
-      '\uFEFF' +
-      [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    logActivity({
+      action: 'export',
+      entity: 'user',
+      details: JSON.stringify({ rows: rows.length }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
-    const today = new Date().toISOString().split('T')[0];
-    const filename = `brukere-${today}.csv`;
-
-    return new NextResponse(csv, {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/csv; charset=utf-8',
-        'Content-Disposition': `attachment; filename="${filename}"`,
-      },
-    });
+    return csvResponse(toCsv(headers, rows), csvFilename('brukere'));
   } catch (error) {
     logger.error('Error exporting users', { error });
-    return NextResponse.json(
-      { error: 'Kunne ikke eksportere brukere' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Kunne ikke eksportere brukere' }, { status: 500 });
   }
 }

@@ -111,7 +111,7 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
       <div className="flex justify-end gap-2 mt-4">
         <button type="button" onClick={onCancel} disabled={saving} className="text-sm text-gray-600 px-3 py-1.5">Avbryt</button>
         <button type="submit" disabled={!valid || saving}
-          className="bg-blue-600 text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50">
+          className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50">
           {saving ? 'Lagrer …' : 'Lagre endringer'}
         </button>
       </div>

@@ -20,7 +20,7 @@ export async function recordOpen(token: string): Promise<boolean> {
     type: 'email.opened',
     source: 'server',
     contactId: send.contactId,
-    meta: {},
+    meta: { messageSendId: send.id },
     dedupeKey: `open:${send.id}`,
   });
 
@@ -76,16 +76,24 @@ export async function recordReply(
     await createReplyTask(send, inbound.subject);
   }
 
+  const enrollment =
+    send.enrollmentId != null
+      ? await prisma.flowEnrollment.findUnique({ where: { id: send.enrollmentId } })
+      : null;
+
   await emitEvent({
     type: 'email.replied',
     source: 'server',
     contactId: send.contactId,
-    meta: {},
+    meta: {
+      messageSendId: send.id,
+      ...(send.enrollmentId != null && { enrollmentId: send.enrollmentId }),
+      ...(enrollment?.flowId != null && { flowId: enrollment.flowId }),
+    },
     dedupeKey: `reply:${send.id}`,
   });
 
   if (send.enrollmentId != null) {
-    const enrollment = await prisma.flowEnrollment.findUnique({ where: { id: send.enrollmentId } });
     // Et svar avslutter flyten — med mindre flyten selv forgrener på «svarte»,
     // da må den fortsette for å nå ja-grenen.
     if (enrollment && enrollment.status === 'active' && !(await flowBranchesOnReply(enrollment.flowId))) {

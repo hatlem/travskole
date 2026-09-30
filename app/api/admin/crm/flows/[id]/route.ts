@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { exitActiveEnrollments } from '@/lib/flows/exit';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 import { ANCHOR_MODES, canDeleteStatus, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 
@@ -178,13 +179,20 @@ export async function PATCH(
       },
     });
 
+    // Arkivert er terminal — ingen kontakter skal bli stående «aktive» i en død flyt.
+    const exitedEnrollments =
+      data.status === 'archived' && existing?.status !== 'archived'
+        ? await exitActiveEnrollments({ flowId })
+        : 0;
+
     logActivity({
       action: 'update',
       entity: 'flow',
       entityId: flow.id,
+      details: exitedEnrollments > 0 ? JSON.stringify({ status: 'archived', exitedEnrollments }) : undefined,
       userEmail: session.user.email,
     }).catch(() => {});
-    return NextResponse.json({ flow });
+    return NextResponse.json({ flow, exitedEnrollments });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&

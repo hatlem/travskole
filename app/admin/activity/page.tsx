@@ -2,6 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import {
+  ACTIVITY_ACTION_OPTIONS,
+  ACTIVITY_ENTITY_OPTIONS,
+  activityActionLabel,
+  activityEntityLabel,
+  formatActivityDetails,
+} from '@/lib/activity-labels';
 
 interface ActivityLog {
   id: number;
@@ -12,21 +19,6 @@ interface ActivityLog {
   userEmail: string;
   createdAt: string;
 }
-
-const actionLabels: Record<string, string> = {
-  create: 'Opprettet',
-  update: 'Oppdatert',
-  delete: 'Slettet',
-  email: 'E-post sendt',
-  status_change: 'Status endret',
-};
-
-const entityLabels: Record<string, string> = {
-  course: 'Kurs',
-  registration: 'Pamelding',
-  user: 'Bruker',
-  booking: 'Booking',
-};
 
 const actionIcons: Record<string, string> = {
   create: 'M12 4v16m8-8H4',
@@ -53,10 +45,10 @@ function relativeTime(dateStr: string): string {
   const diffHour = Math.floor(diffMin / 60);
   const diffDay = Math.floor(diffHour / 24);
 
-  if (diffSec < 60) return 'Akkurat na';
+  if (diffSec < 60) return 'Akkurat nå';
   if (diffMin < 60) return `${diffMin} ${diffMin === 1 ? 'minutt' : 'minutter'} siden`;
   if (diffHour < 24) return `${diffHour} ${diffHour === 1 ? 'time' : 'timer'} siden`;
-  if (diffDay === 1) return 'I gar';
+  if (diffDay === 1) return 'I går';
   if (diffDay < 7) return `${diffDay} dager siden`;
   if (diffDay < 30) return `${Math.floor(diffDay / 7)} ${Math.floor(diffDay / 7) === 1 ? 'uke' : 'uker'} siden`;
   return date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -118,7 +110,7 @@ export default function AdminActivityPage() {
     <div>
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Aktivitetslogg</h1>
-        <p className="text-gray-600 text-sm mt-1">Oversikt over handlinger utfort i adminpanelet</p>
+        <p className="text-gray-600 text-sm mt-1">Oversikt over handlinger utført i adminpanelet</p>
       </div>
 
       {/* Filters */}
@@ -129,7 +121,7 @@ export default function AdminActivityPage() {
           </svg>
           <input
             type="text"
-            placeholder="Sok etter detaljer eller e-post..."
+            placeholder="Søk etter detaljer eller e-post …"
             value={search}
             onChange={e => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
@@ -144,11 +136,9 @@ export default function AdminActivityPage() {
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="">Alle handlinger</option>
-          <option value="create">Opprettet</option>
-          <option value="update">Oppdatert</option>
-          <option value="delete">Slettet</option>
-          <option value="email">E-post sendt</option>
-          <option value="status_change">Statusendring</option>
+          {ACTIVITY_ACTION_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
         </select>
         <select
           value={entityFilter}
@@ -159,10 +149,9 @@ export default function AdminActivityPage() {
           className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue/20 focus:border-bjerke-blue"
         >
           <option value="">Alle typer</option>
-          <option value="course">Kurs</option>
-          <option value="registration">Pamelding</option>
-          <option value="user">Bruker</option>
-          <option value="booking">Booking</option>
+          {ACTIVITY_ENTITY_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
         </select>
       </div>
 
@@ -208,20 +197,20 @@ export default function AdminActivityPage() {
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d={actionIcons[log.action] || 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
                         </svg>
-                        {actionLabels[log.action] || log.action}
+                        {activityActionLabel(log.action)}
                       </span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-gray-700">
-                        {entityLabels[log.entity] || log.entity}
+                        {activityEntityLabel(log.entity)}
                         {log.entityId != null && (
                           <span className="text-gray-400 ml-1">#{log.entityId}</span>
                         )}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-gray-600 truncate block max-w-xs" title={log.details || ''}>
-                        {log.details || '-'}
+                      <span className="text-gray-600 truncate block max-w-xs" title={formatActivityDetails(log.details)}>
+                        {formatActivityDetails(log.details) || '—'}
                       </span>
                     </td>
                   </tr>
@@ -239,19 +228,19 @@ export default function AdminActivityPage() {
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d={actionIcons[log.action] || 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
                     </svg>
-                    {actionLabels[log.action] || log.action}
+                    {activityActionLabel(log.action)}
                   </span>
                   <span className="text-xs text-gray-500" title={new Date(log.createdAt).toLocaleString('nb-NO')}>
                     {relativeTime(log.createdAt)}
                   </span>
                 </div>
                 <p className="text-sm text-gray-900 font-medium">
-                  {entityLabels[log.entity] || log.entity}
+                  {activityEntityLabel(log.entity)}
                   {log.entityId != null && <span className="text-gray-400 ml-1">#{log.entityId}</span>}
                 </p>
                 <p className="text-xs text-gray-500 mt-0.5">{log.userEmail}</p>
                 {log.details && (
-                  <p className="text-sm text-gray-600 mt-1">{log.details}</p>
+                  <p className="text-sm text-gray-600 mt-1">{formatActivityDetails(log.details)}</p>
                 )}
               </div>
             ))}

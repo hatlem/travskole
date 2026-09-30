@@ -71,6 +71,17 @@ export function eventLabel(type: string): string {
   return (EVENT_LABELS as Record<string, string>)[type] ?? type;
 }
 
+export const EVENT_SOURCE_LABELS: Record<string, string> = {
+  server: 'Server',
+  web: 'Nettsted',
+  client: 'Nettleser',
+  webhook: 'Webhook',
+};
+
+export function eventSourceLabel(source: string): string {
+  return EVENT_SOURCE_LABELS[source] ?? source;
+}
+
 /**
  * Hvilken meta-nøkkel hendelsen bruker for å identifisere kurset — påmeldings-
  * hendelser sender `courseId`, klient-hendelsene fra kurssidene `courseSlug`.

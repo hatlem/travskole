@@ -40,3 +40,12 @@ export function planStatusTransition(
     downgrade: nextRank < currentRank,
   };
 }
+
+/** Statuser der betalingen er gjennomført (eller refundert) — ny checkout skal nektes. */
+export const SETTLED_PAYMENT_STATUSES = (Object.keys(STATUS_RANK) as PaymentStatus[]).filter(
+  (status) => STATUS_RANK[status] >= STATUS_RANK.paid,
+);
+
+export function isSettledPaymentStatus(status: string): boolean {
+  return (SETTLED_PAYMENT_STATUSES as string[]).includes(status);
+}

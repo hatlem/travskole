@@ -366,7 +366,7 @@ export default function AvsenderePage() {
               <button
                 type="submit"
                 disabled={!newEmail.trim() || !newName.trim() || creating}
-                className="bg-blue-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
               >
                 {creating ? 'Legger til …' : 'Legg til avsender'}
               </button>

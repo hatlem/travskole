@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { requiredRegistrationConsentError, isWaitlist } from '@/lib/registration-rules';
+import { requiredRegistrationConsentError, isWaitlist, existingChildAgeIssue } from '@/lib/registration-rules';
 
 const RISK_ACTIVITIES_ERROR = 'Du må godta alle påkrevde samtykker';
 const TERMS_ERROR = 'Du må godta vilkårene for å melde på';
@@ -111,5 +111,39 @@ describe('isWaitlist', () => {
 
   it('is not waitlist when open and not wanted', () => {
     expect(isWaitlist('open', false)).toBe(false);
+  });
+});
+
+describe('existingChildAgeIssue', () => {
+  const limits = { ageMin: 6, ageMax: 12 };
+  const start = new Date('2026-06-15T08:00:00Z');
+  const now = new Date('2026-03-01T12:00:00Z');
+
+  it('sjekker lagret fødselsdato mot barnevalget', () => {
+    expect(existingChildAgeIssue(limits, '2016-05-04T00:00:00.000Z', undefined, start, now)).toBeNull();
+    expect(existingChildAgeIssue(limits, '2012-01-01T00:00:00.000Z', '2018-01-01', start, now)).toEqual({
+      field: 'existingChildId',
+      message: 'Kurset er for barn 6–12 år. Barnet er 14 år ved kursstart.',
+    });
+  });
+
+  it('krever fødselsdato i eget felt når barnet mangler den', () => {
+    expect(existingChildAgeIssue(limits, null, '', start, now)).toEqual({
+      field: 'existingChildBirthdate',
+      message: 'Kurset har aldersgrense (6–12 år). Oppgi barnets fødselsdato.',
+    });
+  });
+
+  it('bruker oppgitt fødselsdato og avviser fremtidige datoer', () => {
+    expect(existingChildAgeIssue(limits, null, '2016-05-04', start, now)).toBeNull();
+    expect(existingChildAgeIssue(limits, null, '2023-01-10', start, now)?.message).toContain('Barnet er 3 år');
+    expect(existingChildAgeIssue(limits, null, '2026-04-01', start, now)).toEqual({
+      field: 'existingChildBirthdate',
+      message: 'Fødselsdato kan ikke være frem i tid',
+    });
+  });
+
+  it('godtar barn uten fødselsdato når kurset ikke har aldersgrense', () => {
+    expect(existingChildAgeIssue({ ageMin: null, ageMax: null }, null, undefined, start, now)).toBeNull();
   });
 });

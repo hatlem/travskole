@@ -2,11 +2,11 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { postLoginDestination } from '@/lib/auth-redirect';
 
 export default function MagicLinkClient() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const attempted = useRef(false);
@@ -16,10 +16,9 @@ export default function MagicLinkClient() {
     if (attempted.current) return;
     attempted.current = true;
 
-    const email = searchParams.get('email');
     const token = searchParams.get('token');
 
-    if (!email || !token) {
+    if (!token) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- innlogging med engangstoken må skje etter montering
       setError('Ugyldig innloggingslenke.');
       return;
@@ -27,14 +26,12 @@ export default function MagicLinkClient() {
 
     (async () => {
       try {
-        const result = await signIn('magic-link', { email, token, redirect: false });
-        if (result?.ok) {
+        const result = await signIn('magic-link', { token, redirect: false });
+        if (result?.ok && !result.error) {
           const sessionRes = await fetch('/api/auth/session');
           const session = await sessionRes.json();
-          const isAdmin =
-            session?.user?.role === 'admin' || session?.user?.role === 'superadmin';
-          router.push(isAdmin ? '/admin' : '/dashboard');
-          router.refresh();
+          // Full navigasjon — se login-form: routerens cache kan ha en gammel redirect.
+          window.location.assign(postLoginDestination(null, session?.user?.role));
         } else {
           setError('Innloggingslenken er ugyldig eller utløpt. Be om en ny.');
         }
@@ -42,7 +39,7 @@ export default function MagicLinkClient() {
         setError('Noe gikk galt. Prøv igjen.');
       }
     })();
-  }, [searchParams, router]);
+  }, [searchParams]);
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
