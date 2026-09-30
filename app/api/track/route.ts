@@ -4,7 +4,8 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/auth';
 import { emitEvent } from '@/lib/events/bus';
 import { createRateLimiter } from '@/lib/events/rate-limit';
-import { checkRateLimit, getClientIp, trackLimiter } from '@/lib/rate-limiter';
+import { checkRateLimit, trackLimiter } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { getBaseUrl } from '@/lib/site';
 import { getAllowedTrackingOrigins } from '@/lib/tracking/allowed-origins';
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest) {
   // IP-backstop FØR per-visitor-grensen: bjerke_vid er klient-styrt og kan
   // roteres fritt, så den alene stopper ikke en klient som spammer med nye
   // cookies. IP-en er langt vanskeligere å rotere i stor skala.
-  const ip = getClientIp(request.headers);
+  const ip = getClientIpBucket(request.headers);
   const ipRateLimit = await checkRateLimit(trackLimiter, ip);
   if (!ipRateLimit.allowed) return reply(429);
 

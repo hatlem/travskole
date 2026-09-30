@@ -2,7 +2,8 @@ import NextAuth, { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import { prisma } from '@/lib/prisma';
 import { verifyPassword } from '@/lib/auth';
-import { loginLimiter, checkRateLimit } from '@/lib/rate-limiter';
+import { loginAccountLimiter, loginLimiter, checkRateLimit } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 import { logFailedLogin } from '@/lib/logger';
 import { emailFromMagicLinkIdentifier, hashToken } from '@/lib/auth-tokens';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
@@ -79,16 +80,19 @@ export const authOptions: NextAuthOptions = {
           throw new Error('E-post og passord er påkrevd');
         }
 
-        // SECURITY: brute-force protection — 5 attempts per 15 min per IP+email
-        const ip =
-          (req?.headers?.['x-forwarded-for'] as string | undefined)?.split(',')[0]?.trim() ||
-          'unknown';
-        const rateLimit = await checkRateLimit(loginLimiter, `${ip}:${credentials.email.toLowerCase()}`);
+        // SECURITY: brute-force protection — 5 attempts per 15 min per IP+email,
+        // and 10 per 15 min per email from any address
+        const ip = getClientIpBucket(req?.headers ?? {});
+        const normalizedEmail = credentials.email.trim().toLowerCase();
+        const rateLimit = await checkRateLimit(loginLimiter, `${ip}:${normalizedEmail}`);
         if (!rateLimit.allowed) {
           throw new Error(rateLimit.error || 'For mange innloggingsforsøk. Prøv igjen senere.');
         }
+        const accountLimit = await checkRateLimit(loginAccountLimiter, normalizedEmail);
+        if (!accountLimit.allowed) {
+          throw new Error(accountLimit.error || 'For mange innloggingsforsøk. Prøv igjen senere.');
+        }
 
-        const normalizedEmail = credentials.email.trim().toLowerCase();
         const user = await prisma.user.findUnique({
           where: { email: normalizedEmail },
           include: { parent: true },
@@ -111,6 +115,8 @@ export const authOptions: NextAuthOptions = {
         if (user.deactivatedAt || user.anonymizedAt) {
           throw new Error('Kontoen er deaktivert. Kontakt administrator.');
         }
+
+        await loginAccountLimiter.delete(normalizedEmail);
 
         return {
           id: user.id.toString(),

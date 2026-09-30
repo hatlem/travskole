@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
-import { checkRateLimit, registrationLimiter, getClientIp } from '@/lib/rate-limiter';
+import { checkRateLimit, registrationLimiter } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 import { getServerSession } from '@/lib/auth';
 import { bookingConsentError } from '@/lib/booking';
 import { sendBookingConfirmation, sendBookingAdminNotification } from '@/lib/mail';
@@ -37,7 +38,7 @@ const bookingSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
-  const rl = await checkRateLimit(registrationLimiter, `booking:${getClientIp(request.headers)}`);
+  const rl = await checkRateLimit(registrationLimiter, `booking:${getClientIpBucket(request.headers)}`);
   if (!rl.allowed) {
     return NextResponse.json({ error: rl.error ?? 'For mange forsøk. Prøv igjen senere.' }, { status: 429 });
   }

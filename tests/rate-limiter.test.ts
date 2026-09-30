@@ -35,7 +35,7 @@ import { NextRequest } from 'next/server';
 function post(url: string, ip: string, body: unknown, method = 'POST') {
   return new NextRequest(`https://registrering.bjerke.no${url}`, {
     method,
-    headers: { 'x-forwarded-for': ip, 'content-type': 'application/json' },
+    headers: { 'x-forwarded-for': `${ip}:51234`, 'x-client-ip': ip, 'content-type': 'application/json' },
     body: JSON.stringify(body),
   });
 }
@@ -86,6 +86,25 @@ describe('POST /api/auth/magic-link', () => {
       await magicLink(post('/api/auth/magic-link', ip, { email: 'q@y.no' }));
     }
     expect((await forgotPassword(post('/api/auth/forgot-password', ip, { email: 'q@y.no' }))).status).toBe(200);
+  });
+});
+
+describe('klient-IP bak Azure App Service', () => {
+  it('kan ikke omgås ved å rotere X-Forwarded-For eller cf-connecting-ip', async () => {
+    const forged = (i: number) =>
+      new NextRequest('https://registrering.bjerke.no/api/auth/magic-link', {
+        method: 'POST',
+        headers: {
+          'x-forwarded-for': `10.9.0.${i}, 10.0.0.9:51234`,
+          'x-client-ip': '10.0.0.9',
+          'cf-connecting-ip': `10.8.0.${i}`,
+          'x-real-ip': `10.7.0.${i}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ email: `rot${i}@y.no` }),
+      });
+    for (let i = 0; i < 10; i++) expect((await magicLink(forged(i))).status).toBe(200);
+    expect((await magicLink(forged(10))).status).toBe(429);
   });
 });
 

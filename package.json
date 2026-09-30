@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "refresh-cloudflare-ranges": "node scripts/refresh-cloudflare-ranges.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {

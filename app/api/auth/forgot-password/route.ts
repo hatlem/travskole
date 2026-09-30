@@ -7,14 +7,14 @@ import {
   passwordResetEmailLimiter,
   passwordResetIpLimiter,
   checkRateLimit,
-  getClientIp,
   ipEmailKey,
 } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 
 export async function POST(request: Request) {
   try {
     // SECURITY: rate limiting — hindrer e-postbombing og token-flom
-    const ip = getClientIp(request.headers);
+    const ip = getClientIpBucket(request.headers);
     const rateLimit = await checkRateLimit(passwordResetIpLimiter, ip);
     if (!rateLimit.allowed) {
       logRateLimitExceeded('/api/auth/forgot-password', ip);

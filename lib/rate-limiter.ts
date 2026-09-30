@@ -1,9 +1,17 @@
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 
-// Login rate limiter: 5 attempts per 15 minutes
+// Login rate limiter: 5 attempts per 15 minutes per client IP + email
 export const loginLimiter = new RateLimiterMemory({
   points: 5,
   duration: 15 * 60, // 15 minutes
+});
+
+// Per-account cap independent of the client IP: 10 attempts per 15 minutes per
+// email (unknown emails count too, so it reveals nothing); a successful login
+// clears it. Without it, rotating addresses gives unlimited guesses.
+export const loginAccountLimiter = new RateLimiterMemory({
+  points: 10,
+  duration: 15 * 60,
 });
 
 // Registration rate limiter: 10 registrations per hour per IP
@@ -50,15 +58,6 @@ export const trackLimiter = new RateLimiterMemory({
   points: 300,
   duration: 5 * 60,
 });
-
-/** Best-effort client IP from proxy headers (Azure/Railway set x-forwarded-for). */
-export function getClientIp(headers: Headers): string {
-  return (
-    headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    headers.get('x-real-ip') ||
-    'unknown'
-  );
-}
 
 /** Nøkkel for per-IP+e-post-limitere (e-posten normaliseres). */
 export function ipEmailKey(ip: string, email: string): string {

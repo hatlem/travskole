@@ -4,7 +4,8 @@ import DOMPurify from 'isomorphic-dompurify';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { signupLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { signupLimiter, checkRateLimit } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 import { emitEvent, stitchVisitorToContact, VISITOR_COOKIE } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { phoneSchema } from '@/lib/validation/phone';
@@ -20,7 +21,7 @@ const registerSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     // SECURITY: rate limiting — 5 kontoer per time per IP
-    const ip = getClientIp(request.headers);
+    const ip = getClientIpBucket(request.headers);
     const rateLimit = await checkRateLimit(signupLimiter, ip);
     if (!rateLimit.allowed) {
       logRateLimitExceeded('/api/auth/register', ip);

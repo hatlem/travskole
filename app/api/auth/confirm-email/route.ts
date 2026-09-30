@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { consumeEmailChangeToken } from '@/lib/email-change';
 import { logActivity } from '@/lib/activity';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { confirmEmailLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { confirmEmailLimiter, checkRateLimit } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 
 /**
  * Fullfører et e-postbytte.
@@ -15,7 +16,7 @@ import { confirmEmailLimiter, checkRateLimit, getClientIp } from '@/lib/rate-lim
  * en annen enhet enn den de er innlogget på.
  */
 export async function POST(request: NextRequest) {
-  const ip = getClientIp(request.headers);
+  const ip = getClientIpBucket(request.headers);
   const rateLimit = await checkRateLimit(confirmEmailLimiter, ip);
   if (!rateLimit.allowed) {
     logRateLimitExceeded('/api/auth/confirm-email', ip);

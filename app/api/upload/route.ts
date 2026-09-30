@@ -3,7 +3,8 @@ import { requireAdmin } from '@/lib/auth';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import logger, { logRateLimitExceeded } from '@/lib/logger';
-import { registrationLimiter, checkRateLimit, getClientIp } from '@/lib/rate-limiter';
+import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 
 const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Rate limit selv for admin (stjålet sesjon / misbruk)
-  const ip = getClientIp(request.headers);
+  const ip = getClientIpBucket(request.headers);
   const rateLimit = await checkRateLimit(registrationLimiter, `upload:${ip}`);
   if (!rateLimit.allowed) {
     logRateLimitExceeded('/api/upload', ip);

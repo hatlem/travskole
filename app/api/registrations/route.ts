@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import DOMPurify from 'isomorphic-dompurify';
 import { registrationLimiter, checkRateLimit } from '@/lib/rate-limiter';
+import { getClientIpBucket } from '@/lib/client-ip';
 import logger, { logRegistration, logRateLimitExceeded } from '@/lib/logger';
 import { requireAdmin, getServerSession } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
@@ -53,7 +54,7 @@ interface RegistrationData {
 export async function POST(request: NextRequest) {
   try {
     // SECURITY: Rate limiting
-    const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || 'unknown';
+    const ip = getClientIpBucket(request.headers);
     const rateLimit = await checkRateLimit(registrationLimiter, ip);
     
     if (!rateLimit.allowed) {
