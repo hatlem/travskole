@@ -423,8 +423,9 @@ export default function AdminSettingsPage() {
         ))}
       </div>
 
-      <div className="sticky bottom-0 -mx-4 sm:mx-0 mt-8 z-10">
-        <div className="flex flex-wrap items-center justify-end gap-3 border border-gray-200 bg-white/95 backdrop-blur px-4 py-3 shadow-lg sm:rounded-xl">
+      {/* Holdes over den flytende cookie-knappen nede i hjørnet, så lagre-knappen alltid kan trykkes. */}
+      <div className="sticky bottom-0 sm:bottom-20 -mx-4 sm:mx-0 mt-8 z-10">
+        <div className="flex flex-wrap items-center justify-end gap-3 border border-gray-200 bg-white/95 backdrop-blur px-4 pt-3 pb-[4.5rem] sm:pb-3 shadow-lg sm:rounded-xl">
           <p className="mr-auto text-sm" aria-live="polite">
             {saved ? (
               <span className="font-medium text-green-700">✓ Innstillingene er lagret</span>

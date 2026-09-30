@@ -5,7 +5,6 @@ import "./globals.css";
 import SiteChrome from "@/components/SiteChrome";
 import Providers from "@/components/Providers";
 import { SettingsProvider } from "@/components/SettingsProvider";
-import { FeedbackWidget } from "@/components/FeedbackWidget";
 import { Tracker } from "@/components/Tracker";
 import { getSettings, toClientSettings } from "@/lib/settings";
 
@@ -81,7 +80,6 @@ j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
         <Providers>
           <SettingsProvider settings={toClientSettings(settings)}>
             <SiteChrome>{children}</SiteChrome>
-            <FeedbackWidget />
           </SettingsProvider>
         </Providers>
         <Tracker />
