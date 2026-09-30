@@ -125,8 +125,12 @@ export function mapLegacyToLifecycle(
   };
 
   for (const template of templates) {
-    const byTrigger = classifyByTrigger(template);
-    const classification = byTrigger ?? classifyByName(template);
+    // Trigger-raden vinner — unntatt når den sier «bekreftelse» mens navnet tydelig
+    // er et livssyklus-steg (i prod peker «Velkommen til kursstart» på påmeldings-triggeren).
+    const byName = classifyByName(template);
+    const rawTrigger = classifyByTrigger(template);
+    const byTrigger = rawTrigger === CONFIRMATION && byName !== null && byName !== CONFIRMATION ? null : rawTrigger;
+    const classification = byTrigger ?? byName;
     if (classification === null) {
       unclassified.push(template);
     } else if (classification === CONFIRMATION) {

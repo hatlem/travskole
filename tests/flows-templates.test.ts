@@ -197,6 +197,20 @@ describe('legacy-kursmaler', () => {
     ]);
   });
 
+  it('navnet vinner når triggeren sier bekreftelse men teksten er et livssyklus-steg', () => {
+    const templates = normalizeLegacyTemplates([
+      { id: 20, name: 'Påmelding bekreftet', subject: 'Påmelding mottatt — {{kurs_navn}}', body: 'a' },
+      { id: 21, name: 'Velkommen til kursstart', subject: 'Velkommen til {{kurs_navn}}!', body: 'b' },
+    ]);
+    const triggers = normalizeLegacyTriggers([
+      { id: 1, course_id: 4, template_id: 20, trigger_type: 'registration_confirmed', offset_days: 0, enabled: false },
+      { id: 2, course_id: 4, template_id: 21, trigger_type: 'registration_confirmed', offset_days: 0, enabled: false },
+    ]);
+    const mapping = mapLegacyToLifecycle(templates, triggers);
+    expect(mapping.assignments.map((a) => [a.slot, a.template.id, a.via])).toEqual([['welcome_start', 21, 'name']]);
+    expect(mapping.unmatched.map((u) => u.template.id)).toEqual([20]);
+  });
+
   it('fordeler uklassifiserte tekster på ledige steg i rekkefølge og rapporterer duplikater', () => {
     const templates = normalizeLegacyTemplates([
       { id: 1, name: 'Påminnelse', subject: 'P1', body: 'x' },
