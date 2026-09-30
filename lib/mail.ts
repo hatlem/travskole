@@ -305,7 +305,7 @@ export async function sendBookingApprovedEmail(data: BookingEmail) {
 export async function sendPasswordResetEmail(email: string, token: string) {
   const siteName = await getSiteName();
   const baseUrl = getBaseUrl();
-  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const resetUrl = `${baseUrl}/reset-password?token=${encodeURIComponent(token)}`;
   await sendMail(
     email,
     `Tilbakestill passord — ${siteName}`,
@@ -327,7 +327,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
 export async function sendMagicLinkEmail(email: string, token: string) {
   const siteName = await getSiteName();
   const baseUrl = getBaseUrl();
-  const url = `${baseUrl}/magic-link?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+  const url = `${baseUrl}/magic-link?token=${encodeURIComponent(token)}`;
   await sendMail(
     email,
     `Innloggingslenke — ${siteName}`,

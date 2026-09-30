@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/auth';
 import logger from '@/lib/logger';
+import { emailFromResetIdentifier, hashToken } from '@/lib/auth-tokens';
 
 export async function POST(request: Request) {
   try {
-    const { email, token, password } = await request.json();
+    // E-posten leses fra tokenet; et ev. `email` i body (eldre lenker) ignoreres.
+    const { token, password } = await request.json();
 
-    if (!email || !token || !password) {
+    if (!token || !password) {
       return NextResponse.json(
         { error: 'Alle felt er påkrevd' },
         { status: 400 }
@@ -22,19 +23,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const normalizedEmail = email.toLowerCase().trim();
     // Tokens lagres som sha256-hash (se forgot-password)
-    const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+    const tokenHash = hashToken(String(token));
+    const verificationToken = await prisma.verificationToken.findUnique({ where: { token: tokenHash } });
+    const normalizedEmail = verificationToken ? emailFromResetIdentifier(verificationToken.identifier) : null;
 
-    // Find the verification token
-    const verificationToken = await prisma.verificationToken.findFirst({
-      where: {
-        identifier: normalizedEmail,
-        token: tokenHash,
-      },
-    });
-
-    if (!verificationToken) {
+    if (!verificationToken || !normalizedEmail) {
       return NextResponse.json(
         { error: 'Ugyldig eller utløpt lenke. Be om en ny tilbakestillingslenke.' },
         { status: 400 }
