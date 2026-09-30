@@ -387,7 +387,7 @@ export default function SegmenterPage() {
     <div>
       <CrmTabs />
       <div className="grid md:grid-cols-2 gap-8 max-w-5xl">
-        <section>
+        <section className="min-w-0">
           <h2 className="font-semibold mb-3">Segmenter</h2>
           <p className="text-sm text-gray-500 mb-3">
             Dynamiske utvalg av kontakter, f.eks. «booket julebord i fjor». Brukes som filter i kontaktlisten
@@ -410,7 +410,7 @@ export default function SegmenterPage() {
               const effectiveOp = opIsAllowed ? rule.op : allowedOps[0]?.value || 'eq';
 
               return (
-                <div key={i} className="flex gap-2 items-center">
+                <div key={i} className="flex flex-wrap gap-2 items-center">
                   <select
                     value={rule.field}
                     onChange={(e) => {
@@ -419,14 +419,14 @@ export default function SegmenterPage() {
                       const newOp = newAllowedOps[0]?.value || 'eq';
                       setRules(rules.map((r, j) => (j === i ? { ...r, field: newField, op: newOp } : r)));
                     }}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
                   >
                     {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
                   </select>
                   <select
                     value={effectiveOp}
                     onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, op: e.target.value } : r)))}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
+                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
                   >
                     {allowedOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
@@ -435,7 +435,7 @@ export default function SegmenterPage() {
                       value={rule.value}
                       onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
                       placeholder="verdi"
-                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1"
+                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
                     />
                   )}
                   {rules.length > 1 && (
@@ -472,7 +472,7 @@ export default function SegmenterPage() {
             <ul className="space-y-2">
               {segments.map((s) => (
                 <li key={s.id} className="border border-gray-200 rounded-lg p-3 text-sm flex items-center justify-between gap-3">
-                  <span className="font-medium flex-1">{s.name}</span>
+                  <span className="font-medium flex-1 min-w-0 break-words">{s.name}</span>
                   <a
                     href={`/api/admin/crm/segments/${s.id}/export`}
                     download
@@ -493,7 +493,7 @@ export default function SegmenterPage() {
           )}
         </section>
 
-        <div className="space-y-8">
+        <div className="space-y-8 min-w-0">
           <section>
             <h2 className="font-semibold mb-3">Lister</h2>
             <div className="flex gap-2 mb-3">
@@ -501,7 +501,7 @@ export default function SegmenterPage() {
                 value={listName}
                 onChange={(e) => setListName(e.target.value)}
                 placeholder="Ny liste …"
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1"
+                className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1 min-w-0"
               />
               <button
                 onClick={createList}
@@ -517,9 +517,9 @@ export default function SegmenterPage() {
               <ul className="space-y-2">
                 {lists.map((l) => (
                   <li key={l.id} className="border border-gray-200 rounded-lg p-3 text-sm">
-                    <div className="flex items-center justify-between">
-                      <span className="font-medium">{l.name}</span>
-                      <span className="text-gray-500 text-xs">{l.memberCount} kontakter</span>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium min-w-0 break-words">{l.name}</span>
+                      <span className="text-gray-500 text-xs shrink-0">{l.memberCount} kontakter</span>
                     </div>
                     <div className="flex gap-3 mt-2">
                       <button
@@ -564,7 +564,7 @@ export default function SegmenterPage() {
                                     onChange={() => toggleSelectedContact(c.id)}
                                   />
                                   <span className="font-medium">{c.name}</span>
-                                  <span className="text-gray-400">{c.email ?? '—'}</span>
+                                  <span className="text-gray-400 min-w-0 truncate">{c.email ?? '—'}</span>
                                 </label>
                               </li>
                             ))}
@@ -596,7 +596,7 @@ export default function SegmenterPage() {
                 value={suppressEmail}
                 onChange={(e) => setSuppressEmail(e.target.value)}
                 placeholder="epost@eksempel.no"
-                className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1"
+                className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1 min-w-0"
               />
               <button
                 onClick={addSuppression}
@@ -611,8 +611,8 @@ export default function SegmenterPage() {
             ) : (
               <ul className="space-y-1">
                 {suppressions.map((s) => (
-                  <li key={s.id} className="flex items-center justify-between text-sm py-1 border-b border-gray-100">
-                    <span>{s.email} <span className="text-gray-400 text-xs">({s.reason})</span></span>
+                  <li key={s.id} className="flex items-center justify-between gap-3 text-sm py-1 border-b border-gray-100">
+                    <span className="min-w-0 break-all">{s.email} <span className="text-gray-400 text-xs">({s.reason})</span></span>
                     {canRemoveSuppression && (
                       <button
                         onClick={() => setPendingUnsuppress(s)}
