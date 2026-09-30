@@ -390,7 +390,12 @@ export default function FlyterPage() {
           toast(data.error || 'Kunne ikke arkivere flyt', 'error');
           return;
         }
-        toast('Flyt arkivert', 'success');
+        toast(
+          data.exitedEnrollments > 0
+            ? `Flyt arkivert — ${data.exitedEnrollments} aktive påmeldinger avsluttet`
+            : 'Flyt arkivert',
+          'success'
+        );
       } else {
         const res = await fetch(`/api/admin/crm/flows/${flow.id}`, { method: 'DELETE' });
         const data = await res.json();
@@ -902,7 +907,7 @@ export default function FlyterPage() {
         message={
           confirmAction?.type === 'delete'
             ? `Er du sikker på at du vil slette «${confirmAction.flow.name}»? Dette kan ikke angres.`
-            : `Er du sikker på at du vil arkivere «${confirmAction?.flow.name}»?`
+            : `Er du sikker på at du vil arkivere «${confirmAction?.flow.name}»? Kontakter som er underveis i flyten blir avsluttet, og arkivering kan ikke angres.`
         }
         confirmLabel={confirmAction?.type === 'delete' ? 'Slett' : 'Arkiver'}
         variant={confirmAction?.type === 'delete' ? 'danger' : 'warning'}

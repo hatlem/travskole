@@ -1,0 +1,68 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { NextRequest } from 'next/server';
+
+const { prisma, emitEvent } = vi.hoisted(() => ({
+  prisma: {
+    contact: { findUnique: vi.fn() },
+    suppression: { upsert: vi.fn() },
+    consent: { upsert: vi.fn() },
+    flow: { findUnique: vi.fn(), update: vi.fn() },
+    flowEnrollment: { updateMany: vi.fn(async () => ({ count: 2 })), count: vi.fn() },
+  },
+  emitEvent: vi.fn(async () => {}),
+}));
+vi.mock('@/lib/prisma', () => ({ prisma }));
+vi.mock('@/lib/events/bus', () => ({ emitEvent }));
+vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email: 'admin@x.no' } })) }));
+vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => {}) }));
+
+import { applyUnsubscribe } from '@/lib/flows/unsubscribe';
+import { PATCH } from '@/app/api/admin/crm/flows/[id]/route';
+
+const params = { params: Promise.resolve({ id: '1' }) };
+const patch = (body: unknown) =>
+  new NextRequest('http://localhost/api/admin/crm/flows/1', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+beforeEach(() => vi.clearAllMocks());
+
+describe('applyUnsubscribe', () => {
+  it('exits only active enrollments in marketing flows', async () => {
+    prisma.contact.findUnique.mockResolvedValue({ id: 3, email: 'Kari@X.no' });
+    await expect(applyUnsubscribe(3)).resolves.toBe('ok');
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { contactId: 3, flow: { isMarketing: true }, status: 'active' },
+      data: { status: 'exited', finishedAt: expect.any(Date) },
+    });
+  });
+
+  it('touches nothing for unknown contacts', async () => {
+    prisma.contact.findUnique.mockResolvedValue(null);
+    await expect(applyUnsubscribe(3)).resolves.toBe('not_found');
+    expect(prisma.flowEnrollment.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH flow status → archived', () => {
+  it('exits every active enrollment in the archived flow', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ status: 'active', anchorMode: 'contact' });
+    prisma.flow.update.mockResolvedValue({ id: 1, status: 'archived' });
+    const res = await PATCH(patch({ status: 'archived' }), params);
+    expect(res.status).toBe(200);
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { flowId: 1, status: 'active' },
+      data: { status: 'exited', finishedAt: expect.any(Date) },
+    });
+    expect((await res.json()).exitedEnrollments).toBe(2);
+  });
+
+  it('leaves enrollments alone on pause', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ status: 'active', anchorMode: 'contact' });
+    prisma.flow.update.mockResolvedValue({ id: 1, status: 'paused' });
+    await PATCH(patch({ status: 'paused' }), params);
+    expect(prisma.flowEnrollment.updateMany).not.toHaveBeenCalled();
+  });
+});

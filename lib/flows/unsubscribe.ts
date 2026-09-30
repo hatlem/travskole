@@ -1,6 +1,6 @@
 /**
  * Shared unsubscribe mutation — applies the suppression + consent + event
- * side effects for a verified contact. Used by both the RFC 8058 one-click
+ * (+ exit from marketing flows) side effects for a verified contact. Used by both the RFC 8058 one-click
  * POST endpoint (`/api/avmeld/one-click`) and the human-facing confirmation
  * page (`/avmeld`), so the two surfaces can never drift out of sync.
  *
@@ -12,6 +12,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
+import { exitActiveEnrollments } from '@/lib/flows/exit';
 
 export type ApplyUnsubscribeResult = 'ok' | 'not_found';
 
@@ -46,6 +47,10 @@ export async function applyUnsubscribe(contactId: number): Promise<ApplyUnsubscr
       consentAt: null,
     },
   });
+
+  // Markedsføringsflyter stoppes. Transaksjonelle (kursinfo) får løpe videre —
+  // suppression-sjekken i send-laget avgjør fortsatt hver enkelt e-post.
+  await exitActiveEnrollments({ contactId, flow: { isMarketing: true } });
 
   // Fire-and-forget event — never let a bus hiccup block the unsubscribe.
   emitEvent({
