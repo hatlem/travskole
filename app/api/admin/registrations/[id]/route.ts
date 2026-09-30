@@ -7,7 +7,9 @@ import logger from '@/lib/logger';
 import {
   emitRegistrationStatusEvent,
   promoteFromWaitlist,
+  releaseSeats,
 } from '@/lib/registrations/cancel';
+import { occupiesPlace } from '@/lib/registration-rules';
 import DOMPurify from 'isomorphic-dompurify';
 import { validateProfileInput } from '@/lib/profile';
 import { updateChildForParent } from '@/lib/children';
@@ -201,9 +203,12 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.registration.delete({
+    const deleted = await prisma.registration.delete({
       where: { id: Number(id) },
+      select: { courseId: true, status: true },
     });
+    // En slettet påmelding som hadde plass frigjør den på samme måte som en kansellering.
+    if (occupiesPlace(deleted.status)) await releaseSeats(deleted.courseId);
 
     logActivity({ action: 'delete', entity: 'registration', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
 

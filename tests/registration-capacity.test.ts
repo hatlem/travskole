@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planAdminPlacement, occupiesPlace, isAtCapacity, type AdminPlacementInput } from '@/lib/registration-rules';
+import { planAdminPlacement, planSeatRelease, occupiesPlace, isAtCapacity, type AdminPlacementInput } from '@/lib/registration-rules';
 
 const base: AdminPlacementInput = {
   courseStatus: 'open',
@@ -65,5 +65,34 @@ describe('planAdminPlacement', () => {
   it('confirms everyone on override even when full', () => {
     expect(planAdminPlacement({ ...base, occupied: 10, requested: 2, overrideCapacity: true }))
       .toEqual({ ok: true, statuses: ['confirmed', 'confirmed'] });
+  });
+});
+
+describe('planSeatRelease', () => {
+  it('reopens a full course when the only seat is freed and nobody is waiting', () => {
+    expect(planSeatRelease({ courseStatus: 'full', maxParticipants: 1, occupied: 0, waitlisted: 0 }))
+      .toEqual({ promote: 0, nextStatus: 'open' });
+  });
+
+  it('keeps the course full when a waitlisted participant takes the freed seat', () => {
+    expect(planSeatRelease({ courseStatus: 'full', maxParticipants: 1, occupied: 0, waitlisted: 3 }))
+      .toEqual({ promote: 1, nextStatus: null });
+  });
+
+  it('promotes as many as there are free seats and reopens when seats remain', () => {
+    expect(planSeatRelease({ courseStatus: 'full', maxParticipants: 10, occupied: 7, waitlisted: 2 }))
+      .toEqual({ promote: 2, nextStatus: 'open' });
+  });
+
+  it('marks a stale open course full when it is actually at capacity', () => {
+    expect(planSeatRelease({ courseStatus: 'open', maxParticipants: 2, occupied: 2, waitlisted: 0 }))
+      .toEqual({ promote: 0, nextStatus: 'full' });
+  });
+
+  it('leaves closed courses and courses without a max alone', () => {
+    expect(planSeatRelease({ courseStatus: 'closed', maxParticipants: 5, occupied: 0, waitlisted: 4 }))
+      .toEqual({ promote: 0, nextStatus: null });
+    expect(planSeatRelease({ courseStatus: 'full', maxParticipants: null, occupied: 0, waitlisted: 4 }))
+      .toEqual({ promote: 0, nextStatus: null });
   });
 });

@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
-import { isAtCapacity } from '@/lib/registration-rules';
+import { planSeatRelease } from '@/lib/registration-rules';
 import { countOccupiedPlaces } from '@/lib/registrations/capacity';
 
 /**
@@ -40,51 +40,55 @@ export async function emitRegistrationStatusEvent(
 }
 
 /**
- * Etter en kansellering: rykk opp første på venteliste hvis kurset nå har plass,
- * og gjenåpne et kurs som sto som fullt.
+ * Etter en kansellering eller sletting: rykk opp fra ventelisten så langt det er
+ * ledige plasser, og sett kursstatus ut fra belegget etterpå (fullt ↔ åpent).
  */
 export async function promoteFromWaitlist(registrationId: number): Promise<void> {
-  const cancelledReg = await prisma.registration.findUnique({
+  const reg = await prisma.registration.findUnique({
     where: { id: registrationId },
-    include: { course: true },
+    select: { courseId: true },
   });
-  if (!cancelledReg) return;
+  if (reg) await releaseSeats(reg.courseId);
+}
 
-  const course = cancelledReg.course;
-  const activeCount = await countOccupiedPlaces(course.id);
+export async function releaseSeats(courseId: number): Promise<void> {
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { id: true, name: true, status: true, maxParticipants: true },
+  });
+  if (!course) return;
 
-  if (!course.maxParticipants || isAtCapacity(course.maxParticipants, activeCount)) return;
-
-  const firstWaitlist = await prisma.registration.findFirst({
-    where: { courseId: course.id, status: 'waitlist' },
-    orderBy: { createdAt: 'asc' },
-    include: {
-      parent: { include: { user: true } },
-      child: true,
-      course: true,
-    },
+  const [occupied, waitlisted] = await Promise.all([
+    countOccupiedPlaces(course.id),
+    prisma.registration.count({ where: { courseId: course.id, status: 'waitlist' } }),
+  ]);
+  const plan = planSeatRelease({
+    courseStatus: course.status,
+    maxParticipants: course.maxParticipants,
+    occupied,
+    waitlisted,
   });
 
-  if (firstWaitlist) {
-    await prisma.registration.update({
-      where: { id: firstWaitlist.id },
-      data: { status: 'pending' },
+  if (plan.promote > 0) {
+    const promoted = await prisma.registration.findMany({
+      where: { courseId: course.id, status: 'waitlist' },
+      orderBy: { createdAt: 'asc' },
+      take: plan.promote,
+      include: { parent: { include: { user: true } }, child: true },
     });
-
     const { sendWaitlistPromotionEmail } = await import('@/lib/mail');
-    await sendWaitlistPromotionEmail({
-      parentName: firstWaitlist.parent.name,
-      parentEmail: firstWaitlist.parent.user.email,
-      childName: firstWaitlist.child?.name ?? firstWaitlist.parent.name,
-      courseName: firstWaitlist.course.name,
-    }).catch(() => {});
+    for (const reg of promoted) {
+      await prisma.registration.update({ where: { id: reg.id }, data: { status: 'pending' } });
+      await sendWaitlistPromotionEmail({
+        parentName: reg.parent.name,
+        parentEmail: reg.parent.user.email,
+        childName: reg.child?.name ?? reg.parent.name,
+        courseName: course.name,
+      }).catch(() => {});
+    }
   }
 
-  // Kurset var merket fullt — åpne det igjen nå som en plass er ledig.
-  if (course.status === 'full') {
-    await prisma.course.update({
-      where: { id: course.id },
-      data: { status: 'open' },
-    });
+  if (plan.nextStatus) {
+    await prisma.course.update({ where: { id: course.id }, data: { status: plan.nextStatus } });
   }
 }

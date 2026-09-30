@@ -111,3 +111,32 @@ export function planAdminPlacement(input: AdminPlacementInput): AdminPlacement {
     : `Det er bare ${free} ledig${free === 1 ? '' : 'e'} plass${free === 1 ? '' : 'er'}${capacity}.`;
   return { ok: false, error: `${reason} Velg «Sett på venteliste» eller «Overstyr kapasitet».` };
 }
+
+export interface SeatReleaseInput {
+  courseStatus: string;
+  maxParticipants: number | null;
+  occupied: number;
+  waitlisted: number;
+}
+
+export interface SeatReleasePlan {
+  /** Antall fra ventelisten som rykker opp (eldste først). */
+  promote: number;
+  /** Ny kursstatus, eller null når statusen skal stå urørt. */
+  nextStatus: 'open' | 'full' | null;
+}
+
+/**
+ * Etter at en plass er frigjort: fyll ledige plasser fra ventelisten og sett
+ * kursstatus ut fra faktisk belegg etterpå. Stengte kurs og kurs uten
+ * maks-antall (manuelt satt «fullt») røres ikke.
+ */
+export function planSeatRelease(input: SeatReleaseInput): SeatReleasePlan {
+  const { courseStatus, maxParticipants, occupied, waitlisted } = input;
+  if (courseStatus === 'closed' || !maxParticipants) return { promote: 0, nextStatus: null };
+
+  const promote = Math.min(Math.max(0, maxParticipants - occupied), waitlisted);
+  const full = isAtCapacity(maxParticipants, occupied + promote);
+  const nextStatus = full ? 'full' : 'open';
+  return { promote, nextStatus: nextStatus === courseStatus ? null : nextStatus };
+}
