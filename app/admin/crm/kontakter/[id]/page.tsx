@@ -84,6 +84,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [suppressionBusy, setSuppressionBusy] = useState(false);
+  const [confirmUnsuppress, setConfirmUnsuppress] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [dealDialog, setDealDialog] = useState<{ dealId: number | null } | null>(null);
   const { toast } = useToast();
@@ -451,7 +452,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                   </span>
                   {canUnsuppress ? (
                     <button
-                      onClick={() => setSuppressed(false)}
+                      onClick={() => setConfirmUnsuppress(true)}
                       disabled={suppressionBusy}
                       className="text-xs text-blue-700 hover:underline disabled:opacity-50"
                     >
@@ -618,6 +619,19 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         loading={deleting}
         onConfirm={deleteContact}
         onCancel={() => setConfirmDelete(false)}
+      />
+      <ConfirmModal
+        open={confirmUnsuppress}
+        title="Fjerne fra ikke-kontakt-listen?"
+        message={`${contact.email ?? ''} kan da igjen motta e-post fra flyter og utsendelser. Gjør dette bare hvis personen selv har bedt om det${contact.suppression?.reason === 'unsubscribe' ? ' — adressen meldte seg av selv' : ''}.`}
+        confirmLabel="Fjern"
+        variant="warning"
+        loading={suppressionBusy}
+        onConfirm={async () => {
+          await setSuppressed(false);
+          setConfirmUnsuppress(false);
+        }}
+        onCancel={() => setConfirmUnsuppress(false)}
       />
     </div>
   );
