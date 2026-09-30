@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
+import { prisma } from '@/lib/prisma';
+import { parsePaymentMethods } from '@/lib/payments';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,11 +10,24 @@ export const metadata: Metadata = {
   description: 'Betalingen ble avbrutt',
 };
 
-/**
- * Payment cancelled page: static result when user cancels during checkout.
- * Suggests dashboard navigation and mentions that faktura/invoice is an alternative.
- */
-export default function AvbruttPage() {
+async function courseOffersInvoice(rawCourseId: string | undefined): Promise<boolean> {
+  const courseId = Number(rawCourseId);
+  if (!Number.isInteger(courseId) || courseId <= 0) return false;
+  const course = await prisma.course
+    .findUnique({ where: { id: courseId }, select: { paymentMethods: true } })
+    .catch(() => null);
+  return !!course && parsePaymentMethods(course.paymentMethods).includes('faktura');
+}
+
+/** Stripe sin cancel_url. Faktura nevnes bare når kurset faktisk tilbyr det (?kurs=). */
+export default async function AvbruttPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ kurs?: string }>;
+}) {
+  const { kurs } = await searchParams;
+  const offersInvoice = await courseOffersInvoice(kurs);
+
   return (
     <main className="bg-white">
       <section className="bg-bjerke-blue text-white py-14">
@@ -27,11 +42,9 @@ export default function AvbruttPage() {
             <h2 className="text-xl font-bold text-yellow-900 mb-2">
               Betalingen ble avbrutt
             </h2>
-            <p className="text-yellow-800 mb-4">
-              Du har avbrutt betalingen. Du kan prøve igjen fra dashboard eller kontakte oss for andre betalingsalternativer.
-            </p>
             <p className="text-yellow-800 mb-6">
-              Faktura er også tilgjengelig som betalingsmåte.
+              Du har avbrutt betalingen. Du kan prøve igjen fra dashboard eller kontakte oss for andre betalingsalternativer.
+              {offersInvoice && ' Faktura er også tilgjengelig som betalingsmåte.'}
             </p>
             <Link
               href="/dashboard"
