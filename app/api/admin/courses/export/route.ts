@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
 import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
 import { COURSE_STATUS_LABELS, formatOsloDate, label } from '@/lib/export-labels';
@@ -57,6 +58,13 @@ export async function GET() {
       course._count.registrations,
       formatOsloDate(course.createdAt),
     ]);
+
+    logActivity({
+      action: 'export',
+      entity: 'course',
+      details: JSON.stringify({ rows: rows.length }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
     return csvResponse(toCsv(headers, rows), csvFilename('kurs'));
   } catch (error) {

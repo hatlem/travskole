@@ -8,6 +8,8 @@ const prisma = vi.hoisted(() => ({
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email: 'admin@x.no' } })) }));
 vi.mock('@/lib/logger', () => ({ default: { error: vi.fn() } }));
+const logActivity = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('@/lib/activity', () => ({ logActivity }));
 
 import { GET as exportCourses } from '@/app/api/admin/courses/export/route';
 import { GET as exportRegistrations } from '@/app/api/admin/registrations/export/route';
@@ -53,5 +55,6 @@ describe('admin CSV exports', () => {
     }]);
     const [, row] = await csvOf(await exportUsers());
     expect(row).toBe('2,b@x.no,Bjørn,,,Superadmin,01.03.2026');
+    expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'export', entity: 'user', details: '{"rows":1}' }));
   });
 });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
 import { ROLE_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
@@ -41,6 +42,13 @@ export async function GET() {
       label(ROLE_LABELS, user.role),
       formatOsloDate(user.createdAt),
     ]);
+
+    logActivity({
+      action: 'export',
+      entity: 'user',
+      details: JSON.stringify({ rows: rows.length }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
     return csvResponse(toCsv(headers, rows), csvFilename('brukere'));
   } catch (error) {

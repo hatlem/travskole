@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { logActivity } from '@/lib/activity';
 import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
 import { REGISTRATION_STATUS_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
@@ -65,6 +66,13 @@ export async function GET() {
       yesNo(reg.consentRisk),
       formatOsloDate(reg.createdAt),
     ]);
+
+    logActivity({
+      action: 'export',
+      entity: 'registration',
+      details: JSON.stringify({ rows: rows.length }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
     return csvResponse(toCsv(headers, rows), csvFilename('pameldinger'));
   } catch (error) {
