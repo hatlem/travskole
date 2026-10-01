@@ -2,17 +2,42 @@
 
 import Link from 'next/link';
 
-type IconType = 'courses' | 'registrations' | 'users' | 'bookings' | 'activity' | 'search';
+type IconType = 'courses' | 'registrations' | 'users' | 'bookings' | 'activity' | 'search' | 'email';
+
+interface EmptyStateAction {
+  label: string;
+  href?: string;
+  onClick?: () => void;
+}
 
 interface EmptyStateProps {
   icon?: IconType;
   title: string;
   description?: string;
-  action?: {
-    label: string;
-    href?: string;
-    onClick?: () => void;
-  };
+  /** Neste steg — vises som primærknapp. */
+  action?: EmptyStateAction;
+  /** Et alternativ, f.eks. «Start fra en mal». */
+  secondaryAction?: EmptyStateAction;
+}
+
+const BUTTON_BASE =
+  'inline-flex items-center rounded-lg px-4 py-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2';
+const PRIMARY = `${BUTTON_BASE} bg-bjerke-blue text-white hover:bg-bjerke-blue-dark`;
+const SECONDARY = `${BUTTON_BASE} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`;
+
+function ActionButton({ action, className }: { action: EmptyStateAction; className: string }) {
+  if (action.href) {
+    return (
+      <Link href={action.href} className={className}>
+        {action.label}
+      </Link>
+    );
+  }
+  return (
+    <button type="button" onClick={action.onClick} className={className}>
+      {action.label}
+    </button>
+  );
 }
 
 function EmptyIcon({ type }: { type: IconType }) {
@@ -87,37 +112,32 @@ function EmptyIcon({ type }: { type: IconType }) {
           <path d="M34 46h10" />
         </svg>
       );
+    case 'email':
+      return (
+        <svg className={cls} fill="none" viewBox="0 0 96 96" stroke="currentColor" strokeWidth={1.5}>
+          <rect x="14" y="26" width="52" height="36" rx="4" />
+          <path d="M14 30l26 18 26-18" />
+          <path d="M66 44h10" />
+          <path d="M72 38l6 6-6 6" />
+          <circle cx="80" cy="70" r="8" />
+          <path d="M77 70l2 2 4-4" />
+        </svg>
+      );
     default:
       return null;
   }
 }
 
-export function EmptyState({ icon = 'search', title, description, action }: EmptyStateProps) {
+export function EmptyState({ icon = 'search', title, description, action, secondaryAction }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center">
       <EmptyIcon type={icon} />
-      <h3 className="mt-4 text-lg font-medium text-gray-500">{title}</h3>
-      {description && (
-        <p className="mt-1 max-w-sm text-sm text-gray-400">{description}</p>
-      )}
-      {action && (
-        <div className="mt-6">
-          {action.href ? (
-            <Link
-              href={action.href}
-              className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              {action.label}
-            </Link>
-          ) : (
-            <button
-              type="button"
-              onClick={action.onClick}
-              className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              {action.label}
-            </button>
-          )}
+      <h3 className="mt-4 text-lg font-medium text-gray-900">{title}</h3>
+      {description && <p className="mt-1 max-w-md text-sm text-gray-600">{description}</p>}
+      {(action || secondaryAction) && (
+        <div className="mt-6 flex flex-wrap justify-center gap-3">
+          {action && <ActionButton action={action} className={PRIMARY} />}
+          {secondaryAction && <ActionButton action={secondaryAction} className={SECONDARY} />}
         </div>
       )}
     </div>

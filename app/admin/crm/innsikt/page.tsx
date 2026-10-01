@@ -91,7 +91,6 @@ export default function InnsiktPage() {
   return (
     <div>
       <CrmTabs />
-      <h1 className="text-2xl font-bold mb-4">Innsikt</h1>
       {error && <p className="text-red-600 mb-4">{error}</p>}
       {initialLoading ? (
         <p className="text-gray-500">Laster …</p>

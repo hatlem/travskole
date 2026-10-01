@@ -13,7 +13,10 @@ export interface CrmSubpage {
 export interface CrmNavItem {
   id: string;
   label: string;
+  /** Sidetittel når den skal forklare mer enn fanenavnet (f.eks. Pipeline → Salgstavle). */
+  title?: string;
   href: string;
+  /** Én linje om hva siden er til — vises under tittelen og på CRM-forsiden. */
   description: string;
   subpages?: CrmSubpage[];
   badge?: CrmBadgeKey;
@@ -36,15 +39,15 @@ export const CRM_GROUPS: readonly CrmNavGroup[] = [
         id: 'kontakter',
         label: 'Kontakter',
         href: '/admin/crm/kontakter',
-        description: 'Personer – foreldre, elever og andre dere har kontakt med.',
+        description: 'Alle personer dere har kontakt med – foreldre, elever, bedriftskunder og andre.',
         subpages: [{ href: '/admin/crm/import', label: 'Import' }],
       },
-      { id: 'bedrifter', label: 'Bedrifter', href: '/admin/crm/bedrifter', description: 'Firmaer, klubber og skoler.' },
+      { id: 'bedrifter', label: 'Bedrifter', href: '/admin/crm/bedrifter', description: 'Firmaer, klubber og skoler dere har kontakt med, med kontaktpersonene deres.' },
       {
         id: 'segmenter',
         label: 'Segmenter og lister',
         href: '/admin/crm/segmenter',
-        description: 'Grupper av kontakter, for eksempel til utsendelser.',
+        description: 'Samle kontakter i grupper – automatisk (segment) eller for hånd (liste) – for eksempel til e-postutsendelser.',
       },
     ],
   },
@@ -53,8 +56,14 @@ export const CRM_GROUPS: readonly CrmNavGroup[] = [
     label: 'Salg',
     description: 'Følg opp mulige kunder og husk hva som må gjøres.',
     items: [
-      { id: 'pipeline', label: 'Pipeline', href: '/admin/crm/pipeline', description: 'Salgsmuligheter sortert etter hvor langt de har kommet.' },
-      { id: 'oppgaver', label: 'Oppgaver', href: '/admin/crm/oppgaver', description: 'Ting som skal gjøres, med frist og ansvarlig.' },
+      {
+        id: 'pipeline',
+        label: 'Pipeline',
+        title: 'Salgstavle',
+        href: '/admin/crm/pipeline',
+        description: 'Alle mulige salg (avtaler) i kolonner etter hvor langt de har kommet. Dra et kort videre når det skjer noe.',
+      },
+      { id: 'oppgaver', label: 'Oppgaver', href: '/admin/crm/oppgaver', description: 'Ting som skal gjøres – hvem som har ansvaret, og når det må være gjort.' },
     ],
   },
   {
@@ -62,15 +71,20 @@ export const CRM_GROUPS: readonly CrmNavGroup[] = [
     label: 'E-post',
     description: 'Automatiske e-poster som sendes til riktig person til riktig tid.',
     items: [
-      { id: 'flyter', label: 'E-postflyter', href: '/admin/crm/flyter', description: 'Oppsett for automatiske e-poster.' },
+      {
+        id: 'flyter',
+        label: 'E-postflyter',
+        href: '/admin/crm/flyter',
+        description: 'Automatiske e-poster som går ut av seg selv, for eksempel velkomst etter påmelding eller påminnelse før kursstart.',
+      },
       {
         id: 'godkjenning',
         label: 'Godkjenning',
         href: '/admin/crm/godkjenning',
-        description: 'Se over og godkjenn e-poster før de sendes.',
+        description: 'Les gjennom e-poster som KI har skrevet om, og velg hva som skal sendes.',
         badge: 'pendingReviews',
       },
-      { id: 'avsendere', label: 'Avsendere', href: '/admin/crm/avsendere', description: 'Hvem e-postene sendes fra.' },
+      { id: 'avsendere', label: 'Avsendere', href: '/admin/crm/avsendere', description: 'Navnene og adressene e-postene sendes fra, og hvor svarene havner.' },
     ],
   },
   {
@@ -78,8 +92,8 @@ export const CRM_GROUPS: readonly CrmNavGroup[] = [
     label: 'Rapporter',
     description: 'Se hvordan det går – tall, trender og hva som har skjedd.',
     items: [
-      { id: 'innsikt', label: 'Innsikt', href: '/admin/crm/innsikt', description: 'Tall og trender for kunder og salg.' },
-      { id: 'hendelser', label: 'Hendelser', href: '/admin/crm/hendelser', description: 'Logg over hva kontaktene har gjort.' },
+      { id: 'innsikt', label: 'Innsikt', href: '/admin/crm/innsikt', description: 'Tall og trender: hvordan e-postene, salget og besøkene går.' },
+      { id: 'hendelser', label: 'Hendelser', href: '/admin/crm/hendelser', description: 'Logg over hva som har skjedd – påmeldinger, åpnede e-poster, besøk og mer.' },
     ],
   },
 ];
@@ -127,5 +141,5 @@ export const CRM_QUICK_ACTIONS: readonly CrmQuickAction[] = [
   { label: 'Ny kontakt', href: '/admin/crm/kontakter?ny=1' },
   { label: 'Importer kontakter', href: '/admin/crm/import' },
   { label: 'Ny e-postflyt', href: '/admin/crm/flyter?ny=1' },
-  { label: 'Se pipeline', href: '/admin/crm/pipeline' },
+  { label: 'Åpne salgstavlen', href: '/admin/crm/pipeline' },
 ];

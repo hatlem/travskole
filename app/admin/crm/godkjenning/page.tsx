@@ -107,7 +107,6 @@ export default function GodkjenningPage() {
   return (
     <div>
       <CrmTabs />
-      <h1 className="text-2xl font-bold mb-1">Godkjenning av KI-e-poster</h1>
       <p className="text-sm text-gray-600 mb-4 max-w-3xl">
         E-postnoder i modusen «Godkjenn hver e-post» venter her før de sendes. Sammenlign originalen med KI-versjonen,
         rediger ved behov, og velg hva mottakeren skal få. Ubehandlede utkast sendes som original når fristen går ut.
