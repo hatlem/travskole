@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { PageHeader } from '@/components/admin/PageHeader';
 import {
   ACTIVITY_ACTION_OPTIONS,
   ACTIVITY_ENTITY_OPTIONS,
@@ -88,12 +89,12 @@ export default function AdminActivityPage() {
       if (searchDebounced) params.set('search', searchDebounced);
 
       const res = await fetch(`/api/admin/activity?${params.toString()}`);
-      if (!res.ok) throw new Error('Kunne ikke hente aktivitetslogg');
+      if (!res.ok) throw new Error('Kunne ikke hente loggen. Last siden på nytt.');
       const data = await res.json();
       setLogs(data.logs || []);
       setTotal(data.total || 0);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setLoading(false);
     }
@@ -108,10 +109,10 @@ export default function AdminActivityPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Aktivitetslogg</h1>
-        <p className="text-gray-600 text-sm mt-1">Oversikt over handlinger utført i adminpanelet</p>
-      </div>
+      <PageHeader
+        title="Aktivitetslogg"
+        description="Hvem som har gjort hva i admin, og når. Nyttig når du lurer på hvem som endret eller slettet noe."
+      />
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -162,10 +163,14 @@ export default function AdminActivityPage() {
 
       {/* Activity list */}
       {loading ? (
-        <div className="py-20 text-center text-gray-500">Laster...</div>
+        <div className="py-20 text-center text-gray-500">Laster …</div>
       ) : logs.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-gray-500">Ingen aktivitet funnet.</p>
+          <p className="text-gray-500">
+            {searchDebounced || actionFilter || entityFilter
+              ? 'Ingen hendelser passer med søket. Prøv et annet ord, eller velg «Alle handlinger» og «Alle typer».'
+              : 'Ingenting er logget ennå. Her dukker endringer opp når noen jobber i admin.'}
+          </p>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">

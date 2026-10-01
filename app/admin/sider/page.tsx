@@ -24,12 +24,12 @@ export default function AdminLegalPagesPage() {
     (async () => {
       try {
         const res = await fetch('/api/admin/legal');
-        if (!res.ok) throw new Error('Kunne ikke hente sidene');
+        if (!res.ok) throw new Error('Kunne ikke hente sidene. Last siden på nytt.');
         const data = await res.json();
         setPages(data.pages);
         setDrafts(Object.fromEntries(data.pages.map((p: LegalPage) => [p.key, p.content])));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Noe gikk galt');
+        setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
       }
     })();
   }, []);
@@ -48,7 +48,7 @@ export default function AdminLegalPagesPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: page.key, content: drafts[page.key] ?? '' }),
       });
-      if (!res.ok) throw new Error(`Kunne ikke lagre ${page.title.toLowerCase()}`);
+      if (!res.ok) throw new Error(`${page.title} ble ikke lagret. Prøv igjen.`);
       const data = await res.json();
       setPages((prev) =>
         prev
@@ -60,7 +60,7 @@ export default function AdminLegalPagesPage() {
       setSavedKey(page.key);
       setTimeout(() => setSavedKey((k) => (k === page.key ? null : k)), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setSavingKey(null);
     }
@@ -84,7 +84,7 @@ export default function AdminLegalPagesPage() {
 
       {!pages ? (
         <div className="flex items-center justify-center py-20">
-          <p className="text-gray-500">Laster sider…</p>
+          <p className="text-gray-500">Laster sider …</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -125,7 +125,7 @@ export default function AdminLegalPagesPage() {
                       : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
                   }`}
                 >
-                  {savingKey === page.key ? 'Lagrer…' : `Lagre ${page.title.toLowerCase()}`}
+                  {savingKey === page.key ? 'Lagrer …' : `Lagre ${page.title.toLowerCase()}`}
                 </button>
               </div>
             </div>

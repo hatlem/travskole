@@ -5,6 +5,8 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { STRINGS, STRING_SECTIONS, STRING_PREFIX } from '@/lib/strings';
 
+const shortText = (text: string): string => (text.length > 50 ? `${text.slice(0, 50)} …` : text);
+
 /**
  * Redigering av all publikumsvendt UI-tekst.
  * Standardtekstene bor i lib/strings.ts; kun avvik lagres i databasen
@@ -24,7 +26,7 @@ export default function AdminTeksterPage() {
   const fetchOverrides = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/settings');
-      if (!res.ok) throw new Error('Kunne ikke hente tekster');
+      if (!res.ok) throw new Error('Kunne ikke hente tekstene. Last siden på nytt.');
       const data = await res.json();
       const strOverrides: Record<string, string> = {};
       for (const [key, value] of Object.entries(data.settings as Record<string, string>)) {
@@ -34,7 +36,7 @@ export default function AdminTeksterPage() {
       }
       setOverrides(strOverrides);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setLoading(false);
     }
@@ -90,7 +92,7 @@ export default function AdminTeksterPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ key: STRING_PREFIX + key, value: effective }),
         });
-        if (!res.ok) throw new Error(`Kunne ikke lagre ${key}`);
+        if (!res.ok) throw new Error(`Teksten «${shortText(STRINGS[key])}» ble ikke lagret. Prøv igjen.`);
       }
       setOverrides((prev) => {
         const next = { ...prev };
@@ -104,7 +106,7 @@ export default function AdminTeksterPage() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setSaving(false);
     }
@@ -113,7 +115,7 @@ export default function AdminTeksterPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-gray-500">Laster tekster...</p>
+        <p className="text-gray-500">Laster tekster …</p>
       </div>
     );
   }
@@ -130,8 +132,8 @@ export default function AdminTeksterPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Tekster</h1>
           <p className="text-gray-500 mt-1">
-            Alle tekster besøkende ser. Tomt felt bruker standardteksten (vist i grått).
-            Ikke fjern {'{{plassholdere}}'} — de fylles inn automatisk.
+            Endre tekstene besøkende ser på nettsiden. Tomt felt betyr at standardteksten (i grått) brukes.
+            Ord i doble krøllparenteser, som {'{{kurs_navn}}'}, byttes ut automatisk — la dem stå.
           </p>
         </div>
         <button
@@ -143,7 +145,7 @@ export default function AdminTeksterPage() {
               : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
           }`}
         >
-          {saving ? 'Lagrer...' : dirtyCount > 0 ? `Lagre ${dirtyCount} endringer` : 'Lagre'}
+          {saving ? 'Lagrer …' : dirtyCount === 1 ? 'Lagre 1 endring' : dirtyCount > 1 ? `Lagre ${dirtyCount} endringer` : 'Lagre'}
         </button>
       </div>
 
@@ -151,7 +153,7 @@ export default function AdminTeksterPage() {
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Søk i tekster..."
+        placeholder="Søk i tekstene …"
         className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm mb-8 focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
       />
 
@@ -179,8 +181,8 @@ export default function AdminTeksterPage() {
                 return (
                   <div key={key}>
                     <div className="flex items-center justify-between mb-1">
-                      <label htmlFor={key} className="block text-xs font-mono text-gray-400">
-                        {key}
+                      <label htmlFor={key} className="block text-xs text-gray-500" title={key}>
+                        {isOverridden ? `Standard: «${shortText(STRINGS[key])}»` : 'Standardtekst brukes'}
                       </label>
                       {isOverridden && (
                         <button
@@ -188,7 +190,7 @@ export default function AdminTeksterPage() {
                           onClick={() => updateKey(key, '')}
                           className="text-xs text-bjerke-blue hover:underline"
                         >
-                          Tilbakestill til standard
+                          Bruk standardteksten igjen
                         </button>
                       )}
                     </div>
@@ -218,7 +220,7 @@ export default function AdminTeksterPage() {
           </div>
         ))}
         {sections.length === 0 && (
-          <p className="text-gray-500 text-center py-12">Ingen tekster matcher søket.</p>
+          <p className="text-gray-500 text-center py-12">Ingen tekster passer med søket. Prøv et annet ord.</p>
         )}
       </div>
     </div>
