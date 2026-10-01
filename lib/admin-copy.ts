@@ -67,7 +67,7 @@ export const GLOSSARY = {
   legitimateInterest: {
     term: 'Berettiget interesse',
     replaces: 'legitimate interest',
-    help: 'Lovlig grunn til å sende markedsføring uten eget samtykke, f.eks. til en som allerede har vært kunde og ikke har reservert seg. Brukes med varsomhet.',
+    help: 'Lar dere sende markedsføring til kontaktpersoner i bedrifter uten eget samtykke, f.eks. til Firma AS som hadde julebord hos dere. Gjelder bare bedriftskontakter, og aldri noen som har sagt nei eller meldt seg av.',
   },
   deal: {
     term: 'Avtale',
