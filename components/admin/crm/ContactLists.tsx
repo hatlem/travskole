@@ -117,7 +117,7 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
   return (
     <div className="space-y-3">
       {lists.length === 0 ? (
-        <p className="text-sm text-gray-500">Ikke med i noen lister.</p>
+        <p className="text-sm text-gray-500">Ikke med i noen lister ennå. Velg en liste under, eller lag en ny.</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {lists.map((l) => (
@@ -169,9 +169,9 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
           type="button"
           onClick={add}
           disabled={!canAdd}
-          className="bg-gray-800 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
         >
-          {busy ? 'Legger til …' : 'Legg til i liste'}
+          {busy ? 'Legger til …' : 'Legg i liste'}
         </button>
       </div>
       <p className="text-[11px] text-gray-500">

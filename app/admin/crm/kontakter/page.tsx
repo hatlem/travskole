@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
@@ -21,7 +21,11 @@ interface ContactRow {
   owner: { id: number; email: string } | null;
   lastActivityAt: string | null;
   dealCount: number;
+  segments: GroupRef[];
+  lists: GroupRef[];
 }
+
+interface GroupRef { id: number; name: string }
 
 interface Segment { id: number; name: string }
 interface ContactList { id: number; name: string }
@@ -30,7 +34,51 @@ const STAGE_LABELS: Record<string, string> = {
   lead: 'Interessent', active: 'Aktiv', customer: 'Kunde', dormant: 'Sovende', lost: 'Tapt',
 };
 
-export default function KontakterPage() {
+const MAX_CHIPS = 2;
+
+function idParam(value: string | string[] | undefined): string {
+  const raw = Array.isArray(value) ? value[0] : value;
+  return raw && /^\d+$/.test(raw) ? raw : '';
+}
+
+function GroupChips({ items, tone, onPick }: {
+  items: GroupRef[];
+  tone: 'segment' | 'list';
+  onPick: (id: number) => void;
+}) {
+  if (items.length === 0) return <span className="text-gray-400">—</span>;
+  const color = tone === 'segment'
+    ? 'bg-violet-50 text-violet-800 hover:bg-violet-100'
+    : 'bg-blue-50 text-blue-800 hover:bg-blue-100';
+  const rest = items.slice(MAX_CHIPS);
+  return (
+    <span className="flex flex-wrap gap-1">
+      {items.slice(0, MAX_CHIPS).map((g) => (
+        <button
+          key={g.id}
+          type="button"
+          onClick={() => onPick(g.id)}
+          title={`Vis alle i «${g.name}»`}
+          className={`max-w-[10rem] truncate rounded-full px-2 py-0.5 text-xs ${color}`}
+        >
+          {g.name}
+        </button>
+      ))}
+      {rest.length > 0 && (
+        <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600" title={rest.map((g) => g.name).join(', ')}>
+          +{rest.length}
+        </span>
+      )}
+    </span>
+  );
+}
+
+export default function KontakterPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const initialParams = use(searchParams);
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [lists, setLists] = useState<ContactList[]>([]);
@@ -41,8 +89,8 @@ export default function KontakterPage() {
   const [loadError, setLoadError] = useState(false);
   const [q, setQ] = useState('');
   const [stage, setStage] = useState('');
-  const [segmentId, setSegmentId] = useState('');
-  const [listId, setListId] = useState('');
+  const [segmentId, setSegmentId] = useState(() => idParam(initialParams.segmentId));
+  const [listId, setListId] = useState(() => idParam(initialParams.listId));
   const [tag, setTag] = useState('');
   const [owner, setOwner] = useState('');
   const [availableTags, setAvailableTags] = useState<string[]>([]);
@@ -140,21 +188,10 @@ export default function KontakterPage() {
           className="border border-gray-300 rounded-md px-3 py-2 text-sm w-full sm:w-64"
         />
         <select
-          value={stage}
-          onChange={(e) => { setPage(1); setStage(e.target.value); }}
-          aria-label="Filtrer på stadium"
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
-        >
-          <option value="">Alle stadier</option>
-          {Object.entries(STAGE_LABELS).map(([value, label]) => (
-            <option key={value} value={value}>{label}</option>
-          ))}
-        </select>
-        <select
           value={segmentId}
           onChange={(e) => { setPage(1); setSegmentId(e.target.value); }}
           aria-label="Filtrer på segment"
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
+          className={`border rounded-md px-3 py-2 text-sm max-w-[12rem] ${segmentId ? 'border-violet-400 bg-violet-50 text-violet-900' : 'border-gray-300'}`}
         >
           <option value="">Alle segmenter</option>
           {segments.map((s) => (
@@ -165,11 +202,22 @@ export default function KontakterPage() {
           value={listId}
           onChange={(e) => { setPage(1); setListId(e.target.value); }}
           aria-label="Filtrer på liste"
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
+          className={`border rounded-md px-3 py-2 text-sm max-w-[12rem] ${listId ? 'border-blue-400 bg-blue-50 text-blue-900' : 'border-gray-300'}`}
         >
           <option value="">Alle lister</option>
           {lists.map((l) => (
             <option key={l.id} value={l.id}>{l.name}</option>
+          ))}
+        </select>
+        <select
+          value={stage}
+          onChange={(e) => { setPage(1); setStage(e.target.value); }}
+          aria-label="Filtrer på stadium"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
+        >
+          <option value="">Alle stadier</option>
+          {Object.entries(STAGE_LABELS).map(([value, label]) => (
+            <option key={value} value={value}>{label}</option>
           ))}
         </select>
         <select
@@ -205,6 +253,30 @@ export default function KontakterPage() {
           Ny kontakt
         </button>
       </div>
+
+      {(segmentId || listId) && (
+        <div className="mb-4 flex flex-wrap items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2 text-sm text-gray-800">
+          {segmentId && (
+            <span>
+              Viser kontakter i segmentet <strong>{segments.find((s) => String(s.id) === segmentId)?.name ?? '…'}</strong>
+              <span className="text-gray-500"> (oppdateres automatisk ut fra reglene)</span>
+            </span>
+          )}
+          {segmentId && listId && <span aria-hidden>·</span>}
+          {listId && (
+            <span>
+              Viser kontakter i listen <strong>{lists.find((l) => String(l.id) === listId)?.name ?? '…'}</strong>
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => { setPage(1); setSegmentId(''); setListId(''); }}
+            className="ml-auto text-xs text-blue-700 underline hover:no-underline"
+          >
+            Vis alle kontakter
+          </button>
+        </div>
+      )}
 
       {showNew && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50 flex flex-wrap gap-3 items-end">
@@ -250,6 +322,8 @@ export default function KontakterPage() {
                 <th className="px-4 py-3 font-medium">E-post</th>
                 <th className="px-4 py-3 font-medium">Bedrift</th>
                 <th className="px-4 py-3 font-medium">Stadium</th>
+                <th className="px-4 py-3 font-medium">Segmenter</th>
+                <th className="px-4 py-3 font-medium">Lister</th>
                 <th className="px-4 py-3 font-medium">Ansvarlig</th>
                 <th className="px-4 py-3 font-medium">Deals</th>
                 <th className="px-4 py-3 font-medium">Sist aktiv</th>
@@ -287,6 +361,12 @@ export default function KontakterPage() {
                     ) : '—'}
                   </td>
                   <td className="px-4 py-3">{STAGE_LABELS[c.stage] ?? c.stage}</td>
+                  <td className="px-4 py-3">
+                    <GroupChips items={c.segments} tone="segment" onPick={(id) => { setPage(1); setSegmentId(String(id)); }} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <GroupChips items={c.lists} tone="list" onPick={(id) => { setPage(1); setListId(String(id)); }} />
+                  </td>
                   <td className="px-4 py-3 text-gray-600">{c.owner?.email ?? '—'}</td>
                   <td className="px-4 py-3">{c.dealCount}</td>
                   <td className="px-4 py-3 text-gray-500">

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
-import { parseSegmentRules, contactMatchesSegment } from '@/lib/crm/segments';
+import { parseSegmentRules, contactMatchesSegment, segmentsForContact } from '@/lib/crm/segments';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 import { ownerFilterWhere, parseOwnerFilter } from '@/lib/crm/owner-filter';
 
@@ -56,25 +56,40 @@ export async function GET(request: NextRequest) {
   if (tag) {
     filtered = filtered.filter((c) => c.tagList.includes(tag));
   }
+  const toSegmentContact = (c: (typeof filtered)[number]) => ({
+    stage: c.stage, source: c.source, email: c.email,
+    organizationId: c.organizationId, lastActivityAt: c.lastActivityAt,
+    tags: c.tagList, deals: c.deals,
+  });
+  const segments = await prisma.segment.findMany({
+    orderBy: { name: 'asc' },
+    select: { id: true, name: true, rules: true },
+  });
   if (segmentId) {
-    const segment = await prisma.segment.findUnique({ where: { id: segmentId } });
+    const segment = segments.find((s) => s.id === segmentId);
     if (segment) {
       const rules = parseSegmentRules(segment.rules);
-      filtered = filtered.filter((c) =>
-        contactMatchesSegment(
-          {
-            stage: c.stage, source: c.source, email: c.email,
-            organizationId: c.organizationId, lastActivityAt: c.lastActivityAt,
-            tags: c.tagList, deals: c.deals,
-          },
-          rules,
-        ),
-      );
+      filtered = filtered.filter((c) => contactMatchesSegment(toSegmentContact(c), rules));
     }
   }
 
   const total = filtered.length;
   const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+
+  // Kontaktene (med deals) er allerede lastet for filtreringen, så segmenter
+  // for de ≤50 radene på siden koster bare regelevaluering i minnet. Lister
+  // hentes med én spørring for sidens kontakter.
+  const memberships = pageItems.length
+    ? await prisma.contactListMembership.findMany({
+        where: { contactId: { in: pageItems.map((c) => c.id) } },
+        orderBy: { list: { name: 'asc' } },
+        select: { contactId: true, list: { select: { id: true, name: true } } },
+      })
+    : [];
+  const listsByContact = new Map<number, { id: number; name: string }[]>();
+  for (const m of memberships) {
+    listsByContact.set(m.contactId, [...(listsByContact.get(m.contactId) ?? []), m.list]);
+  }
 
   return NextResponse.json({
     contacts: pageItems.map((c) => ({
@@ -82,6 +97,8 @@ export async function GET(request: NextRequest) {
       stage: c.stage, source: c.source, tags: c.tagList,
       organization: c.organization, owner: c.owner,
       lastActivityAt: c.lastActivityAt, dealCount: c.deals.length,
+      segments: segmentsForContact(toSegmentContact(c), segments).map((s) => ({ id: s.id, name: s.name })),
+      lists: listsByContact.get(c.id) ?? [],
     })),
     total, page, pageSize: PAGE_SIZE, availableTags,
   });

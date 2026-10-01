@@ -15,6 +15,7 @@ import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { AddToFlow } from '@/components/admin/crm/AddToFlow';
 import { ContactLists, type ContactListMembershipRow } from '@/components/admin/crm/ContactLists';
+import { ContactSegments } from '@/components/admin/crm/ContactSegments';
 import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
 import { isSuperAdmin } from '@/lib/settings-shared';
 import { dateInputToIso } from '@/lib/crm/form-utils';
@@ -135,6 +136,12 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
     contact?.ownerId != null && assignees.some((a) => a.id === contact.ownerId) ? contact.ownerId : null;
   const defaultTaskAssignee = activeOwnerId ?? currentUserId;
   const effectiveTaskAssignee = taskAssigneeTouched ? taskAssignee : defaultTaskAssignee;
+
+  function focusLists() {
+    const section = document.getElementById('kontakt-lister');
+    section?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    section?.querySelector<HTMLSelectElement>('select')?.focus({ preventScroll: true });
+  }
 
   async function patch(body: Record<string, unknown>, okMsg: string): Promise<boolean> {
     try {
@@ -479,7 +486,14 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             </div>
 
             <div className="border-t border-gray-100 pt-3">
-              <h3 className="text-sm font-medium mb-2">Lister</h3>
+              <h3 className="text-sm font-medium mb-1">Segmenter</h3>
+              <p className="text-xs text-gray-500 mb-2">Grupper kontakten havner i automatisk.</p>
+              <ContactSegments contactId={contactId} refreshKey={contact} onAddToList={focusLists} />
+            </div>
+
+            <div id="kontakt-lister" className="border-t border-gray-100 pt-3 scroll-mt-4">
+              <h3 className="text-sm font-medium mb-1">Lister</h3>
+              <p className="text-xs text-gray-500 mb-2">Grupper du legger kontakten i selv.</p>
               <ContactLists contactId={contactId} contactName={contact.name} lists={contact.lists} onChanged={load} />
             </div>
 
