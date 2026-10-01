@@ -128,6 +128,7 @@ export function FeedbackForm({ onSuccess, initialPageUrl = "" }: Props) {
       {/* Toast */}
       {toast && (
         <div
+          role={toast.type === "success" ? "status" : "alert"}
           className={`absolute -top-12 left-0 right-0 rounded-lg px-4 py-2 text-sm font-medium shadow-lg transition-all text-center ${
             toast.type === "success" ? "bg-green-600 text-white" : "bg-red-600 text-white"
           }`}
@@ -154,6 +155,7 @@ export function FeedbackForm({ onSuccess, initialPageUrl = "" }: Props) {
 
       {/* Textarea */}
       <textarea
+        aria-label="Tilbakemelding"
         placeholder="Hva kan vi gjøre bedre?"
         value={feedback}
         onChange={(e) => setFeedback(e.target.value)}
@@ -190,16 +192,18 @@ export function FeedbackForm({ onSuccess, initialPageUrl = "" }: Props) {
           <div className="mt-2 space-y-3">
             {/* Page URL */}
             <div className="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5">
-              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-400">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-gray-400" aria-hidden="true">
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
                 <path d="M2 12h20" />
               </svg>
               <input
                 type="text"
+                aria-label="Siden feilen gjelder"
+                autoComplete="off"
                 value={pageUrl}
                 onChange={(e) => setPageUrl(e.target.value)}
-                className="w-full bg-transparent text-xs text-gray-500 outline-none"
+                className="w-full bg-transparent text-sm text-gray-600 outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
                 disabled={loading}
               />
             </div>

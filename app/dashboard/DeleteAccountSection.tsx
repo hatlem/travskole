@@ -82,6 +82,8 @@ export function DeleteAccountSection({ hasPassword }: DeleteAccountSectionProps)
               <input
                 id="delete-confirm"
                 type="text"
+                autoComplete="off"
+                autoCapitalize="characters"
                 value={confirmWord}
                 onChange={(e) => setConfirmWord(e.target.value)}
                 className={fieldClass}

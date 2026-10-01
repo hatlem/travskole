@@ -90,6 +90,7 @@ export function ProfileSection({ profile, email, onSaved }: ProfileSectionProps)
             <input
               id="edit-name"
               type="text"
+              autoComplete="name"
               required
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -103,6 +104,8 @@ export function ProfileSection({ profile, email, onSaved }: ProfileSectionProps)
             <input
               id="edit-phone"
               type="tel"
+              inputMode="tel"
+              autoComplete="tel"
               required
               value={form.phone}
               onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
@@ -116,6 +119,7 @@ export function ProfileSection({ profile, email, onSaved }: ProfileSectionProps)
             <input
               id="edit-address"
               type="text"
+              autoComplete="street-address"
               value={form.address}
               onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
               className={fieldClass}

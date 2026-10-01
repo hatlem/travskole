@@ -662,6 +662,7 @@ export default function PameldingForm({ courseRef, summary, isAdult, paymentMeth
                         {...register('existingChildBirthdate')}
                         type="date"
                         id="existingChildBirthdate"
+                        autoComplete="off"
                         aria-invalid={!!errors.existingChildBirthdate}
                         aria-describedby={describedBy('existingChildBirthdate')}
                         className={inputClass}
@@ -712,6 +713,7 @@ export default function PameldingForm({ courseRef, summary, isAdult, paymentMeth
                       {...register('childBirthdate')}
                       type="date"
                       id="childBirthdate"
+                      autoComplete="off"
                       aria-invalid={!!errors.childBirthdate}
                       aria-describedby={describedBy('childBirthdate')}
                       className={inputClass}

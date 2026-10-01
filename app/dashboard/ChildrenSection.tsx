@@ -129,6 +129,7 @@ export function ChildrenSection({ items, hasProfile, onChange, notify }: Childre
           id={`${fieldId}-name`}
           name="name"
           type="text"
+          autoComplete="off"
           required
           value={form.name}
           onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
@@ -141,6 +142,7 @@ export function ChildrenSection({ items, hasProfile, onChange, notify }: Childre
           id={`${fieldId}-birthdate`}
           name="birthdate"
           type="date"
+          autoComplete="off"
           value={form.birthdate}
           onChange={(e) => setForm((f) => ({ ...f, birthdate: e.target.value }))}
           className={fieldClass}
@@ -152,6 +154,7 @@ export function ChildrenSection({ items, hasProfile, onChange, notify }: Childre
           id={`${fieldId}-allergies`}
           name="allergies"
           type="text"
+          autoComplete="off"
           value={form.allergies}
           onChange={(e) => setForm((f) => ({ ...f, allergies: e.target.value }))}
           placeholder={t('dash.child_allergies_placeholder')}
