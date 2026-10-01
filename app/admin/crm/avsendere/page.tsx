@@ -30,6 +30,7 @@ export default function AvsenderePage() {
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
   const newEmailRef = useRef<HTMLInputElement>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -160,6 +161,7 @@ export default function AvsenderePage() {
       toast(`${newEmail.trim()} er lagt til og kan velges i e-postflyter`, 'success');
       setNewEmail('');
       setNewName('');
+      setShowAdd(false);
       await load();
     } catch {
       toast('Avsenderen ble ikke lagt til — sjekk nettforbindelsen og prøv igjen.', 'error');
@@ -169,6 +171,130 @@ export default function AvsenderePage() {
   }
 
   const domainHint = allowedDomains.map((d) => `@${d}`).join(', ');
+  const emailPlaceholder = `navn@${allowedDomains[0] ?? 'bjerke.no'}`;
+
+  function openAddForm() {
+    setShowAdd(true);
+    requestAnimationFrame(() => {
+      newEmailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      newEmailRef.current?.focus({ preventScroll: true });
+    });
+  }
+
+  function closeAddForm() {
+    setShowAdd(false);
+    setNewEmail('');
+    setNewName('');
+  }
+
+  function renderName(identity: SenderIdentity) {
+    const busy = busyId === identity.id;
+    if (editingId === identity.id) {
+      return (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={editName}
+            onChange={(e) => setEditName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') saveName(identity);
+              if (e.key === 'Escape') setEditingId(null);
+            }}
+            autoFocus
+            maxLength={200}
+            aria-label="Navn mottakeren ser"
+            className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-900 sm:w-56 sm:flex-none"
+          />
+          <button
+            onClick={() => saveName(identity)}
+            disabled={!editName.trim() || busy}
+            className="rounded-md bg-bjerke-blue px-3 py-1.5 text-xs font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+          >
+            {busy ? 'Lagrer …' : 'Lagre'}
+          </button>
+          <button onClick={() => setEditingId(null)} className="px-1 text-xs text-gray-600 hover:underline">
+            Avbryt
+          </button>
+        </div>
+      );
+    }
+    return (
+      <button
+        onClick={() => startEdit(identity)}
+        className="text-left hover:underline"
+        title="Endre navnet mottakeren ser"
+      >
+        {identity.displayName}
+      </button>
+    );
+  }
+
+  function renderToggle(identity: SenderIdentity) {
+    return (
+      <button
+        onClick={() => toggleActive(identity)}
+        disabled={busyId !== null}
+        role="switch"
+        aria-checked={identity.active}
+        aria-label={`${identity.email} er ${identity.active ? 'på' : 'av'}`}
+        className={`inline-flex min-h-7 items-center rounded-full px-2.5 py-0.5 text-xs font-medium disabled:opacity-50 ${
+          identity.active
+            ? 'bg-green-100 text-green-800 hover:bg-green-200'
+            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+        }`}
+        title={identity.active ? 'Klikk for å slå av avsenderen' : 'Klikk for å slå på avsenderen'}
+      >
+        {identity.active ? 'På' : 'Av'}
+      </button>
+    );
+  }
+
+  function renderDelete(identity: SenderIdentity) {
+    if (!canManage) return null;
+    const busy = busyId === identity.id;
+    if (confirmDeleteId === identity.id) {
+      return (
+        <span className="inline-flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-gray-600">Slette {identity.email} for godt?</span>
+          <button
+            onClick={() => remove(identity.id)}
+            disabled={busy}
+            className="rounded-md bg-red-600 px-2.5 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-50"
+          >
+            {busy ? 'Sletter …' : 'Ja, slett'}
+          </button>
+          <button onClick={() => setConfirmDeleteId(null)} disabled={busy} className="text-gray-600 hover:underline">
+            Avbryt
+          </button>
+        </span>
+      );
+    }
+    return (
+      <button
+        onClick={() => {
+          setEditingId(null);
+          setConfirmDeleteId(identity.id);
+        }}
+        disabled={busyId !== null}
+        className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
+        title={
+          identity.sendCount > 0 ? 'Avsendere som har sendt e-post, kan ikke slettes — slå den av i stedet' : undefined
+        }
+      >
+        Slett
+      </button>
+    );
+  }
+
+  const loginLabel = (identity: SenderIdentity) =>
+    identity.hasUserAccount ? (
+      <span className="text-green-700" title="Det finnes en innlogging med samme e-post, så svar kan fordeles til denne personen">
+        Ja
+      </span>
+    ) : (
+      <span className="text-gray-500" title="Ingen innlogging med denne e-posten">
+        Nei
+      </span>
+    );
 
   return (
     <div>
@@ -177,10 +303,9 @@ export default function AvsenderePage() {
           canManage && !loading && !loadError ? (
             <button
               type="button"
-              onClick={() => {
-                newEmailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                newEmailRef.current?.focus({ preventScroll: true });
-              }}
+              onClick={() => (showAdd ? closeAddForm() : openAddForm())}
+              aria-expanded={showAdd}
+              aria-controls="ny-avsender"
               className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -219,6 +344,55 @@ export default function AvsenderePage() {
           </details>
         </div>
 
+        {canManage && showAdd && !loading && !loadError && (
+          <section id="ny-avsender" aria-labelledby="ny-avsender-heading" className="rounded-lg border border-bjerke-blue/30 bg-white p-4 shadow-sm">
+            <h3 id="ny-avsender-heading" className="mb-3 text-sm font-semibold">Legg til avsender</h3>
+            <form onSubmit={create} className="flex flex-wrap items-end gap-3">
+              <label className="flex min-w-0 flex-1 basis-64 flex-col gap-1 text-xs font-medium text-gray-600">
+                E-postadresse
+                <input
+                  ref={newEmailRef}
+                  type="email"
+                  value={newEmail}
+                  onChange={(e) => setNewEmail(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && closeAddForm()}
+                  placeholder={emailPlaceholder}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900"
+                />
+              </label>
+              <label className="flex min-w-0 flex-1 basis-56 flex-col gap-1 text-xs font-medium text-gray-600">
+                Navn mottakeren ser
+                <input
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && closeAddForm()}
+                  placeholder="F.eks. Kari på Bjerke"
+                  maxLength={200}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-normal text-gray-900"
+                />
+              </label>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={closeAddForm}
+                  disabled={creating}
+                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  Avbryt
+                </button>
+                <button
+                  type="submit"
+                  disabled={!newEmail.trim() || !newName.trim() || creating}
+                  className="rounded-md bg-bjerke-blue px-4 py-2 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+                >
+                  {creating ? 'Legger til …' : 'Legg til avsender'}
+                </button>
+              </div>
+              {domainHint && <p className="w-full text-xs text-gray-500">Adressen må slutte på: {domainHint}</p>}
+            </form>
+          </section>
+        )}
+
         {loading ? (
           <TableSkeleton rows={7} cols={5} />
         ) : loadError ? (
@@ -228,184 +402,57 @@ export default function AvsenderePage() {
             action={{ label: 'Prøv igjen', onClick: () => load() }}
           />
         ) : identities.length === 0 ? (
-          <EmptyState
-            title="Ingen avsendere ennå"
-            description="E-postflytene trenger minst én avsender. Legg til en adresse som IT-leverandøren har godkjent."
-            action={canManage ? { label: 'Legg til avsender', onClick: () => newEmailRef.current?.focus() } : undefined}
-          />
+          showAdd ? null : (
+            <EmptyState
+              title="Ingen avsendere ennå"
+              description="E-postflytene trenger minst én avsender. Legg til en adresse som IT-leverandøren har godkjent."
+              action={canManage ? { label: 'Legg til avsender', onClick: openAddForm } : undefined}
+            />
+          )
         ) : (
-          <div className="border border-gray-200 rounded-lg overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-                <tr>
-                  <th className="px-4 py-2 font-medium">E-post</th>
-                  <th className="px-4 py-2 font-medium">Navn mottakeren ser</th>
-                  <th className="px-4 py-2 font-medium">Kan logge inn</th>
-                  <th className="px-4 py-2 font-medium text-right">E-poster sendt</th>
-                  <th className="px-4 py-2 font-medium">På/av</th>
-                  <th className="px-4 py-2" />
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {identities.map((identity) => {
-                  const busy = busyId === identity.id;
-                  const editing = editingId === identity.id;
-                  const confirming = confirmDeleteId === identity.id;
-                  return (
-                    <tr key={identity.id} className={identity.active ? '' : 'text-gray-400'}>
+          <>
+            <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200 md:hidden">
+              {identities.map((identity) => (
+                <li key={identity.id} className={`px-4 py-3 text-sm ${identity.active ? '' : 'text-gray-500'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="min-w-0 break-all font-medium">{identity.email}</span>
+                    {renderToggle(identity)}
+                  </div>
+                  <div className="mt-1">{renderName(identity)}</div>
+                  <p className="mt-1 text-xs text-gray-500">
+                    <span className="tabular-nums">{identity.sendCount}</span> e-poster sendt · Kan logge inn: {loginLabel(identity)}
+                  </p>
+                  {canManage && <div className="mt-2">{renderDelete(identity)}</div>}
+                </li>
+              ))}
+            </ul>
+            <div className="hidden overflow-x-auto rounded-lg border border-gray-200 md:block">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+                  <tr>
+                    <th className="px-4 py-2 font-medium">E-post</th>
+                    <th className="px-4 py-2 font-medium">Navn mottakeren ser</th>
+                    <th className="px-4 py-2 font-medium">Kan logge inn</th>
+                    <th className="px-4 py-2 font-medium text-right">E-poster sendt</th>
+                    <th className="px-4 py-2 font-medium">På/av</th>
+                    <th className="px-4 py-2"><span className="sr-only">Handlinger</span></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {identities.map((identity) => (
+                    <tr key={identity.id} className={identity.active ? '' : 'text-gray-500'}>
                       <td className="px-4 py-2 font-medium">{identity.email}</td>
-                      <td className="px-4 py-2">
-                        {editing ? (
-                          <div className="flex gap-2 items-center">
-                            <input
-                              value={editName}
-                              onChange={(e) => setEditName(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') saveName(identity);
-                                if (e.key === 'Escape') setEditingId(null);
-                              }}
-                              autoFocus
-                              maxLength={200}
-                              aria-label="Navn mottakeren ser"
-                              className="border border-gray-300 rounded-md px-2 py-1 text-sm w-48"
-                            />
-                            <button
-                              onClick={() => saveName(identity)}
-                              disabled={!editName.trim() || busy}
-                              className="text-xs text-blue-700 hover:underline disabled:opacity-50"
-                            >
-                              {busy ? 'Lagrer …' : 'Lagre'}
-                            </button>
-                            <button
-                              onClick={() => setEditingId(null)}
-                              className="text-xs text-gray-500 hover:underline"
-                            >
-                              Avbryt
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => startEdit(identity)}
-                            className="hover:underline text-left"
-                            title="Endre navnet mottakeren ser"
-                          >
-                            {identity.displayName}
-                          </button>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 text-xs">
-                        {identity.hasUserAccount ? (
-                          <span
-                            className="text-green-700"
-                            title="Det finnes en innlogging med samme e-post, så svar kan fordeles til denne personen"
-                          >
-                            Ja
-                          </span>
-                        ) : (
-                          <span className="text-gray-400" title="Ingen innlogging med denne e-posten">
-                            Nei
-                          </span>
-                        )}
-                      </td>
+                      <td className="px-4 py-2">{renderName(identity)}</td>
+                      <td className="px-4 py-2 text-xs">{loginLabel(identity)}</td>
                       <td className="px-4 py-2 text-right tabular-nums">{identity.sendCount}</td>
-                      <td className="px-4 py-2">
-                        <button
-                          onClick={() => toggleActive(identity)}
-                          disabled={busyId !== null}
-                          role="switch"
-                          aria-checked={identity.active}
-                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium disabled:opacity-50 ${
-                            identity.active
-                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                          }`}
-                          title={identity.active ? 'Klikk for å slå av avsenderen' : 'Klikk for å slå på avsenderen'}
-                        >
-                          {identity.active ? 'På' : 'Av'}
-                        </button>
-                      </td>
-                      <td className="px-4 py-2 text-right whitespace-nowrap">
-                        {canManage && (confirming ? (
-                          <span className="inline-flex items-center gap-2 text-xs">
-                            <span className="text-gray-600">Slette {identity.email} for godt?</span>
-                            <button
-                              onClick={() => remove(identity.id)}
-                              disabled={busy}
-                              className="text-red-600 font-medium hover:underline disabled:opacity-50"
-                            >
-                              {busy ? 'Sletter …' : 'Ja, slett'}
-                            </button>
-                            <button
-                              onClick={() => setConfirmDeleteId(null)}
-                              disabled={busy}
-                              className="text-gray-500 hover:underline"
-                            >
-                              Avbryt
-                            </button>
-                          </span>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setEditingId(null);
-                              setConfirmDeleteId(identity.id);
-                            }}
-                            disabled={busyId !== null}
-                            className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
-                            title={
-                              identity.sendCount > 0
-                                ? 'Avsendere som har sendt e-post, kan ikke slettes — slå den av i stedet'
-                                : undefined
-                            }
-                          >
-                            Slett
-                          </button>
-                        ))}
-                      </td>
+                      <td className="px-4 py-2">{renderToggle(identity)}</td>
+                      <td className="px-4 py-2 text-right whitespace-nowrap">{renderDelete(identity)}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {canManage && !loading && !loadError && (
-          <section>
-            <h3 className="font-semibold mb-2">Legg til avsender</h3>
-            <form onSubmit={create} className="border border-gray-200 rounded-lg p-4 flex flex-wrap gap-2 items-end">
-              <label className="flex flex-col gap-1 text-xs text-gray-600 flex-1 min-w-[16rem]">
-                E-postadresse
-                <input
-                  ref={newEmailRef}
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  placeholder={`navn${allowedDomains[0] ? `@${allowedDomains[0]}` : '@bjerke.no'}`}
-                  className="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-xs text-gray-600 flex-1 min-w-[12rem]">
-                Navn mottakeren ser
-                <input
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  placeholder="F.eks. Kari på Bjerke"
-                  maxLength={200}
-                  className="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900"
-                />
-              </label>
-              <button
-                type="submit"
-                disabled={!newEmail.trim() || !newName.trim() || creating}
-                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
-              >
-                {creating ? 'Legger til …' : 'Legg til avsender'}
-              </button>
-              {domainHint && (
-                <p className="w-full text-xs text-gray-500">Adressen må slutte på: {domainHint}</p>
-              )}
-            </form>
-          </section>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>
