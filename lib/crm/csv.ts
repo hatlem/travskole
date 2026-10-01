@@ -1,13 +1,28 @@
 // Minimal, robust CSV-parser for import. Autodetekterer skilletegn
-// (norsk Excel eksporterer med semikolon), håndterer anførselstegn med
-// ""-escaping og linjeskift inni felt. Ingen avhengigheter.
+// (norsk Excel: semikolon, Excel/Sheets-utklipp: tab), respekterer Excels
+// «sep=;»-linje, håndterer anførselstegn med ""-escaping og linjeskift inni felt.
 
-export function parseCsv(text: string): { headers: string[]; rows: string[][] } {
-  const input = text.replace(/^﻿/, '');
-  if (!input.trim()) return { headers: [], rows: [] };
+export type CsvDelimiter = ',' | ';' | '\t';
 
-  const firstLine = input.slice(0, input.indexOf('\n') === -1 ? input.length : input.indexOf('\n'));
-  const delimiter = countOutsideQuotes(firstLine, ';') > countOutsideQuotes(firstLine, ',') ? ';' : ',';
+export interface ParsedCsv {
+  headers: string[];
+  rows: string[][];
+  delimiter: CsvDelimiter;
+}
+
+export function parseCsv(text: string): ParsedCsv {
+  let input = text.replace(/^﻿/, '');
+  let delimiter: CsvDelimiter | null = null;
+
+  const sepHint = /^sep=([;,\t])\r?\n/i.exec(input);
+  if (sepHint) {
+    delimiter = sepHint[1] as CsvDelimiter;
+    input = input.slice(sepHint[0].length);
+  }
+  if (!input.trim()) return { headers: [], rows: [], delimiter: delimiter ?? ',' };
+
+  const newline = input.indexOf('\n');
+  delimiter ??= detectDelimiter(newline === -1 ? input : input.slice(0, newline));
 
   const records: string[][] = [];
   let field = '';
@@ -40,7 +55,17 @@ export function parseCsv(text: string): { headers: string[]; rows: string[][] } 
   if (record.some((f) => f.trim() !== '')) records.push(record);
 
   const [headers = [], ...rows] = records;
-  return { headers: headers.map((h) => h.trim()), rows };
+  return { headers: headers.map((h) => h.trim()), rows, delimiter };
+}
+
+export function detectDelimiter(firstLine: string): CsvDelimiter {
+  const counts: Array<[CsvDelimiter, number]> = [
+    ['\t', countOutsideQuotes(firstLine, '\t')],
+    [';', countOutsideQuotes(firstLine, ';')],
+    [',', countOutsideQuotes(firstLine, ',')],
+  ];
+  const [best] = [...counts].sort((a, b) => b[1] - a[1]);
+  return best[1] > 0 ? best[0] : ',';
 }
 
 function countOutsideQuotes(line: string, char: string): number {
