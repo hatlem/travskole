@@ -83,11 +83,11 @@ export function wonChartMessage(months: { value: number; count: number }[], tota
   const count = months.reduce((sum, m) => sum + m.count, 0);
   if (count === 0) {
     return totalWon > 0
-      ? `Ingen vunne deals de siste 6 månedene (${totalWon} vunnet tidligere).`
-      : 'Ingen vunne deals ennå.';
+      ? `Ingen vunne avtaler de siste 6 månedene (${totalWon} vunnet tidligere).`
+      : 'Ingen vunne avtaler ennå. Når du flytter en avtale til «Vunnet» på salgstavlen, dukker den opp her.';
   }
   if (months.every((m) => m.value === 0)) {
-    return `${count === 1 ? '1 vunnet deal' : `${count} vunne deals`} de siste 6 månedene, men uten registrert verdi.`;
+    return `${count === 1 ? '1 vunnet avtale' : `${count} vunne avtaler`} de siste 6 månedene, men uten beløp. Fyll inn «Verdi» på avtalene for å se grafen.`;
   }
   return null;
 }

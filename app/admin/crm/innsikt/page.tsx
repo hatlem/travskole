@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { GjenbookingFane } from './GjenbookingFane';
 import { wonChartMessage } from '@/lib/crm/insights';
 import { flowStatusLabel } from '@/lib/flows/status';
@@ -33,7 +34,7 @@ interface InsightsData {
 }
 
 const ENROLLMENT_STATUS_NO: Record<string, string> = {
-  active: 'Aktive', completed: 'Fullførte', exited: 'Avsluttede', failed: 'Feilede',
+  active: 'Underveis', completed: 'Ferdige', exited: 'Tatt ut av flyten', failed: 'Stoppet av en feil',
 };
 
 export default function InnsiktPage() {
@@ -48,10 +49,10 @@ export default function InnsiktPage() {
     const load = async () => {
       try {
         const res = await fetch('/api/admin/crm/innsikt', { signal: controller.signal });
-        if (!res.ok) { setError('Kunne ikke laste innsikt'); return; }
+        if (!res.ok) { setError('Kunne ikke hente tallene. Last siden på nytt om litt.'); return; }
         setData(await res.json());
       } catch (e) {
-        if (!(e instanceof DOMException && e.name === 'AbortError')) setError('Kunne ikke laste innsikt');
+        if (!(e instanceof DOMException && e.name === 'AbortError')) setError('Kunne ikke hente tallene. Sjekk nettforbindelsen og last siden på nytt.');
       } finally {
         setInitialLoading(false);
       }
@@ -71,34 +72,38 @@ export default function InnsiktPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) setData((d) => (d ? { ...d, suggestions: prev } : d)); // rollback
+      if (!res.ok) {
+        setData((d) => (d ? { ...d, suggestions: prev } : d)); // rollback
+        setError('Valget på KI-forslaget ble ikke lagret. Prøv igjen.');
+      }
     } catch {
       setData((d) => (d ? { ...d, suggestions: prev } : d));
+      setError('Valget på KI-forslaget ble ikke lagret — sjekk nettforbindelsen og prøv igjen.');
     } finally {
       setPatching(null);
     }
   };
 
   const faner: { key: Fane; label: string }[] = [
-    { key: 'flyter', label: 'Flyter' },
+    { key: 'flyter', label: 'E-postflyter' },
     { key: 'attribusjon', label: 'E-post → booking' },
-    { key: 'gjenbooking', label: 'Gjenbooking' },
-    { key: 'pipeline', label: 'Pipeline' },
-    { key: 'besok', label: 'Besøk' },
+    { key: 'gjenbooking', label: 'Kunder som kom tilbake' },
+    { key: 'pipeline', label: 'Salg' },
+    { key: 'besok', label: 'Besøk på nettsiden' },
     { key: 'ki', label: `KI-forslag${data?.suggestions?.length ? ` (${data.suggestions.length})` : ''}` },
   ];
 
   return (
     <div>
       <CrmTabs />
-      {error && <p className="text-red-600 mb-4">{error}</p>}
+      {error && <p role="alert" className="text-red-600 mb-4">{error}</p>}
       {initialLoading ? (
         <p className="text-gray-500">Laster …</p>
       ) : (
         <>
-          <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto">
+          <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto" role="group" aria-label="Velg rapport">
             {faner.map((f) => (
-              <button key={f.key} onClick={() => setFane(f.key)}
+              <button key={f.key} onClick={() => setFane(f.key)} aria-pressed={fane === f.key}
                 className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px ${
                   fane === f.key ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-600 hover:bg-gray-50'
                 }`}>
@@ -121,16 +126,16 @@ export default function InnsiktPage() {
 }
 
 function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
-  if (!flows) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  if (!flows) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   const harSendinger = flows.perFlow.some((f) => f.sent > 0);
   const harUkentligAktivitet = flows.weekly.some((w) => w.sent > 0 || w.opened > 0);
   return (
     <div className="space-y-8">
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Sendinger og åpninger per uke (12 uker)</h2>
+        <h2 className="font-semibold mb-3">Sendte og åpnede e-poster per uke (siste 12 uker)</h2>
         {!harUkentligAktivitet ? (
           <p className="text-gray-500">
-            Ingen sendinger ennå — <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">aktiver en flyt</Link> for å se aktivitet her.
+            Ingen e-poster sendt ennå — <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">slå på en e-postflyt</Link>, så dukker tallene opp her.
           </p>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
@@ -147,16 +152,17 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
         )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-        <h2 className="font-semibold p-4 pb-0">Per flyt (siste 30 dager)</h2>
+        <h2 className="font-semibold p-4 pb-0">Per e-postflyt (siste 30 dager)</h2>
         {!harSendinger ? (
-          <p className="text-gray-500 p-4">Ingen sendinger ennå.</p>
+          <p className="text-gray-500 p-4">Ingen e-poster sendt de siste 30 dagene.</p>
         ) : (
           <table className="min-w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b">
-              <th className="p-3">Flyt</th><th className="p-3">Status</th><th className="p-3">Sendt</th>
+              <th className="p-3">E-postflyt</th><th className="p-3">Status</th><th className="p-3">Sendt</th>
               <th className="p-3">Åpnet</th><th className="p-3">Klikket</th><th className="p-3">Svart</th>
-              <th className="p-3">Retur</th><th className="p-3">Åpningsrate</th><th className="p-3">Klikkrate</th>
-              <th className="p-3">Aktive</th>
+              <th className="p-3" title="E-poster som ikke kom fram, f.eks. fordi adressen ikke finnes">Kom ikke fram</th>
+              <th className="p-3">Andel åpnet</th><th className="p-3">Andel klikket</th>
+              <th className="p-3">Underveis nå</th>
             </tr></thead>
             <tbody>
               {flows.perFlow.map((f) => (
@@ -175,13 +181,13 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
         )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Påmeldingsstatus</h2>
+        <h2 className="font-semibold mb-3 flex items-center">Personer i flytene<HelpTip term="recipients" /></h2>
         <div className="flex gap-6">
           {flows.enrollmentStatus.map((s) => (
             <div key={s.status}><span className="text-2xl font-bold">{s.count}</span>{' '}
               <span className="text-gray-500 text-sm">{ENROLLMENT_STATUS_NO[s.status] ?? s.status}</span></div>
           ))}
-          {flows.enrollmentStatus.length === 0 && <p className="text-gray-500">Ingen påmeldinger i flyter ennå.</p>}
+          {flows.enrollmentStatus.length === 0 && <p className="text-gray-500">Ingen personer har vært med i en e-postflyt ennå.</p>}
         </div>
       </div>
     </div>
@@ -189,32 +195,32 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
 }
 
 function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
-  if (!pipeline) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  if (!pipeline) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   return (
     <div className="space-y-8">
       <div className="grid grid-cols-3 gap-4">
-        {[['Åpne', pipeline.totals.open], ['Vunnet (totalt)', pipeline.totals.won], ['Tapt (totalt)', pipeline.totals.lost]].map(([label, n]) => (
+        {[['Avtaler som pågår', pipeline.totals.open], ['Vunnet (totalt)', pipeline.totals.won], ['Tapt (totalt)', pipeline.totals.lost]].map(([label, n]) => (
           <div key={label as string} className="bg-white rounded-lg border border-gray-200 p-4 text-center">
             <div className="text-3xl font-bold">{n}</div><div className="text-gray-500 text-sm">{label}</div>
           </div>
         ))}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Åpen verdi per stadium (kr)</h2>
-        {pipeline.byStage.length === 0 ? <p className="text-gray-500">Ingen åpne deals.</p> : (
+        <h2 className="font-semibold mb-3 flex items-center">Verdi av avtaler som pågår, per steg (kr)<HelpTip term="stage" /></h2>
+        {pipeline.byStage.length === 0 ? <p className="text-gray-500">Ingen avtaler pågår nå. <Link href="/admin/crm/pipeline" className="text-blue-700 hover:underline">Åpne salgstavlen</Link> for å legge inn en.</p> : (
           <ResponsiveContainer width="100%" height={260}>
             <BarChart data={pipeline.byStage.map((s) => ({ ...s, label: `${s.stageName} (${s.pipelineName})` }))}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="label" tick={{ fontSize: 11 }} />
               <YAxis tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="openValue" name="Åpen verdi" fill="#2563eb" />
+              <Bar dataKey="openValue" name="Verdi som pågår" fill="#2563eb" />
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Vunnet verdi per måned (6 mnd)</h2>
+        <h2 className="font-semibold mb-3">Vunnet verdi per måned (siste 6 måneder)</h2>
         {wonChartMessage(pipeline.wonByMonth, pipeline.totals.won) ? (
           <p className="text-gray-500">{wonChartMessage(pipeline.wonByMonth, pipeline.totals.won)}</p>
         ) : (
@@ -234,17 +240,17 @@ function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
 }
 
 function BesokFane({ visits }: { visits: InsightsData['visits'] }) {
-  if (!visits) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  if (!visits) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   const harBesok = visits.weekly.some((w) => w.pageViews > 0 || w.courseViews > 0);
   return (
     <div className="space-y-8">
       <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-3">
-        Tallene avhenger av besøkendes samtykke (getcookies) — reelle besøk kan være høyere.
+        Vi teller bare besøkende som har sagt ja til informasjonskapsler (cookies), så det reelle tallet er trolig høyere.
       </p>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Visninger per uke (12 uker)</h2>
         {!harBesok ? (
-          <p className="text-gray-500">Ingen registrerte besøk ennå — avhenger av samtykke (getcookies).</p>
+          <p className="text-gray-500">Ingen besøk registrert ennå. Bare besøkende som sier ja til informasjonskapsler, blir telt.</p>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
             <LineChart data={visits.weekly}>
@@ -260,13 +266,13 @@ function BesokFane({ visits }: { visits: InsightsData['visits'] }) {
         )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Trakt (siste 30 dager)</h2>
+        <h2 className="font-semibold mb-3">Fra besøk til påmelding (siste 30 dager)</h2>
         <div className="flex items-center gap-4 text-center">
-          <div><div className="text-3xl font-bold">{visits.funnel.viewed}</div><div className="text-gray-500 text-sm">Kurs sett</div></div>
+          <div><div className="text-3xl font-bold">{visits.funnel.viewed}</div><div className="text-gray-500 text-sm">Så på et kurs</div></div>
           <div className="text-gray-400">→</div>
-          <div><div className="text-3xl font-bold">{visits.funnel.signupStarted}</div><div className="text-gray-500 text-sm">Påmelding startet</div></div>
+          <div><div className="text-3xl font-bold">{visits.funnel.signupStarted}</div><div className="text-gray-500 text-sm">Begynte å melde seg på</div></div>
           <div className="text-gray-400">→</div>
-          <div><div className="text-3xl font-bold">{visits.funnel.registered}</div><div className="text-gray-500 text-sm">Registrert</div></div>
+          <div><div className="text-3xl font-bold">{visits.funnel.registered}</div><div className="text-gray-500 text-sm">Fullførte påmeldingen</div></div>
         </div>
       </div>
     </div>
@@ -278,9 +284,9 @@ function KiFane({ suggestions, patching, onAction }: {
   patching: number | null;
   onAction: (id: number, status: 'applied' | 'dismissed') => void;
 }) {
-  if (!suggestions) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  if (!suggestions) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   if (suggestions.length === 0) {
-    return <p className="text-gray-500">Ingen forslag ennå — analysen kjører daglig for aktive flyter.</p>;
+    return <p className="text-gray-500">Ingen forslag ennå. KI ser over e-postflytene som er slått på, én gang i døgnet, og foreslår forbedringer her.</p>;
   }
   return (
     <ul className="space-y-3">
@@ -295,9 +301,9 @@ function KiFane({ suggestions, patching, onAction }: {
           </div>
           <div className="flex gap-2 shrink-0">
             <button onClick={() => onAction(s.id, 'applied')} disabled={patching !== null}
-              className="bg-green-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Utført</button>
+              className="bg-green-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50" title="Du har gjort endringen forslaget handler om">Gjort</button>
             <button onClick={() => onAction(s.id, 'dismissed')} disabled={patching !== null}
-              className="border border-gray-300 px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Avvis</button>
+              className="border border-gray-300 px-3 py-1.5 rounded-md text-sm disabled:opacity-50" title="Forslaget fjernes uten at noe endres">Ikke aktuelt</button>
           </div>
         </li>
       ))}

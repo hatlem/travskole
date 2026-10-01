@@ -85,11 +85,11 @@ describe('bucketSumByMonth', () => {
 describe('wonChartMessage', () => {
   const empty = [{ value: 0, count: 0 }, { value: 0, count: 0 }];
   it('explains an empty chart when wins exist outside the window', () => {
-    expect(wonChartMessage(empty, 1)).toBe('Ingen vunne deals de siste 6 månedene (1 vunnet tidligere).');
-    expect(wonChartMessage(empty, 0)).toBe('Ingen vunne deals ennå.');
+    expect(wonChartMessage(empty, 1)).toBe('Ingen vunne avtaler de siste 6 månedene (1 vunnet tidligere).');
+    expect(wonChartMessage(empty, 0)).toBe('Ingen vunne avtaler ennå. Når du flytter en avtale til «Vunnet» på salgstavlen, dukker den opp her.');
   });
   it('does not claim there are no wins when the wins have no value', () => {
-    expect(wonChartMessage([{ value: 0, count: 1 }], 1)).toBe('1 vunnet deal de siste 6 månedene, men uten registrert verdi.');
+    expect(wonChartMessage([{ value: 0, count: 1 }], 1)).toBe('1 vunnet avtale de siste 6 månedene, men uten beløp. Fyll inn «Verdi» på avtalene for å se grafen.');
   });
   it('returns null so the chart is shown when there is won value', () => {
     expect(wonChartMessage([{ value: 1234, count: 1 }], 1)).toBeNull();

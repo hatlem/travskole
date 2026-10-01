@@ -34,7 +34,7 @@ export function AttribusjonFane() {
     return () => { clearTimeout(t); controller.abort(); };
   }, [days]);
 
-  if (error && !data) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  if (error && !data) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   if (!data) return <p className="text-gray-500">Laster …</p>;
 
   const { total, perFlow } = data;
@@ -51,9 +51,10 @@ export function AttribusjonFane() {
           </select>
         </label>
         <p className="text-sm text-gray-500 max-w-2xl">
-          En booking (ny eller vunnet deal, påmelding, forespørsel eller betaling) krediteres flyten når kontakten
-          klikket i eller åpnet en flyt-e-post inntil {data.windowDays} dager før. Siste klikk vinner; uten klikk vinner
-          siste åpning. Hver booking telles én gang. Vinduet settes under Innstillinger → Innsikt.
+          En booking (ny eller vunnet avtale, påmelding, forespørsel eller betaling) regnes som «fra e-post» når
+          personen klikket i eller åpnet en e-post fra en e-postflyt inntil {data.windowDays} dager før. Siste klikk
+          teller; uten klikk teller siste åpning. Hver booking telles bare én gang. Antall dager endrer du under
+          Innstillinger → Innsikt.
         </p>
       </div>
 
@@ -61,24 +62,24 @@ export function AttribusjonFane() {
         <StatTile label="Bookinger fra e-post" value={String(total.attributed)}
           sub={`${rate(total.attributedShare)} av ${total.conversions} bookinger`} />
         <StatTile label="Via klikk / via åpning" value={`${total.viaClick} / ${total.viaOpen}`}
-          sub="Klikk er sterkeste signal" />
-        <StatTile label="Tilskrevet verdi" value={kr(total.value)} sub="Vunnet deal-verdi eller innbetalt" />
-        <StatTile label="Konverteringsrate" value={rate(total.conversionRate)}
-          sub={`bookinger per sendt e-post (${total.sent} sendt)`} />
+          sub="Et klikk sier mer enn en åpning" />
+        <StatTile label="Verdi fra e-post" value={kr(total.value)} sub="Vunnet avtaleverdi eller innbetalt beløp" />
+        <StatTile label="Bookinger per e-post" value={rate(total.conversionRate)}
+          sub={`andel av sendte e-poster som ga booking (${total.sent} sendt)`} />
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
-        <h2 className="font-semibold p-4 pb-0">Per flyt (siste {data.periodDays} dager)</h2>
+        <h2 className="font-semibold p-4 pb-0">Per e-postflyt (siste {data.periodDays} dager)</h2>
         {rows.length === 0 ? (
           <p className="text-gray-500 p-4">
-            Ingen flyt-e-poster sendt i perioden — <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">aktiver en flyt</Link> for å måle effekten.
+            Ingen e-poster fra e-postflyter i perioden — <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">slå på en e-postflyt</Link> for å se hva den gir.
           </p>
         ) : (
           <table className="min-w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b">
-              <th className="p-3">Flyt</th><th className="p-3">Sendt</th><th className="p-3">Bookinger</th>
+              <th className="p-3">E-postflyt</th><th className="p-3">Sendt</th><th className="p-3">Bookinger</th>
               <th className="p-3">Via klikk</th><th className="p-3">Via åpning</th>
-              <th className="p-3">Verdi</th><th className="p-3">Konvertering</th>
+              <th className="p-3">Verdi</th><th className="p-3">Bookinger per e-post</th>
             </tr></thead>
             <tbody>
               {rows.map((f) => (
@@ -106,8 +107,8 @@ export function AttribusjonFane() {
         )}
       </div>
       <p className="text-xs text-gray-500">
-        Åpninger kan overtelles (e-postklienter som laster bilder automatisk) og undertelles (blokkerte bilder).
-        Bookinger fra bedriftsdeals uten kontaktperson kan ikke knyttes til en e-post.
+        Åpninger er ikke helt presise: noen e-postprogrammer åpner alt automatisk, andre blokkerer det vi måler med.
+        Bookinger fra bedriftsavtaler uten kontaktperson kan ikke knyttes til en e-post.
       </p>
     </div>
   );

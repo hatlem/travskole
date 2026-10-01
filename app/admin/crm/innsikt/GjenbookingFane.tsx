@@ -42,7 +42,7 @@ export function GjenbookingFane() {
     return () => { clearTimeout(t); controller.abort(); };
   }, [year, eventType]);
 
-  if (error && !report) return <p className="text-gray-500">Kunne ikke laste denne seksjonen.</p>;
+  if (error && !report) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   if (!report) return <p className="text-gray-500">Laster …</p>;
 
   const selected = (stats: RebookingYearStats[]) =>
@@ -71,19 +71,19 @@ export function GjenbookingFane() {
           </select>
         </label>
         <p className="text-sm text-gray-500 max-w-xl">
-          Sesong = arrangementsdato (ellers når dealen ble opprettet). Tapte deals teller ikke; verdi er vunnet deal-verdi.
-          En kunde er gjenbooket når den har booket samme type både i fjor og i år.
+          Sesongen følger datoen for arrangementet (eller når avtalen ble lagt inn). Tapte avtaler teller ikke, og verdi er
+          vunnet avtaleverdi. En kunde har «kommet tilbake» når den har booket samme type både i fjor og i år.
         </p>
       </div>
 
       {!harData ? (
-        <p className="text-gray-500">Ingen deals for {typeText} i {report.year - 1} eller {report.year} ennå.</p>
+        <p className="text-gray-500">Ingen avtaler for {typeText} i {report.year - 1} eller {report.year} ennå. Tallene kommer når avtaler på salgstavlen blir vunnet.</p>
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <StatTile label={`Kontakter gjenbooket ${report.year}`} value={rate(contactNow.rebookingRate)}
+            <StatTile label={`Kontakter som kom tilbake ${report.year}`} value={rate(contactNow.rebookingRate)}
               sub={`${contactNow.returning} av ${contactNow.previousYearCustomers} fra ${report.year - 1}`} />
-            <StatTile label={`Bedrifter gjenbooket ${report.year}`} value={rate(orgNow.rebookingRate)}
+            <StatTile label={`Bedrifter som kom tilbake ${report.year}`} value={rate(orgNow.rebookingRate)}
               sub={`${orgNow.returning} av ${orgNow.previousYearCustomers} fra ${report.year - 1}`} />
             <StatTile label="Verdi fra gjengangere (kontakter)" value={kr(contactNow.returningValue)}
               sub={`${contactNow.returning} kunder`} />
@@ -93,7 +93,7 @@ export function GjenbookingFane() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white rounded-lg border border-gray-200 p-4">
-              <h2 className="font-semibold mb-3">Gjenbookingsrate per år — {typeText}</h2>
+              <h2 className="font-semibold mb-3">Andel som kom tilbake, per år — {typeText}</h2>
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={report.contacts.map((c, i) => ({
                   year: String(c.year),
@@ -133,12 +133,12 @@ export function GjenbookingFane() {
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
         <h2 className="font-semibold p-4 pb-0">Per arrangementstype — {report.year} mot {report.year - 1}</h2>
-        {report.byEventType.length === 0 ? <p className="text-gray-500 p-4">Ingen deals i perioden.</p> : (
+        {report.byEventType.length === 0 ? <p className="text-gray-500 p-4">Ingen avtaler i perioden.</p> : (
           <table className="min-w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b">
               <th className="p-3">Type</th>
-              <th className="p-3">Kontakter i fjor</th><th className="p-3">Gjenbooket</th><th className="p-3">Rate</th>
-              <th className="p-3">Bedrifter i fjor</th><th className="p-3">Gjenbooket</th><th className="p-3">Rate</th>
+              <th className="p-3">Kontakter i fjor</th><th className="p-3">Kom tilbake</th><th className="p-3">Andel</th>
+              <th className="p-3">Bedrifter i fjor</th><th className="p-3">Kom tilbake</th><th className="p-3">Andel</th>
               <th className="p-3">Verdi gjengangere</th><th className="p-3">Verdi nye</th>
             </tr></thead>
             <tbody>
@@ -163,9 +163,9 @@ export function GjenbookingFane() {
       </div>
 
       <div className="space-y-2">
-        <h2 className="text-lg font-semibold">Ikke gjenbooket ennå — {typeText}</h2>
+        <h2 className="text-lg font-semibold">Har ikke kommet tilbake ennå — {typeText}</h2>
         <p className="text-sm text-gray-500">
-          Kunder fra {report.year - 1} uten booking i {report.year}. Kontakter vises ikke når bedriften deres allerede har booket via en kollega.
+          Kunder fra {report.year - 1} som ikke har booket i {report.year}. Gode å ringe! Kontakter vises ikke når bedriften deres allerede har booket via en kollega.
         </p>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <CustomerList title="Bedrifter" rows={report.notRebooked.organizations} href={(id) => `/admin/crm/bedrifter/${id}`} />
@@ -193,7 +193,7 @@ function YearTable({ title, stats }: { title: string; stats: RebookingYearStats[
       <table className="min-w-full text-sm">
         <thead><tr className="text-left text-gray-500 border-b">
           <th className="p-3">År</th><th className="p-3">Kunder</th><th className="p-3">Kunder året før</th>
-          <th className="p-3">Gjengangere</th><th className="p-3">Nye</th><th className="p-3">Gjenbookingsrate</th>
+          <th className="p-3">Gjengangere</th><th className="p-3">Nye</th><th className="p-3">Andel som kom tilbake</th>
           <th className="p-3">Verdi gjengangere</th><th className="p-3">Verdi nye</th>
         </tr></thead>
         <tbody>
@@ -224,11 +224,11 @@ function CustomerList({ title, rows, href, showEmail = false }: {
   return (
     <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
       <h3 className="font-semibold p-4 pb-0">{title} ({rows.length})</h3>
-      {rows.length === 0 ? <p className="text-gray-500 p-4">Alle har booket igjen.</p> : (
+      {rows.length === 0 ? <p className="text-gray-500 p-4">Alle har booket igjen. Bra jobbet!</p> : (
         <table className="min-w-full text-sm">
           <thead><tr className="text-left text-gray-500 border-b">
             <th className="p-3">Navn</th><th className="p-3">Sist</th><th className="p-3">Typer</th>
-            <th className="p-3">Deals i fjor</th><th className="p-3">Vunnet i fjor</th>
+            <th className="p-3">Avtaler i fjor</th><th className="p-3">Vunnet i fjor</th>
           </tr></thead>
           <tbody>
             {rows.map((r) => (
