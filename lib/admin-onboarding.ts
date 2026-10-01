@@ -39,10 +39,12 @@ export function buildOnboardingSteps(facts: OnboardingFacts): OnboardingStep[] {
     },
     {
       id: 'terms',
-      title: 'Skriv vilkårstekst',
-      description: 'Teksten deltakerne godtar når de melder seg på (avbestilling, eget ansvar osv.).',
-      href: '/admin/settings',
-      cta: 'Skriv vilkår',
+      title: 'Sjekk vilkårene',
+      description:
+        'Selve vilkårene (avbestilling, eget ansvar osv.) står på Vilkårssiden under Sider. ' +
+        'I Innstillinger → Påmelding står setningen deltakerne krysser av for, f.eks. «Jeg har lest og godtar vilkårene».',
+      href: '/admin/settings#consent_terms_text',
+      cta: 'Sjekk avkrysningsteksten',
       done: facts.termsWritten,
     },
     {

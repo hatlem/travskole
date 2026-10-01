@@ -19,8 +19,8 @@ export interface AdminNotice {
   hrefLabel: string;
 }
 
-/** Kortere enn dette regnes som placeholder/tomt, ikke reell vilkårstekst. */
-const MIN_TERMS_LENGTH = 30;
+/** Kortere enn dette regnes som placeholder/tomt («x»), ikke en ekte setning å krysse av for. */
+const MIN_TERMS_LENGTH = 15;
 
 export const isRealTermsText = (text: string | null | undefined): boolean =>
   (text ?? '').trim().length >= MIN_TERMS_LENGTH;
@@ -28,20 +28,20 @@ export const isRealTermsText = (text: string | null | undefined): boolean =>
 export async function getPendingAdminNotices(): Promise<AdminNotice[]> {
   const notices: AdminNotice[] = [];
 
-  // Vilkårsaksept-teksten i påmeldingsskjemaet må være reell juridisk tekst —
-  // fanger både tomt felt og placeholder-verdier (f.eks. «x»).
+  // Avkrysningsteksten ved påmelding må være en ekte setning — fanger tomt felt og
+  // placeholder-verdier (f.eks. «x»). Selve vilkårene står på Vilkårssiden (Sider).
   const terms = ((await getSetting('consent_terms_text')) ?? '').trim();
   if (!isRealTermsText(terms)) {
     notices.push({
       id: 'consent-terms-placeholder',
-      title: 'Vilkårsteksten i påmeldingsskjemaet må fylles inn',
+      title: 'Avkrysningsteksten for vilkår ved påmelding mangler',
       description:
-        'Teksten deltakere godtar ved påmelding («Vilkårsaksept ved påmelding» i innstillingene) ' +
-        `inneholder i dag ${terms.length === 0 ? 'ingen tekst' : `kun «${terms.slice(0, 20)}»`}. ` +
-        'Erstatt den med de reelle vilkårene (bindende påmelding, avbestilling, eget ansvar osv.) ' +
-        'før deltakere melder seg på.',
-      href: '/admin/settings',
-      hrefLabel: 'Gå til innstillinger',
+        'Det deltakerne krysser av for når de melder seg på («Avkrysningstekst ved påmelding» under ' +
+        `Innstillinger → Påmelding) inneholder i dag ${terms.length === 0 ? 'ingen tekst' : `kun «${terms.slice(0, 20)}»`}. ` +
+        'Skriv for eksempel «Jeg har lest og godtar vilkårene» — skjemaet lenker til Vilkårssiden, ' +
+        'der selve vilkårene står (redigeres under Sider).',
+      href: '/admin/settings#consent_terms_text',
+      hrefLabel: 'Skriv avkrysningsteksten',
     });
   }
 

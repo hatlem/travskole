@@ -7,6 +7,8 @@ const { prisma, mail } = vi.hoisted(() => ({
       findUnique: vi.fn(), count: vi.fn(), findMany: vi.fn(), update: vi.fn(), updateMany: vi.fn(), delete: vi.fn(),
     },
     course: { findUnique: vi.fn(), update: vi.fn() },
+    deal: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
   mail: { sendWaitlistPromotionEmail: vi.fn(async () => {}) },
 }));
@@ -35,7 +37,7 @@ function counts(occupied: number, waiting: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  prisma.registration.findUnique.mockResolvedValue({ courseId: 9 });
+  prisma.registration.findUnique.mockResolvedValue({ courseId: 9, paymentStatus: 'none' });
   prisma.course.findUnique.mockResolvedValue({ id: 9, name: 'Kursadmin', status: 'full', maxParticipants: 1 });
   prisma.registration.updateMany.mockResolvedValue({ count: 1 });
 });

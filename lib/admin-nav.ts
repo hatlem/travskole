@@ -13,7 +13,7 @@ export interface CrmSubpage {
 export interface CrmNavItem {
   id: string;
   label: string;
-  /** Sidetittel når den skal forklare mer enn fanenavnet (f.eks. Pipeline → Salgstavle). */
+  /** Sidetittel når den skal forklare mer enn fanenavnet. */
   title?: string;
   href: string;
   /** Én linje om hva siden er til — vises under tittelen og på CRM-forsiden. */
@@ -58,8 +58,7 @@ export const CRM_GROUPS: readonly CrmNavGroup[] = [
     items: [
       {
         id: 'pipeline',
-        label: 'Pipeline',
-        title: 'Salgstavle',
+        label: 'Salgstavle',
         href: '/admin/crm/pipeline',
         description: 'Alle mulige salg (avtaler) i kolonner etter hvor langt de har kommet. Dra et kort videre når det skjer noe.',
       },

@@ -13,6 +13,8 @@ import { occupiesPlace } from '@/lib/registration-rules';
 import DOMPurify from 'isomorphic-dompurify';
 import { validateProfileInput } from '@/lib/profile';
 import { prepareChildUpdate, type ChildUpdateData } from '@/lib/children';
+import { isSettledPaymentStatus } from '@/lib/payments/transitions';
+import { deleteDealsForRegistrations } from '@/lib/crm/source-deals';
 
 export async function PUT(
   request: NextRequest,
@@ -209,18 +211,46 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  const registrationId = Number(id);
+  if (!Number.isInteger(registrationId)) {
+    return NextResponse.json({ error: 'Ugyldig id' }, { status: 400 });
+  }
 
   try {
-    const deleted = await prisma.registration.delete({
-      where: { id: Number(id) },
-      select: { courseId: true, status: true },
+    const existing = await prisma.registration.findUnique({
+      where: { id: registrationId },
+      select: { paymentStatus: true },
     });
+    if (!existing) {
+      return NextResponse.json({ error: 'Påmeldingen finnes ikke' }, { status: 404 });
+    }
+    // Betalte påmeldinger er regnskapsbilag — de kan avlyses, men ikke slettes.
+    if (isSettledPaymentStatus(existing.paymentStatus)) {
+      return NextResponse.json(
+        { error: 'Betalte påmeldinger kan ikke slettes fordi de trengs i regnskapet. Sett status til «Avlyst» i stedet.' },
+        { status: 409 },
+      );
+    }
+
+    const [deals, deleted] = await prisma.$transaction([
+      deleteDealsForRegistrations([registrationId]),
+      prisma.registration.delete({
+        where: { id: registrationId },
+        select: { courseId: true, status: true },
+      }),
+    ]);
     // En slettet påmelding som hadde plass frigjør den på samme måte som en kansellering.
     if (occupiesPlace(deleted.status)) await releaseSeats(deleted.courseId);
 
-    logActivity({ action: 'delete', entity: 'registration', entityId: Number(id), userEmail: session.user.email }).catch(() => {});
+    logActivity({
+      action: 'delete',
+      entity: 'registration',
+      entityId: registrationId,
+      details: JSON.stringify({ dealsRemoved: deals.count }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, dealsRemoved: deals.count });
   } catch (error) {
     logger.error('Error deleting registration', { error });
     return NextResponse.json({ error: 'Kunne ikke slette påmelding' }, { status: 500 });

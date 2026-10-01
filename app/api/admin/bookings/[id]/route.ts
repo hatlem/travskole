@@ -10,6 +10,7 @@ import { signCheckoutToken } from '@/lib/payments/checkout-token';
 import { parsePaymentMethods } from '@/lib/payments';
 import { isSettledPaymentStatus } from '@/lib/payments/transitions';
 import { getBaseUrl } from '@/lib/site';
+import { deleteDealsForBooking } from '@/lib/crm/source-deals';
 
 export async function PUT(
   request: NextRequest,
@@ -104,11 +105,19 @@ export async function DELETE(
     );
   }
 
-  await prisma.bookingRequest.delete({
-    where: { id: bookingId },
-  });
+  // Kortet på salgstavla hører til forespørselen og slettes sammen med den.
+  const [deals] = await prisma.$transaction([
+    deleteDealsForBooking(bookingId),
+    prisma.bookingRequest.delete({ where: { id: bookingId } }),
+  ]);
 
-  logActivity({ action: 'delete', entity: 'booking', entityId: bookingId, userEmail: session.user.email }).catch(() => {});
+  logActivity({
+    action: 'delete',
+    entity: 'booking',
+    entityId: bookingId,
+    details: JSON.stringify({ dealsRemoved: deals.count }),
+    userEmail: session.user.email,
+  }).catch(() => {});
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ success: true, dealsRemoved: deals.count });
 }

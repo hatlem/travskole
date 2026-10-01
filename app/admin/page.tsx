@@ -1,31 +1,43 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 import { getServerSession } from '@/lib/auth';
-import { isSuperAdmin } from '@/lib/settings';
+import { getSetting, isSuperAdmin } from '@/lib/settings';
 import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
-import SuperadminNoticesDialog from '@/components/admin/SuperadminNoticesDialog';
 import { getPendingAdminNotices, isRealTermsText } from '@/lib/admin-notices';
 import { buildOnboardingSteps } from '@/lib/admin-onboarding';
-import { getSetting } from '@/lib/settings';
+import { buildAttentionItems, startOfNextOsloDay, UNFINISHED_PAYMENT_STATUSES } from '@/lib/dashboard-attention';
+import { formatCapacity } from '@/lib/admin-format';
 import { GettingStartedChecklist } from '@/components/admin/GettingStartedChecklist';
 import { PageHeader } from '@/components/admin/PageHeader';
+import { ButtonLink, buttonClass } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
+
+const REG_STATUS: Record<string, { label: string; className: string }> = {
+  pending: { label: 'Venter', className: 'bg-amber-100 text-amber-900' },
+  confirmed: { label: 'Bekreftet', className: 'bg-green-100 text-green-800' },
+  waitlist: { label: 'Venteliste', className: 'bg-blue-100 text-blue-900' },
+  cancelled: { label: 'Avlyst', className: 'bg-gray-200 text-gray-700' },
+};
+
+const shortDate = (d: Date) => d.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', timeZone: 'Europe/Oslo' });
 
 export default async function AdminDashboard() {
-  // Superadmin-oppgaver (vilkårstekst m.m.) — vises som dialog til de er utført.
   const session = await getServerSession();
-  const notices =
-    session && isSuperAdmin(session.user.role) ? await getPendingAdminNotices() : [];
+  const myUserId = session ? Number(session.user.id) : NaN;
+  // Superadmin-oppgaver vises i «Krever oppmerksomhet» — aldri som blokkerende dialog.
+  const notices = session && isSuperAdmin(session.user.role) ? await getPendingAdminNotices() : [];
 
   const now = new Date();
-  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+  const endOfToday = startOfNextOsloDay(now);
+  const myTasksWhere = Number.isInteger(myUserId) ? { assigneeId: myUserId, status: 'open', dueAt: { lt: endOfToday } } : null;
 
   const [
     totalCourses,
     openCourses,
-    totalRegistrations,
     pendingRegistrations,
-    totalUsers,
-    newUsersThisMonth,
+    waitlisted,
+    unfinishedRegistrationPayments,
+    unfinishedBookingPayments,
     newBookings,
     upcomingCourses,
     recentRegistrations,
@@ -34,13 +46,17 @@ export default async function AdminDashboard() {
     importedContactCount,
     flowCount,
     termsText,
+    myTasks,
+    activeRegistrations,
+    totalUsers,
+    newUsersThisMonth,
   ] = await Promise.all([
     prisma.course.count(),
     prisma.course.count({ where: { status: 'open' } }),
-    prisma.registration.count(),
     prisma.registration.count({ where: { status: 'pending' } }),
-    prisma.user.count(),
-    prisma.user.count({ where: { createdAt: { gte: startOfMonth } } }),
+    prisma.registration.count({ where: { status: 'waitlist' } }),
+    prisma.registration.count({ where: { status: { not: 'cancelled' }, paymentStatus: { in: [...UNFINISHED_PAYMENT_STATUSES] } } }),
+    prisma.bookingRequest.count({ where: { status: 'confirmed', paymentStatus: { in: [...UNFINISHED_PAYMENT_STATUSES] } } }),
     prisma.bookingRequest.count({ where: { status: 'new' } }),
     prisma.course.findMany({
       where: { startDate: { gte: now }, status: { not: 'closed' } },
@@ -52,7 +68,7 @@ export default async function AdminDashboard() {
       take: 5,
       orderBy: { createdAt: 'desc' },
       include: {
-        course: { select: { name: true } },
+        course: { select: { id: true, name: true } },
         child: { select: { name: true } },
         parent: { select: { name: true } },
       },
@@ -65,324 +81,247 @@ export default async function AdminDashboard() {
     prisma.contact.count({ where: { source: 'import' } }),
     prisma.flow.count({ where: { status: { not: 'template' } } }),
     getSetting('consent_terms_text'),
+    myTasksWhere
+      ? prisma.task.findMany({
+          where: myTasksWhere,
+          orderBy: { dueAt: 'asc' },
+          take: 20,
+          select: { id: true, title: true, dueAt: true, contact: { select: { id: true, name: true } } },
+        })
+      : Promise.resolve([]),
+    prisma.registration.count({ where: { status: { in: ['pending', 'confirmed'] } } }),
+    prisma.user.count(),
+    prisma.user.count({ where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } }),
   ]);
 
+  const almostFullCourses = openCoursesWithCount.filter(
+    (c) => c.maxParticipants && c._count.registrations / c.maxParticipants > 0.8,
+  );
+  const startOfToday = new Date(endOfToday.getTime() - 24 * 60 * 60 * 1000);
+  const overdueTasks = myTasks.filter((t) => t.dueAt && t.dueAt < startOfToday);
+
+  const attention = buildAttentionItems({
+    newBookings,
+    pendingRegistrations,
+    unfinishedPayments: unfinishedRegistrationPayments + unfinishedBookingPayments,
+    waitlisted,
+    almostFullCourses: almostFullCourses.length,
+    myTasksOverdue: overdueTasks.length,
+    myTasksToday: myTasks.length - overdueTasks.length,
+  });
+
+  // Vilkårsvarselet står allerede i «Krever oppmerksomhet» — ikke gjenta det i sjekklisten.
   const onboardingSteps = buildOnboardingSteps({
     courseCount: totalCourses,
     contactInfoSaved: contactInfoSettings > 0,
     importedContactCount,
     flowCount,
     termsWritten: isRealTermsText(termsText),
-  });
+  }).filter((step) => !(step.id === 'terms' && notices.some((n) => n.id === 'consent-terms-placeholder')));
 
-  const almostFullCourses = openCoursesWithCount.filter(
-    (c) => c.maxParticipants && c._count.registrations / c.maxParticipants > 0.8
-  );
-
-  const stats = [
-    {
-      label: 'Kurs',
-      value: totalCourses,
-      subtitle: `${openCourses} åpne`,
-      href: '/admin/courses',
-      icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253',
-    },
-    {
-      label: 'Påmeldinger',
-      value: totalRegistrations,
-      subtitle: `${pendingRegistrations} venter`,
-      href: '/admin/registrations',
-      icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
-    },
-    {
-      label: 'Brukere',
-      value: totalUsers,
-      subtitle: `${newUsersThisMonth} nye denne mnd`,
-      href: '/admin/users',
-      icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
-    },
-    {
-      label: 'Forespørsler',
-      value: newBookings,
-      badge: newBookings > 0 ? 'Nye' : undefined,
-      href: '/admin/foresporsler',
-      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
-    },
-  ];
-
-  const actionItems = [
-    {
-      show: pendingRegistrations > 0,
-      color: 'border-yellow-500 bg-yellow-50',
-      iconColor: 'text-yellow-600',
-      icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z',
-      title: `${pendingRegistrations} påmelding${pendingRegistrations !== 1 ? 'er' : ''} venter på bekreftelse`,
-      href: '/admin/registrations?status=pending',
-      linkText: 'Se ventende',
-    },
-    {
-      show: almostFullCourses.length > 0,
-      color: 'border-orange-500 bg-orange-50',
-      iconColor: 'text-orange-600',
-      icon: 'M13 10V3L4 14h7v7l9-11h-7z',
-      title: `${almostFullCourses.length} kurs er nesten full${almostFullCourses.length !== 1 ? 'e' : 't'}`,
-      href: '/admin/courses',
-      linkText: 'Se kurs',
-    },
-    {
-      show: newBookings > 0,
-      color: 'border-blue-500 bg-blue-50',
-      iconColor: 'text-blue-600',
-      icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
-      title: `${newBookings} ny${newBookings !== 1 ? 'e' : ''} forespørsel${newBookings !== 1 ? 'er' : ''}`,
-      href: '/admin/foresporsler',
-      linkText: 'Se forespørsler',
-    },
-  ].filter((item) => item.show);
+  const hasAttention = attention.length > 0 || notices.length > 0 || myTasks.length > 0;
 
   return (
     <div>
-      <SuperadminNoticesDialog notices={notices} />
       <PageHeader
         className="mb-8"
         title="Dashboard"
-        description="Det viktigste akkurat nå: hva som venter på deg, og kursene som snart starter."
-        actions={
-          <Link
-            href="/admin/courses/new"
-            className="inline-flex items-center gap-2 rounded-md bg-bjerke-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
-          >
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-            Nytt kurs
-          </Link>
-        }
+        description="Det som venter på deg først, deretter kursene som snart starter."
+        actions={<ButtonLink href="/admin/courses/new">+ Nytt kurs</ButtonLink>}
       />
+
+      {/* Krever oppmerksomhet */}
+      <section aria-labelledby="attention-title" className="mb-10">
+        <h2 id="attention-title" className="mb-4 text-lg font-semibold text-gray-900">Krever oppmerksomhet</h2>
+        {!hasAttention ? (
+          <p className="rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-700">
+            <span aria-hidden="true" className="mr-2 text-green-700">✓</span>
+            Ingenting venter på deg akkurat nå.
+          </p>
+        ) : (
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,22rem)]">
+            <ul className="space-y-3">
+              {notices.map((n) => (
+                <li key={n.id} className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+                  <p className="font-semibold text-amber-950">{n.title}</p>
+                  <p className="mt-1 text-sm text-amber-950">{n.description}</p>
+                  <Link href={n.href} className={buttonClass('secondary', 'sm', 'mt-3')}>
+                    {n.hrefLabel}
+                  </Link>
+                </li>
+              ))}
+              {attention.map((item) => (
+                <li key={item.id}>
+                  <Link
+                    href={item.href}
+                    className="group flex items-center justify-between gap-4 rounded-xl border border-gray-200 bg-white px-5 py-4 hover:border-bjerke-blue/40 hover:shadow-sm"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        aria-hidden="true"
+                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${item.tone === 'urgent' ? 'bg-amber-500' : 'bg-bjerke-blue/50'}`}
+                      />
+                      <span className="font-medium text-gray-900">{item.title}</span>
+                    </span>
+                    <span className="shrink-0 text-sm font-medium text-bjerke-blue group-hover:underline">
+                      {item.cta} <span aria-hidden="true">→</span>
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+
+            {myTasks.length > 0 && (
+              <div className="rounded-xl border border-gray-200 bg-white">
+                <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
+                  <h3 className="font-semibold text-gray-900">Dine oppgaver i dag</h3>
+                  <Link href="/admin/crm/oppgaver" className="text-sm font-medium text-bjerke-blue hover:underline">
+                    Alle
+                  </Link>
+                </div>
+                <ul className="divide-y divide-gray-100">
+                  {myTasks.slice(0, 6).map((task) => {
+                    const overdue = task.dueAt != null && task.dueAt < startOfToday;
+                    return (
+                      <li key={task.id} className="px-5 py-3 text-sm">
+                        <p className="font-medium text-gray-900">{task.title}</p>
+                        <p className="mt-0.5 text-gray-600">
+                          {overdue && task.dueAt ? (
+                            <span className="font-medium text-red-700">Frist {shortDate(task.dueAt)}</span>
+                          ) : (
+                            'I dag'
+                          )}
+                          {task.contact && (
+                            <>
+                              {' · '}
+                              <Link href={`/admin/crm/kontakter/${task.contact.id}`} className="text-bjerke-blue hover:underline">
+                                {task.contact.name}
+                              </Link>
+                            </>
+                          )}
+                        </p>
+                      </li>
+                    );
+                  })}
+                </ul>
+                {myTasks.length > 6 && (
+                  <p className="border-t border-gray-100 px-5 py-2 text-sm text-gray-600">+ {myTasks.length - 6} til</p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {session && (
         <GettingStartedChecklist steps={onboardingSteps} userKey={session.user.email ?? String(session.user.id)} />
       )}
 
-      {/* Stats cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
-        {stats.map((stat) => (
-          <Link
-            key={stat.label}
-            href={stat.href}
-            className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow relative"
-          >
-            {'badge' in stat && stat.badge && (
-              <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-                {stat.badge}
-              </span>
-            )}
-            <div className="flex items-center gap-4">
-              <div className="bg-bjerke-blue/10 rounded-lg p-3">
-                <svg
-                  className="w-6 h-6 text-bjerke-blue"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={1.5}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d={stat.icon} />
-                </svg>
-              </div>
-              <div>
-                <p className="text-sm text-gray-500">{stat.label}</p>
-                <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
-                {'subtitle' in stat && stat.subtitle && (
-                  <p className="text-xs text-gray-400 mt-0.5">{stat.subtitle}</p>
-                )}
-              </div>
-            </div>
+      {/* Tall — etter det som haster */}
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {[
+          { label: 'Åpne kurs', value: openCourses, sub: `${totalCourses} kurs totalt`, href: '/admin/courses' },
+          { label: 'Aktive påmeldinger', value: activeRegistrations, sub: `${waitlisted} på venteliste`, href: '/admin/registrations' },
+          { label: 'Brukere', value: totalUsers, sub: `${newUsersThisMonth} nye denne måneden`, href: '/admin/users' },
+        ].map((stat) => (
+          <Link key={stat.label} href={stat.href} className="rounded-xl border border-gray-200 bg-white px-5 py-4 hover:border-bjerke-blue/40 hover:shadow-sm">
+            <p className="text-sm text-gray-600">{stat.label}</p>
+            <p className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{stat.value}</p>
+            <p className="text-sm text-gray-600">{stat.sub}</p>
           </Link>
         ))}
       </div>
 
-      {/* Action items */}
-      {actionItems.length > 0 && (
-        <div className="mb-10">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Krever oppmerksomhet</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {actionItems.map((item) => (
-              <Link
-                key={item.title}
-                href={item.href}
-                className={`block rounded-lg border-l-4 p-4 ${item.color} hover:shadow-md transition-shadow`}
-              >
-                <div className="flex items-start gap-3">
-                  <svg
-                    className={`w-5 h-5 mt-0.5 flex-shrink-0 ${item.iconColor}`}
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                  </svg>
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{item.title}</p>
-                    <p className={`text-xs font-medium mt-1 ${item.iconColor}`}>
-                      {item.linkText} &rarr;
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Upcoming courses */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Kommende kurs</h2>
-          <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
+      {/* Kommende kurs */}
+      <section aria-labelledby="upcoming-title" className="mb-8 rounded-xl border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+          <h2 id="upcoming-title" className="text-lg font-semibold text-gray-900">
+            Kommende kurs
+          </h2>
+          <Link href="/admin/courses" className="text-sm font-medium text-bjerke-blue hover:underline">
             Se alle
           </Link>
         </div>
         {upcomingCourses.length === 0 ? (
           <div className="p-6 text-center">
-            <p className="text-gray-600">Ingen kurs med startdato fremover.</p>
+            <p className="text-gray-700">Ingen kurs med startdato fremover.</p>
             <Link href="/admin/courses/new" className="mt-2 inline-block text-sm font-medium text-bjerke-blue hover:underline">
-              Lag et nytt kurs &rarr;
+              Lag et nytt kurs →
             </Link>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <ul className="divide-y divide-gray-100">
             {upcomingCourses.map((course) => {
               const registered = course._count.registrations;
               const max = course.maxParticipants;
               const fillPercent = max ? Math.min(Math.round((registered / max) * 100), 100) : 0;
-              const fillColor =
-                fillPercent >= 90
-                  ? 'bg-red-500'
-                  : fillPercent >= 70
-                    ? 'bg-yellow-500'
-                    : 'bg-bjerke-blue';
-
+              const fillColor = fillPercent >= 90 ? 'bg-red-500' : fillPercent >= 70 ? 'bg-amber-500' : 'bg-bjerke-blue';
               return (
-                <div key={course.id} className="px-6 py-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-3">
-                      <Link
-                        href={`/admin/courses/${course.id}`}
-                        className="font-medium text-gray-900 hover:text-bjerke-blue hover:underline"
-                      >
-                        {course.name}
-                      </Link>
-                      <StatusBadge status={course.status} />
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      {course.startDate
-                        ? new Date(course.startDate).toLocaleDateString('nb-NO', {
-                            day: 'numeric',
-                            month: 'short',
-                            year: 'numeric',
-                          })
-                        : 'Avtal tid'}
-                    </div>
-                  </div>
-                  {max ? (
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full ${fillColor}`}
-                          style={{ width: `${fillPercent}%` }}
-                        />
-                      </div>
-                      <span className="text-xs text-gray-500 whitespace-nowrap">
-                        {registered} / {max} ({fillPercent}%)
+                <li key={course.id}>
+                  <Link href={`/admin/courses/${course.id}`} className="block px-6 py-4 hover:bg-gray-50">
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="font-medium text-gray-900">{course.name}</span>
+                      <span className="shrink-0 text-sm text-gray-600">
+                        {course.startDate
+                          ? course.startDate.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })
+                          : 'Avtal tid'}
                       </span>
                     </div>
-                  ) : (
-                    <p className="text-xs text-gray-400">{registered} påmeldt (ingen maks)</p>
-                  )}
-                </div>
+                    <div className="flex items-center gap-3">
+                      {max ? (
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-gray-100" aria-hidden="true">
+                          <div className={`h-full rounded-full ${fillColor}`} style={{ width: `${fillPercent}%` }} />
+                        </div>
+                      ) : (
+                        <div className="flex-1" />
+                      )}
+                      <span className="whitespace-nowrap text-sm tabular-nums text-gray-600">
+                        {formatCapacity(registered, max)} påmeldt
+                      </span>
+                    </div>
+                  </Link>
+                </li>
               );
             })}
-          </div>
+          </ul>
         )}
-      </div>
+      </section>
 
-      {/* Recent registrations */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Siste påmeldinger</h2>
-          <Link href="/admin/registrations" className="text-sm text-bjerke-blue hover:underline font-medium">
+      {/* Siste påmeldinger */}
+      <section aria-labelledby="recent-title" className="rounded-xl border border-gray-200 bg-white">
+        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
+          <h2 id="recent-title" className="text-lg font-semibold text-gray-900">Siste påmeldinger</h2>
+          <Link href="/admin/registrations" className="text-sm font-medium text-bjerke-blue hover:underline">
             Se alle
           </Link>
         </div>
         {recentRegistrations.length === 0 ? (
-          <div className="p-6 text-center text-gray-600">
-            Ingen påmeldinger ennå. De dukker opp her så snart noen melder seg på et kurs.
-          </div>
+          <p className="p-6 text-center text-gray-700">Ingen påmeldinger ennå. De dukker opp her så snart noen melder seg på et kurs.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-                <tr>
-                  <th className="px-6 py-3 text-left">Barn</th>
-                  <th className="px-6 py-3 text-left">Kurs</th>
-                  <th className="px-6 py-3 text-left">Forelder</th>
-                  <th className="px-6 py-3 text-left">Status</th>
-                  <th className="px-6 py-3 text-left">Dato</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {recentRegistrations.map((reg) => (
-                  <tr key={reg.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium text-gray-900">{reg.child?.name ?? `${reg.parent.name} (voksen)`}</td>
-                    <td className="px-6 py-4 text-gray-600">{reg.course.name}</td>
-                    <td className="px-6 py-4 text-gray-600">{reg.parent.name}</td>
-                    <td className="px-6 py-4">
-                      <StatusBadge status={reg.status} />
-                    </td>
-                    <td className="px-6 py-4 text-gray-500">
-                      {new Date(reg.createdAt).toLocaleDateString('nb-NO')}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="divide-y divide-gray-100">
+            {recentRegistrations.map((reg) => {
+              const status = REG_STATUS[reg.status];
+              return (
+                <li key={reg.id} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 px-6 py-3 text-sm">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900">{reg.child?.name ?? `${reg.parent.name} (voksen)`}</p>
+                    <p className="text-gray-600">
+                      <Link href={`/admin/courses/${reg.course.id}`} className="hover:text-bjerke-blue hover:underline">
+                        {reg.course.name}
+                      </Link>
+                      {reg.child && ` · ${reg.parent.name}`}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {status && <Badge className={status.className}>{status.label}</Badge>}
+                    <span className="text-gray-600">{reg.createdAt.toLocaleDateString('nb-NO')}</span>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </div>
+      </section>
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    pending: 'bg-yellow-100 text-yellow-800',
-    new: 'bg-blue-100 text-blue-800',
-    confirmed: 'bg-green-100 text-green-800',
-    cancelled: 'bg-red-100 text-red-800',
-    waitlist: 'bg-blue-100 text-blue-800',
-    open: 'bg-green-100 text-green-800',
-    closed: 'bg-gray-100 text-gray-800',
-    draft: 'bg-gray-100 text-gray-600',
-    full: 'bg-red-100 text-red-800',
-  };
-  const labels: Record<string, string> = {
-    pending: 'Venter',
-    new: 'Ny',
-    confirmed: 'Bekreftet',
-    cancelled: 'Kansellert',
-    waitlist: 'Venteliste',
-    open: 'Åpen',
-    closed: 'Stengt',
-    draft: 'Utkast',
-    full: 'Full',
-  };
-
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${styles[status] || 'bg-gray-100 text-gray-800'}`}
-    >
-      {labels[status] || status}
-    </span>
   );
 }

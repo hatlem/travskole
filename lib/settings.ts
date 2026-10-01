@@ -48,8 +48,9 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   consent_media_text_adult: 'Jeg samtykker i at det blir tatt videoer/bilder av meg under arrangementet, som kan bli publisert på Bjerkes Facebook-side, Instagram-side og hjemmeside.',
   consent_risk_text_adult: 'Jeg har lest og forstått at hestesport kan ansees som risikosport, og ulykker kan skje. Det anbefales derfor å ha en egen ulykkesforsikring.',
 
-  // Vilkårsaksept ved påmelding (bindende/forskudd/tapte dager/eget ansvar) — vises for alle påmeldinger
-  consent_terms_text: 'Jeg bekrefter at påmeldingen er bindende og at betaling skjer på forskudd via faktura. Tapte kursdager kan ikke tas igjen eller refunderes. Ved avbestilling senere enn 3 dager før oppstart påløper et avbestillingsgebyr på kr 500,–. All ridning/kjøring skjer på eget ansvar.',
+  // Avkrysningsteksten ved påmelding. Selve vilkårene står på Vilkårssiden (/vilkar, redigeres under Sider);
+  // påmeldingsskjemaet lenker dit fra denne teksten.
+  consent_terms_text: 'Jeg har lest og godtar vilkårene',
   // Påmeldingsskjema — admin styrer hvilke felt som er obligatoriske ('true'/'false')
   registration_address_required: 'true',
   registration_terms_required: 'true',
@@ -85,6 +86,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   reply_create_task: 'true',
   reply_task_default_assignee: '',
   reply_task_due_days: '1',
+  // E-post til den som får en oppgave tildelt av en kollega
+  task_notify_assignee: 'true',
   // B2B: send markedsføring til organisasjonskontakter på berettiget interesse
   // (så lenge de ikke har trukket samtykke/meldt seg av).
   marketing_allow_legitimate_interest: 'false',
@@ -140,6 +143,7 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'graph_',
   'reply_task_',
   'reply_create_task',
+  'task_notify_',
   'sender_allowed_domains',
   'marketing_allow_',
   'ai_analysis_last_',

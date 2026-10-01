@@ -51,3 +51,15 @@ export function planSettingsSave(
   }
   return { toSave, errors };
 }
+
+/**
+ * Nøkler der redigert verdi faktisk avviker fra lagret verdi (eller standard når ingenting er lagret).
+ * Endrer man et felt og så tilbake, teller det ikke som ulagret.
+ */
+export function changedSettingKeys(
+  edits: Readonly<Record<string, string>>,
+  saved: Readonly<Record<string, string>>,
+  defaults: Readonly<Record<string, string>>,
+): string[] {
+  return Object.keys(edits).filter((key) => edits[key] !== (saved[key] ?? defaults[key] ?? ''));
+}

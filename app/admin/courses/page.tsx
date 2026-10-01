@@ -2,16 +2,28 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { CalendarView } from '@/components/admin/CalendarView';
-import { StatCardsSkeleton, TableSkeleton } from '@/components/admin/Skeleton';
+import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
 import { PageHeader } from '@/components/admin/PageHeader';
+import { Button, ButtonLink, buttonClass } from '@/components/admin/Button';
+import { CourseStatusBadge } from '@/components/admin/StatusBadge';
+import { LinkPending } from '@/components/admin/LinkPending';
 import { useSettings } from '@/components/SettingsProvider';
-import { parseCourseTypes, courseTypeLabel, type CourseType } from '@/lib/settings-shared';
+import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
+import { formatPrice } from '@/lib/admin-format';
+import {
+  COURSE_LIST_FILTERS,
+  courseDisplayStatus,
+  matchesCourseFilter,
+  type CourseDisplayStatus,
+  type CourseListFilter,
+} from '@/lib/course-status';
 
 type ViewMode = 'liste' | 'kalender';
-type SortField = 'name' | 'type' | 'startDate' | 'endDate' | 'price' | 'capacity' | 'status';
+type SortField = 'name' | 'startDate' | 'price' | 'capacity';
 type SortDir = 'asc' | 'desc';
 
 interface Course {
@@ -29,128 +41,92 @@ interface Course {
   description: string | null;
   ageMin: number | null;
   ageMax: number | null;
+  createdAt: string;
   _count: { registrations: number };
 }
 
-type TypeFilter = string;
-type StatusFilter = 'alle' | 'open' | 'full' | 'closed';
+type CourseRow = Course & { display: CourseDisplayStatus };
 
 const DESCRIPTION =
-  'Alle kurs og arrangementer. Lag nye, se hvor mange som er påmeldt, og åpne eller steng for påmelding.';
-
-const statusLabels: Record<string, string> = {
-  open: 'Åpen',
-  full: 'Fullt',
-  closed: 'Stengt',
-};
-
-const statusStyles: Record<string, string> = {
-  open: 'bg-green-100 text-green-800',
-  full: 'bg-yellow-100 text-yellow-800',
-  closed: 'bg-red-100 text-red-800',
-};
-
-const typeStyles: Record<string, string> = {
-  leir: 'bg-purple-100 text-purple-800',
-  kurs: 'bg-blue-100 text-blue-800',
-};
+  'Alle kurs og arrangementer. Trykk på et kurs for å se deltakerne, sende e-post eller laste ned deltakerlisten.';
 
 function formatDate(date: string | null) {
-  if (!date) return '-';
-  return new Date(date).toLocaleDateString('nb-NO');
+  if (!date) return null;
+  return new Date(date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function CapacityBar({ count, min, max }: { count: number; min: number | null; max: number | null }) {
-  if (max == null && min == null) {
-    return <span className="text-gray-600">{count}</span>;
-  }
+function dateRange(c: Course) {
+  const start = formatDate(c.startDate);
+  if (!start) return 'Avtal tid';
+  const end = formatDate(c.endDate);
+  return end && end !== start ? `${start} – ${end}` : start;
+}
 
-  const pct = max && max > 0 ? (count / max) * 100 : 0;
+/** «Påmeldte»: x / maks (eller «Ubegrenset»), med fyllingsgrad og minimum. */
+function Enrolled({ count, min, max }: { count: number; min: number | null; max: number | null }) {
+  const pct = max && max > 0 ? Math.min((count / max) * 100, 100) : 0;
   const belowMin = min != null && count < min;
-  const color = belowMin
-    ? 'bg-orange-500'
-    : pct > 80
-    ? 'bg-red-500'
-    : pct >= 60
-    ? 'bg-yellow-500'
-    : 'bg-green-500';
-
+  const color = pct > 80 ? 'bg-red-500' : pct >= 60 ? 'bg-amber-500' : 'bg-green-600';
   return (
-    <div className="min-w-[120px]">
-      <div className="flex items-center gap-2">
-        {max != null && (
-          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${color}`}
-              style={{ width: `${Math.min(pct, 100)}%` }}
-            />
-          </div>
-        )}
-        <span className="text-xs text-gray-600 whitespace-nowrap">
-          {count}{max != null ? ` / ${max}` : ''}
-        </span>
-      </div>
-      {min != null && (
-        <span className={`text-xs ${belowMin ? 'text-orange-600 font-medium' : 'text-gray-400'}`}>
-          Min: {min}
-        </span>
+    <div className="min-w-[8rem]">
+      <p className="tabular-nums text-gray-900">
+        <span className="font-medium">{count}</span>
+        <span className="text-gray-500"> / {max ?? 'Ubegrenset'}</span>
+      </p>
+      {max != null && (
+        <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-gray-200" aria-hidden="true">
+          <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+        </div>
       )}
+      {belowMin && <p className="mt-0.5 text-xs font-medium text-orange-700">Under minimum ({min})</p>}
     </div>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function SortHeader({
+  field,
+  label,
+  sortField,
+  sortDir,
+  onSort,
+}: {
+  field: SortField;
+  label: string;
+  sortField: SortField;
+  sortDir: SortDir;
+  onSort: (f: SortField) => void;
+}) {
+  const active = field === sortField;
   return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[status] || 'bg-gray-100 text-gray-800'}`}
-    >
-      {statusLabels[status] || status}
-    </span>
-  );
-}
-
-function TypeBadge({ type, courseTypes }: { type: string; courseTypes: CourseType[] }) {
-  return (
-    <span
-      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyles[type] || 'bg-gray-100 text-gray-800'}`}
-    >
-      {courseTypeLabel(courseTypes, type)}
-    </span>
-  );
-}
-
-function SortIcon({ field, sortField, sortDir }: { field: SortField; sortField: SortField; sortDir: SortDir }) {
-  if (field !== sortField) {
-    return (
-      <svg className="w-3 h-3 ml-1 text-gray-300 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-      </svg>
-    );
-  }
-  return sortDir === 'asc' ? (
-    <svg className="w-3 h-3 ml-1 text-bjerke-blue inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-    </svg>
-  ) : (
-    <svg className="w-3 h-3 ml-1 text-bjerke-blue inline" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-    </svg>
+    <th scope="col" aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'} className="px-4 py-3 text-left">
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        className="inline-flex items-center gap-1 rounded-sm uppercase tracking-wide hover:text-gray-900"
+      >
+        {label}
+        <span aria-hidden="true" className={active ? 'text-bjerke-blue' : 'text-gray-300'}>
+          {active ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </button>
+    </th>
   );
 }
 
 export default function AdminCoursesPage() {
   const settings = useSettings();
+  const router = useRouter();
   const courseTypes = parseCourseTypes(settings.course_types);
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('alle');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('alle');
+  const [typeFilter, setTypeFilter] = useState('alle');
+  const [listFilter, setListFilter] = useState<CourseListFilter>('aktive');
   const [duplicating, setDuplicating] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('liste');
   const [sortField, setSortField] = useState<SortField>('startDate');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [sortDir, setSortDir] = useState<SortDir>('asc');
   const { toast } = useToast();
   const [page, setPage] = useState(1);
   const perPage = 25;
@@ -178,49 +154,49 @@ export default function AdminCoursesPage() {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       setSortField(field);
-      setSortDir(field === 'name' ? 'asc' : 'desc');
+      setSortDir(field === 'name' || field === 'startDate' ? 'asc' : 'desc');
     }
   }
 
+  const rows = useMemo<CourseRow[]>(() => {
+    const now = new Date();
+    return courses.map((c) => ({ ...c, display: courseDisplayStatus({ ...c, occupiedCount: c._count.registrations }, now) }));
+  }, [courses]);
+
+  const filterCounts = useMemo(
+    () => Object.fromEntries(COURSE_LIST_FILTERS.map((f) => [f.value, rows.filter((r) => matchesCourseFilter(r.display, f.value)).length])),
+    [rows],
+  );
+
   const filtered = useMemo(() => {
-    const list = courses.filter((c) => {
-      if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    const q = search.trim().toLowerCase();
+    const list = rows.filter((c) => {
+      if (q && !c.name.toLowerCase().includes(q)) return false;
       if (typeFilter !== 'alle' && c.type !== typeFilter) return false;
-      if (statusFilter !== 'alle' && c.status !== statusFilter) return false;
-      return true;
+      return matchesCourseFilter(c.display, listFilter);
     });
 
+    const dir = sortDir === 'asc' ? 1 : -1;
     list.sort((a, b) => {
-      const dir = sortDir === 'asc' ? 1 : -1;
       switch (sortField) {
         case 'name':
-          return dir * a.name.localeCompare(b.name);
-        case 'type':
-          return dir * a.type.localeCompare(b.type);
+          return dir * a.name.localeCompare(b.name, 'nb');
         case 'startDate': {
           if (a.startDate == null && b.startDate == null) return 0;
           if (a.startDate == null) return 1;
           if (b.startDate == null) return -1;
           return dir * (new Date(a.startDate).getTime() - new Date(b.startDate).getTime());
         }
-        case 'endDate': {
-          const aEnd = a.endDate ? new Date(a.endDate).getTime() : 0;
-          const bEnd = b.endDate ? new Date(b.endDate).getTime() : 0;
-          return dir * (aEnd - bEnd);
-        }
         case 'price':
           return dir * ((a.price ?? 0) - (b.price ?? 0));
         case 'capacity':
           return dir * (a._count.registrations - b._count.registrations);
-        case 'status':
-          return dir * a.status.localeCompare(b.status);
         default:
           return 0;
       }
     });
-
     return list;
-  }, [courses, search, typeFilter, statusFilter, sortField, sortDir]);
+  }, [rows, search, typeFilter, listFilter, sortField, sortDir]);
 
   const paginatedCourses = filtered.slice((page - 1) * perPage, page * perPage);
 
@@ -247,9 +223,12 @@ export default function AdminCoursesPage() {
           imageUrl: course.imageUrl,
         }),
       });
-      if (!res.ok) throw new Error('Kunne ikke lage en kopi av kurset. Prøv igjen.');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(data?.error ?? 'Kunne ikke lage en kopi av kurset. Prøv igjen.');
       await fetchCourses();
-      toast('Kopien er laget. Den er stengt for påmelding til du åpner den.', 'success');
+      toast('Kopien er laget som utkast. Den er stengt for påmelding til du publiserer den.', 'success', {
+        action: data?.course?.id ? { label: 'Åpne kopien', href: `/admin/courses/${data.course.id}/edit` } : undefined,
+      });
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Kunne ikke lage en kopi av kurset. Prøv igjen.', 'error');
     } finally {
@@ -257,348 +236,251 @@ export default function AdminCoursesPage() {
     }
   };
 
+  const headerActions = (
+    <>
+      <ButtonLink href="/admin/courses/new">+ Nytt kurs</ButtonLink>
+      {courses.length > 0 ? (
+        <a href="/api/admin/courses/export" download className={buttonClass('secondary')} title="Alle kursene som en fil du kan åpne i Excel">
+          Last ned (Excel)
+        </a>
+      ) : (
+        <span aria-disabled="true" title="Ingen kurs å laste ned ennå" className={buttonClass('secondary')}>
+          Last ned (Excel)
+        </span>
+      )}
+    </>
+  );
+
   if (loading) {
     return (
       <div>
-        <PageHeader title="Kurs" description={DESCRIPTION} />
-        <StatCardsSkeleton count={3} />
-        <div className="mt-6">
-          <TableSkeleton />
-        </div>
+        <PageHeader title="Kurs" description={DESCRIPTION} actions={headerActions} />
+        <TableSkeleton />
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-        <p className="text-red-700 font-medium mb-2">Kursene kunne ikke vises</p>
-        <p className="text-red-600 text-sm">{error}</p>
-        <button
-          onClick={() => { setError(null); setLoading(true); fetchCourses(); }}
-          className="mt-4 text-sm text-bjerke-blue hover:underline font-medium"
+      <div className="rounded-xl border border-red-200 bg-red-50 p-8 text-center">
+        <p className="mb-2 font-medium text-red-800">Kursene kunne ikke vises</p>
+        <p className="text-sm text-red-700">{error}</p>
+        <Button
+          variant="secondary"
+          className="mt-4"
+          onClick={() => {
+            setError(null);
+            setLoading(true);
+            fetchCourses();
+          }}
         >
           Prøv igjen
-        </button>
+        </Button>
       </div>
     );
   }
 
-  const thClass = 'px-6 py-3 text-left cursor-pointer hover:bg-gray-100 transition-colors select-none';
+  const selectClass =
+    'min-h-10 rounded-lg border border-gray-300 bg-white px-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-bjerke-blue';
 
   return (
     <div>
-      {/* Header */}
-      <PageHeader
-        title="Kurs"
-        description={DESCRIPTION}
-        actions={
-          <>
-            <Link
-              href="/admin/courses/new"
-              className="bg-bjerke-blue text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
-            >
-              + Nytt kurs
-            </Link>
-            <button
-              onClick={() => window.open('/api/admin/courses/export')}
-              title="Laster ned alle kursene som en fil du kan åpne i Excel"
-              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-            >
-              Last ned til Excel
-            </button>
-          </>
-        }
-      />
+      <PageHeader title="Kurs" description={DESCRIPTION} actions={headerActions} />
 
-      {/* Search & Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="flex-1 relative">
-          <svg
-            className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <input
-            type="text"
-            placeholder="Søk etter kurs..."
-            value={search}
-            onChange={(e) => {
-              setPage(1);
-              setSearch(e.target.value);
-            }}
-            className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
-          />
-        </div>
-        <select
-          value={typeFilter}
-          onChange={(e) => {
-            setPage(1);
-            setTypeFilter(e.target.value as TypeFilter);
-          }}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
-        >
-          <option value="alle">Alle typer</option>
-          {courseTypes.map((t) => (
-            <option key={t.value} value={t.value}>{t.label}</option>
-          ))}
-        </select>
-        <select
-          value={statusFilter}
-          onChange={(e) => {
-            setPage(1);
-            setStatusFilter(e.target.value as StatusFilter);
-          }}
-          className="px-4 py-2.5 border border-gray-300 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
-        >
-          <option value="alle">Alle statuser</option>
-          <option value="open">Åpen</option>
-          <option value="full">Fullt</option>
-          <option value="closed">Stengt</option>
-        </select>
-        <div className="flex rounded-lg border border-gray-300 overflow-hidden">
-          <button
-            onClick={() => setViewMode('liste')}
-            className={`px-3 py-2.5 text-sm font-medium transition-colors ${
-              viewMode === 'liste'
-                ? 'bg-bjerke-blue text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
-          </button>
-          <button
-            onClick={() => setViewMode('kalender')}
-            className={`px-3 py-2.5 text-sm font-medium transition-colors border-l border-gray-300 ${
-              viewMode === 'kalender'
-                ? 'bg-bjerke-blue text-white'
-                : 'bg-white text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
-        </div>
-      </div>
-
-      {/* Results count */}
-      {courses.length > 0 && viewMode === 'liste' && (
-        <p className="text-sm text-gray-500 mb-4">
-          Viser {filtered.length} av {courses.length} kurs
-        </p>
-      )}
-
-      {/* Calendar view */}
-      {viewMode === 'kalender' && courses.length > 0 ? (
-        <CalendarView courses={filtered} />
-      ) : /* Empty state */
-      courses.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-300 mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
-            />
-          </svg>
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">Ingen kurs ennå</h3>
-          <p className="text-gray-500 mb-6">Legg inn navn, datoer og antall plasser — så kan folk melde seg på.</p>
-          <Link
-            href="/admin/courses/new"
-            className="inline-flex items-center bg-bjerke-blue text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
-          >
-            + Lag ditt første kurs
-          </Link>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <svg
-            className="mx-auto h-12 w-12 text-gray-300 mb-4"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={1.5}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          <h3 className="text-lg font-semibold text-gray-900 mb-1">Ingen treff</h3>
-          <p className="text-gray-500">
-            Ingen kurs passer med søket eller filtrene. Prøv et annet ord, eller velg «Alle typer» og «Alle statuser».
-          </p>
+      {courses.length === 0 ? (
+        <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
+          <h2 className="mb-1 text-lg font-semibold text-gray-900">Ingen kurs ennå</h2>
+          <p className="mb-6 text-gray-600">Legg inn navn, datoer og antall plasser. Kurset lagres som utkast til du publiserer det.</p>
+          <ButtonLink href="/admin/courses/new">+ Lag ditt første kurs</ButtonLink>
         </div>
       ) : (
         <>
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-4">
-            {paginatedCourses.map((course) => (
-              <div
-                key={course.id}
-                className="bg-white rounded-xl shadow-sm border border-gray-200 p-4"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900">{course.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <TypeBadge type={course.type} courseTypes={courseTypes} />
-                      <StatusBadge status={course.status} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3 text-sm mb-3">
-                  <div>
-                    <span className="text-gray-500">Start:</span>{' '}
-                    <span className="text-gray-900">{course.startDate ? formatDate(course.startDate) : 'Avtal tid'}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Slutt:</span>{' '}
-                    <span className="text-gray-900">{formatDate(course.endDate)}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Pris:</span>{' '}
-                    <span className="text-gray-900">
-                      {course.price != null ? `${course.price} kr` : 'Gratis'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Påmeldt:</span>{' '}
-                    <span className="text-gray-900">
-                      {course._count.registrations}
-                      {course.maxParticipants ? ` / ${course.maxParticipants}` : ''}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mb-3">
-                  <CapacityBar
-                    count={course._count.registrations}
-                    min={course.minParticipants}
-                    max={course.maxParticipants}
-                  />
-                </div>
-
-                <div className="flex items-center gap-3 pt-3 border-t border-gray-100">
-                  <Link
-                    href={`/admin/courses/${course.id}/edit`}
-                    className="text-bjerke-blue hover:underline font-medium text-sm"
-                  >
-                    Rediger
-                  </Link>
-                  <button
-                    onClick={() => handleDuplicate(course)}
-                    disabled={duplicating === course.id}
-                    className="text-gray-600 hover:text-bjerke-blue hover:underline font-medium text-sm disabled:opacity-50"
-                  >
-                    {duplicating === course.id ? 'Dupliserer...' : 'Dupliser'}
-                  </button>
-                </div>
-              </div>
-            ))}
+          {/* Statusfilter */}
+          <div role="group" aria-label="Vis kurs" className="mb-4 flex flex-wrap gap-2">
+            {COURSE_LIST_FILTERS.map((f) => {
+              const active = listFilter === f.value;
+              return (
+                <button
+                  key={f.value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setPage(1);
+                    setListFilter(f.value);
+                  }}
+                  className={`inline-flex min-h-9 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-1 ${
+                    active ? 'border-bjerke-blue bg-bjerke-blue text-white' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {f.label}
+                  <span className={`tabular-nums ${active ? 'text-white/80' : 'text-gray-500'}`}>{filterCounts[f.value]}</span>
+                </button>
+              );
+            })}
           </div>
 
-          {/* Desktop table */}
-          <div className="hidden md:block bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
-                  <tr>
-                    <th className={thClass} onClick={() => toggleSort('name')}>
-                      Navn <SortIcon field="name" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className={thClass} onClick={() => toggleSort('type')}>
-                      Type <SortIcon field="type" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className={thClass} onClick={() => toggleSort('startDate')}>
-                      Startdato <SortIcon field="startDate" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className={thClass} onClick={() => toggleSort('endDate')}>
-                      Sluttdato <SortIcon field="endDate" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className={thClass} onClick={() => toggleSort('price')}>
-                      Pris <SortIcon field="price" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className={thClass} onClick={() => toggleSort('capacity')}>
-                      Kapasitet <SortIcon field="capacity" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className={thClass} onClick={() => toggleSort('status')}>
-                      Status <SortIcon field="status" sortField={sortField} sortDir={sortDir} />
-                    </th>
-                    <th className="px-6 py-3 text-left">Handlinger</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {paginatedCourses.map((course) => (
-                    <tr key={course.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 font-medium text-gray-900">
-                        {course.name}
-                      </td>
-                      <td className="px-6 py-4">
-                        <TypeBadge type={course.type} courseTypes={courseTypes} />
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {formatDate(course.endDate)}
-                      </td>
-                      <td className="px-6 py-4 text-gray-600">
-                        {course.price != null ? `${course.price} kr` : 'Gratis'}
-                      </td>
-                      <td className="px-6 py-4">
-                        <CapacityBar
-                          count={course._count.registrations}
-                          min={course.minParticipants}
-                          max={course.maxParticipants}
-                        />
-                      </td>
-                      <td className="px-6 py-4">
-                        <StatusBadge status={course.status} />
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <Link
-                            href={`/admin/courses/${course.id}/edit`}
-                            className="text-bjerke-blue hover:underline font-medium text-xs"
-                          >
-                            Rediger
-                          </Link>
-                          <button
-                            onClick={() => handleDuplicate(course)}
-                            disabled={duplicating === course.id}
-                            className="text-gray-600 hover:text-bjerke-blue hover:underline font-medium text-xs disabled:opacity-50"
-                          >
-                            {duplicating === course.id ? 'Dupliserer...' : 'Dupliser'}
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          {/* Søk, type og visning */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row">
+            <div className="relative flex-1">
+              <label htmlFor="course-search" className="sr-only">Søk etter kurs</label>
+              <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              <input
+                id="course-search"
+                type="search"
+                placeholder="Søk etter kurs …"
+                value={search}
+                onChange={(e) => {
+                  setPage(1);
+                  setSearch(e.target.value);
+                }}
+                className={`${selectClass} w-full pl-10`}
+              />
+            </div>
+            <label htmlFor="course-type" className="sr-only">Type</label>
+            <select
+              id="course-type"
+              value={typeFilter}
+              onChange={(e) => {
+                setPage(1);
+                setTypeFilter(e.target.value);
+              }}
+              className={selectClass}
+            >
+              <option value="alle">Alle typer</option>
+              {courseTypes.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+            <div role="group" aria-label="Visning" className="flex overflow-hidden rounded-lg border border-gray-300">
+              {(['liste', 'kalender'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  aria-pressed={viewMode === mode}
+                  onClick={() => setViewMode(mode)}
+                  className={`min-h-10 px-3 text-sm font-medium ${mode === 'kalender' ? 'border-l border-gray-300' : ''} ${
+                    viewMode === mode ? 'bg-bjerke-blue text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+                  }`}
+                >
+                  {mode === 'liste' ? 'Liste' : 'Kalender'}
+                </button>
+              ))}
             </div>
           </div>
-          <Pagination total={filtered.length} page={page} perPage={perPage} onChange={setPage} />
+
+          {viewMode === 'kalender' ? (
+            <CalendarView courses={filtered} />
+          ) : filtered.length === 0 ? (
+            <div className="rounded-xl border border-gray-200 bg-white p-12 text-center">
+              <h2 className="mb-1 text-lg font-semibold text-gray-900">Ingen treff</h2>
+              <p className="text-gray-600">
+                Ingen kurs passer med søket eller filteret.{' '}
+                {listFilter !== 'alle' && (
+                  <button type="button" onClick={() => setListFilter('alle')} className="font-medium text-bjerke-blue underline underline-offset-2">
+                    Vis alle kurs
+                  </button>
+                )}
+              </p>
+            </div>
+          ) : (
+            <>
+              <p className="mb-3 text-sm text-gray-600" aria-live="polite">
+                Viser {filtered.length} av {courses.length} kurs
+              </p>
+
+              {/* Mobil: hele kortet er en lenke */}
+              <ul className="space-y-3 md:hidden">
+                {paginatedCourses.map((course) => (
+                  <li key={course.id} className="rounded-xl border border-gray-200 bg-white">
+                    <Link href={`/admin/courses/${course.id}`} className="block rounded-xl p-4 hover:bg-gray-50">
+                      <div className="flex items-start justify-between gap-3">
+                        <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                          {course.name}
+                          <LinkPending />
+                        </h3>
+                        <CourseStatusBadge status={course.display} />
+                      </div>
+                      <p className="mt-1 text-sm text-gray-600">
+                        {courseTypeLabel(courseTypes, course.type)} · {dateRange(course)} · {formatPrice(course.price)}
+                      </p>
+                      <div className="mt-3 flex items-start gap-2 text-sm">
+                        <span className="text-gray-600">Påmeldte:</span>
+                        <Enrolled count={course._count.registrations} min={course.minParticipants} max={course.maxParticipants} />
+                      </div>
+                    </Link>
+                    <div className="flex gap-4 border-t border-gray-100 px-4 py-2">
+                      <Link href={`/admin/courses/${course.id}/edit`} className={buttonClass('link', 'sm')}>Rediger</Link>
+                      <button type="button" onClick={() => handleDuplicate(course)} disabled={duplicating === course.id} className={buttonClass('link', 'sm')}>
+                        {duplicating === course.id ? 'Dupliserer …' : 'Dupliser'}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+
+              {/* Desktop: klikk hvor som helst på raden for å åpne kurset */}
+              <div className="hidden overflow-hidden rounded-xl border border-gray-200 bg-white md:block">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50 text-xs font-medium uppercase tracking-wide text-gray-600">
+                      <tr>
+                        <SortHeader field="name" label="Kurs" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                        <SortHeader field="startDate" label="Dato" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                        <SortHeader field="price" label="Pris" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                        <SortHeader field="capacity" label="Påmeldte" sortField={sortField} sortDir={sortDir} onSort={toggleSort} />
+                        <th scope="col" className="px-4 py-3 text-left">Status</th>
+                        <th scope="col" className="px-4 py-3 text-right"><span className="sr-only">Handlinger</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {paginatedCourses.map((course) => (
+                        <tr
+                          key={course.id}
+                          onClick={(e) => {
+                            if ((e.target as Element).closest('a,button')) return;
+                            router.push(`/admin/courses/${course.id}`);
+                          }}
+                          className="cursor-pointer hover:bg-gray-50"
+                        >
+                          <td className="px-4 py-3">
+                            <Link href={`/admin/courses/${course.id}`} className="inline-flex items-center gap-2 font-medium text-gray-900 hover:text-bjerke-blue hover:underline">
+                              {course.name}
+                              <LinkPending />
+                            </Link>
+                            <p className="text-gray-600">{courseTypeLabel(courseTypes, course.type)}</p>
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-gray-700">{dateRange(course)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 tabular-nums text-gray-700">{formatPrice(course.price)}</td>
+                          <td className="px-4 py-3">
+                            <Enrolled count={course._count.registrations} min={course.minParticipants} max={course.maxParticipants} />
+                          </td>
+                          <td className="px-4 py-3">
+                            <CourseStatusBadge status={course.display} />
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            <div className="inline-flex items-center gap-4">
+                              <Link href={`/admin/courses/${course.id}/edit`} className={buttonClass('link', 'sm')}>Rediger</Link>
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicate(course)}
+                                disabled={duplicating === course.id}
+                                className={buttonClass('link', 'sm')}
+                              >
+                                {duplicating === course.id ? 'Dupliserer …' : 'Dupliser'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <Pagination total={filtered.length} page={page} perPage={perPage} onChange={setPage} />
+            </>
+          )}
         </>
       )}
     </div>

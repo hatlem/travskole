@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const prisma = vi.hoisted(() => ({
-  course: { findMany: vi.fn() },
+  course: { findMany: vi.fn(), findUnique: vi.fn() },
   registration: { findMany: vi.fn() },
   user: { findMany: vi.fn() },
   setting: { findUnique: vi.fn(async (): Promise<{ key: string; value: string } | null> => null) },
@@ -15,6 +15,9 @@ vi.mock('@/lib/activity', () => ({ logActivity }));
 import { GET as exportCourses } from '@/app/api/admin/courses/export/route';
 import { GET as exportRegistrations } from '@/app/api/admin/registrations/export/route';
 import { GET as exportUsers } from '@/app/api/admin/users/export/route';
+import { NextRequest } from 'next/server';
+
+const exportReq = (query = '') => new NextRequest(`http://x/api/admin/registrations/export${query}`);
 
 const created = new Date('2026-03-01T10:00:00Z');
 
@@ -35,7 +38,7 @@ describe('admin CSV exports', () => {
     }]);
     const [header, row] = await csvOf(await exportCourses());
     expect(header).toContain('Påmeldinger (aktive)');
-    expect(row).toBe('1,Ponniskole høst,Kurs,Åpen,01.03.2026,,6–12,1500,10,3,01.03.2026');
+    expect(row).toBe('1;Ponniskole høst;Kurs;Åpen;01.03.2026;;6–12;1500;10;3;01.03.2026');
   });
 
   it('courses: type labels come from the course_types setting (incl. arrangement)', async () => {
@@ -47,19 +50,58 @@ describe('admin CSV exports', () => {
       })),
     );
     const [, ...rows] = await csvOf(await exportCourses());
-    expect(rows.map((r) => r.split(',')[2])).toEqual(['Arrangement', 'Firmafest', 'Ukjent']);
+    expect(rows.map((r) => r.split(';')[2])).toEqual(['Arrangement', 'Firmafest', 'Ukjent']);
   });
 
   it('registrations: Norwegian headers and status labels', async () => {
     prisma.registration.findMany.mockResolvedValue([{
-      id: 7, status: 'waitlist', consentActivities: true, consentMedia: false, consentRisk: true, createdAt: created,
-      course: { name: 'Sommerleir' },
-      child: { name: 'Åse Ødegård', birthdate: new Date('2018-05-04T00:00:00Z'), allergies: null },
+      id: 7, status: 'waitlist', paymentStatus: 'none', paymentProvider: null,
+      consentActivities: true, consentMedia: false, consentRisk: true, createdAt: created,
+      course: { name: 'Sommerleir', price: 1500, paymentMethods: 'faktura' },
+      child: { name: 'Åse Ødegård', birthdate: new Date('2018-05-04T00:00:00Z'), allergies: 'Nøtter' },
       parent: { name: 'Kåre', phone: '12345678', user: { email: 'k@x.no' } },
     }]);
-    const [header, row] = await csvOf(await exportRegistrations());
-    expect(header).toContain('Fødselsdato');
-    expect(row).toBe('7,Sommerleir,Åse Ødegård,04.05.2018,Kåre,k@x.no,12345678,,Venteliste,Ja,Nei,Ja,01.03.2026');
+    const [header, row] = await csvOf(await exportRegistrations(exportReq()));
+    expect(header).toBe(
+      'ID;Kurs;Deltaker;Fødselsdato;Allergier og hensyn;Foresatt;E-post;Telefon;Status;Betalt;Betalingsmåte;Beløp (kr);Samtykke aktiviteter;Samtykke bilder/video;Samtykke risiko;Påmeldt',
+    );
+    expect(row).toBe('7;Sommerleir;Åse Ødegård;04.05.2018;Nøtter;Kåre;k@x.no;123 45 678;Venteliste;Nei;Faktura;1500;Ja;Nei;Ja;01.03.2026');
+  });
+
+  it('registrations: payment columns for online payments and refunds', async () => {
+    const base = {
+      status: 'confirmed', consentActivities: false, consentMedia: false, consentRisk: true, createdAt: created,
+      course: { name: 'Leir', price: 2490.5, paymentMethods: 'faktura,stripe,vipps' },
+      child: null, parent: { name: 'Kari', phone: '+4790000001', user: { email: 'kari@x.no' } },
+    };
+    prisma.registration.findMany.mockResolvedValue([
+      { ...base, id: 1, paymentStatus: 'paid', paymentProvider: 'vipps' },
+      { ...base, id: 2, paymentStatus: 'refunded', paymentProvider: 'stripe' },
+      { ...base, id: 3, paymentStatus: 'none', paymentProvider: null },
+    ]);
+    const [, ...rows] = await csvOf(await exportRegistrations(exportReq()));
+    const cols = rows.map((r) => r.split(';'));
+    expect(cols.map((c) => [c[2], c[7], c[9], c[10], c[11]])).toEqual([
+      ['Kari (voksen)', '900 00 001', 'Ja', 'Vipps', '2490,5'],
+      ['Kari (voksen)', '900 00 001', 'Refundert', 'Kort', '2490,5'],
+      ['Kari (voksen)', '900 00 001', 'Nei', '', '2490,5'],
+    ]);
+  });
+
+  it('registrations: ?courseId= exports only that course, named after it', async () => {
+    prisma.course.findUnique.mockResolvedValue({ name: "Ponniskole høst" });
+    prisma.registration.findMany.mockResolvedValue([]);
+    const res = await exportRegistrations(exportReq('?courseId=9'));
+    expect(prisma.registration.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({ courseId: 9 }),
+    }));
+    expect(res.headers.get('Content-Disposition')).toMatch(/filename="deltakere-ponniskole-host-\d{4}-\d{2}-\d{2}\.csv"/);
+  });
+
+  it('registrations: 404 for an unknown course', async () => {
+    prisma.course.findUnique.mockResolvedValue(null);
+    const res = await exportRegistrations(exportReq('?courseId=404'));
+    expect(res.status).toBe(404);
   });
 
   it('users: translated roles', async () => {

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/admin/Button';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 
@@ -131,20 +132,12 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
         />
       </div>
       <div className="flex gap-2 pt-1">
-        <button
-          onClick={save}
-          disabled={saving}
-          className="rounded-lg bg-bjerke-blue px-3 py-1.5 text-xs font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
-        >
-          {saving ? 'Lagrer …' : 'Lagre'}
-        </button>
-        <button
-          onClick={() => setEditingId(null)}
-          disabled={saving}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-        >
+        <Button size="sm" onClick={save} loading={saving} loadingLabel="Lagrer …">
+          Lagre
+        </Button>
+        <Button size="sm" variant="secondary" onClick={() => setEditingId(null)} disabled={saving}>
           Avbryt
-        </button>
+        </Button>
       </div>
     </div>
   );

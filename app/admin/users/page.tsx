@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
@@ -9,6 +10,8 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { HelpTip } from '@/components/admin/HelpTip';
 import { canManageUser } from '@/lib/user-admin';
+import { Button, buttonClass } from '@/components/admin/Button';
+import { formatPhone } from '@/lib/admin-format';
 import { UserFormModal, type EditableUser } from './UserFormModal';
 import { ChildrenEditor, type AdminChild } from './ChildrenEditor';
 
@@ -52,7 +55,8 @@ function statusLabel(status: string): string {
   const map: Record<string, string> = {
     confirmed: 'Bekreftet',
     pending: 'Venter',
-    cancelled: 'Kansellert',
+    cancelled: 'Avlyst',
+    waitlist: 'Venteliste',
     waitlisted: 'Venteliste',
   };
   return map[status] || status;
@@ -63,17 +67,27 @@ function statusColor(status: string): string {
     case 'confirmed':
       return 'bg-green-100 text-green-800';
     case 'pending':
-      return 'bg-yellow-100 text-yellow-800';
+      return 'bg-amber-100 text-amber-900';
     case 'cancelled':
-      return 'bg-red-100 text-red-800';
+      return 'bg-gray-200 text-gray-700';
+    case 'waitlist':
     case 'waitlisted':
-      return 'bg-orange-100 text-orange-800';
+      return 'bg-blue-100 text-blue-900';
     default:
       return 'bg-gray-100 text-gray-800';
   }
 }
 
-const DESCRIPTION = 'Alle med konto: foreldre, deltakere og dere i staben. Endre rolle, send ny innloggingslenke eller steng en konto.';
+const DESCRIPTION = (
+  <>
+    Alle som har konto og kan logge inn: foreldre, deltakere og dere i staben. Alle personer dere har kontakt med — også
+    uten konto — finner du under{' '}
+    <Link href="/admin/crm/kontakter" className="font-medium text-bjerke-blue underline underline-offset-2">
+      CRM → Kontakter
+    </Link>
+    .
+  </>
+);
 
 const ROLE_LABELS: Record<string, string> = { parent: 'Forelder', admin: 'Admin', superadmin: 'Superadmin' };
 
@@ -340,19 +354,16 @@ export default function AdminUsersPage() {
         description={DESCRIPTION}
         actions={
           <>
-            <button
-              onClick={() => setFormModal({ mode: 'create', user: null })}
-              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              + Ny bruker
-            </button>
-            <button
-              onClick={() => window.open('/api/admin/users/export')}
-              title="Laster ned alle brukerne som en fil du kan åpne i Excel"
-              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Last ned til Excel
-            </button>
+            <Button onClick={() => setFormModal({ mode: 'create', user: null })}>+ Ny bruker</Button>
+            {stats.total > 0 ? (
+              <a href="/api/admin/users/export" download title="Alle brukerne som en fil du kan åpne i Excel" className={buttonClass('secondary')}>
+                Last ned (Excel)
+              </a>
+            ) : (
+              <span aria-disabled="true" title="Ingen brukere å laste ned ennå" className={buttonClass('secondary')}>
+                Last ned (Excel)
+              </span>
+            )}
           </>
         }
       />
@@ -377,12 +388,9 @@ export default function AdminUsersPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <p className="text-gray-900 font-medium">Ingen brukere ennå</p>
           <p className="mt-1 text-gray-500">Kontoer opprettes når noen melder seg på via nettsiden, eller når du lager en selv.</p>
-          <button
-            onClick={() => setFormModal({ mode: 'create', user: null })}
-            className="mt-4 bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
+          <Button className="mt-4" onClick={() => setFormModal({ mode: 'create', user: null })}>
             + Ny bruker
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -431,28 +439,125 @@ export default function AdminUsersPage() {
               <span className="text-sm font-medium text-gray-700">
                 {selectedIds.size} valgt
               </span>
-              <button
-                onClick={() => setBulkAction('deactivate')}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
+              <Button size="sm" variant="secondary" onClick={() => setBulkAction('deactivate')}>
                 Steng kontoene
-              </button>
-              <button
-                onClick={() => setBulkAction('reactivate')}
-                className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
+              </Button>
+              <Button size="sm" variant="secondary" onClick={() => setBulkAction('reactivate')}>
                 Åpne kontoene
-              </button>
-              <button
-                onClick={() => setSelectedIds(new Set())}
-                className="text-xs font-medium text-gray-500 hover:underline"
-              >
+              </Button>
+              <button type="button" onClick={() => setSelectedIds(new Set())} className={buttonClass('link', 'sm')}>
                 Fjern valg
               </button>
             </div>
           )}
 
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          {/* Mobil: kort per bruker */}
+          <ul className="space-y-3 md:hidden">
+            {users.map((user) => {
+              const status = userStatus(user);
+              const manageable = canManageUser(currentRole, user.role) && status !== 'anonymized';
+              const expanded = expandedIds.has(user.id);
+              return (
+                <li key={user.id} className={`rounded-xl border bg-white p-4 ${selectedIds.has(user.id) ? 'border-bjerke-blue' : 'border-gray-200'}`}>
+                  <div className="flex items-start gap-3">
+                    {manageable && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(user.id)}
+                        onChange={() => toggleSelected(user.id)}
+                        aria-label={`Velg ${user.email}`}
+                        className="mt-1 h-5 w-5 rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue"
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-gray-900">{user.parent?.name || 'Uten navn'}</p>
+                      <a href={`mailto:${user.email}`} className="block break-all text-sm text-bjerke-blue hover:underline">{user.email}</a>
+                      {user.parent?.phone && (
+                        <a href={`tel:${user.parent.phone}`} className="block text-sm text-gray-700">{formatPhone(user.parent.phone)}</a>
+                      )}
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+                        status === 'anonymized' ? 'bg-gray-200 text-gray-700' : status === 'deactivated' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                      }`}
+                    >
+                      {status === 'anonymized' ? 'Persondata slettet' : status === 'deactivated' ? 'Stengt' : 'Aktiv'}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                    <label className="flex items-center gap-2 text-gray-700">
+                      Rolle
+                      <select
+                        value={user.role}
+                        onChange={(e) => setPendingRole({ user, role: e.target.value })}
+                        disabled={updatingId === user.id || !manageable}
+                        className="min-h-9 rounded-lg border border-gray-300 bg-white px-2 text-sm disabled:opacity-60"
+                      >
+                        <option value="parent">Forelder</option>
+                        <option value="admin">Admin</option>
+                        {(isSuperAdmin || user.role === 'superadmin') && <option value="superadmin">Superadmin</option>}
+                      </select>
+                    </label>
+                    <span className="text-gray-600">
+                      {user.parent?._count?.registrations ?? 0} påmeldinger · {user.parent?._count?.children ?? 0} barn
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 border-t border-gray-100 pt-3">
+                    <button type="button" onClick={() => toggleExpanded(user.id)} aria-expanded={expanded} className={buttonClass('link', 'sm')}>
+                      {expanded ? 'Skjul detaljer' : 'Barn og påmeldinger'}
+                    </button>
+                    {manageable && (
+                      <>
+                        <button type="button" onClick={() => openEdit(user)} className={buttonClass('link', 'sm')}>Rediger</button>
+                        {status === 'active' && (
+                          <button type="button" onClick={() => sendMagicLink(user)} disabled={magicLinkId === user.id} className={buttonClass('link', 'sm', 'text-gray-700')}>
+                            {magicLinkId === user.id ? 'Sender …' : 'Send lenke'}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => setConfirm({ user, action: status === 'deactivated' ? 'reactivate' : 'deactivate' })}
+                          className={buttonClass('link', 'sm', 'text-gray-700')}
+                        >
+                          {status === 'deactivated' ? 'Åpne konto' : 'Steng konto'}
+                        </button>
+                        <button type="button" onClick={() => setConfirm({ user, action: 'anonymize' })} className={buttonClass('dangerText', 'sm')}>
+                          Slett persondata
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {expanded && (
+                    <div className="mt-3 space-y-4 border-t border-gray-100 pt-3">
+                      {user.parent ? (
+                        <ChildrenEditor userId={user.id} items={user.parent.children ?? []} onChange={(children) => applyChildren(user.id, children)} />
+                      ) : (
+                        <p className="text-sm text-gray-600">Brukeren har ingen profil ennå. Legg inn navn og telefon under «Rediger» først.</p>
+                      )}
+                      <div>
+                        <p className="mb-2 text-xs font-semibold uppercase text-gray-600">Siste påmeldinger</p>
+                        {user.parent?.registrations?.length ? (
+                          <ul className="space-y-1 text-sm">
+                            {user.parent.registrations.map((reg) => (
+                              <li key={reg.id} className="flex items-center justify-between gap-2">
+                                <Link href={`/admin/courses/${reg.course.id}`} className="truncate text-gray-900 hover:underline">{reg.course.name}</Link>
+                                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${statusColor(reg.status)}`}>{statusLabel(reg.status)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="text-sm text-gray-600">Ingen påmeldinger</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </li>
+              );
+            })}
+            {users.length === 0 && <li className="rounded-xl border border-gray-200 bg-white px-4 py-12 text-center text-gray-600">Ingen brukere passer med filteret.</li>}
+          </ul>
+
+          <div className="hidden bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden md:block">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
@@ -515,15 +620,15 @@ export default function AdminUsersPage() {
                                 <p className="font-medium text-gray-900 truncate">{user.parent?.name || '-'}</p>
                                 <p className="text-gray-500 text-xs truncate" title={user.email}>{user.email}</p>
                                 {user.parent?.phone && (
-                                  <p className="text-gray-400 text-xs lg:hidden">{user.parent.phone}</p>
+                                  <p className="text-gray-600 text-xs lg:hidden">{formatPhone(user.parent.phone)}</p>
                                 )}
-                                <p className="text-gray-400 text-xs 2xl:hidden">
+                                <p className="text-gray-500 text-xs 2xl:hidden">
                                   Opprettet {new Date(user.createdAt).toLocaleDateString('nb-NO')}
                                 </p>
                               </div>
                             </div>
                           </td>
-                          <td className="px-4 py-4 text-gray-500 hidden lg:table-cell whitespace-nowrap">{user.parent?.phone || '-'}</td>
+                          <td className="px-4 py-4 text-gray-600 hidden lg:table-cell whitespace-nowrap">{user.parent?.phone ? formatPhone(user.parent.phone) : '–'}</td>
                           <td className="px-4 py-4 hidden 2xl:table-cell">
                             <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-100 text-xs font-medium text-gray-700">
                               {user.parent?._count?.children ?? 0}
@@ -586,10 +691,7 @@ export default function AdminUsersPage() {
                           >
                             {manageable ? (
                               <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 min-w-[9rem] max-w-[13rem] ml-auto">
-                                <button
-                                  onClick={() => openEdit(user)}
-                                  className="text-xs font-medium text-bjerke-blue hover:underline"
-                                >
+                                <button type="button" onClick={() => openEdit(user)} className={buttonClass('link', 'sm')}>
                                   Rediger
                                 </button>
                                 {status === 'active' && (
@@ -597,7 +699,7 @@ export default function AdminUsersPage() {
                                     onClick={() => sendMagicLink(user)}
                                     disabled={magicLinkId === user.id}
                                     title="Send en fersk innloggingslenke på e-post"
-                                    className="text-xs font-medium text-gray-600 hover:underline disabled:opacity-50"
+                                    className={buttonClass('link', 'sm', 'text-gray-700')}
                                   >
                                     {magicLinkId === user.id ? 'Sender …' : 'Send lenke'}
                                   </button>
@@ -606,13 +708,13 @@ export default function AdminUsersPage() {
                                   onClick={() =>
                                     setConfirm({ user, action: status === 'deactivated' ? 'reactivate' : 'deactivate' })
                                   }
-                                  className="text-xs font-medium text-gray-600 hover:underline"
+                                  className={buttonClass('link', 'sm', 'text-gray-700')}
                                 >
                                   {status === 'deactivated' ? 'Åpne konto' : 'Steng konto'}
                                 </button>
                                 <button
                                   onClick={() => setConfirm({ user, action: 'anonymize' })}
-                                  className="text-xs font-medium text-red-600 hover:underline"
+                                  className={buttonClass('dangerText', 'sm')}
                                 >
                                   Slett persondata
                                 </button>
@@ -687,7 +789,7 @@ export default function AdminUsersPage() {
                   })}
                   {users.length === 0 && (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
+                      <td colSpan={9} className="px-4 py-12 text-center text-gray-600">
                         Ingen brukere matcher filteret.
                       </td>
                     </tr>

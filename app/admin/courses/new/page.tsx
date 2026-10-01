@@ -9,6 +9,9 @@ import ImageUpload from '@/components/ImageUpload';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 import { PAYMENT_METHODS } from '@/lib/payments';
+import { useToast } from '@/components/admin/Toast';
+import { Button } from '@/components/admin/Button';
+import { formatPrice } from '@/lib/admin-format';
 
 function slugify(text: string): string {
   return text
@@ -29,9 +32,9 @@ export default function NewCoursePage() {
   const settings = useSettings();
   const courseTypes = parseCourseTypes(settings.course_types);
   const router = useRouter();
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [imageUrl, setImageUrl] = useState('');
 
   // Form state for live preview
@@ -40,7 +43,8 @@ export default function NewCoursePage() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState(courseTypes[0]?.value ?? 'kurs');
   const [audience, setAudience] = useState('barn');
-  const [status, setStatus] = useState('open');
+  // Nye kurs lagres som utkast (stengt) til admin publiserer dem.
+  const [status, setStatus] = useState('closed');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ageMin, setAgeMin] = useState('');
@@ -77,7 +81,6 @@ export default function NewCoursePage() {
     }
     setLoading(true);
     setError(null);
-    setSuccess(false);
 
     const data = {
       name: name.trim(),
@@ -110,19 +113,21 @@ export default function NewCoursePage() {
         body: JSON.stringify(data),
       });
 
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || 'Kurset ble ikke lagret. Sjekk feltene og prøv igjen.');
+        throw new Error(json?.error || 'Kurset ble ikke lagret. Sjekk feltene og prøv igjen.');
       }
 
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/admin/courses');
-        router.refresh();
-      }, 1200);
+      toast(
+        status === 'closed'
+          ? 'Kurset er lagret som utkast. Trykk «Publiser» når det er klart for påmelding.'
+          : 'Kurset er opprettet og åpent for påmelding.',
+        'success',
+      );
+      // Knappen holdes i «Oppretter …» til kurssiden er lastet, så ingen trykker to ganger.
+      router.push(`/admin/courses/${json.course.id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Kurset ble ikke lagret. Prøv igjen om litt.');
-    } finally {
       setLoading(false);
     }
   }
@@ -144,25 +149,12 @@ export default function NewCoursePage() {
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mt-2">Nytt kurs</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Fyll inn det viktigste og trykk «Opprett kurs». Du kan endre alt senere.
+          Fyll inn det viktigste og lagre. Kurset blir et utkast som ikke er åpent for påmelding før du trykker «Publiser».
         </p>
       </div>
 
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
-          <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Kurset er opprettet! Du sendes tilbake til kurslisten …
-        </div>
-      )}
-
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
           {error}
         </div>
       )}
@@ -311,7 +303,7 @@ export default function NewCoursePage() {
               {/* Status */}
               <div>
                 <label htmlFor="status" className={labelClass}>
-                  Status *
+                  Påmelding
                 </label>
                 <select
                   id="status"
@@ -321,10 +313,10 @@ export default function NewCoursePage() {
                   onChange={(e) => setStatus(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="open">Åpen</option>
-                  <option value="full">Fullt</option>
-                  <option value="closed">Stengt</option>
+                  <option value="closed">Utkast – ikke åpen for påmelding ennå</option>
+                  <option value="open">Åpen for påmelding med en gang</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-600">Utkast vises på nettsiden som «Stengt» til du publiserer.</p>
               </div>
 
               {/* Dates */}
@@ -486,13 +478,9 @@ export default function NewCoursePage() {
 
             {/* Actions */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
-              >
-                {loading ? 'Oppretter …' : 'Opprett kurs'}
-              </button>
+              <Button type="submit" loading={loading} loadingLabel="Lagrer …" className="w-full">
+                {status === 'closed' ? 'Lagre som utkast' : 'Opprett og publiser'}
+              </Button>
               {invalidFields.some((f) => touched[f]) && (
                 <ul role="alert" className="mt-3 text-sm text-red-600 list-disc pl-5 space-y-0.5">
                   {invalidFields.map((f) => (
@@ -536,7 +524,7 @@ export default function NewCoursePage() {
                     <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Fullt</span>
                   )}
                   {status === 'closed' && (
-                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Stengt</span>
+                    <span className="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">Stengt</span>
                   )}
                 </div>
                 <h3 className="font-semibold text-gray-900">{name}</h3>
@@ -557,7 +545,7 @@ export default function NewCoursePage() {
                     </span>
                   )}
                   {price && (
-                    <span className="text-sm font-semibold text-bjerke-blue">{Number(price).toLocaleString('nb-NO')} kr</span>
+                    <span className="text-sm font-semibold text-bjerke-blue">{formatPrice(Number(price))}</span>
                   )}
                 </div>
               </div>

@@ -67,7 +67,7 @@ export function HelpTip({ term, label, children, align = 'left' }: HelpTipProps)
         }}
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
-        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 bg-white text-[11px] font-semibold leading-none text-gray-500 hover:border-bjerke-blue hover:text-bjerke-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-1"
+        className="ml-1 inline-flex h-5 w-5 items-center justify-center rounded-full border border-gray-300 bg-white text-xs font-semibold leading-none text-gray-500 hover:border-bjerke-blue hover:text-bjerke-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-1"
       >
         ?
       </button>

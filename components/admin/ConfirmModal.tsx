@@ -1,18 +1,25 @@
 'use client';
 
-import { useEffect, useId, useRef } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { useModalEscape } from './useModalEscape';
+import { buttonClass, Spinner } from './Button';
+import { focusableWithin } from './focus-trap';
 
 type Variant = 'danger' | 'warning' | 'info';
 
 interface ConfirmModalProps {
   open: boolean;
   title: string;
-  message: string;
+  message: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** danger = rød bekreft-knapp (sletting o.l.). warning/info = marineblå. */
   variant?: Variant;
   loading?: boolean;
+  /** Ekstra innhold under meldingen, f.eks. forhåndsvisning av en e-post. */
+  children?: ReactNode;
+  /** «lg» gir plass til forhåndsvisninger. */
+  size?: 'md' | 'lg';
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -22,28 +29,12 @@ const variantConfig: Record<
   {
     iconBg: string;
     iconColor: string;
-    buttonBg: string;
-    buttonHover: string;
+    button: 'danger' | 'primary';
   }
 > = {
-  danger: {
-    iconBg: 'bg-red-100',
-    iconColor: 'text-red-600',
-    buttonBg: 'bg-red-600',
-    buttonHover: 'hover:bg-red-700',
-  },
-  warning: {
-    iconBg: 'bg-yellow-100',
-    iconColor: 'text-yellow-600',
-    buttonBg: 'bg-yellow-600',
-    buttonHover: 'hover:bg-yellow-700',
-  },
-  info: {
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600',
-    buttonBg: 'bg-blue-600',
-    buttonHover: 'hover:bg-blue-700',
-  },
+  danger: { iconBg: 'bg-red-100', iconColor: 'text-red-600', button: 'danger' },
+  warning: { iconBg: 'bg-amber-100', iconColor: 'text-amber-700', button: 'primary' },
+  info: { iconBg: 'bg-bjerke-blue/10', iconColor: 'text-bjerke-blue', button: 'primary' },
 };
 
 function VariantIcon({ variant }: { variant: Variant }) {
@@ -106,6 +97,8 @@ export function ConfirmModal({
   cancelLabel = 'Avbryt',
   variant = 'danger',
   loading = false,
+  children,
+  size = 'md',
   onConfirm,
   onCancel,
 }: ConfirmModalProps) {
@@ -127,8 +120,8 @@ export function ConfirmModal({
 
   const trapTab = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== 'Tab') return;
-    const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
-    if (!buttons || buttons.length === 0) return;
+    const buttons = dialogRef.current ? focusableWithin(dialogRef.current) : [];
+    if (buttons.length === 0) return;
     const first = buttons[0];
     const last = buttons[buttons.length - 1];
     if (e.shiftKey && document.activeElement === first) {
@@ -160,7 +153,7 @@ export function ConfirmModal({
         aria-labelledby={titleId}
         aria-describedby={messageId}
         onKeyDown={trapTab}
-        className="relative w-full max-w-md animate-in zoom-in-95 fade-in rounded-lg bg-white p-6 shadow-xl duration-200"
+        className={`relative max-h-[calc(100dvh-2rem)] w-full overflow-y-auto rounded-xl bg-white p-6 shadow-xl ${size === 'lg' ? 'max-w-2xl' : 'max-w-md'}`}
       >
         {/* Icon */}
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
@@ -171,9 +164,10 @@ export function ConfirmModal({
 
         {/* Content */}
         <div className="text-center">
-          <h3 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h3>
-          <p id={messageId} className="mt-2 text-sm text-gray-500">{message}</p>
+          <h3 id={titleId} className="text-lg font-semibold text-gray-900 text-balance">{title}</h3>
+          <div id={messageId} className="mt-2 text-sm text-gray-600 text-pretty">{message}</div>
         </div>
+        {children && <div className="mt-4">{children}</div>}
 
         {/* Actions */}
         <div className="mt-6 flex gap-3">
@@ -182,39 +176,22 @@ export function ConfirmModal({
             type="button"
             disabled={loading}
             onClick={onCancel}
-            className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className={buttonClass('secondary', 'md', 'flex-1')}
           >
             {cancelLabel}
           </button>
           <button
             type="button"
             disabled={loading}
+            aria-busy={loading || undefined}
             onClick={onConfirm}
-            className={`flex-1 rounded-lg px-4 py-2.5 text-sm font-medium text-white ${config.buttonBg} ${config.buttonHover} disabled:opacity-50`}
+            className={buttonClass(config.button, 'md', 'flex-1')}
           >
             {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg
-                  className="h-4 w-4 animate-spin"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="4"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                  />
-                </svg>
-                Venter...
-              </span>
+              <>
+                <Spinner />
+                Venter …
+              </>
             ) : (
               confirmLabel
             )}

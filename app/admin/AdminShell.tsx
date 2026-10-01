@@ -8,8 +8,10 @@ import { ToastProvider } from '@/components/admin/Toast';
 import { KeyboardShortcuts } from '@/components/admin/KeyboardShortcuts';
 import { BreadcrumbLabelProvider, useBreadcrumbOverrides } from '@/components/admin/BreadcrumbLabel';
 import { buildBreadcrumbs } from '@/lib/admin-breadcrumbs';
+import { adminDocumentTitle } from '@/lib/admin-title';
 import { CRM_GROUPS, CRM_ROOT, findCrmLocation, groupHref, matchesPath } from '@/lib/admin-nav';
 import { FeedbackWidget } from '@/components/FeedbackWidget';
+import { LinkPending } from '@/components/admin/LinkPending';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -21,8 +23,7 @@ const navItems = [
   { href: '/admin/sider', label: 'Sider', icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' },
 ];
 
-// Ikoner for oppføringene som ligger i konto-dropdownen nederst i sidebaren
-// (innstillinger, tekster, aktivitetslogg) — ikke i hoved-navigasjonen.
+// Ikoner for «System»-gruppen nederst i sidemenyen.
 const SETTINGS_ICON = 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z';
 const ACTIVITY_ICON = 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z';
 const TEKSTER_ICON = 'M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129';
@@ -50,6 +51,12 @@ export function AdminShell({
   const breadcrumbs = buildBreadcrumbs(pathname, breadcrumbOverrides);
   const isSuperAdmin = role === 'superadmin';
   const siteName = settings.site_name || 'Bjerke Registrering';
+  const documentTitle = adminDocumentTitle(pathname, breadcrumbs, siteName);
+
+  // Unik fanetittel per side (sidene er klientkomponenter uten egen metadata).
+  useEffect(() => {
+    document.title = documentTitle;
+  }, [documentTitle]);
 
   const isActive = (href: string) => {
     if (href === '/admin') return pathname === '/admin';
@@ -58,9 +65,8 @@ export function AdminShell({
   const inCrm = matchesPath(pathname, CRM_ROOT);
   const activeCrmGroupId = findCrmLocation(pathname)?.group.id;
 
-  // Innstillinger, tekster og aktivitetslogg ligger i konto-dropdownen
-  // nederst — ikke i hoved-navigasjonen.
-  const accountMenuItems = [
+  // Innstillinger, tekster og aktivitetslogg: egen «System»-gruppe nederst i menyen.
+  const systemItems = [
     { href: '/admin/settings', label: 'Innstillinger', icon: SETTINGS_ICON },
     ...(isSuperAdmin
       ? [{ href: '/admin/tekster', label: 'Tekster', icon: TEKSTER_ICON }]
@@ -85,7 +91,7 @@ export function AdminShell({
     return () => document.removeEventListener('mousedown', onPointerDown);
   }, [accountOpen]);
 
-  const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80';
+  const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white';
   const linkClass = (active: boolean) =>
     `flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors ${focusRing} ${
       active
@@ -133,6 +139,7 @@ export function AdminShell({
                   <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                 </svg>
                 {item.label}
+                <LinkPending className="ml-auto h-3.5 w-3.5" />
               </Link>
               {item.href === CRM_ROOT && inCrm && (
                 <ul aria-label="CRM-områder" className="mt-1 mb-2 ml-6 pl-3 border-l border-white/20 space-y-0.5">
@@ -151,7 +158,10 @@ export function AdminShell({
                               : 'text-blue-100 hover:bg-white/10 hover:text-white'
                           }`}
                         >
-                          {group.label}
+                          <span className="flex items-center justify-between gap-2">
+                            {group.label}
+                            <LinkPending />
+                          </span>
                         </Link>
                       </li>
                     );
@@ -162,45 +172,48 @@ export function AdminShell({
           );
         })}
 
+        <div className="pt-4 mt-4 border-t border-white/15">
+          <p id="admin-nav-system" className="px-4 pb-1 text-xs font-semibold uppercase tracking-wide text-blue-200">
+            System
+          </p>
+          <ul aria-labelledby="admin-nav-system" className="space-y-1">
+            {systemItems.map((item) => {
+              const active = isActive(item.href);
+              return (
+                <li key={item.href}>
+                  <Link
+                    href={item.href}
+                    onClick={() => setSidebarOpen(false)}
+                    aria-current={currentFor(item.href, active)}
+                    className={linkClass(active)}
+                  >
+                    <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
+                    </svg>
+                    {item.label}
+                    <LinkPending className="ml-auto h-3.5 w-3.5" />
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </nav>
 
       {/* Konto — dropdown med e-post som trigger */}
       <div data-account-menu className="p-4 border-t border-white/20 relative">
         {accountOpen && (
           <div className="absolute bottom-full left-4 right-4 mb-2 rounded-lg bg-bjerke-blue-dark border border-white/20 shadow-lg max-h-[70vh] overflow-y-auto">
-            {accountMenuItems.map((item) => {
-              const active = isActive(item.href);
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => {
-                    setAccountOpen(false);
-                    setSidebarOpen(false);
-                  }}
-                  className={`flex items-center gap-3 px-4 py-3 text-sm font-medium transition-colors ${
-                    active
-                      ? 'bg-white/10 text-white font-semibold'
-                      : 'text-blue-100 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
-                  </svg>
-                  {item.label}
-                </Link>
-              );
-            })}
-            <div className="border-t border-white/15" />
+            <p className="px-4 pt-3 pb-1 text-xs text-blue-200 truncate" title={email}>Innlogget som {email}</p>
             <Link
               href="/dashboard"
               onClick={() => {
                 setAccountOpen(false);
                 setSidebarOpen(false);
               }}
-              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors ${focusRing}`}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
               </svg>
               Tilbake til nettstedet
@@ -211,9 +224,9 @@ export function AdminShell({
                 setAccountOpen(false);
                 setSidebarOpen(false);
               }}
-              className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
+              className={`flex items-center gap-3 px-4 py-3 text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors ${focusRing}`}
             >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
               </svg>
               Logg ut
@@ -225,7 +238,7 @@ export function AdminShell({
           onClick={() => setAccountOpen((o) => !o)}
           aria-expanded={accountOpen}
           aria-haspopup="true"
-          className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors"
+          className={`w-full flex items-center justify-between gap-3 px-4 py-3 rounded-lg text-sm font-medium text-blue-100 hover:bg-white/10 hover:text-white transition-colors ${focusRing}`}
         >
           <span className="flex items-center gap-3 min-w-0">
             <svg className="w-5 h-5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -250,9 +263,15 @@ export function AdminShell({
   return (
     <ToastProvider>
       <KeyboardShortcuts />
+      <a
+        href="#admin-main"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[10000] focus:rounded-lg focus:bg-white focus:px-4 focus:py-3 focus:text-sm focus:font-semibold focus:text-bjerke-blue focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
+      >
+        Hopp til innholdet
+      </a>
       <div className="min-h-screen bg-gray-50 flex">
         {/* Desktop sidebar */}
-        <aside className="hidden lg:flex w-64 bg-bjerke-blue text-white flex-shrink-0 min-h-screen flex-col">
+        <aside data-admin-sidebar className="hidden lg:flex w-64 bg-bjerke-blue text-white flex-shrink-0 h-screen sticky top-0 flex-col">
           {sidebarContent}
         </aside>
 
@@ -267,6 +286,7 @@ export function AdminShell({
         {/* Mobile sidebar */}
         <aside
           id="admin-mobile-sidebar"
+          data-admin-sidebar
           inert={!sidebarOpen}
           className={`fixed inset-y-0 left-0 z-50 w-64 bg-bjerke-blue text-white flex flex-col transform transition-transform duration-200 ease-in-out lg:hidden ${
             sidebarOpen ? 'translate-x-0' : '-translate-x-full'
@@ -275,7 +295,7 @@ export function AdminShell({
           <button
             onClick={() => setSidebarOpen(false)}
             aria-label="Lukk meny"
-            className="absolute top-4 right-4 text-white/70 hover:text-white"
+            className={`absolute top-3 right-3 flex h-10 w-10 items-center justify-center rounded-lg text-white/70 hover:text-white ${focusRing}`}
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -286,13 +306,13 @@ export function AdminShell({
 
         {/* Main content */}
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="bg-white border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-4 flex-shrink-0">
+          <header className="sticky top-0 z-30 bg-white/95 backdrop-blur border-b border-gray-200 px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-4 flex-shrink-0">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Åpne meny"
               aria-expanded={sidebarOpen}
               aria-controls="admin-mobile-sidebar"
-              className="lg:hidden text-gray-500 hover:text-gray-700"
+              className="lg:hidden -ml-2 flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:text-gray-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
             >
               <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
@@ -321,7 +341,7 @@ export function AdminShell({
           </header>
 
           {/* Ingen overflow her: vinduet er scroll-containeren, så sticky (f.eks. lagre-linja) følger viewporten. Brede tabeller/kanban har egen overflow-x-auto. */}
-          <main className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8">
+          <main id="admin-main" tabIndex={-1} className="flex-1 min-w-0 p-4 sm:p-6 lg:p-8 focus:outline-none">
             <BreadcrumbLabelProvider value={setBreadcrumbLabel}>{children}</BreadcrumbLabelProvider>
           </main>
         </div>

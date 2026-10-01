@@ -3,8 +3,10 @@ import { NextRequest } from 'next/server';
 
 const { prisma, mail } = vi.hoisted(() => ({
   prisma: {
-    course: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    course: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(async () => ({ id: 9 })) },
     registration: { count: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    deal: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+    $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
   mail: { sendWaitlistPromotionEmail: vi.fn(async () => {}) },
 }));
@@ -14,7 +16,7 @@ vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email:
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => {}) }));
 vi.mock('@/lib/logger', () => ({ default: { error: vi.fn() } }));
 
-import { PUT, DELETE } from '@/app/api/admin/courses/[id]/route';
+import { PUT, PATCH, DELETE } from '@/app/api/admin/courses/[id]/route';
 
 const params = { params: Promise.resolve({ id: '9' }) };
 const putReq = (body: unknown) =>
@@ -101,9 +103,26 @@ describe('DELETE /api/admin/courses/[id]', () => {
 
   it('deletes a course without settled payments', async () => {
     prisma.registration.count.mockResolvedValue(0);
+    prisma.registration.findMany.mockResolvedValue([]);
     const res = await DELETE(deleteReq(), params);
     expect(res.status).toBe(200);
     expect(prisma.course.delete).toHaveBeenCalledWith({ where: { id: 9 } });
+  });
+
+  it('removes the sales-board deals of the course registrations in the same transaction', async () => {
+    prisma.registration.count.mockResolvedValue(0);
+    prisma.registration.findMany.mockResolvedValue([{ id: 31 }, { id: 32 }]);
+    prisma.deal.deleteMany.mockResolvedValueOnce({ count: 2 });
+    const res = await DELETE(deleteReq(), params);
+    expect(prisma.deal.deleteMany).toHaveBeenCalledWith({ where: { registrationId: { in: [31, 32] } } });
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect((await res.json()).dealsRemoved).toBe(2);
+  });
+
+  it('never touches deals when the delete is refused', async () => {
+    prisma.registration.count.mockResolvedValue(1);
+    await DELETE(deleteReq(), params);
+    expect(prisma.deal.deleteMany).not.toHaveBeenCalled();
   });
 
   it('returns 404 for an unknown course', async () => {
@@ -111,5 +130,34 @@ describe('DELETE /api/admin/courses/[id]', () => {
     const res = await DELETE(deleteReq(), params);
     expect(res.status).toBe(404);
     expect(prisma.course.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH /api/admin/courses/[id] — publish', () => {
+  const patchReq = (body: unknown) =>
+    new NextRequest('http://x/api/admin/courses/9', { method: 'PATCH', body: JSON.stringify(body) });
+
+  it('opens a draft course and settles capacity', async () => {
+    prisma.course.findUnique
+      .mockResolvedValueOnce({ id: 9, name: 'Ponnikurs', status: 'closed', maxParticipants: 5 })
+      .mockResolvedValue({ id: 9, name: 'Ponnikurs', status: 'open', maxParticipants: 5 });
+    prisma.course.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 9, ...data }));
+    counts(0, 0);
+    const res = await PATCH(patchReq({ status: 'open' }), params);
+    expect(res.status).toBe(200);
+    expect(prisma.course.update).toHaveBeenCalledWith({ where: { id: 9 }, data: { status: 'open' } });
+    expect((await res.json()).course.status).toBe('open');
+  });
+
+  it('rejects unknown statuses', async () => {
+    const res = await PATCH(patchReq({ status: 'draft' }), params);
+    expect(res.status).toBe(400);
+    expect(prisma.course.update).not.toHaveBeenCalled();
+  });
+
+  it('404s for an unknown course', async () => {
+    prisma.course.findUnique.mockResolvedValue(null);
+    const res = await PATCH(patchReq({ status: 'open' }), params);
+    expect(res.status).toBe(404);
   });
 });

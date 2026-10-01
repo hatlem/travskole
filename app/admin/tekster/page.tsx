@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { STRINGS, STRING_SECTIONS, STRING_PREFIX } from '@/lib/strings';
+import { Button } from '@/components/admin/Button';
+import { useToast } from '@/components/admin/Toast';
 
 const shortText = (text: string): string => (text.length > 50 ? `${text.slice(0, 50)} …` : text);
 
@@ -15,11 +17,11 @@ const shortText = (text: string): string => (text.length > 50 ? `${text.slice(0,
 export default function AdminTeksterPage() {
   const { data: session } = useSession();
   const router = useRouter();
+  const { toast } = useToast();
   const [overrides, setOverrides] = useState<Record<string, string>>({});
   const [dirty, setDirty] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
@@ -81,8 +83,8 @@ export default function AdminTeksterPage() {
 
   async function handleSave() {
     setSaving(true);
-    setSaved(false);
     setError(null);
+    const count = Object.keys(dirty).length;
     try {
       for (const [key, value] of Object.entries(dirty)) {
         // Verdi lik standard eller tom -> lagre tom overstyring (= bruk standard)
@@ -103,8 +105,7 @@ export default function AdminTeksterPage() {
         return next;
       });
       setDirty({});
-      setSaved(true);
-      setTimeout(() => setSaved(false), 3000);
+      toast(count === 1 ? '1 tekst er lagret og vises på nettsiden.' : `${count} tekster er lagret og vises på nettsiden.`, 'success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
@@ -128,25 +129,17 @@ export default function AdminTeksterPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Tekster</h1>
-          <p className="text-gray-500 mt-1">
+          <p className="text-gray-600 mt-1">
             Endre tekstene besøkende ser på nettsiden. Tomt felt betyr at standardteksten (i grått) brukes.
             Ord i doble krøllparenteser, som {'{{kurs_navn}}'}, byttes ut automatisk — la dem stå.
           </p>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving || dirtyCount === 0}
-          className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition whitespace-nowrap ${
-            saving || dirtyCount === 0
-              ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-              : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
-          }`}
-        >
-          {saving ? 'Lagrer …' : dirtyCount === 1 ? 'Lagre 1 endring' : dirtyCount > 1 ? `Lagre ${dirtyCount} endringer` : 'Lagre'}
-        </button>
+        <Button onClick={handleSave} loading={saving} loadingLabel="Lagrer …" disabled={dirtyCount === 0} className="whitespace-nowrap">
+          {dirtyCount === 1 ? 'Lagre 1 endring' : dirtyCount > 1 ? `Lagre ${dirtyCount} endringer` : 'Lagre'}
+        </Button>
       </div>
 
       <input
@@ -158,17 +151,12 @@ export default function AdminTeksterPage() {
       />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
           {error}
           <button onClick={() => setError(null)} className="ml-2 font-medium underline">Lukk</button>
         </div>
       )}
 
-      {saved && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-          Tekstene ble lagret.
-        </div>
-      )}
 
       <div className="space-y-8">
         {sections.map(({ section, title, keys }) => (

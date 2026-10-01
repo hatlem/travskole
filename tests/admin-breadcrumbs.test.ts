@@ -9,7 +9,7 @@ describe('buildBreadcrumbs', () => {
     expect(labels('/admin/crm/godkjenning')).toEqual(['Admin', 'CRM', 'E-post', 'Godkjenning']);
     expect(labels('/admin/crm/avsendere')).toEqual(['Admin', 'CRM', 'E-post', 'Avsendere']);
     expect(labels('/admin/crm/segmenter')).toEqual(['Admin', 'CRM', 'Kunder', 'Segmenter og lister']);
-    expect(labels('/admin/crm/pipeline')).toEqual(['Admin', 'CRM', 'Salg', 'Pipeline']);
+    expect(labels('/admin/crm/pipeline')).toEqual(['Admin', 'CRM', 'Salg', 'Salgstavle']);
     expect(labels('/admin/crm/hendelser')).toEqual(['Admin', 'CRM', 'Rapporter', 'Hendelser']);
   });
 

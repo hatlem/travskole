@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, use } from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { useToast } from '@/components/admin/Toast';
@@ -8,12 +8,16 @@ import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { paymentStatusBadge } from '@/lib/payments/badge';
+import { Button, buttonClass } from '@/components/admin/Button';
+import { formatPhone } from '@/lib/admin-format';
+import { UNFINISHED_PAYMENT_STATUSES } from '@/lib/dashboard-attention';
 import { RegistrationEditModal, type EditableRegistration } from './RegistrationEditModal';
 
 interface Registration {
   id: number;
   status: string;
   paymentStatus?: string;
+  paymentProvider?: string | null;
   consentActivities: boolean;
   consentMedia: boolean;
   consentRisk: boolean;
@@ -59,28 +63,84 @@ const DESCRIPTION =
   'Alle som har meldt seg på kurs. Bekreft, flytt fra venteliste, eller legg inn en påmelding selv.';
 
 const STATUS_COLORS: Record<string, string> = {
-  pending: 'bg-yellow-100 text-yellow-800',
+  pending: 'bg-amber-100 text-amber-900',
   confirmed: 'bg-green-100 text-green-800',
-  waitlist: 'bg-blue-100 text-blue-800',
-  cancelled: 'bg-red-100 text-red-800',
+  waitlist: 'bg-blue-100 text-blue-900',
+  cancelled: 'bg-gray-200 text-gray-700',
 };
+
+const STATUS_FILTERS = ['all', 'pending', 'confirmed', 'waitlist', 'cancelled'];
+
+type PaymentFilter = 'all' | 'paid' | 'ikke-fullfort' | 'none';
+const PAYMENT_FILTERS: PaymentFilter[] = ['all', 'paid', 'ikke-fullfort', 'none'];
+
+function matchesPaymentFilter(status: string | undefined, filter: PaymentFilter): boolean {
+  const s = status ?? 'none';
+  switch (filter) {
+    case 'paid':
+      return s === 'paid' || s === 'partially_refunded' || s === 'refunded';
+    case 'ikke-fullfort':
+      return (UNFINISHED_PAYMENT_STATUSES as readonly string[]).includes(s);
+    case 'none':
+      return s === 'none';
+    default:
+      return true;
+  }
+}
+
+function StatusSelect({
+  reg,
+  busy,
+  onChange,
+}: {
+  reg: { id: number; status: string };
+  busy: boolean;
+  onChange: (status: string) => void;
+}) {
+  return (
+    <select
+      value={reg.status}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={busy}
+      aria-label="Status"
+      className={`min-h-9 cursor-pointer rounded-full border-0 py-1 pl-3 pr-8 text-xs font-semibold focus:ring-2 focus:ring-bjerke-blue ${
+        STATUS_COLORS[reg.status] || 'bg-gray-100 text-gray-800'
+      } ${busy ? 'cursor-wait opacity-50' : ''}`}
+    >
+      <option value="pending">Venter</option>
+      <option value="confirmed">Bekreftet</option>
+      <option value="waitlist">Venteliste</option>
+      <option value="cancelled">Avlyst</option>
+    </select>
+  );
+}
 
 function PaymentBadge({ status }: { status?: string }) {
   const badge = paymentStatusBadge(status);
   if (!badge) return null;
   return (
-    <span className={`text-xs font-semibold rounded-full px-3 py-1 ${badge.className}`}>
+    <span className={`whitespace-nowrap text-xs font-semibold rounded-full px-3 py-1 ${badge.className}`}>
       {badge.label}
     </span>
   );
 }
 
-export default function AdminRegistrationsPage() {
+export default function AdminRegistrationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Lenker fra dashboardet: ?status=pending, ?betaling=ikke-fullfort
+  const initialParams = use(searchParams);
+  const initialStatus = typeof initialParams.status === 'string' && STATUS_FILTERS.includes(initialParams.status) ? initialParams.status : 'all';
+  const initialPayment = PAYMENT_FILTERS.find((f) => f === initialParams.betaling) ?? 'all';
   const [registrations, setRegistrations] = useState<Registration[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingId, setUpdatingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>(initialPayment);
+  const [courseError, setCourseError] = useState<string | null>(null);
   const [courseFilter, setCourseFilter] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
@@ -168,6 +228,11 @@ export default function AdminRegistrationsPage() {
 
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
+    if (!selectedCourseId) {
+      setCourseError('Velg hvilket kurs deltakeren skal meldes på.');
+      document.getElementById('add-course')?.focus();
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await fetch('/api/admin/registrations', {
@@ -219,7 +284,8 @@ export default function AdminRegistrationsPage() {
       setRegistrations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status } : r))
       );
-      toast('Statusen er endret', 'success');
+      const labels: Record<string, string> = { pending: 'Venter', confirmed: 'Bekreftet', waitlist: 'Venteliste', cancelled: 'Avlyst' };
+      toast(`Statusen er endret til «${labels[status] ?? status}»`, 'success');
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
@@ -237,7 +303,10 @@ export default function AdminRegistrationsPage() {
     setDeletingReg(true);
     try {
       const res = await fetch(`/api/admin/registrations/${deleteTargetId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Påmeldingen ble ikke slettet. Prøv igjen.');
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        throw new Error(body?.error ?? 'Påmeldingen ble ikke slettet. Prøv igjen.');
+      }
       setRegistrations((prev) => prev.filter((r) => r.id !== deleteTargetId));
       setSelectedIds((prev) => {
         const next = new Set(prev);
@@ -267,22 +336,27 @@ export default function AdminRegistrationsPage() {
     setShowBulkModal(false);
     setBulkUpdating(true);
     try {
-      const promises = Array.from(selectedIds).map((id) =>
-        fetch(`/api/admin/registrations/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        })
+      const ids = Array.from(selectedIds);
+      const results = await Promise.all(
+        ids.map((id) =>
+          fetch(`/api/admin/registrations/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status }),
+          })
+            .then((r) => (r.ok ? id : null))
+            .catch(() => null),
+        ),
       );
-      await Promise.all(promises);
-      setRegistrations((prev) =>
-        prev.map((r) => (selectedIds.has(r.id) ? { ...r, status } : r))
-      );
-      setSelectedIds(new Set());
-      toast(
-        selectedIds.size === 1 ? '1 påmelding er oppdatert' : `${selectedIds.size} påmeldinger er oppdatert`,
-        'success',
-      );
+      const ok = new Set(results.filter((id): id is number => id !== null));
+      setRegistrations((prev) => prev.map((r) => (ok.has(r.id) ? { ...r, status } : r)));
+      // De som feilet forblir valgt, så man kan prøve igjen.
+      setSelectedIds(new Set(ids.filter((id) => !ok.has(id))));
+      if (ok.size === ids.length) {
+        toast(ok.size === 1 ? '1 påmelding er oppdatert' : `${ok.size} påmeldinger er oppdatert`, 'success');
+      } else {
+        toast(`${ids.length - ok.size} av ${ids.length} ble ikke oppdatert. De er fortsatt valgt — prøv igjen.`, 'error');
+      }
     } catch (err) {
       toast(err instanceof Error ? err.message : 'Noen påmeldinger ble kanskje ikke oppdatert. Last siden på nytt og sjekk statusene.', 'error');
     } finally {
@@ -350,6 +424,7 @@ export default function AdminRegistrationsPage() {
   const filteredRegistrations = useMemo(() => {
     return registrations.filter((reg) => {
       if (statusFilter !== 'all' && reg.status !== statusFilter) return false;
+      if (!matchesPaymentFilter(reg.paymentStatus, paymentFilter)) return false;
       if (courseFilter !== 'all' && reg.course.id !== Number(courseFilter)) return false;
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
@@ -362,7 +437,7 @@ export default function AdminRegistrationsPage() {
       }
       return true;
     });
-  }, [registrations, statusFilter, courseFilter, searchQuery]);
+  }, [registrations, statusFilter, paymentFilter, courseFilter, searchQuery]);
 
   const paginatedRegistrations = filteredRegistrations.slice((page - 1) * perPage, page * perPage);
 
@@ -416,19 +491,23 @@ export default function AdminRegistrationsPage() {
         description={DESCRIPTION}
         actions={
           <>
-            <button
-              onClick={showAddForm ? () => setShowAddForm(false) : openAddForm}
-              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              {showAddForm ? 'Lukk skjema' : '+ Legg til deltaker'}
-            </button>
-            <button
-              onClick={() => window.open('/api/admin/registrations/export')}
-              title="Laster ned alle påmeldingene som en fil du kan åpne i Excel"
-              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Last ned til Excel
-            </button>
+            <Button variant={showAddForm ? 'secondary' : 'primary'} onClick={showAddForm ? () => setShowAddForm(false) : openAddForm}>
+              {showAddForm ? 'Lukk skjemaet' : '+ Legg til deltaker'}
+            </Button>
+            {registrations.length > 0 ? (
+              <a
+                href="/api/admin/registrations/export"
+                download
+                title="Alle påmeldingene med betaling, som en fil du kan åpne i Excel"
+                className={buttonClass('secondary')}
+              >
+                Last ned (Excel)
+              </a>
+            ) : (
+              <span aria-disabled="true" title="Ingen påmeldinger å laste ned ennå" className={buttonClass('secondary')}>
+                Last ned (Excel)
+              </span>
+            )}
           </>
         }
       />
@@ -443,9 +522,12 @@ export default function AdminRegistrationsPage() {
             <div className="space-y-6">
               {/* Course picker with search */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Kurs *</label>
+                <label htmlFor="add-course" className="block text-sm font-medium text-gray-700 mb-1">Kurs</label>
                 <div className="relative" ref={courseDropdownRef}>
                   <input
+                    id="add-course"
+                    aria-invalid={!!courseError}
+                    aria-describedby={courseError ? 'add-course-error' : undefined}
                     type="text"
                     placeholder="Søk etter kurs..."
                     value={courseDropdownOpen ? courseSearch : selectedCourseName}
@@ -485,6 +567,7 @@ export default function AdminRegistrationsPage() {
                             type="button"
                             onClick={() => {
                               setSelectedCourseId(String(c.id));
+                              setCourseError(null);
                               setCourseDropdownOpen(false);
                               setCourseSearch('');
                             }}
@@ -507,8 +590,9 @@ export default function AdminRegistrationsPage() {
                     </div>
                   )}
                 </div>
-                {/* Hidden required input for form validation */}
-                <input type="hidden" required value={selectedCourseId} />
+                {courseError && (
+                  <p id="add-course-error" className="mt-1 text-sm text-red-700">{courseError}</p>
+                )}
               </div>
 
               {/* Parent section */}
@@ -712,31 +796,14 @@ export default function AdminRegistrationsPage() {
             </div>
 
             <div className="flex gap-3 mt-6 pt-4 border-t border-gray-100">
-              <button
-                type="submit"
-                disabled={submitting || !selectedCourseId}
-                className={`px-6 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  submitting || !selectedCourseId
-                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                    : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
-                }`}
-              >
-                {submitting
-                  ? 'Legger til …'
-                  : !isAdultCourse && children.length > 1
+              <Button type="submit" loading={submitting} loadingLabel="Legger til …">
+                {!isAdultCourse && children.length > 1
                   ? `Legg til ${children.filter((c) => c.firstName.trim()).length} deltakere`
                   : 'Legg til deltaker'}
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowAddForm(false)}
-                className="px-6 py-2.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg text-sm font-medium transition-colors"
-              >
+              </Button>
+              <Button variant="secondary" onClick={() => setShowAddForm(false)}>
                 Avbryt
-              </button>
-              {!selectedCourseId && (
-                <span className="self-center text-xs text-gray-500">Velg et kurs for å legge til deltakere</span>
-              )}
+              </Button>
             </div>
           </form>
         </div>
@@ -752,12 +819,14 @@ export default function AdminRegistrationsPage() {
               setPage(1);
               setSearchQuery(e.target.value);
             }}
-            placeholder="Søk etter kurs, barn, forelder eller e-post..."
+            aria-label="Søk"
+            placeholder="Søk etter kurs, barn, forelder eller e-post …"
             className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent"
           />
         </div>
         <select
           value={courseFilter}
+          aria-label="Kurs"
           onChange={(e) => {
             setPage(1);
             setCourseFilter(e.target.value);
@@ -773,6 +842,7 @@ export default function AdminRegistrationsPage() {
         </select>
         <select
           value={statusFilter}
+          aria-label="Status"
           onChange={(e) => {
             setPage(1);
             setStatusFilter(e.target.value);
@@ -785,6 +855,20 @@ export default function AdminRegistrationsPage() {
           <option value="waitlist">Venteliste</option>
           <option value="cancelled">Avlyst</option>
         </select>
+        <select
+          value={paymentFilter}
+          aria-label="Betaling"
+          onChange={(e) => {
+            setPage(1);
+            setPaymentFilter(e.target.value as PaymentFilter);
+          }}
+          className="px-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:border-transparent bg-white"
+        >
+          <option value="all">Alle betalinger</option>
+          <option value="paid">Betalt på nett</option>
+          <option value="ikke-fullfort">Betaling ikke fullført</option>
+          <option value="none">Ingen nettbetaling</option>
+        </select>
       </div>
 
       {/* Result count */}
@@ -794,29 +878,18 @@ export default function AdminRegistrationsPage() {
 
       {/* Bulk action bar */}
       {visibleSelectedCount > 0 && (
-        <div className="bg-bjerke-blue text-white rounded-lg px-4 py-3 mb-4 flex items-center justify-between">
-          <span className="text-sm font-medium">{visibleSelectedCount} valgt</span>
-          <div className="flex gap-2">
-            <button
-              onClick={() => bulkUpdateStatus('confirmed')}
-              disabled={bulkUpdating}
-              className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
-            >
-              {bulkUpdating ? 'Oppdaterer …' : 'Bekreft valgte'}
-            </button>
-            <button
-              onClick={() => bulkUpdateStatus('cancelled')}
-              disabled={bulkUpdating}
-              className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
-            >
-              {bulkUpdating ? 'Oppdaterer …' : 'Avlys valgte'}
-            </button>
-            <button
-              onClick={() => setSelectedIds(new Set())}
-              className="text-white/80 hover:text-white px-3 py-1.5 text-sm transition-colors"
-            >
+        <div className="sticky top-16 z-10 mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-bjerke-blue/30 bg-blue-50 px-4 py-3">
+          <span className="text-sm font-medium text-gray-900">{visibleSelectedCount} valgt</span>
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" onClick={() => bulkUpdateStatus('confirmed')} loading={bulkUpdating && bulkTargetStatus === 'confirmed'} disabled={bulkUpdating}>
+              Bekreft valgte
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => bulkUpdateStatus('cancelled')} loading={bulkUpdating && bulkTargetStatus === 'cancelled'} disabled={bulkUpdating}>
+              Avlys valgte
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setSelectedIds(new Set())}>
               Fjern valg
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -828,16 +901,56 @@ export default function AdminRegistrationsPage() {
           <p className="text-gray-500 mt-1 mb-4">
             Når noen melder seg på via nettsiden, dukker de opp her. Du kan også legge inn en påmelding selv.
           </p>
-          <button
-            onClick={openAddForm}
-            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            + Legg til deltaker
-          </button>
+          <Button onClick={openAddForm}>+ Legg til deltaker</Button>
         </div>
       ) : (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
+          {/* Mobil: én påmelding per kort */}
+          <ul className="divide-y divide-gray-100 md:hidden">
+            {paginatedRegistrations.map((reg) => (
+              <li key={reg.id} className={`space-y-2 p-4 ${selectedIds.has(reg.id) ? 'bg-blue-50' : ''}`}>
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(reg.id)}
+                    onChange={() => toggleSelect(reg.id)}
+                    aria-label={`Velg ${reg.child?.name ?? reg.parent.name}`}
+                    className="mt-1 h-5 w-5 rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-gray-900">{reg.child?.name ?? `${reg.parent.name} (voksen)`}</p>
+                    <Link href={`/admin/courses/${reg.course.id}`} className="text-sm text-bjerke-blue hover:underline">
+                      {reg.course.name}
+                    </Link>
+                  </div>
+                  <StatusSelect reg={reg} busy={updatingId === reg.id} onChange={(status) => updateStatus(reg.id, status)} />
+                </div>
+                <div className="pl-8 text-sm text-gray-700">
+                  {reg.child && <p>Foresatt: {reg.parent.name}</p>}
+                  <p className="flex flex-wrap gap-x-3">
+                    <a href={`mailto:${reg.parent.user?.email}`} className="break-all text-bjerke-blue hover:underline">{reg.parent.user?.email}</a>
+                    {reg.parent.phone && (
+                      <a href={`tel:${reg.parent.phone}`} className="whitespace-nowrap text-bjerke-blue hover:underline">{formatPhone(reg.parent.phone)}</a>
+                    )}
+                  </p>
+                  {reg.child?.allergies && <p className="mt-1 text-amber-900">Allergier: {reg.child.allergies}</p>}
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2 pl-8">
+                  <PaymentBadge status={reg.paymentStatus} />
+                  <span className="text-sm text-gray-600">{new Date(reg.createdAt).toLocaleDateString('nb-NO')}</span>
+                  <span className="ml-auto flex gap-4">
+                    <button type="button" onClick={() => setEditTarget(reg)} className={buttonClass('link', 'sm')}>Rediger</button>
+                    <button type="button" onClick={() => requestDeleteRegistration(reg.id)} className={buttonClass('dangerText', 'sm')}>Slett</button>
+                  </span>
+                </div>
+              </li>
+            ))}
+            {paginatedRegistrations.length === 0 && (
+              <li className="px-4 py-12 text-center text-gray-600">Ingen påmeldinger passer med filteret.</li>
+            )}
+          </ul>
+
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-sm">
               <thead className="bg-gray-50 text-gray-500 uppercase text-xs">
                 <tr>
@@ -877,10 +990,10 @@ export default function AdminRegistrationsPage() {
                         className="h-4 w-4 rounded border-gray-300 text-bjerke-blue focus:ring-bjerke-blue cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3.5 text-gray-400 font-mono text-xs">#{reg.id}</td>
+                    <td className="px-4 py-3.5 text-gray-500 font-mono text-xs">#{reg.id}</td>
                     <td className="px-4 py-3.5 font-medium text-gray-900">
                       <Link
-                        href={`/admin/courses/${reg.course.id}/edit`}
+                        href={`/admin/courses/${reg.course.id}`}
                         className="hover:text-bjerke-blue hover:underline"
                       >
                         {reg.course.name}
@@ -888,41 +1001,23 @@ export default function AdminRegistrationsPage() {
                     </td>
                     <td className="px-4 py-3.5 text-gray-700">{reg.child?.name ?? `${reg.parent.name} (voksen)`}</td>
                     <td className="px-4 py-3.5 text-gray-700">{reg.parent.name}</td>
-                    <td className="px-4 py-3.5 text-gray-500 text-xs">{reg.parent.user?.email}</td>
-                    <td className="px-4 py-3.5 text-gray-500 text-xs">{reg.parent.phone}</td>
+                    <td className="px-4 py-3.5 text-gray-600">{reg.parent.user?.email}</td>
+                    <td className="whitespace-nowrap px-4 py-3.5 text-gray-600">{formatPhone(reg.parent.phone)}</td>
                     <td className="px-4 py-3.5">
-                      <select
-                        value={reg.status}
-                        onChange={(e) => updateStatus(reg.id, e.target.value)}
-                        disabled={updatingId === reg.id}
-                        className={`text-xs font-semibold rounded-full px-3 py-1 border-0 cursor-pointer focus:ring-2 focus:ring-bjerke-blue ${
-                          STATUS_COLORS[reg.status] || 'bg-gray-100 text-gray-800'
-                        } ${updatingId === reg.id ? 'opacity-50 cursor-wait' : ''}`}
-                      >
-                        <option value="pending">Venter</option>
-                        <option value="confirmed">Bekreftet</option>
-                        <option value="waitlist">Venteliste</option>
-                        <option value="cancelled">Avlyst</option>
-                      </select>
+                      <StatusSelect reg={reg} busy={updatingId === reg.id} onChange={(status) => updateStatus(reg.id, status)} />
                     </td>
                     <td className="px-4 py-3.5">
                       <PaymentBadge status={reg.paymentStatus} />
                     </td>
-                    <td className="px-4 py-3.5 text-gray-400 text-xs">
+                    <td className="whitespace-nowrap px-4 py-3.5 text-gray-600">
                       {new Date(reg.createdAt).toLocaleDateString('nb-NO')}
                     </td>
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => setEditTarget(reg)}
-                          className="text-bjerke-blue hover:underline text-xs font-medium transition-colors"
-                        >
+                        <button type="button" onClick={() => setEditTarget(reg)} className={buttonClass('link', 'sm')}>
                           Rediger
                         </button>
-                        <button
-                          onClick={() => requestDeleteRegistration(reg.id)}
-                          className="text-red-500 hover:text-red-700 text-xs font-medium transition-colors"
-                        >
+                        <button type="button" onClick={() => requestDeleteRegistration(reg.id)} className={buttonClass('dangerText', 'sm')}>
                           Slett
                         </button>
                       </div>
@@ -931,7 +1026,7 @@ export default function AdminRegistrationsPage() {
                 ))}
                 {paginatedRegistrations.length === 0 && (
                   <tr>
-                    <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
+                    <td colSpan={11} className="px-4 py-12 text-center text-gray-600">
                       Ingen påmeldinger matcher filteret.
                     </td>
                   </tr>
@@ -955,7 +1050,7 @@ export default function AdminRegistrationsPage() {
       <ConfirmModal
         open={showDeleteModal}
         title="Slette påmeldingen?"
-        message="Påmeldingen fjernes for godt og kan ikke hentes tilbake. Vil du bare melde av deltakeren, sett status til «Avlyst» i stedet – da får neste på ventelisten plassen."
+        message="Påmeldingen og kortet i salgstavla fjernes for godt. Vil du bare melde av deltakeren, sett status til «Avlyst» i stedet – da får neste på ventelisten plassen. Betalte påmeldinger kan ikke slettes."
         confirmLabel="Ja, slett"
         variant="danger"
         loading={deletingReg}

@@ -5,6 +5,8 @@ import { logActivity } from '@/lib/activity';
 import { serializePaymentMethods } from '@/lib/payments';
 import { SETTLED_PAYMENT_STATUSES } from '@/lib/payments/transitions';
 import { releaseSeats } from '@/lib/registrations/cancel';
+import { deleteDealsForRegistrations } from '@/lib/crm/source-deals';
+import { isCourseStatus } from '@/lib/course-status';
 import logger from '@/lib/logger';
 
 export async function GET(
@@ -57,6 +59,9 @@ export async function PUT(
     if (!name || !type || !status || (mode === 'standard' && !startDate)) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
     }
+    if (!isCourseStatus(status)) {
+      return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
+    }
 
     const { generateSlug } = await import('@/lib/slug');
     const courseSlug = slug?.trim() || generateSlug(name);
@@ -102,6 +107,48 @@ export async function PUT(
   }
 }
 
+/** Bare status — «Publiser» (åpne for påmelding) og «Steng påmelding» uten å sende hele skjemaet. */
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const session = await requireAdmin();
+  if (!session) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  const { id } = await params;
+  const courseId = Number(id);
+  const body = await request.json().catch(() => null);
+  if (!Number.isInteger(courseId) || !isCourseStatus(body?.status)) {
+    return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
+  }
+
+  try {
+    const existing = await prisma.course.findUnique({ where: { id: courseId }, select: { status: true } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Kurs ikke funnet' }, { status: 404 });
+    }
+    const course = await prisma.course.update({ where: { id: courseId }, data: { status: body.status } });
+    // Et åpnet kurs kan allerede være fullt (eller ha venteliste som skal rykke opp).
+    const settledStatus = await releaseSeats(course.id);
+    if (settledStatus) course.status = settledStatus;
+
+    logActivity({
+      action: 'status_change',
+      entity: 'course',
+      entityId: courseId,
+      details: JSON.stringify({ from: existing.status, to: course.status }),
+      userEmail: session.user.email,
+    }).catch(() => {});
+
+    return NextResponse.json({ course });
+  } catch (error) {
+    logger.error('Error updating course status', { error });
+    return NextResponse.json({ error: 'Kunne ikke endre status' }, { status: 500 });
+  }
+}
+
 export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -132,11 +179,22 @@ export async function DELETE(
       );
     }
 
-    await prisma.course.delete({ where: { id: courseId } });
+    // Påmeldingene slettes med kurset (cascade); kortene deres på salgstavla må fjernes eksplisitt.
+    const registrations = await prisma.registration.findMany({ where: { courseId }, select: { id: true } });
+    const [deals] = await prisma.$transaction([
+      deleteDealsForRegistrations(registrations.map((r) => r.id)),
+      prisma.course.delete({ where: { id: courseId } }),
+    ]);
 
-    logActivity({ action: 'delete', entity: 'course', entityId: courseId, userEmail: session.user.email }).catch(() => {});
+    logActivity({
+      action: 'delete',
+      entity: 'course',
+      entityId: courseId,
+      details: JSON.stringify({ registrations: registrations.length, dealsRemoved: deals.count }),
+      userEmail: session.user.email,
+    }).catch(() => {});
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, dealsRemoved: deals.count });
   } catch (error) {
     logger.error('Error deleting course', { error });
     return NextResponse.json({ error: 'Kunne ikke slette kurs' }, { status: 500 });
