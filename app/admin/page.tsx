@@ -8,6 +8,7 @@ import { getPendingAdminNotices, isRealTermsText } from '@/lib/admin-notices';
 import { buildOnboardingSteps } from '@/lib/admin-onboarding';
 import { buildAttentionItems, startOfNextOsloDay, UNFINISHED_PAYMENT_STATUSES } from '@/lib/dashboard-attention';
 import { formatCapacity } from '@/lib/admin-format';
+import { loadMyTasksDue } from '@/lib/admin-my-tasks';
 import { GettingStartedChecklist } from '@/components/admin/GettingStartedChecklist';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { ButtonLink, buttonClass } from '@/components/admin/Button';
@@ -30,7 +31,7 @@ export default async function AdminDashboard() {
 
   const now = new Date();
   const endOfToday = startOfNextOsloDay(now);
-  const myTasksWhere = Number.isInteger(myUserId) ? { assigneeId: myUserId, status: 'open', dueAt: { lt: endOfToday } } : null;
+  const startOfToday = new Date(endOfToday.getTime() - 24 * 60 * 60 * 1000);
 
   const [
     totalCourses,
@@ -82,14 +83,7 @@ export default async function AdminDashboard() {
     prisma.contact.count({ where: { source: 'import' } }),
     prisma.flow.count({ where: { status: { not: 'template' } } }),
     getSetting('consent_terms_text'),
-    myTasksWhere
-      ? prisma.task.findMany({
-          where: myTasksWhere,
-          orderBy: { dueAt: 'asc' },
-          take: 20,
-          select: { id: true, title: true, dueAt: true, contact: { select: { id: true, name: true } } },
-        })
-      : Promise.resolve([]),
+    loadMyTasksDue(Number.isInteger(myUserId) ? myUserId : null, { startOfToday, endOfToday }),
     prisma.registration.count({ where: { status: { in: ['pending', 'confirmed'] } } }),
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } }),
@@ -98,8 +92,6 @@ export default async function AdminDashboard() {
   const almostFullCourses = openCoursesWithCount.filter(
     (c) => c.maxParticipants && c._count.registrations / c.maxParticipants > 0.8,
   );
-  const startOfToday = new Date(endOfToday.getTime() - 24 * 60 * 60 * 1000);
-  const overdueTasks = myTasks.filter((t) => t.dueAt && t.dueAt < startOfToday);
 
   const attention = buildAttentionItems({
     newBookings,
@@ -107,8 +99,8 @@ export default async function AdminDashboard() {
     unfinishedPayments: unfinishedRegistrationPayments + unfinishedBookingPayments,
     waitlisted,
     almostFullCourses: almostFullCourses.length,
-    myTasksOverdue: overdueTasks.length,
-    myTasksToday: myTasks.length - overdueTasks.length,
+    myTasksOverdue: myTasks.overdue,
+    myTasksToday: myTasks.today,
   });
 
   // Vilkårsvarselet står allerede i «Krever oppmerksomhet» — ikke gjenta det i sjekklisten.
@@ -120,7 +112,8 @@ export default async function AdminDashboard() {
     termsWritten: isRealTermsText(termsText),
   }).filter((step) => !(step.id === 'terms' && notices.some((n) => n.id === 'consent-terms-placeholder')));
 
-  const hasAttention = attention.length > 0 || notices.length > 0 || myTasks.length > 0;
+  const myTaskTotal = myTasks.overdue + myTasks.today;
+  const hasAttention = attention.length > 0 || notices.length > 0 || myTaskTotal > 0;
 
   return (
     <div>
@@ -172,7 +165,7 @@ export default async function AdminDashboard() {
               ))}
             </ul>
 
-            {myTasks.length > 0 && (
+            {myTaskTotal > 0 && (
               <div className="rounded-xl border border-gray-200 bg-white">
                 <div className="flex items-center justify-between border-b border-gray-200 px-5 py-3">
                   <h3 className="font-semibold text-gray-900">Dine oppgaver i dag</h3>
@@ -181,7 +174,7 @@ export default async function AdminDashboard() {
                   </Link>
                 </div>
                 <ul className="divide-y divide-gray-100">
-                  {myTasks.slice(0, 6).map((task) => {
+                  {myTasks.tasks.map((task) => {
                     const overdue = task.dueAt != null && task.dueAt < startOfToday;
                     return (
                       <li key={task.id} className="px-5 py-3 text-sm">
@@ -205,8 +198,8 @@ export default async function AdminDashboard() {
                     );
                   })}
                 </ul>
-                {myTasks.length > 6 && (
-                  <p className="border-t border-gray-100 px-5 py-2 text-sm text-gray-600">+ {myTasks.length - 6} til</p>
+                {myTaskTotal > myTasks.tasks.length && (
+                  <p className="border-t border-gray-100 px-5 py-2 text-sm text-gray-600">+ {myTaskTotal - myTasks.tasks.length} til</p>
                 )}
               </div>
             )}
