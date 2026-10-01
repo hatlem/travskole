@@ -62,6 +62,14 @@ describe('planAdminPlacement', () => {
       .toEqual({ ok: true, statuses: ['confirmed'] });
   });
 
+  it('blocks unpublished drafts unless capacity is overridden', () => {
+    const result = planAdminPlacement({ ...base, courseStatus: 'draft' });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toMatch(/ikke publisert/);
+    expect(planAdminPlacement({ ...base, courseStatus: 'draft', overrideCapacity: true }))
+      .toEqual({ ok: true, statuses: ['confirmed'] });
+  });
+
   it('confirms everyone on override even when full', () => {
     expect(planAdminPlacement({ ...base, occupied: 10, requested: 2, overrideCapacity: true }))
       .toEqual({ ok: true, statuses: ['confirmed', 'confirmed'] });
@@ -93,6 +101,13 @@ describe('planSeatRelease', () => {
     expect(planSeatRelease({ courseStatus: 'closed', maxParticipants: 5, occupied: 0, waitlisted: 4 }))
       .toEqual({ promote: 0, nextStatus: null });
     expect(planSeatRelease({ courseStatus: 'full', maxParticipants: null, occupied: 0, waitlisted: 4 }))
+      .toEqual({ promote: 0, nextStatus: null });
+  });
+
+  it('never flips a draft to open, even with free seats and a waitlist', () => {
+    expect(planSeatRelease({ courseStatus: 'draft', maxParticipants: 5, occupied: 0, waitlisted: 0 }))
+      .toEqual({ promote: 0, nextStatus: null });
+    expect(planSeatRelease({ courseStatus: 'draft', maxParticipants: 5, occupied: 5, waitlisted: 2 }))
       .toEqual({ promote: 0, nextStatus: null });
   });
 });

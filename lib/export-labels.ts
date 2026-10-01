@@ -8,11 +8,7 @@ export const REGISTRATION_STATUS_LABELS: Record<string, string> = {
   cancelled: 'Avlyst',
 };
 
-export const COURSE_STATUS_LABELS: Record<string, string> = {
-  open: 'Åpen',
-  full: 'Fullt',
-  closed: 'Stengt',
-};
+export { COURSE_STATUS_LABELS } from '@/lib/course-status';
 
 export const ROLE_LABELS: Record<string, string> = {
   parent: 'Forelder',

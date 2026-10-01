@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { isPublicCourse } from '@/lib/course-status';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import DOMPurify from 'isomorphic-dompurify';
@@ -168,7 +169,8 @@ export async function POST(request: NextRequest) {
       course = allCourses.find((c) => generateSlug(c.name) === data.courseSlug) ?? null;
     }
 
-    if (!course) {
+    // Utkast er ikke publisert — de finnes ikke for publikum.
+    if (!course || !isPublicCourse(course)) {
       return NextResponse.json(
         { error: 'Kurset finnes ikke' },
         { status: 404 }

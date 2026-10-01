@@ -41,8 +41,8 @@ export async function POST(request: NextRequest) {
     if (!name || !type || (mode === 'standard' && !startDate)) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
     }
-    // Nye kurs er stengt (utkast) til admin trykker «Publiser».
-    const initialStatus = status ?? 'closed';
+    // Nye kurs er utkast (skjult fra nettsiden) til admin trykker «Publiser».
+    const initialStatus = status ?? 'draft';
     if (!isCourseStatus(initialStatus)) {
       return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
     }

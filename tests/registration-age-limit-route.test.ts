@@ -114,3 +114,12 @@ describe('POST /api/registrations — aldersgrense', () => {
     });
   });
 });
+
+describe('POST /api/registrations — utkast', () => {
+  it('treats an unpublished draft as a missing course', async () => {
+    prisma.course.findFirst.mockResolvedValue({ ...COURSE, status: 'draft' });
+    const res = await post(body({ childSelection: 'new', childName: 'Ola Nordmann', childBirthdate: '2018-01-10' }));
+    expect(res.status).toBe(404);
+    expect(prisma.registration.create).not.toHaveBeenCalled();
+  });
+});

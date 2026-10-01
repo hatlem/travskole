@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { courseSitemapEntries } from '@/lib/sitemap';
+import { SITEMAP_COURSE_STATUSES, courseSitemapEntries } from '@/lib/sitemap';
 import { parseCoursePath } from '@/lib/course-lookup';
 
 const base = 'https://registrering.bjerke.no';
@@ -13,6 +13,13 @@ const course = {
   createdAt: new Date('2025-01-01T00:00:00Z'),
   updatedAt: new Date('2026-09-01T00:00:00Z'),
 };
+
+describe('SITEMAP_COURSE_STATUSES', () => {
+  it('holder utkast og stengte kurs utenfor sitemapen', () => {
+    expect(SITEMAP_COURSE_STATUSES).not.toContain('draft');
+    expect(SITEMAP_COURSE_STATUSES).not.toContain('closed');
+  });
+});
 
 describe('courseSitemapEntries', () => {
   it('bruker startåret for daterte kurs', () => {

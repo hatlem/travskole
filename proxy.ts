@@ -1,17 +1,23 @@
 import { withAuth } from 'next-auth/middleware';
 import { NextResponse } from 'next/server';
 import { findCourseBySlug, parseCoursePath } from '@/lib/course-lookup';
+import { courseAccess, PREVIEW_PARAM } from '@/lib/course-status';
+import { isAdmin } from '@/lib/settings-shared';
 
 /**
- * Ukjente kurs-URL-er får ekte 404. Siden selv kan ikke sette statusen:
+ * Ukjente kurs-URL-er og utkast får ekte 404. Siden selv kan ikke sette statusen:
  * loading.tsx gjør at svaret strømmes (200) før notFound() kalles. DB-feil
- * slipper forespørselen videre til siden.
+ * slipper forespørselen videre til siden (som selv skjuler utkast).
+ * Admin kan forhåndsvise et utkasts kursside (ikke påmeldingen) med ?forhandsvis=1.
  */
-async function isMissingCourse(pathname: string): Promise<boolean> {
+async function isMissingCourse(pathname: string, viewerIsAdmin: boolean, wantsPreview: boolean): Promise<boolean> {
   const parsed = parseCoursePath(pathname);
   if (!parsed) return false;
   try {
-    return (await findCourseBySlug(parsed.type, parsed.slug)) === null;
+    const course = await findCourseBySlug(parsed.type, parsed.slug);
+    if (!course) return true;
+    const previewable = wantsPreview && !pathname.replace(/\/$/, '').endsWith('/pamelding');
+    return courseAccess(course, { isAdmin: viewerIsAdmin, wantsPreview: previewable }) === 'hidden';
   } catch {
     return false;
   }
@@ -33,7 +39,9 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
-    if (pathname.startsWith('/arrangementer/') && (await isMissingCourse(pathname))) {
+    const viewerIsAdmin = !!token && !token.deactivated && isAdmin(token.role);
+    const wantsPreview = req.nextUrl.searchParams.get(PREVIEW_PARAM) === '1';
+    if (pathname.startsWith('/arrangementer/') && (await isMissingCourse(pathname, viewerIsAdmin, wantsPreview))) {
       // Omskriving til en sti uten rute gir Next sin not-found-side med status 404.
       return NextResponse.rewrite(new URL('/arrangementer-ikke-funnet', req.url));
     }

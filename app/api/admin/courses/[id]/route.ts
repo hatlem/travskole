@@ -6,8 +6,18 @@ import { serializePaymentMethods } from '@/lib/payments';
 import { SETTLED_PAYMENT_STATUSES } from '@/lib/payments/transitions';
 import { releaseSeats } from '@/lib/registrations/cancel';
 import { deleteDealsForRegistrations } from '@/lib/crm/source-deals';
-import { isCourseStatus } from '@/lib/course-status';
+import { draftTransitionError, isCourseStatus } from '@/lib/course-status';
 import logger from '@/lib/logger';
+
+/** Hindrer at et kurs kunder allerede har meldt seg på (eller spurt om), blir et skjult utkast. */
+async function draftGuard(courseId: number, from: string, to: string): Promise<string | null> {
+  if (to !== 'draft' || from === 'draft') return null;
+  const [registrations, requests] = await Promise.all([
+    prisma.registration.count({ where: { courseId } }),
+    prisma.bookingRequest.count({ where: { courseId } }),
+  ]);
+  return draftTransitionError(from, to, registrations + requests);
+}
 
 export async function GET(
   _request: NextRequest,
@@ -63,6 +73,15 @@ export async function PUT(
       return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
     }
 
+    const existing = await prisma.course.findUnique({ where: { id: Number(id) }, select: { status: true } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Kurs ikke funnet' }, { status: 404 });
+    }
+    const draftError = await draftGuard(Number(id), existing.status, status);
+    if (draftError) {
+      return NextResponse.json({ error: draftError }, { status: 409 });
+    }
+
     const { generateSlug } = await import('@/lib/slug');
     const courseSlug = slug?.trim() || generateSlug(name);
 
@@ -107,7 +126,7 @@ export async function PUT(
   }
 }
 
-/** Bare status — «Publiser» (åpne for påmelding) og «Steng påmelding» uten å sende hele skjemaet. */
+/** Bare status — «Publiser» (utkast → åpen), «Åpne påmelding» og «Steng påmelding» uten å sende hele skjemaet. */
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -128,6 +147,10 @@ export async function PATCH(
     const existing = await prisma.course.findUnique({ where: { id: courseId }, select: { status: true } });
     if (!existing) {
       return NextResponse.json({ error: 'Kurs ikke funnet' }, { status: 404 });
+    }
+    const draftError = await draftGuard(courseId, existing.status, body.status);
+    if (draftError) {
+      return NextResponse.json({ error: draftError }, { status: 409 });
     }
     const course = await prisma.course.update({ where: { id: courseId }, data: { status: body.status } });
     // Et åpnet kurs kan allerede være fullt (eller ha venteliste som skal rykke opp).

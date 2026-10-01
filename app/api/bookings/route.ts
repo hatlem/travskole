@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isPublicCourse } from '@/lib/course-status';
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { checkRateLimit, registrationLimiter } from '@/lib/rate-limiter';
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
   const data = parsed.data;
 
   const course = await prisma.course.findUnique({ where: { id: data.courseId } });
-  if (!course || course.registrationMode !== 'request' || course.status === 'closed') {
+  if (!course || !isPublicCourse(course) || course.registrationMode !== 'request' || course.status === 'closed') {
     return NextResponse.json({ error: 'Forespørsel er ikke tilgjengelig for dette arrangementet' }, { status: 400 });
   }
 

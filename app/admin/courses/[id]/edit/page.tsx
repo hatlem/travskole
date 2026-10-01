@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, use, useCallback } from 'react';
+import { COURSE_DISPLAY_STATUS, isCourseStatus } from '@/lib/course-status';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -441,6 +442,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   onChange={(e) => setStatus(e.target.value)}
                   className={inputClass}
                 >
+                  <option value="draft">Utkast – vises ikke på nettsiden</option>
                   <option value="open">Åpen for påmelding</option>
                   <option value="full">Fullt (nye havner på venteliste)</option>
                   <option value="closed">Stengt for påmelding</option>
@@ -642,14 +644,10 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   <span className="text-xs font-medium uppercase tracking-wide text-bjerke-blue">
                     {courseTypeLabel(courseTypes, type)}
                   </span>
-                  {status === 'open' && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Åpen</span>
-                  )}
-                  {status === 'full' && (
-                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Fullt</span>
-                  )}
-                  {status === 'closed' && (
-                    <span className="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">Stengt</span>
+                  {isCourseStatus(status) && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${COURSE_DISPLAY_STATUS[status].className}`}>
+                      {COURSE_DISPLAY_STATUS[status].label}
+                    </span>
                   )}
                 </div>
                 <h3 className="font-semibold text-gray-900">{name}</h3>

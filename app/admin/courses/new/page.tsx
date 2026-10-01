@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import { COURSE_DISPLAY_STATUS, isCourseStatus } from '@/lib/course-status';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { validateCourseForm } from '@/lib/course-form';
@@ -43,8 +44,8 @@ export default function NewCoursePage() {
   const [description, setDescription] = useState('');
   const [type, setType] = useState(courseTypes[0]?.value ?? 'kurs');
   const [audience, setAudience] = useState('barn');
-  // Nye kurs lagres som utkast (stengt) til admin publiserer dem.
-  const [status, setStatus] = useState('closed');
+  // Nye kurs lagres som utkast (skjult fra nettsiden) til admin publiserer dem.
+  const [status, setStatus] = useState('draft');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [ageMin, setAgeMin] = useState('');
@@ -119,7 +120,7 @@ export default function NewCoursePage() {
       }
 
       toast(
-        status === 'closed'
+        status === 'draft'
           ? 'Kurset er lagret som utkast. Trykk «Publiser» når det er klart for påmelding.'
           : 'Kurset er opprettet og åpent for påmelding.',
         'success',
@@ -313,10 +314,10 @@ export default function NewCoursePage() {
                   onChange={(e) => setStatus(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="closed">Utkast – ikke åpen for påmelding ennå</option>
+                  <option value="draft">Utkast – ikke publisert ennå</option>
                   <option value="open">Åpen for påmelding med en gang</option>
                 </select>
-                <p className="mt-1 text-xs text-gray-600">Utkast vises på nettsiden som «Stengt» til du publiserer.</p>
+                <p className="mt-1 text-xs text-gray-600">Utkast vises ikke på nettsiden før du publiserer.</p>
               </div>
 
               {/* Dates */}
@@ -479,7 +480,7 @@ export default function NewCoursePage() {
             {/* Actions */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <Button type="submit" loading={loading} loadingLabel="Lagrer …" className="w-full">
-                {status === 'closed' ? 'Lagre som utkast' : 'Opprett og publiser'}
+                {status === 'draft' ? 'Lagre som utkast' : 'Opprett og publiser'}
               </Button>
               {invalidFields.some((f) => touched[f]) && (
                 <ul role="alert" className="mt-3 text-sm text-red-600 list-disc pl-5 space-y-0.5">
@@ -517,14 +518,10 @@ export default function NewCoursePage() {
                   <span className="text-xs font-medium uppercase tracking-wide text-bjerke-blue">
                     {courseTypeLabel(courseTypes, type)}
                   </span>
-                  {status === 'open' && (
-                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">Åpen</span>
-                  )}
-                  {status === 'full' && (
-                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Fullt</span>
-                  )}
-                  {status === 'closed' && (
-                    <span className="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">Stengt</span>
+                  {isCourseStatus(status) && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${COURSE_DISPLAY_STATUS[status].className}`}>
+                      {COURSE_DISPLAY_STATUS[status].label}
+                    </span>
                   )}
                 </div>
                 <h3 className="font-semibold text-gray-900">{name}</h3>

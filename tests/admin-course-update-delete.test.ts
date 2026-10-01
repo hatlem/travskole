@@ -5,6 +5,7 @@ const { prisma, mail } = vi.hoisted(() => ({
   prisma: {
     course: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(async () => ({ id: 9 })) },
     registration: { count: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
+    bookingRequest: { count: vi.fn(async () => 0) },
     deal: { deleteMany: vi.fn(async () => ({ count: 0 })) },
     $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
   },
@@ -85,6 +86,22 @@ describe('PUT /api/admin/courses/[id] — capacity status', () => {
     expect(statusUpdates()).toEqual([]);
     expect((await res.json()).course.status).toBe('closed');
   });
+
+  it('keeps a draft a draft whatever the capacity', async () => {
+    stored('draft', 2);
+    counts(0, 3);
+    const res = await PUT(putReq({ ...BODY, status: 'draft', maxParticipants: 2 }), params);
+    expect(statusUpdates()).toEqual([]);
+    expect((await res.json()).course.status).toBe('draft');
+  });
+
+  it('refuses to turn a course with registrations back into a draft', async () => {
+    stored('open', 5);
+    counts(2, 0);
+    const res = await PUT(putReq({ ...BODY, status: 'draft' }), params);
+    expect(res.status).toBe(409);
+    expect(prisma.course.update).not.toHaveBeenCalled();
+  });
 });
 
 describe('DELETE /api/admin/courses/[id]', () => {
@@ -139,7 +156,7 @@ describe('PATCH /api/admin/courses/[id] — publish', () => {
 
   it('opens a draft course and settles capacity', async () => {
     prisma.course.findUnique
-      .mockResolvedValueOnce({ id: 9, name: 'Ponnikurs', status: 'closed', maxParticipants: 5 })
+      .mockResolvedValueOnce({ id: 9, name: 'Ponnikurs', status: 'draft', maxParticipants: 5 })
       .mockResolvedValue({ id: 9, name: 'Ponnikurs', status: 'open', maxParticipants: 5 });
     prisma.course.update.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 9, ...data }));
     counts(0, 0);
@@ -149,8 +166,17 @@ describe('PATCH /api/admin/courses/[id] — publish', () => {
     expect((await res.json()).course.status).toBe('open');
   });
 
-  it('rejects unknown statuses', async () => {
+  it('refuses to unpublish a course that has booking requests', async () => {
+    stored('open', null);
+    counts(0, 0);
+    prisma.bookingRequest.count.mockResolvedValueOnce(1);
     const res = await PATCH(patchReq({ status: 'draft' }), params);
+    expect(res.status).toBe(409);
+    expect(prisma.course.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects unknown statuses', async () => {
+    const res = await PATCH(patchReq({ status: 'archived' }), params);
     expect(res.status).toBe(400);
     expect(prisma.course.update).not.toHaveBeenCalled();
   });

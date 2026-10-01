@@ -2,6 +2,9 @@ import type { MetadataRoute } from 'next';
 import { generateSlug } from '@/lib/slug';
 import { isUpcomingOrOngoing } from '@/lib/course-card';
 
+/** Bare kurs man kan melde seg på. Utkast (og stengte kurs) holdes utenfor. */
+export const SITEMAP_COURSE_STATUSES = ['open', 'full'];
+
 export interface SitemapCourse {
   name: string;
   slug: string | null;

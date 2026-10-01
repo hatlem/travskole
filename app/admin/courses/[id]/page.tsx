@@ -62,7 +62,7 @@ export default async function CourseDetailPage({
     cancelled: regs.filter((r) => r.status === 'cancelled').length,
   };
   const occupied = regs.filter((r) => occupiesPlace(r.status)).length;
-  const displayStatus = courseDisplayStatus({ ...course, occupiedCount: occupied });
+  const displayStatus = courseDisplayStatus(course);
   const publicPath = coursePublicPath(course);
   const isAdult = course.audience === 'voksen';
   const fillPct = course.maxParticipants ? Math.min((occupied / course.maxParticipants) * 100, 100) : null;

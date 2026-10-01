@@ -57,6 +57,7 @@ export function isWaitlist(courseStatus: string, wantsWaitlist: boolean): boolea
  */
 export type RegistrationFormMode = 'register' | 'waitlist' | 'closed';
 
+/** Utkast, stengte og ukjente statuser gir «closed» (utkast gir uansett 404 før dette). */
 export function registrationFormMode(courseStatus: string): RegistrationFormMode {
   if (courseStatus === 'full') return 'waitlist';
   if (courseStatus === 'open') return 'register';
@@ -97,6 +98,9 @@ export function planAdminPlacement(input: AdminPlacementInput): AdminPlacement {
   const { courseStatus, maxParticipants, occupied, requested, waitlist, overrideCapacity } = input;
   if (overrideCapacity) return { ok: true, statuses: Array(requested).fill('confirmed') };
 
+  if (courseStatus === 'draft') {
+    return { ok: false, error: 'Kurset er ikke publisert ennå. Velg «Overstyr kapasitet og aldersgrense» for å legge til likevel.' };
+  }
   if (courseStatus === 'closed') {
     return { ok: false, error: 'Kurset er stengt for påmelding. Velg «Overstyr kapasitet og aldersgrense» for å legge til likevel.' };
   }
@@ -141,12 +145,12 @@ export interface SeatReleasePlan {
 
 /**
  * Etter at en plass er frigjort: fyll ledige plasser fra ventelisten og sett
- * kursstatus ut fra faktisk belegg etterpå. Stengte kurs og kurs uten
- * maks-antall (manuelt satt «fullt») røres ikke.
+ * kursstatus ut fra faktisk belegg etterpå. Bare åpne/fulle kurs justeres:
+ * utkast og stengte kurs, og kurs uten maks-antall (manuelt satt «fullt»), røres ikke.
  */
 export function planSeatRelease(input: SeatReleaseInput): SeatReleasePlan {
   const { courseStatus, maxParticipants, occupied, waitlisted } = input;
-  if (courseStatus === 'closed' || !maxParticipants) return { promote: 0, nextStatus: null };
+  if ((courseStatus !== 'open' && courseStatus !== 'full') || !maxParticipants) return { promote: 0, nextStatus: null };
 
   const promote = Math.min(Math.max(0, maxParticipants - occupied), waitlisted);
   const full = isAtCapacity(maxParticipants, occupied + promote);

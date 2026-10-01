@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useRef, useCallback, use } from 'react';
+import { courseStatusLabel } from '@/lib/course-status';
 import Link from 'next/link';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { useToast } from '@/components/admin/Toast';
@@ -580,7 +581,7 @@ export default function AdminRegistrationsPage({
                               {c.startDate ? new Date(c.startDate).toLocaleDateString('nb-NO') : ''}
                               {c.status !== 'open' && (
                                 <span className={`ml-2 ${c.status === 'full' ? 'text-red-500' : 'text-gray-500'}`}>
-                                  ({c.status === 'full' ? 'Fullt' : c.status === 'closed' ? 'Stengt' : c.status})
+                                  ({courseStatusLabel(c.status)})
                                 </span>
                               )}
                             </span>

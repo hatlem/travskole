@@ -4,6 +4,7 @@ import CourseFilter from '@/components/CourseFilter';
 import { prisma } from '@/lib/prisma';
 import { toCourseCardProps, compareForListing, isUpcomingOrOngoing } from '@/lib/course-card';
 import { getSettings } from '@/lib/settings';
+import { PUBLIC_COURSE_WHERE } from '@/lib/course-status';
 import type { Metadata } from 'next';
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -18,7 +19,7 @@ export const dynamic = 'force-dynamic';
 
 async function getAllCourses(): Promise<Course[]> {
   try {
-    const dbCourses = await prisma.course.findMany();
+    const dbCourses = await prisma.course.findMany({ where: PUBLIC_COURSE_WHERE });
     return dbCourses
       .filter((c) => isUpcomingOrOngoing(c))
       .sort(compareForListing)

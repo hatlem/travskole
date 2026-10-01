@@ -153,6 +153,7 @@ describe('registrationFormMode', () => {
     expect(registrationFormMode('open')).toBe('register');
     expect(registrationFormMode('full')).toBe('waitlist');
     expect(registrationFormMode('closed')).toBe('closed');
+    expect(registrationFormMode('draft')).toBe('closed');
     expect(registrationFormMode('ukjent')).toBe('closed');
   });
 });

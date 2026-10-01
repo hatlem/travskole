@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { registrationFormMode } from '@/lib/registration-rules';
 import { findCourseBySlug } from '@/lib/course-lookup';
+import { isPublicCourse } from '@/lib/course-status';
 import { parsePaymentMethods } from '@/lib/payments';
 import { getSettings } from '@/lib/settings';
 import { audienceLabel, formatDateRange, priceLabel } from '@/lib/buyer-display';
@@ -17,7 +18,7 @@ type Params = Promise<{ type: string; year: string; slug: string }>;
 export async function generateMetadata({ params }: { params: Params }): Promise<Metadata> {
   const { type, slug } = await params;
   const course = await findCourseBySlug(type, slug);
-  if (!course) return { title: 'Ikke funnet' };
+  if (!course || !isPublicCourse(course)) return { title: 'Ikke funnet' };
   const prefix = course.registrationMode === 'request' ? 'Forespørsel' : 'Påmelding';
   return { title: `${prefix} – ${course.name}`, robots: { index: false } };
 }
@@ -26,7 +27,8 @@ export default async function PameldingPage({ params }: { params: Params }) {
   const { type, year, slug } = await params;
   const [course, settings] = await Promise.all([findCourseBySlug(type, slug), getSettings()]);
 
-  if (!course) {
+  // Utkast tar aldri imot påmeldinger — heller ikke i admin sin forhåndsvisning.
+  if (!course || !isPublicCourse(course)) {
     notFound();
   }
 

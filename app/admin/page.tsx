@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { CourseStatusBadge } from '@/components/admin/StatusBadge';
 import Link from 'next/link';
 import { getServerSession } from '@/lib/auth';
 import { getSetting, isSuperAdmin } from '@/lib/settings';
@@ -260,7 +261,10 @@ export default async function AdminDashboard() {
                 <li key={course.id}>
                   <Link href={`/admin/courses/${course.id}`} className="block px-6 py-4 hover:bg-gray-50">
                     <div className="mb-2 flex items-center justify-between gap-3">
-                      <span className="font-medium text-gray-900">{course.name}</span>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate font-medium text-gray-900">{course.name}</span>
+                        {course.status === 'draft' && <CourseStatusBadge status="draft" />}
+                      </span>
                       <span className="shrink-0 text-sm text-gray-600">
                         {course.startDate
                           ? course.startDate.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })

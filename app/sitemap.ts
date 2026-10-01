@@ -1,7 +1,7 @@
 import type { MetadataRoute } from 'next';
 import { getBaseUrl } from '@/lib/site';
 import { prisma } from '@/lib/prisma';
-import { courseSitemapEntries } from '@/lib/sitemap';
+import { SITEMAP_COURSE_STATUSES, courseSitemapEntries } from '@/lib/sitemap';
 
 // Bygges uten DB-tilgang (brannmur) — må genereres ved forespørsel for å få med kursene.
 export const dynamic = 'force-dynamic';
@@ -19,7 +19,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   try {
     const courses = await prisma.course.findMany({
-      where: { status: { in: ['open', 'full'] } },
+      where: { status: { in: SITEMAP_COURSE_STATUSES } },
       select: {
         name: true,
         slug: true,

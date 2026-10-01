@@ -1,17 +1,60 @@
 /**
- * Kursstatus slik admin ser den: lagret status (open/full/closed) pluss det
- * ansatte faktisk lurer på — er kurset over, og er det et utkast som aldri er åpnet?
- *
- * «Utkast» = stengt, ikke over, og ingen har plass. Stengte kurs vises fortsatt på
- * nettsiden (som «Stengt»), så teksten lover aldri at kurset er skjult.
+ * Kursstatus: lagret status (draft/open/full/closed) og det ansatte faktisk lurer
+ * på — er kurset over? Utkast er aldri offentlige: de listes ikke, er ikke i
+ * sitemapen og gir 404 for alle andre enn admin (forhåndsvisning).
  */
 import { getCourseUrl } from '@/lib/slug';
 
-export const COURSE_STATUSES = ['open', 'full', 'closed'] as const;
+export const COURSE_STATUSES = ['draft', 'open', 'full', 'closed'] as const;
 export type CourseStatus = (typeof COURSE_STATUSES)[number];
 
 export function isCourseStatus(value: unknown): value is CourseStatus {
   return typeof value === 'string' && (COURSE_STATUSES as readonly string[]).includes(value);
+}
+
+export const COURSE_STATUS_LABELS: Record<CourseStatus, string> = {
+  draft: 'Utkast',
+  open: 'Åpen',
+  full: 'Fullt',
+  closed: 'Stengt',
+};
+
+export function courseStatusLabel(status: string): string {
+  return isCourseStatus(status) ? COURSE_STATUS_LABELS[status] : status;
+}
+
+/** Utkast er den eneste ikke-offentlige statusen. */
+export function isPublicCourse(c: { status: string }): boolean {
+  return c.status !== 'draft';
+}
+
+/** Prisma-filter for kurs som kan vises offentlig. */
+export const PUBLIC_COURSE_WHERE = { status: { not: 'draft' } } as const;
+
+/** Query-parameteren admin bruker for å forhåndsvise et utkast på nettsiden. */
+export const PREVIEW_PARAM = 'forhandsvis';
+
+export type CourseAccess = 'public' | 'preview' | 'hidden';
+
+/**
+ * Hvem får se kurssiden: publiserte kurs alle, utkast bare admin som ber om
+ * forhåndsvisning (?forhandsvis=1). Alle andre får 404.
+ */
+export function courseAccess(
+  course: { status: string },
+  viewer: { isAdmin: boolean; wantsPreview: boolean },
+): CourseAccess {
+  if (isPublicCourse(course)) return 'public';
+  return viewer.isAdmin && viewer.wantsPreview ? 'preview' : 'hidden';
+}
+
+/**
+ * Et kurs med påmeldinger kan ikke gjøres om til utkast: kundene har lenker til
+ * kurssiden, som da ville gitt 404. Returnerer en feilmelding, eller null.
+ */
+export function draftTransitionError(from: string, to: string, registrationCount: number): string | null {
+  if (to !== 'draft' || from === 'draft' || registrationCount === 0) return null;
+  return 'Kurset har påmeldinger og kan ikke gjøres om til utkast. Steng påmeldingen i stedet.';
 }
 
 export type CourseDisplayStatus = 'open' | 'full' | 'closed' | 'draft' | 'ended';
@@ -23,8 +66,6 @@ export interface CourseStatusInput {
   status: string;
   startDate: DateLike;
   endDate: DateLike;
-  /** Påmeldinger som opptar plass (bekreftet/venter). */
-  occupiedCount: number;
 }
 
 /** Siste kursdag er passert (sluttdato, ellers startdato). Udaterte kurs blir aldri «avsluttet». */
@@ -38,7 +79,8 @@ export function courseHasEnded(c: { startDate: DateLike; endDate: DateLike }, no
 
 export function courseDisplayStatus(c: CourseStatusInput, now: Date = new Date()): CourseDisplayStatus {
   if (courseHasEnded(c, now)) return 'ended';
-  if (c.status === 'closed') return c.occupiedCount === 0 ? 'draft' : 'closed';
+  if (c.status === 'draft') return 'draft';
+  if (c.status === 'closed') return 'closed';
   if (c.status === 'full') return 'full';
   return 'open';
 }
@@ -50,7 +92,7 @@ export const COURSE_DISPLAY_STATUS: Record<CourseDisplayStatus, { label: string;
   draft: {
     label: 'Utkast',
     className: 'bg-white text-gray-700 ring-1 ring-inset ring-gray-300',
-    hint: 'Ikke åpnet for påmelding ennå. Vises på nettsiden som «Stengt» til du publiserer.',
+    hint: 'Ikke publisert. Kurset vises ikke på nettsiden før du publiserer det.',
   },
   ended: { label: 'Avsluttet', className: 'bg-gray-100 text-gray-600', hint: 'Kursdatoen er passert.' },
 };

@@ -160,7 +160,7 @@ export default function AdminCoursesPage() {
 
   const rows = useMemo<CourseRow[]>(() => {
     const now = new Date();
-    return courses.map((c) => ({ ...c, display: courseDisplayStatus({ ...c, occupiedCount: c._count.registrations }, now) }));
+    return courses.map((c) => ({ ...c, display: courseDisplayStatus(c, now) }));
   }, [courses]);
 
   const filterCounts = useMemo(
@@ -219,14 +219,14 @@ export default function AdminCoursesPage() {
           price: course.price,
           minParticipants: course.minParticipants,
           maxParticipants: course.maxParticipants,
-          status: 'closed',
+          status: 'draft',
           imageUrl: course.imageUrl,
         }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok) throw new Error(data?.error ?? 'Kunne ikke lage en kopi av kurset. Prøv igjen.');
       await fetchCourses();
-      toast('Kopien er laget som utkast. Den er stengt for påmelding til du publiserer den.', 'success', {
+      toast('Kopien er laget som utkast. Den vises ikke på nettsiden før du publiserer den.', 'success', {
         action: data?.course?.id ? { label: 'Åpne kopien', href: `/admin/courses/${data.course.id}/edit` } : undefined,
       });
     } catch (err) {

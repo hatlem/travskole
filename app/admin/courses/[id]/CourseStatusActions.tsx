@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button, buttonClass } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useToast } from '@/components/admin/Toast';
+import { PREVIEW_PARAM } from '@/lib/course-status';
 
 const ExternalIcon = () => (
   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" aria-hidden="true">
@@ -12,7 +13,10 @@ const ExternalIcon = () => (
   </svg>
 );
 
-/** «Publiser» for stengte kurs, «Steng påmelding» for åpne, og alltid «Se på nettsiden». Redigering ligger i fanene. */
+/**
+ * «Publiser» for utkast, «Åpne påmelding» for stengte, «Steng påmelding» for åpne.
+ * Utkast forhåndsvises (kun admin); publiserte kurs har «Se på nettsiden».
+ */
 export function CourseStatusActions({ courseId, status, publicPath }: { courseId: number; status: string; publicPath: string }) {
   const router = useRouter();
   const { toast } = useToast();
@@ -33,7 +37,7 @@ export function CourseStatusActions({ courseId, status, publicPath }: { courseId
       if (next === 'open') {
         toast(
           data?.course?.status === 'full'
-            ? 'Kurset er publisert, men allerede fullt — nye havner på venteliste.'
+            ? 'Kurset er åpnet, men allerede fullt. Nye havner på venteliste.'
             : 'Kurset er publisert og åpent for påmelding.',
           'success',
           { action: { label: 'Se på nettsiden', onClick: () => window.open(publicPath, '_blank', 'noopener') } },
@@ -50,16 +54,19 @@ export function CourseStatusActions({ courseId, status, publicPath }: { courseId
     }
   }
 
+  const isDraft = status === 'draft';
+  const viewHref = isDraft ? `${publicPath}?${PREVIEW_PARAM}=1` : publicPath;
+
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <a href={publicPath} target="_blank" rel="noopener noreferrer" className={buttonClass('secondary')}>
-        Se på nettsiden
+      <a href={viewHref} target="_blank" rel="noopener noreferrer" className={buttonClass('secondary')}>
+        {isDraft ? 'Forhåndsvis' : 'Se på nettsiden'}
         <ExternalIcon />
         <span className="sr-only">(åpnes i ny fane)</span>
       </a>
-      {status === 'closed' ? (
-        <Button onClick={() => setStatus('open')} loading={saving || refreshing} loadingLabel="Publiserer …">
-          Publiser
+      {isDraft || status === 'closed' ? (
+        <Button onClick={() => setStatus('open')} loading={saving || refreshing} loadingLabel={isDraft ? 'Publiserer …' : 'Åpner …'}>
+          {isDraft ? 'Publiser' : 'Åpne påmelding'}
         </Button>
       ) : (
         <Button variant="secondary" onClick={() => setConfirmClose(true)} disabled={saving || refreshing}>
