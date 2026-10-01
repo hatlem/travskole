@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
       participants: booking.participants,
       preferredDate: data.preferredDate ?? null,
       message: data.message ?? null,
+      priceKr: course.price,
     };
     await Promise.all([
       sendBookingConfirmation(emailData),

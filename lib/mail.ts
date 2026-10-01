@@ -5,15 +5,16 @@ import logger from '@/lib/logger';
 import { getBaseUrl } from '@/lib/site';
 import { BRAND } from '@/lib/brand';
 import { MAGIC_LINK_TTL_HOURS } from '@/lib/magic-link-ttl';
-
-function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
+import {
+  buildBookingConfirmationEmail,
+  buildCancellationEmail,
+  buildRegistrationConfirmationEmail,
+  escapeHtml,
+  type BookingEmailData,
+  type CancellationEmailData,
+  type EmailContext,
+  type RegistrationEmailData,
+} from '@/lib/buyer-emails';
 
 // Enkel plain-text-versjon fra HTML (for multipart-e-post → bedre leverbarhet,
 // unngår MIME_HTML_ONLY/HTML_MIME_NO_HTML_TAG-fradrag).
@@ -133,46 +134,15 @@ export async function sendMailAs(input: SendMailAsInput): Promise<{ messageId: s
   return { messageId: info.messageId ?? null };
 }
 
-interface RegistrationEmail {
-  courseName: string;
-  /** Utelatt for voksen-arrangementer — deltakeren er forelderen selv */
-  childName?: string;
-  childBirthdate?: string;
-  parentName: string;
-  parentEmail: string;
-  parentPhone: string;
-  allergies?: string;
-  isWaitlist?: boolean;
+type RegistrationEmail = RegistrationEmailData;
+
+async function emailContext(): Promise<EmailContext> {
+  return { settings: await getSettings(), baseUrl: getBaseUrl() };
 }
 
 export async function sendRegistrationConfirmation(data: RegistrationEmail) {
-  const settings = await getSettings();
-  const t = makeT(settings);
-  const adminEmail = settings.contact_email;
-  const siteName = settings.site_name;
-  const birthdate = data.childBirthdate
-    ? new Date(data.childBirthdate).toLocaleDateString('nb-NO')
-    : '';
-  const kurs = escapeHtml(data.courseName);
-  const subject = t(data.isWaitlist ? 'email.confirm_subject_waitlist' : 'email.confirm_subject', { kurs: data.courseName });
-  const intro = `<p>${escapeHtml(t(data.isWaitlist ? 'email.confirm_intro_waitlist' : 'email.confirm_intro', { kurs: '\u0000' })).replace('\u0000', `<strong>${kurs}</strong>`)}</p>`;
-  const followUp = `<p>${escapeHtml(t(data.isWaitlist ? 'email.confirm_followup_waitlist' : 'email.confirm_followup'))}</p>`;
-  await sendMail(
-    data.parentEmail,
-    subject,
-    `<div style="font-family:sans-serif;max-width:600px">
-      <h2>${escapeHtml(t('email.confirm_greeting', { navn: data.parentName }))}</h2>
-      ${intro}
-      <table style="border-collapse:collapse;margin:16px 0">
-        ${data.childName ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Barn:</td><td>${escapeHtml(data.childName)}</td></tr>` : `<tr><td style="padding:4px 12px 4px 0;color:#666">Deltaker:</td><td>${escapeHtml(data.parentName)}</td></tr>`}
-        ${birthdate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Fødselsdato:</td><td>${escapeHtml(birthdate)}</td></tr>` : ''}
-        ${data.allergies ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Allergier:</td><td>${escapeHtml(data.allergies)}</td></tr>` : ''}
-      </table>
-      ${followUp}
-      <p>${escapeHtml(t('email.questions'))} <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
-      <p style="color:#666;margin-top:24px">${escapeHtml(t('email.signoff'))}<br>${escapeHtml(siteName)}</p>
-    </div>`,
-  );
+  const { subject, html } = buildRegistrationConfirmationEmail(data, await emailContext());
+  await sendMail(data.parentEmail, subject, html);
 }
 
 export async function sendRegistrationAdminNotification(data: RegistrationEmail) {
@@ -233,37 +203,17 @@ export async function sendWaitlistPromotionEmail(data: WaitlistPromotionEmail) {
   );
 }
 
-interface BookingEmail {
-  courseName: string;
-  name: string;
-  email: string;
-  phone: string;
-  participants: number;
-  preferredDate?: string | null;
-  message?: string | null;
-}
+type BookingEmail = BookingEmailData;
 
 export async function sendBookingConfirmation(data: BookingEmail) {
-  const settings = await getSettings();
-  const t = makeT(settings);
-  const adminEmail = settings.contact_email;
-  const siteName = settings.site_name;
-  await sendMail(
-    data.email,
-    t('email.booking_subject', { side: siteName }),
-    `<div style="font-family:sans-serif;max-width:600px">
-      <h2>${escapeHtml(t('email.confirm_greeting', { navn: data.name }))}</h2>
-      <p>${escapeHtml(t('email.booking_intro'))}</p>
-      <table style="border-collapse:collapse;margin:16px 0">
-        <tr><td style="padding:4px 12px 4px 0;color:#666">Arrangement:</td><td><strong>${escapeHtml(data.courseName)}</strong></td></tr>
-        <tr><td style="padding:4px 12px 4px 0;color:#666">Deltakere:</td><td>${data.participants}</td></tr>
-        ${data.preferredDate ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Ønsket dato:</td><td>${escapeHtml(new Date(data.preferredDate).toLocaleDateString('nb-NO'))}</td></tr>` : ''}
-        ${data.message ? `<tr><td style="padding:4px 12px 4px 0;color:#666">Melding:</td><td>${escapeHtml(data.message)}</td></tr>` : ''}
-      </table>
-      <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
-      <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
-    </div>`,
-  );
+  const { subject, html } = buildBookingConfirmationEmail(data, await emailContext());
+  await sendMail(data.email, subject, html);
+}
+
+/** Bekreftelse når kjøperen selv avbestiller en påmelding eller trekker en forespørsel. */
+export async function sendCancellationConfirmation(to: string, data: CancellationEmailData) {
+  const { subject, html } = buildCancellationEmail(data, await emailContext());
+  await sendMail(to, subject, html);
 }
 
 export async function sendBookingApprovedPayEmail(

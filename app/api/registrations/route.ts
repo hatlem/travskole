@@ -429,6 +429,11 @@ export async function POST(request: NextRequest) {
       parentPhone: data.parentPhone,
       allergies: childAllergies,
       isWaitlist: isWaitlistRegistration,
+      isAdult: isAdultCourse,
+      courseStart: course.startDate,
+      courseEnd: course.endDate,
+      priceKr: course.price,
+      paymentMethods: parsePaymentMethods(course.paymentMethods),
     };
 
     // Påmeldingsbekreftelse (hardkodet, waitlist-bevisst) + admin-varsel.

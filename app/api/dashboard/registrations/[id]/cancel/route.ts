@@ -8,6 +8,7 @@ import {
   promoteFromWaitlist,
 } from '@/lib/registrations/cancel';
 import { syncRegistrationToCrm } from '@/lib/crm/bridge';
+import { sendCancellationConfirmation } from '@/lib/mail';
 import logger from '@/lib/logger';
 
 /**
@@ -42,7 +43,9 @@ export async function POST(
         status: true,
         paymentStatus: true,
         courseId: true,
-        course: { select: { startDate: true, endDate: true } },
+        course: { select: { name: true, startDate: true, endDate: true } },
+        child: { select: { name: true } },
+        parent: { select: { name: true, user: { select: { email: true } } } },
       },
     });
     if (!registration) {
@@ -73,6 +76,16 @@ export async function POST(
       .then(() => emitRegistrationStatusEvent(id, registration.courseId, 'cancelled'))
       .catch(() => {});
     await promoteFromWaitlist(id);
+
+    // Transaksjonell kvittering på avbestillingen; en feilet utsending velter ikke avbestillingen.
+    await sendCancellationConfirmation(registration.parent.user.email, {
+      kind: 'registration',
+      name: registration.parent.name,
+      courseName: registration.course.name,
+      participant: registration.child?.name ?? registration.parent.name,
+      courseStart: registration.course.startDate,
+      courseEnd: registration.course.endDate,
+    }).catch((error) => logger.error('[dashboard:cancel] confirmation email failed', { error }));
 
     return NextResponse.json({ ok: true, status: 'cancelled' });
   } catch (error) {

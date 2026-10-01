@@ -7,6 +7,7 @@ import { bookingOwnershipWhere } from '@/lib/bookings/ownership';
 import { selfCancelBookingError } from '@/lib/registrations/cancel-rules';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
 import { emitBookingStatusEvent } from '@/lib/bookings/status-event';
+import { sendCancellationConfirmation } from '@/lib/mail';
 import logger from '@/lib/logger';
 
 /**
@@ -40,7 +41,7 @@ export async function POST(
   try {
     const booking = await prisma.bookingRequest.findFirst({
       where: { id, ...bookingOwnershipWhere(email, sessionUserId) },
-      select: { id: true, status: true, paymentStatus: true, email: true },
+      select: { id: true, status: true, paymentStatus: true, email: true, name: true, course: { select: { name: true } } },
     });
     if (!booking) {
       return NextResponse.json({ error: 'Forespørselen ble ikke funnet' }, { status: 404 });
@@ -69,6 +70,13 @@ export async function POST(
       .catch(() => {})
       .then(() => emitBookingStatusEvent({ id, email: booking.email, status: 'cancelled' }))
       .catch(() => {});
+
+    await sendCancellationConfirmation(booking.email, {
+      kind: 'booking',
+      name: booking.name,
+      courseName: booking.course?.name ?? 'arrangementet',
+      participant: booking.name,
+    }).catch((error) => logger.error('[dashboard:cancel] withdraw email failed', { error }));
 
     return NextResponse.json({ ok: true, status: 'cancelled' });
   } catch (error) {
