@@ -3,27 +3,13 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const REVIEW_HREF = '/admin/crm/godkjenning';
-
-const TABS = [
-  { href: '/admin/crm/kontakter', label: 'Kontakter' },
-  { href: '/admin/crm/bedrifter', label: 'Bedrifter' },
-  { href: '/admin/crm/pipeline', label: 'Pipeline' },
-  { href: '/admin/crm/oppgaver', label: 'Oppgaver' },
-  { href: '/admin/crm/segmenter', label: 'Segmenter og lister' },
-  { href: '/admin/crm/hendelser', label: 'Hendelser' },
-  { href: '/admin/crm/flyter', label: 'Flyter' },
-  { href: REVIEW_HREF, label: 'Godkjenning' },
-  { href: '/admin/crm/avsendere', label: 'Avsendere' },
-  { href: '/admin/crm/innsikt', label: 'Innsikt' },
-  { href: '/admin/crm/import', label: 'Import' },
-];
+import { findCrmLocation, type CrmBadgeKey } from '@/lib/admin-nav';
 
 /** Antall KI-utkast som venter på godkjenning — oppdateres ved navigasjon og etter beslutninger. */
-function usePendingReviewCount(pathname: string): number {
+function usePendingReviewCount(pathname: string, enabled: boolean): number {
   const [count, setCount] = useState(0);
   useEffect(() => {
+    if (!enabled) return;
     const controller = new AbortController();
     const load = async () => {
       try {
@@ -38,41 +24,48 @@ function usePendingReviewCount(pathname: string): number {
       controller.abort();
       window.removeEventListener('crm-review-count-changed', load);
     };
-  }, [pathname]);
+  }, [pathname, enabled]);
   return count;
 }
 
+/** Fanene for gruppen siden hører til (f.eks. Kunder: Kontakter, Bedrifter, Segmenter og lister). */
 export function CrmTabs() {
   const pathname = usePathname();
-  const pendingReviews = usePendingReviewCount(pathname);
+  const location = findCrmLocation(pathname);
+  const hasBadge = location?.group.items.some((item) => item.badge === 'pendingReviews') ?? false;
+  const pendingReviews = usePendingReviewCount(pathname, hasBadge);
   const activeRef = useRef<HTMLAnchorElement>(null);
 
-  // Mange faner: på smale skjermer rulles fanelinjen, og aktiv fane holdes synlig.
+  // På smale skjermer rulles fanelinjen, og aktiv fane holdes synlig.
   useEffect(() => {
     activeRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [pathname]);
 
+  if (!location) return null;
+  const badges: Record<CrmBadgeKey, number> = { pendingReviews };
+
   return (
     <nav
-      aria-label="CRM"
+      aria-label={`CRM – ${location.group.label}`}
       className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto overscroll-x-contain [scrollbar-width:thin] -mx-4 px-4 sm:mx-0 sm:px-0"
     >
-      {TABS.map((tab) => {
-        const active = pathname.startsWith(tab.href);
-        const badge = tab.href === REVIEW_HREF && pendingReviews > 0 ? pendingReviews : null;
+      {location.group.items.map((item) => {
+        const active = item.id === location.item.id;
+        const exact = active && pathname === item.href;
+        const badge = item.badge && badges[item.badge] > 0 ? badges[item.badge] : null;
         return (
           <Link
-            key={tab.href}
-            href={tab.href}
+            key={item.id}
+            href={item.href}
             ref={active ? activeRef : undefined}
-            aria-current={active ? 'page' : undefined}
-            className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px transition-colors ${
+            aria-current={exact ? 'page' : active ? 'true' : undefined}
+            className={`shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-blue-500 ${
               active
                 ? 'border-blue-600 text-blue-700 bg-blue-50'
                 : 'border-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50'
             }`}
           >
-            {tab.label}
+            {item.label}
             {badge !== null && (
               <span
                 className="ml-1.5 inline-flex min-w-5 justify-center rounded-full bg-purple-600 px-1.5 text-xs font-semibold text-white tabular-nums"

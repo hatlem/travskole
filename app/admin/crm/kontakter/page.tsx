@@ -6,6 +6,7 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
+import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
 import { Pagination } from '@/components/admin/Pagination';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
 
@@ -144,6 +145,8 @@ export default function KontakterPage({
     return () => abortRef.current?.abort();
   }, []);
 
+  useOpenFromQuery('ny', () => setShowNew(true));
+
   useEffect(() => {
     fetch('/api/admin/crm/segments')
       .then((r) => r.json())
@@ -246,9 +249,15 @@ export default function KontakterPage({
           ))}
         </select>
         <span className="text-sm text-gray-500">{total} kontakter</span>
+        <Link
+          href="/admin/crm/import"
+          className="ml-auto border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
+        >
+          Importer
+        </Link>
         <button
           onClick={() => setShowNew(true)}
-          className="ml-auto bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
+          className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
         >
           Ny kontakt
         </button>
