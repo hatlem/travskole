@@ -29,6 +29,7 @@ import { getBaseUrl } from '@/lib/site';
 import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
+import { sendDeferral, type SendWindow } from './send-window';
 
 /**
  * Fellespostboksen alle automatiske utsendelser ber om svar til, uavhengig av
@@ -53,6 +54,12 @@ export interface PendingReviewResult {
   resumeAt: Date;
 }
 
+/** Utenfor sendetiden — runneren parkerer enrollmentet på noden til `resumeAt`. */
+export interface OutsideSendWindowResult {
+  kind: 'outside_window';
+  resumeAt: Date;
+}
+
 export type SendFlowEmailResult =
   | 'sent'
   | 'already_sent'
@@ -60,7 +67,8 @@ export type SendFlowEmailResult =
   | 'skipped_no_consent'
   | 'skipped_review'
   | 'failed'
-  | PendingReviewResult;
+  | PendingReviewResult
+  | OutsideSendWindowResult;
 
 export interface SendFlowEmailInput {
   enrollmentId: number;
@@ -76,6 +84,13 @@ export interface SendFlowEmailInput {
   flowId?: number;
   registrationId?: number | null;
   now?: Date;
+  /** Effektivt sendevindu; null/utelatt = send når som helst. */
+  sendWindow?: SendWindow | null;
+}
+
+function outsideWindow(input: SendFlowEmailInput): OutsideSendWindowResult | null {
+  const resumeAt = sendDeferral(input.now ?? new Date(), input.sendWindow ?? null, input.enrollmentId);
+  return resumeAt ? { kind: 'outside_window', resumeAt } : null;
 }
 
 function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
@@ -234,6 +249,14 @@ async function resolveAiBody(
 }
 
 export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlowEmailResult> {
+  // Med godkjenning lages KI-utkastet også utenfor sendetiden, så admin kan
+  // behandle det før vinduet åpner; ellers ventes det før noe annet skjer.
+  const reviewFirst = input.isMarketing && input.aiReview === 'approve';
+  if (!reviewFirst) {
+    const deferred = outsideWindow(input);
+    if (deferred) return deferred;
+  }
+
   const contact = await prisma.contact.findUnique({
     where: { id: input.contactId },
     select: { email: true, name: true, organizationId: true },
@@ -277,6 +300,10 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const ai = await resolveAiBody(input, renderedBody, subject, contact.name);
   if (ai.kind === 'pending_review') return ai;
   if (ai.kind === 'skip') return 'skipped_review';
+  if (reviewFirst) {
+    const deferred = outsideWindow(input);
+    if (deferred) return deferred;
+  }
   // Admin-redigert/KI-tekst kan inneholde flettefelt som ikke var fylt inn.
   const personalizedBody = ai.aiPersonalized ? replaceMergeTags(ai.body, mergeData) : ai.body;
   const aiPersonalized = ai.aiPersonalized;

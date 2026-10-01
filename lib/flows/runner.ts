@@ -18,6 +18,8 @@ import { ENGAGEMENT_CONDITION_KINDS, parseNodeConfig, type FlowNodeType, type Gr
 import { planStep, type PlannedAction, type StepContext, type TaskActionPayload } from './step';
 import { sendFlowEmail } from './send';
 import { findReview } from '@/lib/ai/review';
+import type { SendWindow } from './send-window';
+import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
 
 const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
@@ -266,6 +268,7 @@ async function processEnrollment(
   enrollment: ClaimedEnrollment,
   graph: FlowGraph,
   segmentRulesById: Record<number, string>,
+  sendWindow: SendWindow | null,
   now: Date,
 ): Promise<EnrollmentOutcome> {
   const contact = await loadContactState(enrollment.contactId);
@@ -318,8 +321,18 @@ async function processEnrollment(
           aiPersonalize: plan.aiPersonalize,
           aiReview: plan.aiReview,
           isMarketing: enrollment.flow.isMarketing,
+          sendWindow,
           now,
         });
+        if (typeof result === 'object' && result.kind === 'outside_window') {
+          // Utenfor sendetiden: parker PÅ e-post-noden til vinduet åpner.
+          // Ingenting er sendt eller reservert, så neste tick prøver på nytt.
+          await prisma.flowEnrollment.update({
+            where: { id: enrollment.id },
+            data: { currentNodeId: node.id, nextRunAt: result.resumeAt },
+          });
+          return { sent, failed: false, completed: false };
+        }
         if (typeof result === 'object') {
           // KI-utkast venter på godkjenning: parker PÅ e-post-noden til fristen.
           // Neste tick (tidsavbrudd eller admin-vekking) treffer samme utkast via
@@ -441,6 +454,7 @@ async function processClaimed(claimedIds: number[], now: Date): Promise<FlowBatc
 
   const graphCache = new Map<number, FlowGraph>();
   const segmentRulesById = await loadSegmentRulesById();
+  const sendWindows = await loadSendWindowConfig();
 
   for (const enrollment of dueEnrollments) {
     if (enrollment.flow.status !== 'active') continue;
@@ -448,7 +462,8 @@ async function processClaimed(claimedIds: number[], now: Date): Promise<FlowBatc
     result.processed++;
     try {
       const graph = await getGraph(enrollment.flowId, graphCache);
-      const outcome = await processEnrollment(enrollment, graph, segmentRulesById, now);
+      const sendWindow = effectiveWindowFor(sendWindows, enrollment.flowId);
+      const outcome = await processEnrollment(enrollment, graph, segmentRulesById, sendWindow, now);
       result.sent += outcome.sent;
       if (outcome.failed) result.failed++;
       if (outcome.completed) result.completed++;
