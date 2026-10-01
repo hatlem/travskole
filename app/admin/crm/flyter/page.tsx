@@ -10,6 +10,8 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { HelpTip } from '@/components/admin/HelpTip';
+import { HINTS } from '@/lib/admin-copy';
 import { FLOW_STATUS_LABELS, canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
 import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
 import { DEFAULT_FLOW_SETTINGS, FlowSettingsFields, type FlowSettingsValues } from './flow-settings-fields';
@@ -57,7 +59,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-type ConfirmAction = { type: 'archive' | 'delete'; flow: FlowRow };
+type ConfirmAction = { type: 'archive' | 'delete' | 'resume'; flow: FlowRow };
 
 type TemplateAction = 'standard' | 'legacy';
 
@@ -73,7 +75,7 @@ const LIFECYCLE_SLOT_LABELS: Record<string, string> = {
 };
 
 const MATCH_VIA_LABELS: Record<string, string> = {
-  trigger: 'etter gammel utløser',
+  trigger: 'koblet via gammel startregel',
   name: 'etter navn',
   order: 'etter rekkefølge',
 };
@@ -91,7 +93,16 @@ function legacyStatusMessage(result: LegacyImportResult): string {
   }
 }
 
-const ANCHOR_LABELS: Record<string, string> = { contact: 'Kontakt', course: 'Kurs' };
+const ANCHOR_LABELS: Record<string, string> = { contact: 'En person', course: 'Et kurs' };
+
+const primaryBtn =
+  'inline-flex items-center rounded-md bg-bjerke-blue px-4 py-2 text-sm font-medium text-white hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2';
+const secondaryBtn =
+  'inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2';
+
+function enrollmentText(n: number): string {
+  return n === 1 ? '1 person er underveis' : `${n} personer er underveis`;
+}
 
 export default function FlyterPage() {
   const [flows, setFlows] = useState<FlowRow[]>([]);
@@ -123,6 +134,19 @@ export default function FlyterPage() {
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
   useOpenFromQuery('ny', () => setShowNew(true));
+  useOpenFromQuery('mal', () => openTemplatePicker());
+
+  function openTemplatePicker() {
+    setShowGenerate(false);
+    setShowNew(false);
+    setShowFromTemplate(true);
+  }
+
+  function openNewFlow() {
+    setShowGenerate(false);
+    setShowFromTemplate(false);
+    setShowNew(true);
+  }
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
@@ -132,7 +156,7 @@ export default function FlyterPage() {
     setLoading(true);
     try {
       const res = await fetch('/api/admin/crm/flows', { signal: controller.signal });
-      if (!res.ok) throw new Error('Kunne ikke laste flyter');
+      if (!res.ok) throw new Error('E-postflytene kunne ikke hentes. Prøv igjen om litt.');
       const data = await res.json();
       setFlows(data.flows || []);
       setLoadError(false);
@@ -140,7 +164,7 @@ export default function FlyterPage() {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setFlows([]);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste flyter', 'error');
+      toast(err instanceof Error ? err.message : 'E-postflytene kunne ikke hentes. Prøv igjen om litt.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -218,15 +242,15 @@ export default function FlyterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke opprette flyt', 'error');
+        toast(data.error || 'Flyten ble ikke opprettet. Prøv igjen.', 'error');
         return;
       }
-      toast('Flyt opprettet', 'success');
+      toast('Flyten er opprettet. Neste steg: velg når den skal starte, og legg til en e-post.', 'success');
       setShowNew(false);
       setNewSettings(DEFAULT_FLOW_SETTINGS);
       router.push(`/admin/crm/flyter/${data.flow.id}`);
     } catch {
-      toast('Kunne ikke opprette flyt', 'error');
+      toast('Flyten ble ikke opprettet. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setCreating(false);
     }
@@ -242,13 +266,13 @@ export default function FlyterPage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          toast(data.error || 'Kunne ikke opprette flyt fra mal', 'error');
+          toast(data.error || 'Flyten ble ikke laget fra malen. Prøv igjen.', 'error');
           return;
         }
-        toast('Ny flyt opprettet fra mal', 'success');
+        toast('Ny flyt laget fra malen. Se over tekstene, og aktiver når du er fornøyd.', 'success');
         router.push(`/admin/crm/flyter/${data.flow.id}`);
       } catch {
-        toast('Kunne ikke opprette flyt fra mal', 'error');
+        toast('Flyten ble ikke laget fra malen. Sjekk nettforbindelsen og prøv igjen.', 'error');
       }
     });
   }
@@ -265,14 +289,14 @@ export default function FlyterPage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          toast(data.error || 'Kunne ikke endre navn', 'error');
+          toast(data.error || 'Navnet ble ikke endret. Prøv igjen.', 'error');
           return;
         }
         setRenaming(null);
-        toast('Navn endret', 'success');
+        toast(`Navnet er endret til «${name.trim()}».`, 'success');
         load();
       } catch {
-        toast('Kunne ikke endre navn', 'error');
+        toast('Navnet ble ikke endret. Sjekk nettforbindelsen og prøv igjen.', 'error');
       }
     });
   }
@@ -293,12 +317,12 @@ export default function FlyterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setGenerateError(data.error || 'Kunne ikke generere flyt');
+        setGenerateError(data.error || 'KI klarte ikke å lage et utkast. Prøv å beskrive målet litt annerledes.');
         return;
       }
       router.push(`/admin/crm/flyter/${data.flowId}`);
     } catch {
-      setGenerateError('Kunne ikke generere flyt');
+      setGenerateError('KI-utkastet ble ikke laget. Sjekk nettforbindelsen og prøv igjen.');
     } finally {
       setGenerating(false);
     }
@@ -317,14 +341,16 @@ export default function FlyterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke legge til maler', 'error');
+        toast(data.error || 'Malene ble ikke lagt til. Prøv igjen.', 'error');
         return;
       }
       if (action === 'standard') {
         const result = data as InstallResult;
         setTemplateReport({ kind: 'standard', result });
         toast(
-          result.created.length > 0 ? `${result.created.length} standardmaler lagt til` : 'Alle standardmalene finnes allerede',
+          result.created.length > 0
+            ? `${result.created.length} ferdige maler er lagt til. Velg «Bruk mal» for å lage en flyt fra en av dem.`
+            : 'Alle de ferdige malene finnes allerede.',
           'success',
         );
       } else {
@@ -335,7 +361,7 @@ export default function FlyterPage() {
       setTemplateAction(null);
       load();
     } catch {
-      toast('Kunne ikke legge til maler', 'error');
+      toast('Malene ble ikke lagt til. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setTemplateBusy(false);
     }
@@ -355,17 +381,19 @@ export default function FlyterPage() {
           if (Array.isArray(data.errors) && data.errors.length > 0) {
             (data.errors as ValidationError[]).forEach((e) => toast(e.message, 'error'));
           } else {
-            toast(data.error || 'Kunne ikke endre status', 'error');
+            toast(data.error || 'Statusen ble ikke endret. Prøv igjen.', 'error');
           }
           return;
         }
         toast(
-          nextStatus === 'active' ? 'Flyt gjenopptatt' : 'Flyt satt på pause',
+          nextStatus === 'active'
+            ? `«${flow.name}» går igjen. E-postene fortsetter der de stoppet.`
+            : `«${flow.name}» står på pause. Ingen e-poster sendes før du gjenopptar.`,
           'success',
         );
         load();
       } catch {
-        toast('Kunne ikke endre status', 'error');
+        toast('Statusen ble ikke endret. Sjekk nettforbindelsen og prøv igjen.', 'error');
       }
     });
   }
@@ -373,6 +401,11 @@ export default function FlyterPage() {
   async function runConfirmedAction() {
     if (!confirmAction) return;
     const { type, flow } = confirmAction;
+    if (type === 'resume') {
+      setConfirmAction(null);
+      await toggleStatus(flow);
+      return;
+    }
     setConfirmLoading(true);
     try {
       if (type === 'archive') {
@@ -383,28 +416,33 @@ export default function FlyterPage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          toast(data.error || 'Kunne ikke arkivere flyt', 'error');
+          toast(data.error || 'Flyten ble ikke arkivert. Prøv igjen.', 'error');
           return;
         }
         toast(
           data.exitedEnrollments > 0
-            ? `Flyt arkivert — ${data.exitedEnrollments} aktive påmeldinger avsluttet`
-            : 'Flyt arkivert',
+            ? `«${flow.name}» er arkivert. ${data.exitedEnrollments === 1 ? '1 person' : `${data.exitedEnrollments} personer`} som var underveis, får ingen flere e-poster.`
+            : `«${flow.name}» er arkivert og sender ingen flere e-poster.`,
           'success'
         );
       } else {
         const res = await fetch(`/api/admin/crm/flows/${flow.id}`, { method: 'DELETE' });
         const data = await res.json();
         if (!res.ok) {
-          toast(data.error || 'Kunne ikke slette flyt', 'error');
+          toast(data.error || 'Den ble ikke slettet. Prøv igjen.', 'error');
           return;
         }
-        toast(isTemplateStatus(flow.status) ? 'Mal slettet' : 'Flyt slettet', 'success');
+        toast(isTemplateStatus(flow.status) ? `Malen «${flow.name}» er slettet.` : `«${flow.name}» er slettet.`, 'success');
       }
       setConfirmAction(null);
       load();
     } catch {
-      toast(type === 'archive' ? 'Kunne ikke arkivere flyt' : 'Kunne ikke slette flyt', 'error');
+      toast(
+        type === 'archive'
+          ? 'Flyten ble ikke arkivert. Sjekk nettforbindelsen og prøv igjen.'
+          : 'Den ble ikke slettet. Sjekk nettforbindelsen og prøv igjen.',
+        'error',
+      );
     } finally {
       setConfirmLoading(false);
     }
@@ -415,47 +453,56 @@ export default function FlyterPage() {
 
   return (
     <div>
-      <CrmTabs />
-      <div className="flex flex-wrap items-center gap-3 mb-4">
-        <span className="text-sm text-gray-500">
-          {regularFlows.length} flyter · {templates.length} maler
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          {aiConfigured && (
-            <button
-              onClick={() => { setShowNew(false); setShowFromTemplate(false); setShowGenerate((v) => !v); }}
-              className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-purple-700"
-            >
-              Generer med KI
+      <CrmTabs
+        actions={
+          <>
+            {aiConfigured && (
+              <button
+                onClick={() => { setShowNew(false); setShowFromTemplate(false); setShowGenerate((v) => !v); }}
+                className="inline-flex items-center rounded-md border border-purple-300 bg-white px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50"
+              >
+                Lag utkast med KI
+              </button>
+            )}
+            <button onClick={() => (showFromTemplate ? setShowFromTemplate(false) : openTemplatePicker())} className={secondaryBtn}>
+              Start fra en mal
             </button>
-          )}
-          <button
-            onClick={() => { setShowGenerate(false); setShowNew(false); setShowFromTemplate((v) => !v); }}
-            disabled={templates.length === 0}
-            title={templates.length === 0 ? 'Lagre en flyt som mal fra flyt-editoren eller legg til standardmalene først' : undefined}
-            className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
-          >
-            Ny flyt fra mal
-          </button>
-          <button
-            onClick={() => { setShowGenerate(false); setShowFromTemplate(false); setShowNew(true); }}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-          >
-            Ny flyt
-          </button>
-        </div>
-      </div>
+            <button onClick={openNewFlow} className={primaryBtn}>
+              Ny e-postflyt
+            </button>
+          </>
+        }
+      />
 
-      {showFromTemplate && templates.length > 0 && (
+      {showFromTemplate && !loading && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-indigo-50">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-800">Velg mal</h3>
-            <button onClick={() => setShowFromTemplate(false)} className="text-sm text-gray-600">
+            <h3 className="text-sm font-semibold text-gray-800">Velg en mal å starte fra</h3>
+            <button onClick={() => setShowFromTemplate(false)} className="text-sm text-gray-600 hover:underline">
               Avbryt
             </button>
           </div>
+          {templates.length === 0 ? (
+            <div className="text-sm text-gray-700">
+              <p>Det finnes ingen maler ennå.</p>
+              {isSuperAdmin ? (
+                <button
+                  onClick={() => { setShowFromTemplate(false); setTemplateReport(null); setTemplateAction('standard'); }}
+                  className="mt-2 inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                >
+                  Legg til de ferdige malene
+                </button>
+              ) : (
+                <p className="mt-1 text-gray-600">
+                  Be en superadmin legge til de ferdige malene, eller trykk «Ny e-postflyt» for å lage en fra bunnen.
+                </p>
+              )}
+            </div>
+          ) : (
+          <>
           <p className="text-xs text-gray-600 mb-3">
-            Malen kopieres til et nytt utkast med noder, koblinger, utløsere og innstillinger. Malen selv endres ikke.
+            Du får en kopi med alle stegene, startreglene og innstillingene fra malen. Kopien er et utkast — ingenting
+            sendes før du aktiverer den. Malen selv endres ikke.
           </p>
           <ul className="grid gap-2 sm:grid-cols-2">
             {templates.map((template) => (
@@ -473,13 +520,15 @@ export default function FlyterPage() {
               </li>
             ))}
           </ul>
+          </>
+          )}
         </div>
       )}
 
       {showGenerate && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-purple-50 flex flex-wrap gap-3 items-end">
           <label className="text-sm flex-1 min-w-[240px]">
-            <span className="block text-gray-600 mb-1">Mål *</span>
+            <span className="block text-gray-600 mb-1">Hva skal flyten oppnå?</span>
             <textarea
               autoFocus
               value={goal}
@@ -522,7 +571,7 @@ export default function FlyterPage() {
             disabled={goal.trim().length < 10 || senderIdentityId === '' || generating}
             className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
           >
-            {generating ? 'Genererer …' : 'Generer utkast'}
+            {generating ? 'Lager utkast …' : 'Lag utkast'}
           </button>
           <button
             onClick={() => {
@@ -536,13 +585,17 @@ export default function FlyterPage() {
           >
             Avbryt
           </button>
+          <p className="w-full text-xs text-gray-600">
+            KI lager et utkast du kan se over og endre. Ingenting sendes før du aktiverer flyten.
+          </p>
           {generateError && <p className="w-full text-sm text-red-600">{generateError}</p>}
         </div>
       )}
 
       {showNew && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50 max-w-xl">
-          <h3 className="text-sm font-semibold text-gray-800 mb-3">Ny flyt</h3>
+          <h3 className="text-sm font-semibold text-gray-800">Ny e-postflyt</h3>
+          <p className="mb-3 text-xs text-gray-600">{HINTS.startFromTemplate}</p>
           <FlowSettingsFields
             idPrefix="new-flow"
             values={newSettings}
@@ -554,7 +607,7 @@ export default function FlyterPage() {
               disabled={!newSettings.name.trim() || creating}
               className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
             >
-              {creating ? 'Oppretter …' : 'Opprett'}
+              {creating ? 'Lager flyten …' : 'Lag flyten'}
             </button>
             <button
               onClick={() => { setShowNew(false); setNewSettings(DEFAULT_FLOW_SETTINGS); }}
@@ -570,17 +623,19 @@ export default function FlyterPage() {
         <TableSkeleton rows={8} />
       ) : loadError ? (
         <EmptyState
-          title="Kunne ikke laste flyter"
-          description="Noe gikk galt under henting av flyter. Prøv igjen."
+          title="E-postflytene kunne ikke hentes"
+          description="Det kan skyldes et brudd i nettforbindelsen. Prøv igjen — kontakt den tekniske ansvarlige hvis det fortsetter."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       ) : (
         <>
           {regularFlows.length === 0 ? (
             <EmptyState
-              title="Ingen flyter ennå"
-              description="Ingen flyter ennå — lag din første automatiske e-postflyt."
-              action={{ label: 'Ny flyt', onClick: () => setShowNew(true) }}
+              icon="email"
+              title="Lag din første e-postflyt"
+              description="En e-postflyt sender e-poster av seg selv — for eksempel velkomst rett etter påmelding og en påminnelse før kursstart. Det enkleste er å starte fra en ferdig mal."
+              action={{ label: 'Start fra en mal', onClick: openTemplatePicker }}
+              secondaryAction={{ label: 'Lag fra bunnen', onClick: openNewFlow }}
             />
           ) : (
             <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -589,9 +644,21 @@ export default function FlyterPage() {
                   <tr>
                     <th className="px-4 py-3 font-medium">Navn</th>
                     <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Aktive påmeldinger</th>
-                    <th className="px-4 py-3 font-medium">Markedsføring</th>
-                    <th className="px-4 py-3 font-medium">Forankring</th>
+                    <th className="px-4 py-3 font-medium">
+                      Underveis
+                      <HelpTip term="recipients" />
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      Type
+                      <HelpTip label="Markedsføring eller viktig informasjon?">
+                        Markedsføring (f.eks. «Nye kurs i høst!») går bare til de som har sagt ja. Viktig informasjon
+                        (f.eks. «Praktisk info før kursstart») går til alle det gjelder.
+                      </HelpTip>
+                    </th>
+                    <th className="px-4 py-3 font-medium">
+                      Gjelder
+                      <HelpTip term="anchor" />
+                    </th>
                     <th className="px-4 py-3 font-medium">Sist endret</th>
                     <th className="px-4 py-3 font-medium">Handlinger</th>
                   </tr>
@@ -615,7 +682,7 @@ export default function FlyterPage() {
                           <StatusBadge status={flow.status} />
                         </td>
                         <td className="px-4 py-3">{flow.activeEnrollments}</td>
-                        <td className="px-4 py-3 text-gray-600">{flow.isMarketing ? 'Ja' : 'Nei'}</td>
+                        <td className="px-4 py-3 text-gray-600">{flow.isMarketing ? 'Markedsføring' : 'Viktig info'}</td>
                         <td className="px-4 py-3 text-gray-600">{ANCHOR_LABELS[flow.anchorMode] ?? flow.anchorMode}</td>
                         <td className="px-4 py-3 text-gray-500">
                           {new Date(flow.updatedAt).toLocaleDateString('nb-NO')}
@@ -630,11 +697,13 @@ export default function FlyterPage() {
                             </Link>
                             {canToggle && (
                               <button
-                                onClick={() => toggleStatus(flow)}
+                                onClick={() =>
+                                  flow.status === 'active' ? toggleStatus(flow) : setConfirmAction({ type: 'resume', flow })
+                                }
                                 disabled={isPending}
                                 className="text-gray-700 hover:underline disabled:opacity-50"
                               >
-                                {flow.status === 'active' ? 'Pause' : 'Gjenoppta'}
+                                {flow.status === 'active' ? 'Sett på pause' : 'Gjenoppta'}
                               </button>
                             )}
                             {flow.status !== 'archived' && (
@@ -668,9 +737,13 @@ export default function FlyterPage() {
           <section className="mt-8">
             <div className="flex flex-wrap items-start gap-3 mb-3">
               <div className="flex-1 min-w-[240px]">
-                <h2 className="text-sm font-semibold text-gray-800">Maler</h2>
+                <h2 className="text-sm font-semibold text-gray-800">
+                  Maler
+                  <HelpTip term="template" />
+                </h2>
                 <p className="text-xs text-gray-500">
-                  Maler kan ikke aktiveres eller få påmeldinger. Lagre en flyt som mal fra flyt-editoren, og bruk «Ny flyt fra mal» for å starte en ny flyt fra den.
+                  Ferdige oppsett du kan kopiere. Maler sender aldri e-post selv. Trykk «Bruk mal» for å lage en ny flyt
+                  fra en mal, eller «Lagre som mal» inne i en flyt for å lage din egen.
                 </p>
               </div>
               {isSuperAdmin && (
@@ -679,7 +752,7 @@ export default function FlyterPage() {
                     onClick={() => { setTemplateReport(null); setTemplateAction((a) => (a === 'standard' ? null : 'standard')); }}
                     className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
                   >
-                    Legg til standardmaler
+                    Legg til ferdige maler
                   </button>
                   <button
                     onClick={() => { setTemplateReport(null); setTemplateAction((a) => (a === 'legacy' ? null : 'legacy')); }}
@@ -694,12 +767,12 @@ export default function FlyterPage() {
             {templateAction && (
               <div className="border border-gray-200 rounded-lg p-4 mb-3 bg-indigo-50">
                 <h3 className="text-sm font-semibold text-gray-800 mb-1">
-                  {templateAction === 'standard' ? 'Legg til standardmaler' : 'Importer gamle kursmaler'}
+                  {templateAction === 'standard' ? 'Legg til ferdige maler' : 'Importer gamle kursmaler'}
                 </h3>
                 <p className="text-xs text-gray-600 mb-3">
                   {templateAction === 'standard'
-                    ? 'Legger til «Gjenbooking julebord/firmafest», «Oppfølging av forespørsel», «Etter arrangementet» og «Velkommen ny kontakt» som maler. Maler som allerede finnes, hoppes over.'
-                    : 'Lager malen «Kurs-livssyklus (originaltekster)» med de håndskrevne tekstene fra det gamle kursmal-systemet. Den eksisterende livssyklus-flyten endres ikke.'}
+                    ? 'Legger til «Gjenbooking julebord/firmafest», «Oppfølging av forespørsel», «Etter arrangementet» og «Velkommen ny kontakt» som maler. Maler som allerede finnes, hoppes over. Ingenting sendes.'
+                    : 'Lager malen «Kurs-livssyklus (originaltekster)» med tekstene fra det gamle systemet for kurs-e-post. Flyten som brukes i dag, endres ikke.'}
                 </p>
                 <div className="flex flex-wrap items-end gap-3">
                   <label className="text-sm">
@@ -783,17 +856,27 @@ export default function FlyterPage() {
             )}
 
             {templates.length === 0 ? (
-              <p className="text-sm text-gray-500 border border-dashed border-gray-300 rounded-lg px-4 py-6 text-center">
-                Ingen maler ennå.
-              </p>
+              <div className="text-sm text-gray-600 border border-dashed border-gray-300 rounded-lg px-4 py-6 text-center">
+                <p>Ingen maler ennå.</p>
+                {isSuperAdmin ? (
+                  <button
+                    onClick={() => { setTemplateReport(null); setTemplateAction('standard'); }}
+                    className="mt-2 text-sm font-medium text-bjerke-blue hover:underline"
+                  >
+                    Legg til de ferdige malene
+                  </button>
+                ) : (
+                  <p className="mt-1 text-gray-500">Åpne en flyt og trykk «Lagre som mal» for å lage din egen.</p>
+                )}
+              </div>
             ) : (
               <div className="overflow-x-auto border border-gray-200 rounded-lg">
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50 text-left text-gray-600">
                     <tr>
                       <th className="px-4 py-3 font-medium">Navn</th>
-                      <th className="px-4 py-3 font-medium">Markedsføring</th>
-                      <th className="px-4 py-3 font-medium">Forankring</th>
+                      <th className="px-4 py-3 font-medium">Type</th>
+                      <th className="px-4 py-3 font-medium">Gjelder</th>
                       <th className="px-4 py-3 font-medium">Sist endret</th>
                       <th className="px-4 py-3 font-medium">Handlinger</th>
                     </tr>
@@ -844,7 +927,7 @@ export default function FlyterPage() {
                               </>
                             )}
                           </td>
-                          <td className="px-4 py-3 text-gray-600">{template.isMarketing ? 'Ja' : 'Nei'}</td>
+                          <td className="px-4 py-3 text-gray-600">{template.isMarketing ? 'Markedsføring' : 'Viktig info'}</td>
                           <td className="px-4 py-3 text-gray-600">
                             {ANCHOR_LABELS[template.anchorMode] ?? template.anchorMode}
                           </td>
@@ -897,16 +980,29 @@ export default function FlyterPage() {
         open={confirmAction !== null}
         title={
           confirmAction?.type === 'delete'
-            ? isTemplateStatus(confirmAction.flow.status) ? 'Slett mal' : 'Slett flyt'
-            : 'Arkiver flyt'
+            ? isTemplateStatus(confirmAction.flow.status) ? 'Slette malen?' : 'Slette flyten?'
+            : confirmAction?.type === 'resume'
+              ? 'Gjenoppta flyten?'
+              : 'Arkivere flyten?'
         }
         message={
-          confirmAction?.type === 'delete'
-            ? `Er du sikker på at du vil slette «${confirmAction.flow.name}»? Dette kan ikke angres.`
-            : `Er du sikker på at du vil arkivere «${confirmAction?.flow.name}»? Kontakter som er underveis i flyten blir avsluttet, og arkivering kan ikke angres.`
+          !confirmAction
+            ? ''
+            : confirmAction.type === 'delete'
+              ? `«${confirmAction.flow.name}» slettes for godt, med alle stegene og startreglene. Dette kan ikke angres.`
+              : confirmAction.type === 'resume'
+                ? `${HINTS.resumeFlow}${confirmAction.flow.activeEnrollments > 0 ? ` (${enrollmentText(confirmAction.flow.activeEnrollments)}.)` : ''}`
+                : `«${confirmAction.flow.name}» stopper for godt og sender ingen flere e-poster.${
+                    confirmAction.flow.activeEnrollments > 0
+                      ? ` ${enrollmentText(confirmAction.flow.activeEnrollments)} og får ikke resten av e-postene.`
+                      : ''
+                  } Arkivering kan ikke angres. Vil du bare stoppe en stund, velg «Sett på pause» i stedet.`
         }
-        confirmLabel={confirmAction?.type === 'delete' ? 'Slett' : 'Arkiver'}
-        variant={confirmAction?.type === 'delete' ? 'danger' : 'warning'}
+        confirmLabel={
+          confirmAction?.type === 'delete' ? 'Ja, slett' : confirmAction?.type === 'resume' ? 'Ja, gjenoppta' : 'Ja, arkiver'
+        }
+        cancelLabel="Avbryt"
+        variant={confirmAction?.type === 'delete' ? 'danger' : confirmAction?.type === 'resume' ? 'info' : 'warning'}
         loading={confirmLoading}
         onConfirm={runConfirmedAction}
         onCancel={() => setConfirmAction(null)}

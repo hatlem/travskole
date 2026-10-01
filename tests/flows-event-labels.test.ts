@@ -73,8 +73,8 @@ const lists: ListOption[] = [{ id: 5, name: 'Nyhetsbrev' }];
 
 describe('listefilter', () => {
   it('listehendelsene har norske etiketter i CRM-gruppen', () => {
-    expect(eventLabel('list.member_added')).toBe('Lagt til i CRM-liste');
-    expect(eventLabel('list.member_removed')).toBe('Fjernet fra CRM-liste');
+    expect(eventLabel('list.member_added')).toBe('Lagt til i en liste');
+    expect(eventLabel('list.member_removed')).toBe('Fjernet fra en liste');
     const crm = groupedEventTypes().find((g) => g.group === 'CRM');
     expect(crm?.types).toEqual(['list.member_added', 'list.member_removed']);
   });
@@ -108,8 +108,8 @@ describe('listefilter', () => {
 
 describe('eventSourceLabel', () => {
   it('translates known sources and passes unknown through', () => {
-    expect(eventSourceLabel('web')).toBe('Nettsted');
-    expect(eventSourceLabel('server')).toBe('Server');
+    expect(eventSourceLabel('web')).toBe('Nettsiden');
+    expect(eventSourceLabel('server')).toBe('Påmeldingssystemet');
     expect(eventSourceLabel('ukjent')).toBe('ukjent');
   });
 });

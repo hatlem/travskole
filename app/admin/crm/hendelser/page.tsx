@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
-import { EVENT_LABELS, eventLabel, groupedEventTypes } from '@/lib/flows/event-labels';
+import { EVENT_LABELS, eventLabel, eventSourceLabel, groupedEventTypes } from '@/lib/flows/event-labels';
 
 interface EventRow {
   id: number;
@@ -23,14 +23,7 @@ interface EventRow {
 const SOURCES = ['server', 'web', 'client', 'webhook'] as const;
 
 /** Hvor hendelsen kom fra, i vanlige ord (kodeverdien vises under «Teknisk»). */
-const SOURCE_LABELS: Record<string, string> = {
-  server: 'Påmeldingssystemet',
-  web: 'Nettsiden',
-  client: 'Besøkendes nettleser',
-  webhook: 'Annen tjeneste (f.eks. betaling)',
-};
-
-const sourceLabel = (source: string): string => SOURCE_LABELS[source] ?? source;
+const sourceLabel = eventSourceLabel;
 
 function EventDetails({ meta, type, source }: { meta: string; type: string; source: string }) {
   let formatted = meta;

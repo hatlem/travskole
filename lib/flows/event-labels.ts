@@ -8,28 +8,28 @@
 import { EVENT_TYPES, type EventType } from '@/lib/events/taxonomy';
 
 export const EVENT_LABELS: Record<EventType, string> = {
-  'user.registered': 'Bruker registrerte seg',
+  'user.registered': 'Ny bruker registrerte seg',
   'user.logged_in': 'Bruker logget inn',
   'booking.created': 'Ny arrangementsforespørsel',
   'booking.status_changed': 'Arrangementsforespørsel endret status',
   'registration.created': 'Ny kurspåmelding',
   'registration.confirmed': 'Kurspåmelding bekreftet',
   'registration.cancelled': 'Kurspåmelding avlyst',
-  'consent.updated': 'Samtykke oppdatert',
+  'consent.updated': 'Endret samtykke til e-post',
   'email.opened': 'E-post åpnet',
   'email.clicked': 'Lenke i e-post klikket',
   'email.replied': 'Svar på e-post mottatt',
   'email.bounced': 'E-post kom i retur',
-  'list.member_added': 'Lagt til i CRM-liste',
-  'list.member_removed': 'Fjernet fra CRM-liste',
+  'list.member_added': 'Lagt til i en liste',
+  'list.member_removed': 'Fjernet fra en liste',
   'page.viewed': 'Side besøkt',
   'course.viewed': 'Kursside besøkt',
   'signup.started': 'Påmeldingsskjema påbegynt',
-  'cta.clicked': 'Knapp/CTA klikket',
+  'cta.clicked': 'Knapp på nettsiden klikket',
   'payment.succeeded': 'Betaling gjennomført',
   'payment.failed': 'Betaling feilet',
   'payment.refunded': 'Betaling refundert',
-  'payment.expired': 'Betaling utløpt',
+  'payment.expired': 'Betaling ble ikke fullført i tide',
   'payment.partially_refunded': 'Betaling delvis refundert',
 };
 
@@ -76,10 +76,10 @@ export function eventLabel(type: string): string {
 }
 
 export const EVENT_SOURCE_LABELS: Record<string, string> = {
-  server: 'Server',
-  web: 'Nettsted',
-  client: 'Nettleser',
-  webhook: 'Webhook',
+  server: 'Påmeldingssystemet',
+  web: 'Nettsiden',
+  client: 'Besøkendes nettleser',
+  webhook: 'Annen tjeneste (f.eks. betaling)',
 };
 
 export function eventSourceLabel(source: string): string {
