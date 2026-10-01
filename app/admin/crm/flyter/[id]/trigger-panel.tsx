@@ -13,6 +13,7 @@ import {
   type CourseOption,
   type ListOption,
 } from '@/lib/flows/event-labels';
+import { formatDateNo } from '@/lib/crm/format-date';
 
 export interface TriggerRow {
   id: number;
@@ -33,7 +34,7 @@ const EVENT_GROUPS = groupedEventTypes();
 
 function courseOptionLabel(course: CourseOption): string {
   if (!course.startDate) return course.name;
-  return `${course.name} (${new Date(course.startDate).toLocaleDateString('nb-NO')})`;
+  return `${course.name} (${formatDateNo(course.startDate)})`;
 }
 
 export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onTriggersChange }: TriggerPanelProps) {
