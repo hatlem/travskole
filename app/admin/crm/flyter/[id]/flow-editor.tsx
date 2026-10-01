@@ -39,7 +39,7 @@ import { EnrollModal } from './enroll-modal';
 import { FlowSettingsPanel } from './flow-settings-panel';
 import { FlowToolbar, type ValidationError } from './flow-toolbar';
 import type { FlowSendWindowValue } from './flow-send-window-section';
-import { describeSendWindow, resolveEffectiveSendWindow } from '@/lib/flows/send-window';
+import { activatedFlowNote, describeSendWindow, resolveEffectiveSendWindow } from '@/lib/flows/send-window';
 
 interface InitialNode {
   id: number;
@@ -414,7 +414,7 @@ export function FlowEditor({
       }
       setFlow((f) => ({ ...f, status: data.flow.status }));
       clearErrors();
-      toast('Flyten er aktiv. E-postene går nå ut til de som kvalifiserer.', 'success');
+      toast(activatedFlowNote(sendWindowLabel), 'success');
     } catch {
       toast('Flyten ble ikke aktivert. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
@@ -757,6 +757,7 @@ export function FlowEditor({
         <EnrollModal
           flowId={flow.id}
           isMarketing={flow.isMarketing}
+          sendWindowLabel={sendWindowLabel}
           onClose={() => setEnrollOpen(false)}
           onEnrolled={(result) => {
             if (result.enrolled > 0) {

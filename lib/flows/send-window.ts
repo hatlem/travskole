@@ -394,6 +394,15 @@ export function describeSendWindow(w: SendWindow | null): string {
   return w ? `${describeHours(w)} ${describeDays(w.days)}` : 'når som helst';
 }
 
+/** Når kontakter som legges inn i flyten, får e-post — aldri «med en gang» utenfor sendetiden. */
+export function enrollTimingNote(windowLabel: string): string {
+  return `De som legges til, begynner å få e-postene fra flyten innenfor flytens sendetider (nå: ${windowLabel}).`;
+}
+
+export function activatedFlowNote(windowLabel: string): string {
+  return `Flyten er aktiv. E-postene går ut til de som kvalifiserer, innenfor flytens sendetider (nå: ${windowLabel}).`;
+}
+
 const OSLO_CLOCK = new Intl.DateTimeFormat('nb-NO', {
   timeZone: OSLO_TZ,
   hour: '2-digit',

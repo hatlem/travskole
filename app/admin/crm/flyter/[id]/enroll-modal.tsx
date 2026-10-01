@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { useModalEscape } from '@/components/admin/useModalEscape';
+import { enrollTimingNote } from '@/lib/flows/send-window';
 
 interface SegmentOption {
   id: number;
@@ -32,6 +33,8 @@ export interface EnrollResult {
 interface EnrollModalProps {
   flowId: number;
   isMarketing: boolean;
+  /** Flytens gjeldende sendetid, f.eks. «08–20 alle dager». */
+  sendWindowLabel: string;
   onClose: () => void;
   onEnrolled: (result: EnrollResult) => void;
 }
@@ -40,7 +43,7 @@ type Mode = 'segment' | 'list' | 'contacts';
 
 const SEGMENT_CAP = 500;
 
-export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: EnrollModalProps) {
+export function EnrollModal({ flowId, isMarketing, sendWindowLabel, onClose, onEnrolled }: EnrollModalProps) {
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>('segment');
   const [segments, setSegments] = useState<SegmentOption[] | null>(null);
@@ -317,7 +320,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
 
             <div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
               <p>Personer som allerede er underveis i flyten, eller som står på ikke-kontakt-listen, hoppes over.</p>
-              <p>De som legges til, begynner å få e-postene fra flyten med en gang.</p>
+              <p>{enrollTimingNote(sendWindowLabel)}</p>
               {isMarketing && <p>Dette er markedsføring: bare de som har sagt ja til markedsføring, får e-postene.</p>}
             </div>
 

@@ -3,11 +3,13 @@ import {
   DEFAULT_SEND_WINDOW,
   DEFAULT_SEND_WINDOW_VALUE,
   WEEKDAYS,
+  activatedFlowNote,
   allowedSendHours,
   describeDays,
   describeSendWindow,
   draftFromValue,
   draftToValue,
+  enrollTimingNote,
   flowSendWindowInputSchema,
   flowSendWindowKey,
   formatSendTime,
@@ -346,5 +348,16 @@ describe('visning', () => {
     expect(allowedSendHours(DEFAULT_SEND_WINDOW)).toEqual([8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]);
     expect(allowedSendHours(W({ startHour: 8, startMinute: 30, endHour: 10, endMinute: 15 }))).toEqual([8, 9, 10]);
     expect(allowedSendHours(null)).toHaveLength(24);
+  });
+});
+
+describe('tekster om når e-post sendes', () => {
+  it('lover aldri sending «med en gang», men viser gjeldende sendetid', () => {
+    const label = describeSendWindow(DEFAULT_SEND_WINDOW);
+    expect(enrollTimingNote(label)).toBe(
+      `De som legges til, begynner å få e-postene fra flyten innenfor flytens sendetider (nå: ${label}).`,
+    );
+    expect(activatedFlowNote('når som helst')).toContain('innenfor flytens sendetider (nå: når som helst)');
+    for (const text of [enrollTimingNote(label), activatedFlowNote(label)]) expect(text).not.toMatch(/med en gang|går nå ut/);
   });
 });
