@@ -89,6 +89,7 @@ const TOGGLE_SETTINGS: readonly string[] = [
   'registration_terms_required',
   'payment_test_mode',
   'reply_create_task',
+  'task_notify_assignee',
   'marketing_allow_legitimate_interest',
   'marketing_optin_enabled',
   'ai_context_include_history',

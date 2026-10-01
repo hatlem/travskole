@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { guardedNavigationTarget, planSettingsSave, type LinkClick } from '@/lib/unsaved-changes';
+import { changedSettingKeys, guardedNavigationTarget, planSettingsSave, type LinkClick } from '@/lib/unsaved-changes';
 import { validateSettingValue } from '@/lib/settings-shared';
 
 const current = new URL('https://registrering.bjerke.no/admin/settings');
@@ -33,5 +33,18 @@ describe('planSettingsSave', () => {
     );
     expect(plan.toSave).toEqual(['site_name']);
     expect(plan.errors).toEqual({ reply_task_due_days: 'Må være et heltall mellom 0 og 365' });
+  });
+});
+
+describe('changedSettingKeys', () => {
+  it('editing back to the original value is not an unsaved change', () => {
+    expect(changedSettingKeys({ site_name: 'Bjerke' }, { site_name: 'Bjerke' }, {})).toEqual([]);
+    expect(changedSettingKeys({ site_name: 'Bjerke!' }, { site_name: 'Bjerke' }, {})).toEqual(['site_name']);
+  });
+
+  it('compares against the default when nothing is stored', () => {
+    expect(changedSettingKeys({ gtm_id: 'GTM-1' }, {}, { gtm_id: 'GTM-1' })).toEqual([]);
+    expect(changedSettingKeys({ gtm_id: '' }, {}, { gtm_id: 'GTM-1' })).toEqual(['gtm_id']);
+    expect(changedSettingKeys({ ukjent: '' }, {}, {})).toEqual([]);
   });
 });

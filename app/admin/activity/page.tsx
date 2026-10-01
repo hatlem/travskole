@@ -3,13 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { PageHeader } from '@/components/admin/PageHeader';
-import {
-  ACTIVITY_ACTION_OPTIONS,
-  ACTIVITY_ENTITY_OPTIONS,
-  activityActionLabel,
-  activityEntityLabel,
-  formatActivityDetails,
-} from '@/lib/activity-labels';
+import { ACTIVITY_ACTION_OPTIONS, ACTIVITY_ENTITY_OPTIONS } from '@/lib/activity-labels';
+import { formatActivity } from '@/lib/activity-format';
+import { buttonClass } from '@/components/admin/Button';
 
 interface ActivityLog {
   id: number;
@@ -36,6 +32,16 @@ const actionColors: Record<string, string> = {
   email: 'bg-purple-100 text-purple-700',
   status_change: 'bg-yellow-100 text-yellow-700',
 };
+
+function ActionIcon({ action }: { action: string }) {
+  return (
+    <span aria-hidden="true" className={`mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${actionColors[action] || 'bg-gray-100 text-gray-700'}`}>
+      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d={actionIcons[action] || 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
+      </svg>
+    </span>
+  );
+}
 
 function relativeTime(dateStr: string): string {
   const now = new Date();
@@ -179,15 +185,16 @@ export default function AdminActivityPage() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Tidspunkt</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Bruker</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Handling</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Type</th>
-                  <th className="text-left px-4 py-3 font-medium text-gray-500">Detaljer</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Tidspunkt</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Bruker</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Hva skjedde</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-600">Detaljer</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {logs.map(log => (
+                {logs.map(log => {
+                  const formatted = formatActivity(log);
+                  return (
                   <tr key={log.id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-4 py-3 whitespace-nowrap">
                       <span className="text-gray-900" title={new Date(log.createdAt).toLocaleString('nb-NO')}>
@@ -198,57 +205,43 @@ export default function AdminActivityPage() {
                       <span className="text-gray-700">{log.userEmail}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${actionColors[log.action] || 'bg-gray-100 text-gray-700'}`}>
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d={actionIcons[log.action] || 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
-                        </svg>
-                        {activityActionLabel(log.action)}
+                      <span className="inline-flex items-start gap-2 text-gray-900">
+                        <ActionIcon action={log.action} />
+                        {formatted.summary}
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-gray-700">
-                        {activityEntityLabel(log.entity)}
-                        {log.entityId != null && (
-                          <span className="text-gray-400 ml-1">#{log.entityId}</span>
-                        )}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="text-gray-600 truncate block max-w-xs" title={formatActivityDetails(log.details)}>
-                        {formatActivityDetails(log.details) || '—'}
+                      <span className="text-gray-600 line-clamp-2 max-w-sm" title={formatted.details || undefined}>
+                        {formatted.details || '—'}
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
 
           {/* Mobile list */}
           <div className="md:hidden divide-y divide-gray-100">
-            {logs.map(log => (
-              <div key={log.id} className="p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${actionColors[log.action] || 'bg-gray-100 text-gray-700'}`}>
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d={actionIcons[log.action] || 'M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z'} />
-                    </svg>
-                    {activityActionLabel(log.action)}
-                  </span>
-                  <span className="text-xs text-gray-500" title={new Date(log.createdAt).toLocaleString('nb-NO')}>
-                    {relativeTime(log.createdAt)}
-                  </span>
+            {logs.map(log => {
+              const formatted = formatActivity(log);
+              return (
+                <div key={log.id} className="p-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="inline-flex items-start gap-2 text-sm font-medium text-gray-900">
+                      <ActionIcon action={log.action} />
+                      {formatted.summary}
+                    </p>
+                    <span className="shrink-0 text-xs text-gray-600" title={new Date(log.createdAt).toLocaleString('nb-NO')}>
+                      {relativeTime(log.createdAt)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-xs text-gray-600">{log.userEmail}</p>
+                  {formatted.details && <p className="mt-1 text-sm text-gray-600">{formatted.details}</p>}
                 </div>
-                <p className="text-sm text-gray-900 font-medium">
-                  {activityEntityLabel(log.entity)}
-                  {log.entityId != null && <span className="text-gray-400 ml-1">#{log.entityId}</span>}
-                </p>
-                <p className="text-xs text-gray-500 mt-0.5">{log.userEmail}</p>
-                {log.details && (
-                  <p className="text-sm text-gray-600 mt-1">{formatActivityDetails(log.details)}</p>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -259,7 +252,7 @@ export default function AdminActivityPage() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className={buttonClass('secondary')}
           >
             Forrige
           </button>
@@ -269,7 +262,7 @@ export default function AdminActivityPage() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            className={buttonClass('secondary')}
           >
             Neste
           </button>

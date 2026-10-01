@@ -15,7 +15,7 @@ describe('getPendingAdminNotices', () => {
     const notices = await getPendingAdminNotices();
     expect(notices).toHaveLength(1);
     expect(notices[0].id).toBe('consent-terms-placeholder');
-    expect(notices[0].href).toBe('/admin/settings');
+    expect(notices[0].href).toBe('/admin/settings#consent_terms_text');
     expect(notices[0].description).toContain('«x»');
   });
 
@@ -29,6 +29,18 @@ describe('getPendingAdminNotices', () => {
   it('varsler når teksten kun er whitespace', async () => {
     getSettingMock.mockResolvedValue('   \n  ');
     expect(await getPendingAdminNotices()).toHaveLength(1);
+  });
+
+  it('godtar standardteksten «Jeg har lest og godtar vilkårene»', async () => {
+    getSettingMock.mockResolvedValue('Jeg har lest og godtar vilkårene');
+    expect(await getPendingAdminNotices()).toHaveLength(0);
+  });
+
+  it('forklarer forskjellen på avkrysningsteksten og Vilkårssiden', async () => {
+    getSettingMock.mockResolvedValue('');
+    const [notice] = await getPendingAdminNotices();
+    expect(notice.description).toContain('Avkrysningstekst ved påmelding');
+    expect(notice.description).toContain('Vilkårssiden');
   });
 
   it('ingen varsler når reell vilkårstekst er satt', async () => {
