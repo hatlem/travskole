@@ -4,10 +4,11 @@
  * `buildFlowCopy` er ren (ingen I/O) og gjør selve omformingen: noder får
  * midlertidige referanser, koblinger remappes til disse, og koblinger som
  * peker på ukjente noder droppes. `cloneFlow` skriver kopien i én transaksjon.
- * Enrollments, sendinger og KI-forslag kopieres aldri.
+ * Enrollments, sendinger og KI-forslag kopieres aldri; flytens egne sendetider følger med.
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
+import { flowSendWindowKey } from './send-window';
 
 export type CloneTargetStatus = 'draft' | 'template';
 
@@ -19,6 +20,8 @@ export interface CloneSource {
   nodes: { id: number; type: string; config: string; posX: number; posY: number }[];
   edges: { fromNodeId: number; toNodeId: number; branch: string | null }[];
   triggers: { eventType: string; filter: string }[];
+  /** Lagret overstyring av sendetid (flow_send_window_<id>), om flyten har en. */
+  sendWindow?: string | null;
 }
 
 export interface FlowCopy {
@@ -26,6 +29,7 @@ export interface FlowCopy {
   nodes: { ref: number; type: string; config: string; posX: number; posY: number }[];
   edges: { fromRef: number; toRef: number; branch: string | null }[];
   triggers: { eventType: string; filter: string }[];
+  sendWindow?: string | null;
 }
 
 export const FLOW_NAME_MAX = 200;
@@ -67,10 +71,11 @@ export function buildFlowCopy(
     nodes,
     edges,
     triggers: source.triggers.map((t) => ({ eventType: t.eventType, filter: t.filter })),
+    ...(source.sendWindow ? { sendWindow: source.sendWindow } : {}),
   };
 }
 
-type CloneTx = Pick<Prisma.TransactionClient, 'flow' | 'flowNode' | 'flowEdge' | 'flowTrigger'>;
+type CloneTx = Pick<Prisma.TransactionClient, 'flow' | 'flowNode' | 'flowEdge' | 'flowTrigger' | 'setting'>;
 
 /** Skriver en `FlowCopy` i en eksisterende transaksjon og returnerer den nye flyt-iden. */
 export async function writeFlowCopy(tx: CloneTx, copy: FlowCopy): Promise<number> {
@@ -100,6 +105,9 @@ export async function writeFlowCopy(tx: CloneTx, copy: FlowCopy): Promise<number
       data: copy.triggers.map((t) => ({ flowId: flow.id, eventType: t.eventType, filter: t.filter })),
     });
   }
+  if (copy.sendWindow) {
+    await tx.setting.create({ data: { key: flowSendWindowKey(flow.id), value: copy.sendWindow } });
+  }
   return flow.id;
 }
 
@@ -108,7 +116,7 @@ export async function writeFlowCopy(tx: CloneTx, copy: FlowCopy): Promise<number
  * kilden ikke finnes.
  */
 export async function cloneFlow(
-  db: Pick<PrismaClient, 'flow' | '$transaction'>,
+  db: Pick<PrismaClient, 'flow' | 'setting' | '$transaction'>,
   sourceId: number,
   opts: { status: CloneTargetStatus; name?: string },
 ): Promise<{ id: number; name: string; status: CloneTargetStatus } | null> {
@@ -126,7 +134,8 @@ export async function cloneFlow(
   });
   if (!source) return null;
 
-  const copy = buildFlowCopy(source, opts);
+  const sendWindow = await db.setting.findUnique({ where: { key: flowSendWindowKey(sourceId) }, select: { value: true } });
+  const copy = buildFlowCopy({ ...source, sendWindow: sendWindow?.value ?? null }, opts);
   const id = await db.$transaction((tx) => writeFlowCopy(tx, copy));
   return { id, name: copy.flow.name, status: copy.flow.status };
 }

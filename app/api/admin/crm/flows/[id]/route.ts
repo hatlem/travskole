@@ -7,6 +7,8 @@ import { logActivity } from '@/lib/activity';
 import { exitActiveEnrollments } from '@/lib/flows/exit';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 import { ANCHOR_MODES, canDeleteStatus, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
+import { flowSendWindowInputSchema, overrideToInput } from '@/lib/flows/send-window';
+import { deleteFlowSendWindowOverride, saveFlowSendWindowOverride } from '@/lib/flows/send-window-store';
 
 export async function GET(
   request: NextRequest,
@@ -43,6 +45,8 @@ const patchSchema = z.object({
   isMarketing: z.boolean().optional(),
   anchorMode: z.enum(ANCHOR_MODES).optional(),
   status: z.enum(['draft', 'active', 'paused', 'archived']).optional(),
+  // Sendetider endrer ikke grafen, så de kan endres også mens flyten kjører.
+  sendWindow: flowSendWindowInputSchema.optional(),
 });
 
 /**
@@ -178,6 +182,9 @@ export async function PATCH(
         ...(data.status !== undefined && { status: data.status }),
       },
     });
+    if (data.sendWindow !== undefined) {
+      await saveFlowSendWindowOverride(flowId, data.sendWindow);
+    }
 
     // Arkivert er terminal — ingen kontakter skal bli stående «aktive» i en død flyt.
     const exitedEnrollments =
@@ -189,10 +196,20 @@ export async function PATCH(
       action: 'update',
       entity: 'flow',
       entityId: flow.id,
-      details: exitedEnrollments > 0 ? JSON.stringify({ status: 'archived', exitedEnrollments }) : undefined,
+      details:
+        exitedEnrollments > 0 || data.sendWindow !== undefined
+          ? JSON.stringify({
+              ...(exitedEnrollments > 0 && { status: 'archived', exitedEnrollments }),
+              ...(data.sendWindow !== undefined && { sendWindow: data.sendWindow.mode }),
+            })
+          : undefined,
       userEmail: session.user.email,
     }).catch(() => {});
-    return NextResponse.json({ flow, exitedEnrollments });
+    return NextResponse.json({
+      flow,
+      exitedEnrollments,
+      ...(data.sendWindow !== undefined && { sendWindow: overrideToInput(data.sendWindow) }),
+    });
   } catch (error) {
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -237,6 +254,8 @@ export async function DELETE(
 
   try {
     await prisma.flow.delete({ where: { id: flowId } });
+    // En foreldreløs sendetid-rad er ufarlig (id-er gjenbrukes ikke) — slettingen skal ikke feile på den.
+    await deleteFlowSendWindowOverride(flowId).catch(() => {});
     logActivity({
       action: 'delete',
       entity: 'flow',
