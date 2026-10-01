@@ -21,9 +21,11 @@ import { findReview } from '@/lib/ai/review';
 import type { SendWindow } from './send-window';
 import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
 
-const BATCH_SIZE = 50;
+export const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
-const LEASE_MINUTES = 10;
+export const LEASE_MINUTES = 10;
+/** Tidsbudsjett for én cron-kjøring — godt under Azures ~230 s og langt under leasen. */
+export const DRAIN_BUDGET_MS = 75_000;
 
 export interface FlowBatchResult {
   processed: number;
@@ -492,6 +494,43 @@ async function processClaimed(claimedIds: number[], now: Date): Promise<FlowBatc
  */
 export async function runFlowBatch(now: Date = new Date()): Promise<FlowBatchResult> {
   return processClaimed(await claimDueEnrollmentIds(now), now);
+}
+
+export interface FlowDrainResult extends FlowBatchResult {
+  batches: number;
+}
+
+/**
+ * Kjører batcher etter hverandre til køen er tom eller tidsbudsjettet er
+ * brukt, så en nattlig kø tømmes raskt når sendetiden åpner. Hver batch
+ * claimer med fersk `now` (samme claim/lease som én batch); en ny startes
+ * bare når den tregeste batchen hittil fortsatt får plass i budsjettet.
+ */
+export async function drainFlowBatches(
+  budgetMs: number = DRAIN_BUDGET_MS,
+  clock: () => Date = () => new Date(),
+): Promise<FlowDrainResult> {
+  const total: FlowDrainResult = { processed: 0, sent: 0, failed: 0, completed: 0, batches: 0 };
+  const startedAt = clock().getTime();
+  let slowestMs = 0;
+
+  for (;;) {
+    const now = clock();
+    const claimed = await claimDueEnrollmentIds(now);
+    if (claimed.length === 0) break;
+    const result = await processClaimed(claimed, now);
+    total.processed += result.processed;
+    total.sent += result.sent;
+    total.failed += result.failed;
+    total.completed += result.completed;
+    total.batches++;
+
+    const finishedAt = clock().getTime();
+    slowestMs = Math.max(slowestMs, finishedAt - now.getTime());
+    if (claimed.length < BATCH_SIZE) break;
+    if (finishedAt - startedAt + slowestMs > budgetMs) break;
+  }
+  return total;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { timingSafeEqual } from 'crypto';
-import { runFlowBatch } from '@/lib/flows/runner';
+import { drainFlowBatches } from '@/lib/flows/runner';
 import { pollMailboxes } from '@/lib/tracking/poller';
 import { runAiAnalysis } from '@/lib/ai/analyze-runner';
 import logger from '@/lib/logger';
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await runFlowBatch();
+    const result = await drainFlowBatches();
     const poller = await pollMailboxes().catch((error) => {
       logger.error('Graph-polling kastet uventet feil', { error: error instanceof Error ? error.message : String(error) });
       return { replies: 0, bounces: 0, scanned: 0 };
@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
     const suggestions = await runAiAnalysis().catch(() => ({ created: 0 }));
 
     logger.info('Flows cron batch completed', {
+      batches: result.batches,
       processed: result.processed,
       sent: result.sent,
       failed: result.failed,
