@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { bookingConfirmationNote, buildBookingApprovalEmail, formatAgreedTime } from '@/lib/bookings/approval-email-content';
 
 const prisma = vi.hoisted(() => ({
-  bookingRequest: { findUnique: vi.fn(), update: vi.fn() },
+  bookingRequest: { findUnique: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn() },
   deal: { findUnique: vi.fn() },
   note: { create: vi.fn(async () => ({})) },
 }));
@@ -34,7 +34,8 @@ const post = (body: Record<string, unknown>) =>
 beforeEach(() => {
   vi.clearAllMocks();
   prisma.bookingRequest.findUnique.mockResolvedValue(BOOKING);
-  prisma.bookingRequest.update.mockResolvedValue({ ...BOOKING, status: 'confirmed' });
+  prisma.bookingRequest.updateMany.mockResolvedValue({ count: 1 });
+  prisma.bookingRequest.findUniqueOrThrow.mockResolvedValue({ ...BOOKING, status: 'confirmed' });
   prisma.deal.findUnique.mockResolvedValue({ id: 31, contactId: 44 });
 });
 
@@ -79,14 +80,17 @@ describe('POST /api/admin/bookings/[id]/confirm', () => {
     const body = await res.json();
     expect(body.to).toBe('kari@x.no');
     expect(body.html).toContain('kl. 18:30');
-    expect(prisma.bookingRequest.update).not.toHaveBeenCalled();
+    expect(prisma.bookingRequest.updateMany).not.toHaveBeenCalled();
     expect(sendAdminEmail).not.toHaveBeenCalled();
   });
 
   it('confirm: updates status, emails the customer, notes the deal and returns CRM links', async () => {
     const res = await post({ date: '2026-11-14', time: '18:30', note: 'Hei' });
     const body = await res.json();
-    expect(prisma.bookingRequest.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'confirmed' }) }));
+    expect(prisma.bookingRequest.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 7, status: { not: 'confirmed' } },
+      data: expect.objectContaining({ status: 'confirmed' }),
+    }));
     expect(syncBookingToCrm).toHaveBeenCalledWith(7);
     expect(sendAdminEmail).toHaveBeenCalledWith('kari@x.no', 'Booking godkjent — Julebord', expect.stringContaining('kl. 18:30'));
     expect(prisma.note.create).toHaveBeenCalledWith({
@@ -100,6 +104,22 @@ describe('POST /api/admin/bookings/[id]/confirm', () => {
     const body = await (await post({})).json();
     expect(body.emailSent).toBe(false);
     expect(prisma.note.create).not.toHaveBeenCalled();
+  });
+
+  it('two concurrent confirms: only the winner emails and notes the deal; the other gets 409', async () => {
+    let confirmed = false;
+    prisma.bookingRequest.updateMany.mockImplementation(async () => {
+      await Promise.resolve();
+      if (confirmed) return { count: 0 };
+      confirmed = true;
+      return { count: 1 };
+    });
+    const [a, b] = await Promise.all([post({ note: 'Hei' }), post({ note: 'Hei' })]);
+    expect([a.status, b.status].sort()).toEqual([200, 409]);
+    expect(sendAdminEmail).toHaveBeenCalledTimes(1);
+    expect(prisma.note.create).toHaveBeenCalledTimes(1);
+    expect(syncBookingToCrm).toHaveBeenCalledTimes(1);
+    expect(logActivity).toHaveBeenCalledTimes(1);
   });
 
   it('rejects bad times and already-confirmed requests', async () => {

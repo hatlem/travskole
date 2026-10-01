@@ -19,6 +19,8 @@ import {
 import { parsePaymentMethods } from '@/lib/payments';
 import logger from '@/lib/logger';
 
+const ALREADY_CONFIRMED = 'Forespørselen er allerede bekreftet.';
+
 const schema = z.object({
   date: z.string().trim().refine((v) => v === '' || isAgreedDate(v), 'Ugyldig dato').optional().default(''),
   time: z.string().trim().refine((v) => v === '' || isAgreedTime(v), 'Skriv klokkeslett som 12:00').optional().default(''),
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({ error: 'Forespørselen finnes ikke' }, { status: 404 });
   }
   if (booking.status === 'confirmed') {
-    return NextResponse.json({ error: 'Forespørselen er allerede bekreftet.' }, { status: 409 });
+    return NextResponse.json({ error: ALREADY_CONFIRMED }, { status: 409 });
   }
 
   const amountKr = booking.course?.price != null ? booking.course.price * booking.participants : null;
@@ -87,10 +89,15 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 
   try {
-    const updated = await prisma.bookingRequest.update({
-      where: { id: bookingId },
+    // Betinget overgang: to samtidige bekreftelser gir bare én e-post og ett CRM-notat.
+    const { count } = await prisma.bookingRequest.updateMany({
+      where: { id: bookingId, status: { not: 'confirmed' } },
       data: { status: 'confirmed', confirmedAt: new Date(), cancelledAt: null },
     });
+    if (count === 0) {
+      return NextResponse.json({ error: ALREADY_CONFIRMED }, { status: 409 });
+    }
+    const updated = await prisma.bookingRequest.findUniqueOrThrow({ where: { id: bookingId } });
 
     logActivity({
       action: 'status_change',
