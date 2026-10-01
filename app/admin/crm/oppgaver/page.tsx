@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useToast } from '@/components/admin/Toast';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
 import { dateInputToIso, isoToDateInput } from '@/lib/crm/form-utils';
@@ -51,6 +52,7 @@ export default function OppgaverPage() {
   const { assignees, currentUserId } = useAssignees();
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Nye oppgaver tildeles meg som standard.
   const effectiveNewAssignee = newAssigneeTouched ? newAssignee : currentUserId;
@@ -66,7 +68,7 @@ export default function OppgaverPage() {
       if (statusFilter) params.set('status', statusFilter);
       if (assigneeFilter) params.set('assignee', assigneeFilter);
       const res = await fetch(`/api/admin/crm/tasks?${params}`, { signal: controller.signal });
-      if (!res.ok) throw new Error('Kunne ikke laste oppgaver');
+      if (!res.ok) throw new Error('Kunne ikke hente oppgavene. Last siden på nytt om litt.');
       const data = await res.json();
       setTasks(data.tasks || []);
       setLoadError(false);
@@ -74,7 +76,7 @@ export default function OppgaverPage() {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setTasks([]);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste oppgaver', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente oppgavene. Last siden på nytt om litt.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -107,16 +109,16 @@ export default function OppgaverPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke opprette oppgave', 'error');
+        toast(data.error || 'Oppgaven ble ikke lagt til. Sjekk tittel og frist og prøv igjen.', 'error');
         return;
       }
-      toast('Oppgave opprettet', 'success');
+      toast(`Oppgaven «${title.trim()}» er lagt til`, 'success');
       setTitle('');
       setDueAt('');
       setNewAssigneeTouched(false);
       await load();
     } catch {
-      toast('Kunne ikke opprette oppgave', 'error');
+      toast('Oppgaven ble ikke lagt til — sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setCreating(false);
     }
@@ -130,7 +132,7 @@ export default function OppgaverPage() {
     });
     if (!res.ok) {
       const data = await res.json().catch(() => ({}));
-      toast(data.error || 'Kunne ikke oppdatere oppgave', 'error');
+      toast(data.error || 'Endringen ble ikke lagret. Prøv igjen.', 'error');
       return false;
     }
     return true;
@@ -170,7 +172,7 @@ export default function OppgaverPage() {
     setSavingEdit(true);
     try {
       if (await patchTask(original.id, body)) {
-        toast('Oppgave oppdatert', 'success');
+        toast('Oppgaven er lagret', 'success');
         setEditing(null);
         await load();
       }
@@ -188,14 +190,14 @@ export default function OppgaverPage() {
       const res = await fetch(`/api/admin/crm/tasks/${deleteTarget.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke slette oppgave', 'error');
+        toast(data.error || 'Oppgaven ble ikke slettet. Prøv igjen.', 'error');
         return;
       }
-      toast('Oppgave slettet', 'success');
+      toast('Oppgaven er slettet', 'success');
       setDeleteTarget(null);
       await load();
     } catch {
-      toast('Kunne ikke slette oppgave', 'error');
+      toast('Oppgaven ble ikke slettet — sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setDeleting(false);
     }
@@ -203,14 +205,28 @@ export default function OppgaverPage() {
 
   const overdue = (t: TaskRow) => t.status === 'open' && t.dueAt !== null && isOverdue(t.dueAt);
   const emptyDescription =
-    assigneeFilter === 'me' ? 'Du har ingen oppgaver her. Velg «Alle» for å se hele teamets oppgaver.'
-      : 'Opprett oppgaver her eller fra en kontakt.';
+    assigneeFilter === 'me'
+      ? 'Du har ingen oppgaver her. Velg «Alle» for å se hele teamets oppgaver, eller lag en ny.'
+      : 'Skriv inn en ny oppgave i feltet over, eller lag en fra en kontakt.';
 
   return (
     <div>
-      <CrmTabs />
+      <CrmTabs
+        actions={
+          <button
+            type="button"
+            onClick={() => titleInputRef.current?.focus()}
+            className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Ny oppgave
+          </button>
+        }
+      />
       <div className="flex flex-wrap items-center gap-3 mb-4">
-        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden text-sm" role="group" aria-label="Ansvarlig">
+        <div className="inline-flex rounded-md border border-gray-300 overflow-hidden text-sm" role="group" aria-label="Vis oppgaver for">
           {[
             { value: 'me', label: 'Mine' },
             { value: '', label: 'Alle' },
@@ -252,10 +268,17 @@ export default function OppgaverPage() {
         className="flex flex-wrap items-center gap-2 mb-4 border border-gray-200 rounded-lg p-3 bg-gray-50"
         onSubmit={(e) => { e.preventDefault(); createTask(); }}
       >
+        <label htmlFor="new-task-title" className="w-full text-sm font-medium text-gray-800 flex items-center">
+          Ny oppgave
+          <HelpTip term="owner" />
+          <span className="ml-2 font-normal text-gray-500">Hva skal gjøres, når, og hvem har ansvaret?</span>
+        </label>
         <input
+          id="new-task-title"
+          ref={titleInputRef}
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Ny oppgave …"
+          placeholder="F.eks. Ring Firma AS om julebordet"
           maxLength={300}
           className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1 min-w-[12rem] bg-white"
         />
@@ -267,6 +290,7 @@ export default function OppgaverPage() {
           className="border border-gray-300 rounded-md px-2 py-2 text-sm bg-white"
         />
         <AssigneeSelect
+          aria-label="Ansvarlig"
           value={effectiveNewAssignee}
           onChange={(v) => { setNewAssignee(v); setNewAssigneeTouched(true); }}
           className="border border-gray-300 rounded-md px-2 py-2 text-sm bg-white"
@@ -276,7 +300,7 @@ export default function OppgaverPage() {
           disabled={!title.trim() || creating}
           className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
         >
-          {creating ? 'Legger til …' : 'Legg til'}
+          {creating ? 'Legger til …' : 'Legg til oppgave'}
         </button>
       </form>
 
@@ -284,12 +308,16 @@ export default function OppgaverPage() {
         <TableSkeleton rows={8} />
       ) : loadError ? (
         <EmptyState
-          title="Kunne ikke laste oppgaver"
-          description="Noe gikk galt under henting av oppgaver. Prøv igjen."
+          title="Kunne ikke hente oppgavene"
+          description="Noe gikk galt da oppgavene skulle hentes. Ingenting er endret — prøv igjen."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       ) : tasks.length === 0 ? (
-        <EmptyState title="Ingen oppgaver" description={emptyDescription} />
+        <EmptyState
+          title={statusFilter === 'open' ? 'Ingenting å gjøre akkurat nå' : 'Ingen oppgaver her'}
+          description={emptyDescription}
+          action={{ label: 'Lag en oppgave', onClick: () => titleInputRef.current?.focus() }}
+        />
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="min-w-full text-sm">
@@ -314,7 +342,7 @@ export default function OppgaverPage() {
                         checked={t.status === 'done'}
                         onChange={() => toggle(t)}
                         disabled={updatingIds.has(t.id)}
-                        aria-label="Fullført"
+                        aria-label={t.status === 'done' ? `Marker «${t.title}» som ikke gjort` : `Marker «${t.title}» som gjort`}
                       />
                     </td>
                     <td className="px-4 py-3">
@@ -403,9 +431,9 @@ export default function OppgaverPage() {
 
       <ConfirmModal
         open={deleteTarget !== null}
-        title="Slett oppgave"
-        message={deleteTarget ? `Slette «${deleteTarget.title}»?` : ''}
-        confirmLabel="Slett"
+        title="Slette oppgaven?"
+        message={deleteTarget ? `«${deleteTarget.title}» forsvinner for godt, også fra kontakten den hører til. Vil du bare krysse den av som gjort, bruk avkrysningsboksen i stedet.` : ''}
+        confirmLabel="Slett oppgaven"
         loading={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
