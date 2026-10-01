@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useId, useRef } from 'react';
 import { useModalEscape } from './useModalEscape';
 
 type Variant = 'danger' | 'warning' | 'info';
@@ -109,8 +110,35 @@ export function ConfirmModal({
   onCancel,
 }: ConfirmModalProps) {
   useModalEscape(open, onCancel, loading);
+  const titleId = useId();
+  const messageId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+
+  // Fokus inn i dialogen (Avbryt = trygt standardvalg) og tilbake til utløseren ved lukking.
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cancelRef.current?.focus();
+    return () => previous?.focus();
+  }, [open]);
 
   if (!open) return null;
+
+  const trapTab = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const buttons = dialogRef.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)');
+    if (!buttons || buttons.length === 0) return;
+    const first = buttons[0];
+    const last = buttons[buttons.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
 
   const config = variantConfig[variant];
 
@@ -125,7 +153,15 @@ export function ConfirmModal({
       <div className="fixed inset-0 bg-black/50 transition-opacity" />
 
       {/* Modal */}
-      <div className="relative w-full max-w-md animate-in zoom-in-95 fade-in rounded-lg bg-white p-6 shadow-xl duration-200">
+      <div
+        ref={dialogRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={messageId}
+        onKeyDown={trapTab}
+        className="relative w-full max-w-md animate-in zoom-in-95 fade-in rounded-lg bg-white p-6 shadow-xl duration-200"
+      >
         {/* Icon */}
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full">
           <div className={`flex h-12 w-12 items-center justify-center rounded-full ${config.iconBg} ${config.iconColor}`}>
@@ -135,13 +171,14 @@ export function ConfirmModal({
 
         {/* Content */}
         <div className="text-center">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          <p className="mt-2 text-sm text-gray-500">{message}</p>
+          <h3 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h3>
+          <p id={messageId} className="mt-2 text-sm text-gray-500">{message}</p>
         </div>
 
         {/* Actions */}
         <div className="mt-6 flex gap-3">
           <button
+            ref={cancelRef}
             type="button"
             disabled={loading}
             onClick={onCancel}
