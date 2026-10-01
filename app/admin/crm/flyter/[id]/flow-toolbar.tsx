@@ -39,6 +39,9 @@ interface FlowToolbarProps {
   onSaveAsTemplate: () => void;
   savingTemplate: boolean;
   enrollmentCounter: React.ReactNode;
+  /** F.eks. «08–20 alle dager» eller «når som helst». */
+  sendWindowLabel: string;
+  onSendWindowClick: () => void;
 }
 
 export function FlowToolbar({
@@ -59,6 +62,8 @@ export function FlowToolbar({
   onSaveAsTemplate,
   savingTemplate,
   enrollmentCounter,
+  sendWindowLabel,
+  onSendWindowClick,
 }: FlowToolbarProps) {
   const editingDisabled = !isFlowEditable(status);
   const isTemplate = isTemplateStatus(status);
@@ -77,6 +82,14 @@ export function FlowToolbar({
             >
               {STATUS_LABELS[status] ?? status}
             </span>
+            <button
+              type="button"
+              onClick={onSendWindowClick}
+              title="Når flyten kan sende e-post. Klikk for å endre."
+              className="inline-block rounded-full border border-gray-300 px-2 py-0.5 text-xs text-gray-600 hover:bg-gray-50"
+            >
+              Sendes {sendWindowLabel}
+            </button>
             {dirty && <span className="text-xs text-amber-600">Ulagrede endringer</span>}
           </div>
         </div>

@@ -3,21 +3,25 @@
  * (flow_send_window_<id>), kan endres mens flyten kjører, valideres med
  * norske feilmeldinger, og ryddes bort når flyten slettes.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     flow: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(async () => ({})) },
-    flowEnrollment: { count: vi.fn() },
-    setting: { upsert: vi.fn(), deleteMany: vi.fn() },
+    flowEnrollment: { count: vi.fn(), findMany: vi.fn() },
+    flowNode: { findMany: vi.fn() },
+    setting: { upsert: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn() },
   },
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email: 'admin@x.no' } })) }));
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => {}) }));
+vi.mock('@/lib/flows/enroll', () => ({ enrollContacts: vi.fn(), enrollList: vi.fn(), enrollSegment: vi.fn() }));
 
 import { PATCH, DELETE } from '@/app/api/admin/crm/flows/[id]/route';
+import { GET as listEnrollments } from '@/app/api/admin/crm/flows/[id]/enrollments/route';
+import { DEFAULT_SEND_WINDOW, sendDeferral } from '@/lib/flows/send-window';
 
 const params = { params: Promise.resolve({ id: '9' }) };
 const req = (method: string, body?: unknown) =>
@@ -110,5 +114,43 @@ describe('DELETE rydder sendetiden', () => {
     prisma.setting.deleteMany.mockRejectedValue(new Error('db'));
     const res = await DELETE(req('DELETE'), params);
     expect(res.status).toBe(200);
+  });
+});
+
+describe('GET enrollments viser hvem som venter på sendetid', () => {
+  const NIGHT = new Date('2026-10-01T22:00:00Z');
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NIGHT);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('markerer parkerte e-post-løp, ikke sovende vent-noder', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 9 });
+    prisma.flowEnrollment.findMany.mockResolvedValue([
+      { id: 1, status: 'active', currentNodeId: 12, nextRunAt: sendDeferral(NIGHT, DEFAULT_SEND_WINDOW, 1), contact: { id: 1, name: 'A' } },
+      { id: 2, status: 'active', currentNodeId: 12, nextRunAt: new Date('2026-10-04T09:13:27.512Z'), contact: { id: 2, name: 'B' } },
+    ]);
+    prisma.flowEnrollment.count.mockResolvedValue(2);
+    prisma.flowNode.findMany.mockResolvedValue([{ id: 12 }]);
+    prisma.setting.findMany.mockResolvedValue([]);
+
+    const res = await listEnrollments(new NextRequest('http://localhost/api/admin/crm/flows/9/enrollments'), params);
+    const body = await res.json();
+    expect(prisma.flowNode.findMany).toHaveBeenCalledWith({ where: { flowId: 9, type: 'email' }, select: { id: true } });
+    expect(body.enrollments.map((e: { waitingForSendWindow: boolean }) => e.waitingForSendWindow)).toEqual([true, false]);
+  });
+
+  it('flyt med «når som helst» har ingen som venter på sendetid', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 9 });
+    prisma.flowEnrollment.findMany.mockResolvedValue([
+      { id: 1, status: 'active', currentNodeId: 12, nextRunAt: sendDeferral(NIGHT, DEFAULT_SEND_WINDOW, 1), contact: { id: 1, name: 'A' } },
+    ]);
+    prisma.flowEnrollment.count.mockResolvedValue(1);
+    prisma.flowNode.findMany.mockResolvedValue([{ id: 12 }]);
+    prisma.setting.findMany.mockResolvedValue([{ key: 'flow_send_window_9', value: 'anytime' }]);
+
+    const body = await (await listEnrollments(new NextRequest('http://localhost/api/admin/crm/flows/9/enrollments'), params)).json();
+    expect(body.enrollments[0].waitingForSendWindow).toBe(false);
   });
 });

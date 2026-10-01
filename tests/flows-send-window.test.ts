@@ -12,6 +12,7 @@ import {
   flowSendWindowKey,
   formatSendTime,
   isParkedForSendWindow,
+  isWaitingForSendWindow,
   isWithinWindow,
   nextWindowStart,
   overrideToInput,
@@ -233,6 +234,28 @@ describe('isParkedForSendWindow', () => {
   });
   it('uten vindu er ingenting parkert', () => {
     expect(isParkedForSendWindow(7, iso('2026-10-02T06:00:00Z'), null)).toBe(false);
+  });
+});
+
+describe('isWaitingForSendWindow', () => {
+  const NOW = iso('2026-10-01T22:00:00Z');
+  const parkedAt = sendDeferral(NOW, DEFAULT_SEND_WINDOW, 3)!;
+  const emailNodes = new Set([12]);
+  const base = { id: 3, status: 'active', currentNodeId: 12, nextRunAt: parkedAt };
+
+  it('aktivt enrollment parkert på e-post-noden venter på sendetid', () => {
+    expect(isWaitingForSendWindow(base, emailNodes, DEFAULT_SEND_WINDOW, NOW)).toBe(true);
+  });
+  it('vent-node som sover frem til en e-post er ikke «venter på sendetid»', () => {
+    const sleeping = { ...base, nextRunAt: new Date(NOW.getTime() + 3 * 86_400_000 + 1234) };
+    expect(isWaitingForSendWindow(sleeping, emailNodes, DEFAULT_SEND_WINDOW, NOW)).toBe(false);
+  });
+  it('andre noder, avsluttede løp, forfalte tidspunkt og når som helst gir false', () => {
+    expect(isWaitingForSendWindow({ ...base, currentNodeId: 13 }, emailNodes, DEFAULT_SEND_WINDOW, NOW)).toBe(false);
+    expect(isWaitingForSendWindow({ ...base, currentNodeId: null }, emailNodes, DEFAULT_SEND_WINDOW, NOW)).toBe(false);
+    expect(isWaitingForSendWindow({ ...base, status: 'completed' }, emailNodes, DEFAULT_SEND_WINDOW, NOW)).toBe(false);
+    expect(isWaitingForSendWindow(base, emailNodes, DEFAULT_SEND_WINDOW, new Date(parkedAt.getTime() + 1))).toBe(false);
+    expect(isWaitingForSendWindow(base, emailNodes, null, NOW)).toBe(false);
   });
 });
 

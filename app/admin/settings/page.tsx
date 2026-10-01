@@ -7,6 +7,8 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useUnsavedChangesGuard } from '@/components/admin/useUnsavedChangesGuard';
 import { validateSettingValue } from '@/lib/settings-shared';
 import { planSettingsSave } from '@/lib/unsaved-changes';
+import { SendWindowFields } from '@/components/admin/SendWindowFields';
+import { draftFromValue, draftToValue } from '@/lib/flows/send-window';
 
 interface SettingGroup {
   title: string;
@@ -15,7 +17,7 @@ interface SettingGroup {
   fields: {
     key: string;
     label: string;
-    type: 'text' | 'textarea' | 'email' | 'tel' | 'toggle';
+    type: 'text' | 'textarea' | 'email' | 'tel' | 'toggle' | 'sendWindow';
     placeholder?: string;
     help?: string;
   }[];
@@ -173,6 +175,15 @@ const SETTING_GROUPS: SettingGroup[] = [
     description: 'Registrer handlinger på bjerke.no (sidevisninger og klikk) i hendelsesloggen, med samme besøker-ID som her.',
     fields: [
       { key: 'tracking_allowed_origins', label: 'Nettsteder som får sende hendelser (kommaseparert)', type: 'text', placeholder: 'https://bjerke.no,https://www.bjerke.no', help: 'Fullstendige adresser uten sti, f.eks. https://bjerke.no. Andre nettsteder avvises, og tomt felt slår sporingen på bjerke.no av. Endringer gjelder innen ett minutt.' },
+    ],
+  },
+  {
+    title: 'Sendetider for e-post',
+    description: 'Automatiske e-poster fra flyter sendes bare innenfor tidsrommet under, så ingen får e-post midt på natten. En e-post som skulle gått utenfor tidsrommet, venter og sendes når det åpner igjen. Kvitteringer, innloggingslenker, påmeldingsbekreftelser og testutsendelser sendes alltid med en gang.',
+    adminEditable: true,
+    fields: [
+      { key: 'send_window_enabled', label: 'Send bare innenfor tidsrommet', type: 'toggle', help: 'Av = flyt-e-poster kan sendes når som helst, også om natten.' },
+      { key: 'send_window', label: 'Tidsrom og dager (norsk tid)', type: 'sendWindow', help: 'Standard er kl. 08–20 alle dager: helgen er med fordi kursinfo ofte trengs da, mens natten er stengt. Hver flyt kan ha egne tider under Innstillinger i flyten — f.eks. «Når som helst» for viktig kursinformasjon.' },
     ],
   },
 ];
@@ -383,6 +394,21 @@ export default function AdminSettingsPage() {
                         }`}
                       />
                     </button>
+                  ) : field.type === 'sendWindow' ? (
+                    <div
+                      id={field.key}
+                      tabIndex={-1}
+                      onBlur={(e) => {
+                        if (!e.currentTarget.contains(e.relatedTarget)) validateOnBlur(field.key, valueOf(field.key));
+                      }}
+                    >
+                      <SendWindowFields
+                        idPrefix={field.key}
+                        value={draftFromValue(valueOf(field.key))}
+                        onChange={(draft) => updateSetting(field.key, draftToValue(draft))}
+                        disabled={valueOf('send_window_enabled') === 'false'}
+                      />
+                    </div>
                   ) : field.type === 'textarea' ? (
                     <textarea
                       id={field.key}

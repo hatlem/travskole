@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import type { AnchorMode } from '@/lib/flows/status';
 import { FlowSettingsFields, type FlowSettingsValues } from '../flow-settings-fields';
+import type { FlowSendWindowOverride } from '@/lib/flows/send-window';
+import { FlowSendWindowSection, type FlowSendWindowValue } from './flow-send-window-section';
 
 export interface FlowSettingsMeta {
   id: number;
@@ -18,6 +20,8 @@ interface FlowSettingsPanelProps {
   disabled: boolean;
   hasActiveEnrollments: boolean;
   onSaved: (patch: Omit<FlowSettingsMeta, 'id'>) => void;
+  sendWindow: FlowSendWindowValue;
+  onSendWindowSaved: (override: FlowSendWindowOverride) => void;
 }
 
 const toValues = (flow: FlowSettingsMeta): FlowSettingsValues => ({
@@ -27,7 +31,14 @@ const toValues = (flow: FlowSettingsMeta): FlowSettingsValues => ({
   anchorMode: flow.anchorMode === 'course' ? 'course' : 'contact',
 });
 
-export function FlowSettingsPanel({ flow, disabled, hasActiveEnrollments, onSaved }: FlowSettingsPanelProps) {
+export function FlowSettingsPanel({
+  flow,
+  disabled,
+  hasActiveEnrollments,
+  onSaved,
+  sendWindow,
+  onSendWindowSaved,
+}: FlowSettingsPanelProps) {
   const { toast } = useToast();
   const [values, setValues] = useState<FlowSettingsValues>(() => toValues(flow));
   const [saving, setSaving] = useState(false);
@@ -108,6 +119,14 @@ export function FlowSettingsPanel({ flow, disabled, hasActiveEnrollments, onSave
           )}
         </div>
       )}
+      <div className="border-t border-gray-200 pt-3">
+        <FlowSendWindowSection
+          flowId={flow.id}
+          isMarketing={flow.isMarketing}
+          value={sendWindow}
+          onSaved={onSendWindowSaved}
+        />
+      </div>
     </div>
   );
 }

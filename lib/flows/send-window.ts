@@ -263,6 +263,29 @@ export function isParkedForSendWindow(seed: number, nextRunAt: Date, w: SendWind
   return opensAt(t - sendJitterMs(seed, w)) || opensAt(t);
 }
 
+export interface EnrollmentWaitState {
+  id: number;
+  status: string;
+  currentNodeId: number | null;
+  nextRunAt: Date;
+}
+
+/** Aktivt enrollment som står parkert på en e-post-node og venter på at sendetiden åpner. */
+export function isWaitingForSendWindow(
+  enrollment: EnrollmentWaitState,
+  emailNodeIds: ReadonlySet<number>,
+  w: SendWindow | null,
+  now: Date,
+): boolean {
+  return (
+    enrollment.status === 'active' &&
+    enrollment.currentNodeId !== null &&
+    emailNodeIds.has(enrollment.currentNodeId) &&
+    enrollment.nextRunAt.getTime() > now.getTime() &&
+    isParkedForSendWindow(enrollment.id, enrollment.nextRunAt, w)
+  );
+}
+
 // --- Global innstilling og overstyring per flyt ------------------------------
 
 /** Den globale standarden: null = av (send når som helst). Ugyldig verdi ⇒ 08–20 alle dager. */
