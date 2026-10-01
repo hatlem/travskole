@@ -12,15 +12,15 @@ vi.mock('@/lib/crm/bridge', () => ({ syncBookingToCrm: vi.fn(async () => {}) }))
 vi.mock('@/lib/events/bus', () => ({ emitEvent: vi.fn(async () => {}) }));
 vi.mock('@/lib/crm/normalize', () => ({ normalizeEmail: (e: string) => e.toLowerCase() }));
 vi.mock('@/lib/site', () => ({ getBaseUrl: () => 'https://x.no' }));
-const mail = vi.hoisted(() => ({ sendBookingApprovedPayEmail: vi.fn(async () => {}), sendBookingApprovedEmail: vi.fn(async () => {}) }));
+type SendAdminEmail = (to: string, subject: string, html: string) => Promise<void>;
+const mail = vi.hoisted(() => ({ sendAdminEmail: vi.fn<SendAdminEmail>(async () => {}) }));
 vi.mock('@/lib/mail', () => mail);
+vi.mock('@/lib/settings', () => ({ getSettings: vi.fn(async () => ({ site_name: 'Bjerke', contact_email: 'post@bjerke.no' })) }));
 
 import { PUT } from '@/app/api/admin/bookings/[id]/route';
-import { sendBookingApprovedPayEmail } from '@/lib/mail';
 
-// vi.mocked() gives mock.calls the real lib/mail function signature (the bare
-// vi.hoisted() object above infers a zero-arg tuple, which fails tsc strict).
-const mockedPayEmail = vi.mocked(sendBookingApprovedPayEmail);
+/** Venter på den fire-and-forget e-posten i ruten. */
+const flush = () => new Promise((r) => setTimeout(r, 0));
 
 const req = (body: unknown) => new Request('http://x', { method: 'PUT', body: JSON.stringify(body) }) as unknown as Parameters<typeof PUT>[0];
 const ctx = { params: Promise.resolve({ id: '5' }) };
@@ -34,28 +34,33 @@ beforeEach(() => {
 });
 
 describe('PUT booking: approval-e-post-trigger', () => {
-  it('new→confirmed på online-kurs → betal-e-post med token-lenke', async () => {
+  it('new→confirmed på online-kurs → samme betal-e-post som skuffen, med token-lenke', async () => {
     prisma.bookingRequest.findUnique.mockResolvedValue({ status: 'new' });
     prisma.course.findUnique.mockResolvedValue({ name: 'Ponni', price: 500, paymentMethods: 'stripe,faktura' });
     await PUT(req({ status: 'confirmed' }), ctx);
-    expect(mail.sendBookingApprovedPayEmail).toHaveBeenCalledTimes(1);
-    const arg = mockedPayEmail.mock.calls[0][0];
-    expect(arg.amountKr).toBe(1000); // 500 × 2
-    expect(arg.payUrl).toContain('/betaling/booking?token=');
-    expect(mail.sendBookingApprovedEmail).not.toHaveBeenCalled();
+    await flush();
+    expect(mail.sendAdminEmail).toHaveBeenCalledTimes(1);
+    const [to, subject, html] = mail.sendAdminEmail.mock.calls[0];
+    expect(to).toBe('k@x.no');
+    expect(subject).toBe('Booking godkjent — fullfør betaling for Ponni');
+    expect(html).toContain('1 000 kr'); // 500 × 2
+    expect(html).toContain('/betaling/booking?token=');
+    expect(html).not.toContain('Avtalt tidspunkt');
   });
-  it('new→confirmed på faktura-kurs → plain e-post', async () => {
+  it('new→confirmed på faktura-kurs → vanlig godkjenning', async () => {
     prisma.bookingRequest.findUnique.mockResolvedValue({ status: 'new' });
     prisma.course.findUnique.mockResolvedValue({ name: 'Ponni', price: 500, paymentMethods: 'faktura' });
     await PUT(req({ status: 'confirmed' }), ctx);
-    expect(mail.sendBookingApprovedEmail).toHaveBeenCalledTimes(1);
-    expect(mail.sendBookingApprovedPayEmail).not.toHaveBeenCalled();
+    await flush();
+    expect(mail.sendAdminEmail).toHaveBeenCalledTimes(1);
+    expect(mail.sendAdminEmail.mock.calls[0][1]).toBe('Booking godkjent — Ponni');
+    expect(mail.sendAdminEmail.mock.calls[0][2]).not.toContain('Betal nå');
   });
   it('confirmed→confirmed → ingen e-post', async () => {
     prisma.bookingRequest.findUnique.mockResolvedValue({ status: 'confirmed' });
     prisma.course.findUnique.mockResolvedValue({ name: 'Ponni', price: 500, paymentMethods: 'stripe' });
     await PUT(req({ status: 'confirmed' }), ctx);
-    expect(mail.sendBookingApprovedPayEmail).not.toHaveBeenCalled();
-    expect(mail.sendBookingApprovedEmail).not.toHaveBeenCalled();
+    await flush();
+    expect(mail.sendAdminEmail).not.toHaveBeenCalled();
   });
 });

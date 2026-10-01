@@ -11,7 +11,7 @@ vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email:
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => {}) }));
 vi.mock('@/lib/crm/bridge', () => ({ syncBookingToCrm: vi.fn(async () => {}) }));
 vi.mock('@/lib/events/bus', () => ({ emitEvent: vi.fn(async () => true) }));
-vi.mock('@/lib/mail', () => ({ sendBookingApprovedPayEmail: vi.fn(), sendBookingApprovedEmail: vi.fn() }));
+vi.mock('@/lib/mail', () => ({ sendAdminEmail: vi.fn() }));
 
 import { GET } from '@/app/api/admin/bookings/route';
 import { DELETE } from '@/app/api/admin/bookings/[id]/route';

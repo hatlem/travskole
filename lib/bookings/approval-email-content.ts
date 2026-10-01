@@ -1,7 +1,7 @@
 /**
  * Godkjennings-e-posten når admin bekrefter en forespørsel fra skuffen: med avtalt
  * tidspunkt og en valgfri personlig hilsen. Ren funksjon — samme HTML brukes til
- * forhåndsvisning og utsendelse. (Massebekreftelse bruker fortsatt malene i lib/mail.ts.)
+ * forhåndsvisning og utsendelse — også ved massebekreftelse og statusendring.
  *
  * BookingRequest har ikke eget felt for avtalt tidspunkt, så det står i e-posten,
  * i aktivitetsloggen og som notat på avtalen i salgstavla.
@@ -71,7 +71,7 @@ export function buildBookingApprovalEmail(c: BookingApprovalContent): { subject:
     : '';
   const payBlock = pay
     ? `<p style="margin:24px 0"><a href="${escapeHtml(c.payUrl!)}" style="background:#003B7A;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Betal nå</a></p>
-      <p style="color:#666;font-size:13px">Lenken er gyldig i 14 dager. Er du innlogget, kan du også betale under «Mine bookinger».</p>`
+      <p style="color:#666;font-size:13px">Lenken er gyldig i 14 dager. Du kan også betale fra «Mine forespørsler» på Min side.</p>`
     : '';
 
   return {

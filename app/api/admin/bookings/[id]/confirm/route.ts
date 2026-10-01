@@ -7,7 +7,8 @@ import { getSettings } from '@/lib/settings';
 import { sendAdminEmail } from '@/lib/mail';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
 import { emitBookingStatusEvent } from '@/lib/bookings/status-event';
-import { decideBookingApprovalEmail, BOOKING_CHECKOUT_TOKEN_TTL_MS } from '@/lib/bookings/approval-email';
+import { decideBookingApprovalEmail } from '@/lib/bookings/approval-email';
+import { bookingApprovalPayUrl } from '@/lib/bookings/approval-pay-url';
 import {
   bookingConfirmationNote,
   buildBookingApprovalEmail,
@@ -15,9 +16,7 @@ import {
   isAgreedDate,
   isAgreedTime,
 } from '@/lib/bookings/approval-email-content';
-import { signCheckoutToken } from '@/lib/payments/checkout-token';
 import { parsePaymentMethods } from '@/lib/payments';
-import { getBaseUrl } from '@/lib/site';
 import logger from '@/lib/logger';
 
 const schema = z.object({
@@ -107,12 +106,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     let emailSent = true;
     try {
-      const payUrl =
-        kind === 'pay'
-          ? `${getBaseUrl()}/betaling/booking?token=${encodeURIComponent(
-              signCheckoutToken({ kind: 'booking', id: bookingId, expMs: Date.now() + BOOKING_CHECKOUT_TOKEN_TTL_MS }),
-            )}`
-          : null;
+      const payUrl = kind === 'pay' ? bookingApprovalPayUrl(bookingId) : null;
       const email = buildBookingApprovalEmail({ ...content, payUrl });
       await sendAdminEmail(booking.email, email.subject, email.html);
     } catch (error) {

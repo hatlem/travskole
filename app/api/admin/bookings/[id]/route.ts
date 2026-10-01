@@ -4,12 +4,13 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { syncBookingToCrm } from '@/lib/crm/bridge';
 import { emitBookingStatusEvent } from '@/lib/bookings/status-event';
-import { decideBookingApprovalEmail, BOOKING_CHECKOUT_TOKEN_TTL_MS } from '@/lib/bookings/approval-email';
-import { sendBookingApprovedPayEmail, sendBookingApprovedEmail } from '@/lib/mail';
-import { signCheckoutToken } from '@/lib/payments/checkout-token';
+import { decideBookingApprovalEmail } from '@/lib/bookings/approval-email';
+import { buildBookingApprovalEmail } from '@/lib/bookings/approval-email-content';
+import { bookingApprovalPayUrl } from '@/lib/bookings/approval-pay-url';
+import { sendAdminEmail } from '@/lib/mail';
+import { getSettings } from '@/lib/settings';
 import { parsePaymentMethods } from '@/lib/payments';
 import { isSettledPaymentStatus } from '@/lib/payments/transitions';
-import { getBaseUrl } from '@/lib/site';
 import { deleteDealsForBooking } from '@/lib/crm/source-deals';
 
 export async function PUT(
@@ -47,7 +48,8 @@ export async function PUT(
 
   emitBookingStatusEvent(booking).catch(() => {});
 
-  // Godkjenning-e-post (fire-safe): kun ved overgang inn i confirmed.
+  // Godkjenning-e-post (fire-safe): kun ved overgang inn i confirmed. Samme mal som
+  // «Bekreft»-skuffen, bare uten avtalt tidspunkt og hilsen.
   (async () => {
     const course = booking.courseId
       ? await prisma.course.findUnique({ where: { id: booking.courseId }, select: { name: true, price: true, paymentMethods: true } })
@@ -61,18 +63,22 @@ export async function PUT(
       paymentStatus: booking.paymentStatus,
     });
     if (decision === 'none') return;
-    const emailData = {
+    const settings = await getSettings();
+    const email = buildBookingApprovalEmail({
+      kind: decision,
+      name: booking.name,
       courseName: course?.name ?? 'Booking',
-      name: booking.name, email: booking.email, phone: booking.phone,
-      participants: booking.participants, preferredDate: booking.preferredDate ? booking.preferredDate.toISOString() : null, message: booking.message ?? null,
-    };
-    if (decision === 'pay' && amountKr != null) {
-      const token = signCheckoutToken({ kind: 'booking', id: booking.id, expMs: Date.now() + BOOKING_CHECKOUT_TOKEN_TTL_MS });
-      const payUrl = `${getBaseUrl()}/betaling/booking?token=${encodeURIComponent(token)}`;
-      await sendBookingApprovedPayEmail({ ...emailData, amountKr, payUrl });
-    } else {
-      await sendBookingApprovedEmail(emailData);
-    }
+      participants: booking.participants,
+      agreedDate: null,
+      agreedTime: null,
+      preferredDate: booking.preferredDate,
+      note: null,
+      amountKr,
+      payUrl: decision === 'pay' ? bookingApprovalPayUrl(booking.id) : null,
+      siteName: settings.site_name,
+      contactEmail: settings.contact_email,
+    });
+    await sendAdminEmail(booking.email, email.subject, email.html);
   })().catch(() => {});
 
   return NextResponse.json({ booking });

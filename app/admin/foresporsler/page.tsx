@@ -12,6 +12,7 @@ import { adminBookingStatusLabel } from '@/lib/bookings/withdrawn';
 import { paymentStatusBadge } from '@/lib/payments/badge';
 import { isSettledPaymentStatus } from '@/lib/payments/transitions';
 import { formatPhone } from '@/lib/admin-format';
+import { bulkConfirmBody, sharedPreferredDay } from '@/lib/bookings/bulk-confirm';
 import { ConfirmBookingDrawer, type BookingConfirmResult } from './ConfirmBookingDrawer';
 
 interface Booking {
@@ -50,6 +51,9 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-200 text-gray-700',
 };
 
+const inputClass =
+  'w-full min-h-10 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-bjerke-blue';
+
 const formatDateTime = (value: string) =>
   new Date(value).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -62,6 +66,8 @@ export default function AdminForesporslerPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkAction, setBulkAction] = useState<'confirmed' | 'cancelled' | null>(null);
+  const [bulkDate, setBulkDate] = useState('');
+  const [bulkTime, setBulkTime] = useState('');
   const [confirmTarget, setConfirmTarget] = useState<Booking | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Booking | null>(null);
   const [rejecting, setRejecting] = useState(false);
@@ -180,36 +186,73 @@ export default function AdminForesporslerPage() {
     }
   }
 
+  const selectedBookings = useMemo(() => bookings.filter((b) => selected.has(b.id)), [bookings, selected]);
+  // Ett avtalt tidspunkt for alle gir bare mening når alle har ønsket samme dag.
+  const bulkSharedDay = useMemo(() => sharedPreferredDay(selectedBookings.map((b) => b.preferredDate)), [selectedBookings]);
+
+  function openBulk(action: 'confirmed' | 'cancelled') {
+    setBulkDate(bulkSharedDay ?? '');
+    setBulkTime('');
+    setBulkAction(action);
+  }
+
+  /** Bekreft: samme rute og e-post som skuffen (uten hilsen). Avvis: vanlig statusendring. */
+  function bulkRequest(id: number, action: 'confirmed' | 'cancelled') {
+    if (action === 'confirmed') {
+      const shared = bulkSharedDay ? { date: bulkDate, time: bulkTime } : null;
+      return fetch(`/api/admin/bookings/${id}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(bulkConfirmBody(shared)),
+      });
+    }
+    return fetch(`/api/admin/bookings/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'cancelled' }),
+    });
+  }
+
   async function bulkUpdateStatus() {
-    const status = bulkAction;
-    if (!status || selected.size === 0) return;
+    const action = bulkAction;
+    if (!action || selected.size === 0) return;
     setBulkProcessing(true);
     const ids = Array.from(selected);
     const results = await Promise.all(
-      ids.map((id) =>
-        fetch(`/api/admin/bookings/${id}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status }),
-        })
-          .then((r) => (r.ok ? id : null))
-          .catch(() => null),
-      ),
+      ids.map(async (id) => {
+        try {
+          const res = await bulkRequest(id, action);
+          if (!res.ok) return null;
+          const body = await res.json().catch(() => null);
+          return { id, emailSent: body?.emailSent !== false, crm: body?.crm as Booking['crm'] | undefined };
+        } catch {
+          return null;
+        }
+      }),
     );
-    const ok = results.filter((id): id is number => id !== null);
+    const ok = results.filter((r): r is NonNullable<typeof r> => r !== null);
+    const okIds = new Set(ok.map((r) => r.id));
     const now = new Date().toISOString();
     setBookings((prev) =>
-      prev.map((b) =>
-        ok.includes(b.id)
-          ? { ...b, status, ...(status === 'confirmed' ? { confirmedAt: now } : { cancelledAt: now }) }
-          : b,
-      ),
+      prev.map((b) => {
+        const r = ok.find((x) => x.id === b.id);
+        if (!r) return b;
+        return action === 'confirmed'
+          ? { ...b, status: 'confirmed', confirmedAt: now, cancelledAt: null, crm: r.crm ?? b.crm }
+          : { ...b, status: 'cancelled', cancelledAt: now, withdrawnByCustomer: false };
+      }),
     );
-    setSelected(new Set(ids.filter((id) => !ok.includes(id))));
-    if (ok.length === ids.length) {
-      toast(ok.length === 1 ? '1 forespørsel er oppdatert.' : `${ok.length} forespørsler er oppdatert.`, 'success');
-    } else {
+    setSelected(new Set(ids.filter((id) => !okIds.has(id))));
+    const noEmail = ok.filter((r) => !r.emailSent).length;
+    const done = ok.length === 1 ? '1 forespørsel' : `${ok.length} forespørsler`;
+    if (ok.length < ids.length) {
       toast(`${ids.length - ok.length} av ${ids.length} ble ikke oppdatert. De er fortsatt valgt — prøv igjen.`, 'error');
+    } else if (action === 'confirmed' && noEmail > 0) {
+      toast(`${done} er bekreftet, men ${noEmail} fikk ikke e-post. Ta kontakt med dem direkte.`, 'error');
+    } else if (action === 'confirmed') {
+      toast(`${done} er bekreftet, og alle har fått e-post.`, 'success');
+    } else {
+      toast(`${done} er avvist.`, 'success');
     }
     setBulkAction(null);
     setBulkProcessing(false);
@@ -302,10 +345,10 @@ export default function AdminForesporslerPage() {
             <>
               <span className="text-sm font-medium text-gray-700">{selected.size} valgt</span>
               <div className="ml-auto flex gap-2">
-                <Button size="sm" onClick={() => setBulkAction('confirmed')} disabled={bulkProcessing}>
+                <Button size="sm" onClick={() => openBulk('confirmed')} disabled={bulkProcessing}>
                   Bekreft valgte
                 </Button>
-                <Button size="sm" variant="secondary" onClick={() => setBulkAction('cancelled')} disabled={bulkProcessing}>
+                <Button size="sm" variant="secondary" onClick={() => openBulk('cancelled')} disabled={bulkProcessing}>
                   Avvis valgte
                 </Button>
               </div>
@@ -367,7 +410,9 @@ export default function AdminForesporslerPage() {
         title={bulkAction === 'confirmed' ? `Bekrefte ${selected.size} forespørsler?` : `Avvise ${selected.size} forespørsler?`}
         message={
           bulkAction === 'confirmed'
-            ? 'Alle får standard bekreftelse på e-post, uten avtalt klokkeslett eller personlig hilsen. Vil du legge til det, bekreft dem én og én.'
+            ? bulkSharedDay
+              ? 'Alle får samme bekreftelse på e-post som når du bekrefter én og én, uten personlig hilsen. Alle ønsket samme dag, så du kan sette ett avtalt tidspunkt for alle.'
+              : 'Alle får samme bekreftelse på e-post som når du bekrefter én og én, men uten avtalt tidspunkt og personlig hilsen, siden de har ønsket ulike datoer. Vil du legge til det, bekreft dem én og én.'
             : 'De valgte forespørslene blir avvist.'
         }
         confirmLabel={bulkAction === 'confirmed' ? 'Bekreft alle' : 'Avvis alle'}
@@ -375,7 +420,23 @@ export default function AdminForesporslerPage() {
         loading={bulkProcessing}
         onConfirm={bulkUpdateStatus}
         onCancel={() => setBulkAction(null)}
-      />
+      >
+        {bulkAction === 'confirmed' && bulkSharedDay && (
+          <fieldset className="mt-4 text-left">
+            <legend className="text-sm font-semibold text-gray-900">Avtalt tidspunkt for alle (valgfritt)</legend>
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <div>
+                <label htmlFor="bulk-date" className="mb-1 block text-sm text-gray-700">Dato</label>
+                <input id="bulk-date" type="date" value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} className={inputClass} />
+              </div>
+              <div>
+                <label htmlFor="bulk-time" className="mb-1 block text-sm text-gray-700">Klokkeslett</label>
+                <input id="bulk-time" type="time" value={bulkTime} onChange={(e) => setBulkTime(e.target.value)} className={inputClass} />
+              </div>
+            </div>
+          </fieldset>
+        )}
+      </ConfirmModal>
 
       <ConfirmModal
         open={deleteTarget !== null}

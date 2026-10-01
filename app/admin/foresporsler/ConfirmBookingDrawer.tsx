@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Drawer } from '@/components/admin/Drawer';
 import { Button } from '@/components/admin/Button';
 import { formatPhone } from '@/lib/admin-format';
+import { isoDay } from '@/lib/bookings/bulk-confirm';
 
 export interface ConfirmableBooking {
   id: number;
@@ -24,11 +25,6 @@ export interface BookingConfirmResult {
 
 const inputClass =
   'w-full min-h-10 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-bjerke-blue';
-
-/** «2026-11-14» fra ønsket dato (lagret som UTC-midnatt). */
-function isoDay(value: string | null): string {
-  return value ? new Date(value).toISOString().slice(0, 10) : '';
-}
 
 /**
  * Skuffen bak «Bekreft»: avtalt dato/klokkeslett, valgfri personlig hilsen og
