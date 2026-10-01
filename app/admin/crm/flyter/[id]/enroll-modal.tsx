@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { enrollTimingNote } from '@/lib/flows/send-window';
+import { enrollResultMessage, type MarketingReach } from '@/lib/flows/enroll-message';
 
 interface SegmentOption {
   id: number;
@@ -28,11 +29,19 @@ export interface EnrollResult {
   skippedSuppressed: number;
   skippedMissing: number;
   capped: number;
+  /** Bare i markedsføringsflyter: hvem av de nye som faktisk får e-post. */
+  reach?: MarketingReach;
+  /** Flyten er et utkast — de nye venter til den aktiveres. */
+  awaitingActivation?: boolean;
 }
 
 interface EnrollModalProps {
   flowId: number;
   isMarketing: boolean;
+  /** Utkast: ingen e-post sendes før flyten aktiveres. */
+  isDraft: boolean;
+  /** Snarvei fra resultatet i et utkast. */
+  onActivate?: () => void;
   /** Flytens gjeldende sendetid, f.eks. «08–20 alle dager». */
   sendWindowLabel: string;
   onClose: () => void;
@@ -43,7 +52,7 @@ type Mode = 'segment' | 'list' | 'contacts';
 
 const SEGMENT_CAP = 500;
 
-export function EnrollModal({ flowId, isMarketing, sendWindowLabel, onClose, onEnrolled }: EnrollModalProps) {
+export function EnrollModal({ flowId, isMarketing, isDraft, onActivate, sendWindowLabel, onClose, onEnrolled }: EnrollModalProps) {
   const { toast } = useToast();
   const [mode, setMode] = useState<Mode>('segment');
   const [segments, setSegments] = useState<SegmentOption[] | null>(null);
@@ -162,14 +171,14 @@ export function EnrollModal({ flowId, isMarketing, sendWindowLabel, onClose, onE
         skippedSuppressed: data.skippedSuppressed ?? 0,
         skippedMissing: data.skippedMissing ?? 0,
         capped: data.capped ?? 0,
+        reach: data.reach ?? undefined,
+        awaitingActivation: data.awaitingActivation === true,
       };
       setResult(summary);
       onEnrolled(summary);
       toast(
-        summary.enrolled === 1
-          ? '1 person er lagt til i flyten og får e-postene.'
-          : `${summary.enrolled} personer er lagt til i flyten og får e-postene.`,
-        'success',
+        enrollResultMessage(summary, { reach: summary.reach, awaitingActivation: summary.awaitingActivation }),
+        summary.enrolled > 0 ? 'success' : 'info',
       );
     } catch {
       toast('Ingen ble lagt til i flyten. Sjekk nettforbindelsen og prøv igjen.', 'error');
@@ -200,7 +209,22 @@ export function EnrollModal({ flowId, isMarketing, sendWindowLabel, onClose, onE
         {result ? (
           <div className="space-y-3 text-sm">
             <ul className="space-y-1">
-              <li><span className="font-medium">{result.enrolled}</span> lagt til i flyten</li>
+              <li>
+                <span className="font-medium">{result.enrolled}</span>{' '}
+                {result.awaitingActivation ? 'lagt til — venter på at flyten aktiveres' : 'lagt til i flyten'}
+              </li>
+              {result.reach && result.enrolled > 0 && (
+                <li className="pl-4 text-gray-600">
+                  {result.reach.consented} har samtykket
+                  {result.reach.legitimateInterest > 0 && `, ${result.reach.legitimateInterest} får e-post som bedriftskontakt`}
+                  {result.reach.missing > 0 && (
+                    <>
+                      {' · '}
+                      <span className="text-amber-700">{result.reach.missing} mangler samtykke og får ingen e-post</span>
+                    </>
+                  )}
+                </li>
+              )}
               <li><span className="font-medium">{result.skippedActive}</span> hoppet over — er allerede underveis i flyten</li>
               <li><span className="font-medium">{result.skippedSuppressed}</span> hoppet over — har meldt seg av eller står på ikke-kontakt-listen</li>
               {result.skippedMissing > 0 && (
@@ -212,13 +236,32 @@ export function EnrollModal({ flowId, isMarketing, sendWindowLabel, onClose, onE
                 </li>
               )}
             </ul>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => { setResult(null); setSelected([]); }} className="text-sm text-gray-700 px-3 py-1.5">
+            {result.awaitingActivation && (
+              <p className="rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Ingen e-post er sendt. De som er lagt til, starter når du aktiverer flyten.
+              </p>
+            )}
+            <div className="flex flex-wrap justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { setResult(null); setSelected([]); }}
+                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
+              >
                 Legg til flere
               </button>
-              <button onClick={onClose} className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm">
-                Ferdig
-              </button>
+              {result.awaitingActivation && onActivate ? (
+                <button
+                  type="button"
+                  onClick={() => { onClose(); onActivate(); }}
+                  className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm text-white hover:bg-bjerke-blue-dark"
+                >
+                  Aktiver flyten nå
+                </button>
+              ) : (
+                <button type="button" onClick={onClose} className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm text-white hover:bg-bjerke-blue-dark">
+                  Ferdig
+                </button>
+              )}
             </div>
           </div>
         ) : (
@@ -318,9 +361,15 @@ export function EnrollModal({ flowId, isMarketing, sendWindowLabel, onClose, onE
               </div>
             )}
 
+            {isDraft && (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <strong className="font-semibold">Flyten er et utkast.</strong> De du legger til, venter i kø — ingen e-post
+                sendes før du aktiverer flyten.
+              </p>
+            )}
             <div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
               <p>Personer som allerede er underveis i flyten, eller som står på ikke-kontakt-listen, hoppes over.</p>
-              <p>{enrollTimingNote(sendWindowLabel)}</p>
+              {!isDraft && <p>{enrollTimingNote(sendWindowLabel)}</p>}
               {isMarketing && <p>Dette er markedsføring: bare de som har sagt ja til markedsføring, får e-postene.</p>}
             </div>
 

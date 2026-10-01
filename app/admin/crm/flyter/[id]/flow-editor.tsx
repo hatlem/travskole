@@ -501,7 +501,14 @@ export function FlowEditor({
       }
       setFlow((f) => ({ ...f, status: data.flow.status }));
       clearErrors();
-      toast(activatedFlowNote(sendWindowLabel), 'success');
+      const started = Number(data.startedEnrollments) || 0;
+      toast(
+        started > 0
+          ? `${activatedFlowNote(sendWindowLabel)} ${started === 1 ? '1 person' : `${started} personer`} som ventet, starter nå.`
+          : activatedFlowNote(sendWindowLabel),
+        'success',
+      );
+      if (started > 0) setEnrollmentsVersion((v) => v + 1);
     } catch {
       toast('Flyten ble ikke aktivert. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
@@ -870,6 +877,8 @@ export function FlowEditor({
         <EnrollModal
           flowId={flow.id}
           isMarketing={flow.isMarketing}
+          isDraft={flow.status === 'draft'}
+          onActivate={() => void requestStatusChange('activate')}
           sendWindowLabel={sendWindowLabel}
           onClose={() => setEnrollOpen(false)}
           onEnrolled={(result) => {

@@ -13,6 +13,7 @@ interface EnrollmentRow {
   finishedAt: string | null;
   nextRunAt: string;
   waitingForSendWindow?: boolean;
+  awaitingActivation?: boolean;
   contact: { id: number; name: string };
 }
 
@@ -28,6 +29,7 @@ function fmtDate(d: string | null): string {
 }
 
 function statusLabel(e: EnrollmentRow): string {
+  if (e.awaitingActivation) return 'Venter på aktivering';
   if (e.waitingForSendWindow) return `Venter på sendetid (${formatSendTime(new Date(e.nextRunAt), new Date())})`;
   return STATUS_LABELS_NO[e.status] ?? e.status;
 }

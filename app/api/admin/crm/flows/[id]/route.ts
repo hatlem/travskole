@@ -264,7 +264,7 @@ export async function DELETE(
   }
   if (!canDeleteStatus(existing.status)) {
     return NextResponse.json(
-      { error: 'Kan bare slette maler og flyter med status kladd eller arkivert.' },
+      { error: 'Kan bare slette maler og flyter som er utkast, pauset eller arkivert. Sett flyten på pause først.' },
       { status: 409 },
     );
   }

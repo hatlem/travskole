@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-import { enrollContacts, enrollList, enrollSegment, type EnrollSummary } from '@/lib/flows/enroll';
+import { enrollContacts, enrollList, enrollSegment, type EnrollOptions, type EnrollSummary } from '@/lib/flows/enroll';
+import { AWAITING_ACTIVATION_RUN_AT, isAwaitingActivation } from '@/lib/flows/awaiting-activation';
+import { marketingReach } from '@/lib/flows/enroll-reach';
 import { canEnrollIntoStatus, isTemplateStatus } from '@/lib/flows/status';
 import { isWaitingForSendWindow } from '@/lib/flows/send-window';
 import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
@@ -50,6 +52,7 @@ export async function GET(
   return NextResponse.json({
     enrollments: enrollments.map((enrollment) => ({
       ...enrollment,
+      awaitingActivation: isAwaitingActivation(enrollment),
       waitingForSendWindow: isWaitingForSendWindow(enrollment, emailNodeIds, sendWindow.effective, now),
     })),
     total,
@@ -107,7 +110,7 @@ export async function POST(
 
   const flow = await prisma.flow.findUnique({
     where: { id: flowId },
-    select: { id: true, status: true, anchorMode: true },
+    select: { id: true, status: true, anchorMode: true, isMarketing: true },
   });
   if (!flow) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
@@ -125,10 +128,18 @@ export async function POST(
   }
   if (!canEnrollIntoStatus(flow.status)) {
     return NextResponse.json(
-      { error: 'Flyten må være aktiv (eller pauset) for å melde inn kontakter.' },
+      { error: 'Flyten må være et utkast, aktiv eller pauset for å legge til personer.' },
       { status: 409 },
     );
   }
+
+  // I et utkast venter løpene på aktivering — ingen e-post før flyten aktiveres.
+  const awaitingActivation = flow.status === 'draft';
+  const enrolledIds: number[] = [];
+  const options: EnrollOptions = {
+    collect: enrolledIds,
+    ...(awaitingActivation && { startAt: AWAITING_ACTIVATION_RUN_AT }),
+  };
 
   let summary: EnrollSummary;
   if (data.segmentId !== undefined) {
@@ -136,16 +147,16 @@ export async function POST(
     if (!segment) {
       return NextResponse.json({ error: 'Fant ingen segment med denne iden' }, { status: 404 });
     }
-    summary = await enrollSegment(flowId, data.segmentId);
+    summary = await enrollSegment(flowId, data.segmentId, options);
   } else if (data.listId !== undefined) {
-    const listSummary = await enrollList(flowId, data.listId);
+    const listSummary = await enrollList(flowId, data.listId, options);
     if (!listSummary) {
       return NextResponse.json({ error: 'Fant ingen liste med denne iden' }, { status: 404 });
     }
     summary = listSummary;
   } else {
     const ids = data.contactIds ?? [data.contactId as number];
-    summary = await enrollContacts(flowId, ids);
+    summary = await enrollContacts(flowId, ids, options);
     if (data.contactId !== undefined && summary.skippedMissing > 0) {
       return NextResponse.json({ error: 'Fant ingen kontakt med denne iden' }, { status: 404 });
     }
@@ -158,5 +169,11 @@ export async function POST(
     userEmail: session.user.email,
     details: JSON.stringify(summary),
   }).catch(() => {});
-  return NextResponse.json(summary);
+  // Markedsføring går bare til de med samtykke — si det med en gang, ikke først når e-postene uteblir.
+  const reach = flow.isMarketing === true ? await marketingReach(enrolledIds) : undefined;
+  return NextResponse.json({
+    ...summary,
+    ...(awaitingActivation && { awaitingActivation }),
+    ...(reach && { reach }),
+  });
 }
