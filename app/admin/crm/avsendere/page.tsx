@@ -5,6 +5,7 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
+import { HelpTip } from '@/components/admin/HelpTip';
 
 interface SenderIdentity {
   id: number;
@@ -29,6 +30,7 @@ export default function AvsenderePage() {
   const [newEmail, setNewEmail] = useState('');
   const [newName, setNewName] = useState('');
   const [creating, setCreating] = useState(false);
+  const newEmailRef = useRef<HTMLInputElement>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
@@ -43,7 +45,7 @@ export default function AvsenderePage() {
     setLoading(true);
     try {
       const res = await fetch(API, { signal: controller.signal });
-      if (!res.ok) throw new Error('Kunne ikke laste avsendere');
+      if (!res.ok) throw new Error('Kunne ikke hente avsenderne. Last siden på nytt om litt.');
       const data = await res.json();
       setIdentities(data.identities || []);
       setAllowedDomains(data.allowedDomains || []);
@@ -52,7 +54,7 @@ export default function AvsenderePage() {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste avsendere', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente avsenderne. Last siden på nytt om litt.', 'error');
     } finally {
       if (abortRef.current === controller) setLoading(false);
     }
@@ -77,14 +79,14 @@ export default function AvsenderePage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke oppdatere avsender', 'error');
+        toast(data.error || 'Endringen ble ikke lagret. Prøv igjen.', 'error');
         return false;
       }
       setIdentities((prev) => prev.map((i) => (i.id === id ? { ...i, ...body } : i)));
       toast(successMessage, 'success');
       return true;
     } catch {
-      toast('Kunne ikke oppdatere avsender', 'error');
+      toast('Endringen ble ikke lagret — sjekk nettforbindelsen og prøv igjen.', 'error');
       return false;
     } finally {
       setBusyId(null);
@@ -104,7 +106,7 @@ export default function AvsenderePage() {
       setEditingId(null);
       return;
     }
-    if (await patch(identity.id, { displayName: name }, 'Visningsnavn oppdatert')) {
+    if (await patch(identity.id, { displayName: name }, 'Navnet er endret — nye e-poster sendes med det nye navnet')) {
       setEditingId(null);
     }
   }
@@ -114,7 +116,9 @@ export default function AvsenderePage() {
     await patch(
       identity.id,
       { active: !identity.active },
-      identity.active ? 'Avsender deaktivert' : 'Avsender aktivert',
+      identity.active
+        ? `${identity.email} er slått av — e-poster som bruker den, sendes ikke før du slår den på igjen`
+        : `${identity.email} er slått på og kan brukes i e-postflyter`,
     );
   }
 
@@ -125,13 +129,13 @@ export default function AvsenderePage() {
       const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke slette avsender', 'error');
+        toast(data.error || 'Avsenderen ble ikke slettet. Har den sendt e-post før, kan du slå den av i stedet.', 'error');
         return;
       }
       setIdentities((prev) => prev.filter((i) => i.id !== id));
-      toast('Avsender slettet', 'success');
+      toast('Avsenderen er slettet', 'success');
     } catch {
-      toast('Kunne ikke slette avsender', 'error');
+      toast('Avsenderen ble ikke slettet — sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setBusyId(null);
       setConfirmDeleteId(null);
@@ -150,15 +154,15 @@ export default function AvsenderePage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke legge til avsender', 'error');
+        toast(data.error || 'Avsenderen ble ikke lagt til. Sjekk at adressen er riktig og prøv igjen.', 'error');
         return;
       }
-      toast('Avsender lagt til', 'success');
+      toast(`${newEmail.trim()} er lagt til og kan velges i e-postflyter`, 'success');
       setNewEmail('');
       setNewName('');
       await load();
     } catch {
-      toast('Kunne ikke legge til avsender', 'error');
+      toast('Avsenderen ble ikke lagt til — sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setCreating(false);
     }
@@ -168,40 +172,66 @@ export default function AvsenderePage() {
 
   return (
     <div>
-      <CrmTabs />
+      <CrmTabs
+        actions={
+          canManage && !loading && !loadError ? (
+            <button
+              type="button"
+              onClick={() => {
+                newEmailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                newEmailRef.current?.focus({ preventScroll: true });
+              }}
+              className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+              </svg>
+              Legg til avsender
+            </button>
+          ) : undefined
+        }
+      />
       <div className="max-w-5xl space-y-6">
-        <div>
-          <h2 className="font-semibold mb-1">Avsendere</h2>
-          <p className="text-sm text-gray-500">
-            Adressene som kan velges som avsender i e-poststeg i flyter. Deaktiverte avsendere kan ikke
-            velges, og e-poststeg som bruker dem sendes ikke.
-          </p>
-        </div>
+        <p className="text-sm text-gray-600">
+          Du velger avsender i hver e-post i en e-postflyt. En avsender som er slått av, kan ikke velges, og
+          e-poster som bruker den, blir ikke sendt.
+        </p>
 
         <div className="border border-amber-300 bg-amber-50 rounded-lg p-4 text-sm text-amber-900 space-y-1">
           <p className="font-semibold">Før du legger til en ny adresse</p>
           <p>
-            Adressen må først verifiseres som avsender i Azure Communication Services av Basefarm/Orange
-            (SPF/DKIM). Ellers vil utsendelser fra adressen feile.
+            IT-leverandøren (Basefarm/Orange) må først godkjenne adressen for utsending. Gjør de ikke det, kommer
+            ikke e-postene fram. Spør dem før du tar adressen i bruk.
           </p>
-          <p>
-            Svar på e-poster går alltid til <span className="font-medium">registrering@bjerke.no</span>,
+          <p className="flex flex-wrap items-center">
+            Svar på e-postene går alltid til <span className="mx-1 font-medium">registrering@bjerke.no</span>,
             uansett hvilken avsender som er valgt.
+            <HelpTip label="Avsender og svar-til">
+              Avsenderen er navnet og adressen mottakeren ser i innboksen, f.eks. «Kari på Bjerke». Trykker mottakeren
+              «Svar», havner svaret likevel i registrering@bjerke.no, så ingenting forsvinner.
+            </HelpTip>
           </p>
+          <details className="pt-1 text-xs text-amber-800">
+            <summary className="cursor-pointer">Teknisk (for IT)</summary>
+            <p className="mt-1">
+              Adressen må verifiseres som avsender i Azure Communication Services, med SPF og DKIM for domenet.
+            </p>
+          </details>
         </div>
 
         {loading ? (
           <TableSkeleton rows={7} cols={5} />
         ) : loadError ? (
           <EmptyState
-            title="Kunne ikke laste avsendere"
-            description="Noe gikk galt under henting av avsenderadresser. Prøv igjen."
+            title="Kunne ikke hente avsenderne"
+            description="Noe gikk galt da avsenderadressene skulle hentes. Ingenting er endret — prøv igjen."
             action={{ label: 'Prøv igjen', onClick: () => load() }}
           />
         ) : identities.length === 0 ? (
           <EmptyState
-            title="Ingen avsendere"
-            description="Legg til en verifisert avsenderadresse for å kunne sende e-post fra flyter."
+            title="Ingen avsendere ennå"
+            description="E-postflytene trenger minst én avsender. Legg til en adresse som IT-leverandøren har godkjent."
+            action={canManage ? { label: 'Legg til avsender', onClick: () => newEmailRef.current?.focus() } : undefined}
           />
         ) : (
           <div className="border border-gray-200 rounded-lg overflow-x-auto">
@@ -209,10 +239,10 @@ export default function AvsenderePage() {
               <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
                 <tr>
                   <th className="px-4 py-2 font-medium">E-post</th>
-                  <th className="px-4 py-2 font-medium">Visningsnavn</th>
-                  <th className="px-4 py-2 font-medium">Brukerkonto</th>
-                  <th className="px-4 py-2 font-medium text-right">Sendt</th>
-                  <th className="px-4 py-2 font-medium">Status</th>
+                  <th className="px-4 py-2 font-medium">Navn mottakeren ser</th>
+                  <th className="px-4 py-2 font-medium">Kan logge inn</th>
+                  <th className="px-4 py-2 font-medium text-right">E-poster sendt</th>
+                  <th className="px-4 py-2 font-medium">På/av</th>
                   <th className="px-4 py-2" />
                 </tr>
               </thead>
@@ -236,7 +266,7 @@ export default function AvsenderePage() {
                               }}
                               autoFocus
                               maxLength={200}
-                              aria-label="Visningsnavn"
+                              aria-label="Navn mottakeren ser"
                               className="border border-gray-300 rounded-md px-2 py-1 text-sm w-48"
                             />
                             <button
@@ -257,7 +287,7 @@ export default function AvsenderePage() {
                           <button
                             onClick={() => startEdit(identity)}
                             className="hover:underline text-left"
-                            title="Endre visningsnavn"
+                            title="Endre navnet mottakeren ser"
                           >
                             {identity.displayName}
                           </button>
@@ -267,12 +297,12 @@ export default function AvsenderePage() {
                         {identity.hasUserAccount ? (
                           <span
                             className="text-green-700"
-                            title="En bruker med samme e-post finnes og kan få tildelt oppfølging av svar"
+                            title="Det finnes en innlogging med samme e-post, så svar kan fordeles til denne personen"
                           >
                             Ja
                           </span>
                         ) : (
-                          <span className="text-gray-400" title="Ingen brukerkonto med denne e-posten">
+                          <span className="text-gray-400" title="Ingen innlogging med denne e-posten">
                             Nei
                           </span>
                         )}
@@ -289,15 +319,15 @@ export default function AvsenderePage() {
                               ? 'bg-green-100 text-green-800 hover:bg-green-200'
                               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                           }`}
-                          title={identity.active ? 'Klikk for å deaktivere' : 'Klikk for å aktivere'}
+                          title={identity.active ? 'Klikk for å slå av avsenderen' : 'Klikk for å slå på avsenderen'}
                         >
-                          {identity.active ? 'Aktiv' : 'Inaktiv'}
+                          {identity.active ? 'På' : 'Av'}
                         </button>
                       </td>
                       <td className="px-4 py-2 text-right whitespace-nowrap">
                         {canManage && (confirming ? (
                           <span className="inline-flex items-center gap-2 text-xs">
-                            <span className="text-gray-600">Slette?</span>
+                            <span className="text-gray-600">Slette {identity.email} for godt?</span>
                             <button
                               onClick={() => remove(identity.id)}
                               disabled={busy}
@@ -323,7 +353,7 @@ export default function AvsenderePage() {
                             className="text-xs text-gray-400 hover:text-red-600 disabled:opacity-50"
                             title={
                               identity.sendCount > 0
-                                ? 'Avsendere med sendehistorikk kan ikke slettes — deaktiver i stedet'
+                                ? 'Avsendere som har sendt e-post, kan ikke slettes — slå den av i stedet'
                                 : undefined
                             }
                           >
@@ -344,8 +374,9 @@ export default function AvsenderePage() {
             <h3 className="font-semibold mb-2">Legg til avsender</h3>
             <form onSubmit={create} className="border border-gray-200 rounded-lg p-4 flex flex-wrap gap-2 items-end">
               <label className="flex flex-col gap-1 text-xs text-gray-600 flex-1 min-w-[16rem]">
-                E-post
+                E-postadresse
                 <input
+                  ref={newEmailRef}
                   type="email"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
@@ -354,11 +385,11 @@ export default function AvsenderePage() {
                 />
               </label>
               <label className="flex flex-col gap-1 text-xs text-gray-600 flex-1 min-w-[12rem]">
-                Visningsnavn
+                Navn mottakeren ser
                 <input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Fornavn Etternavn"
+                  placeholder="F.eks. Kari på Bjerke"
                   maxLength={200}
                   className="border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-900"
                 />
@@ -371,7 +402,7 @@ export default function AvsenderePage() {
                 {creating ? 'Legger til …' : 'Legg til avsender'}
               </button>
               {domainHint && (
-                <p className="w-full text-xs text-gray-500">Tillatte domener: {domainHint}</p>
+                <p className="w-full text-xs text-gray-500">Adressen må slutte på: {domainHint}</p>
               )}
             </form>
           </section>
