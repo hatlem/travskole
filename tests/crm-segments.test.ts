@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { contactMatchesSegment, parseSegmentRules, type SegmentContact } from '@/lib/crm/segments';
+import {
+  contactMatchesSegment,
+  describeSegmentRules,
+  parseSegmentRules,
+  segmentsForContact,
+  type SegmentContact,
+} from '@/lib/crm/segments';
 
 const contact = (o: Partial<SegmentContact> = {}): SegmentContact => ({
   stage: 'customer',
@@ -140,5 +146,66 @@ describe('contactMatchesSegment — deal rules apply to the SAME deal', () => {
         { field: 'deal.eventType', op: 'eq', value: 'julebord' },
       ],
     })).toBe(true);
+  });
+});
+
+describe('segmentsForContact — enkeltkontakt-evaluering', () => {
+  const segments = [
+    { id: 1, name: 'Julebord før 2026', rules: '{"all":[{"field":"deal.eventType","op":"eq","value":"julebord"},{"field":"deal.eventDate","op":"lt","value":"2026-01-01"}]}' },
+    { id: 2, name: 'Interessenter', rules: '{"all":[{"field":"stage","op":"eq","value":"lead"}]}' },
+    { id: 3, name: 'VIP', rules: '{"all":[{"field":"tags","op":"contains","value":"vip"}]}' },
+    { id: 4, name: 'Alle', rules: '{"all":[]}' },
+    { id: 5, name: 'Ødelagt', rules: 'tull' },
+  ];
+  const contacts: SegmentContact[] = [
+    contact(),
+    contact({ stage: 'lead', tags: [] }),
+    contact({ deals: [], tags: ['vip'] }),
+    contact({ stage: 'lead', deals: [{ eventType: 'julebord', eventDate: new Date('2026-12-01'), status: 'open' }] }),
+  ];
+
+  it('gir de segmentene kontakten treffer', () => {
+    expect(segmentsForContact(contact(), segments).map((s) => s.id)).toEqual([1, 3, 4, 5]);
+  });
+
+  it('er enig med bulk-filtreringen for hvert segment', () => {
+    for (const segment of segments) {
+      const bulk = contacts.filter((c) => contactMatchesSegment(c, parseSegmentRules(segment.rules)));
+      const single = contacts.filter((c) => segmentsForContact(c, segments).some((s) => s.id === segment.id));
+      expect(single).toEqual(bulk);
+    }
+  });
+});
+
+describe('describeSegmentRules', () => {
+  it('slår deal-regler sammen til én linje', () => {
+    expect(describeSegmentRules({
+      all: [
+        { field: 'deal.eventType', op: 'eq', value: 'julebord' },
+        { field: 'deal.eventDate', op: 'lt', value: '2026-01-01' },
+      ],
+    })).toEqual(['Deal: type = julebord, dato før 01.01.2026']);
+  });
+
+  it('beskriver kontaktregler med norske etiketter', () => {
+    expect(describeSegmentRules({
+      all: [
+        { field: 'stage', op: 'eq', value: 'customer' },
+        { field: 'tags', op: 'contains', value: 'vip' },
+        { field: 'email', op: 'contains', value: '@acme.no' },
+        { field: 'organizationId', op: 'is_null' },
+        { field: 'deal.status', op: 'neq', value: 'lost' },
+      ],
+    })).toEqual([
+      'Stadium = Kunde',
+      'Tagg = vip',
+      'E-post inneholder «@acme.no»',
+      'Bedrift mangler',
+      'Deal: status ≠ tapt',
+    ]);
+  });
+
+  it('tomme regler betyr alle kontakter', () => {
+    expect(describeSegmentRules({ all: [] })).toEqual(['Alle kontakter (ingen regler)']);
   });
 });

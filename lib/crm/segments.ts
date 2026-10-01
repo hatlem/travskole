@@ -114,3 +114,70 @@ export function contactMatchesSegment(contact: SegmentContact, rules: SegmentRul
   if (dealRules.length === 0) return true;
   return contact.deals.some((deal) => dealRules.every((rule) => checkDealRule(deal, rule)));
 }
+
+export interface StoredSegment {
+  id: number;
+  name: string;
+  rules: string;
+}
+
+/** Enkeltkontakt-evaluering: segmentene kontakten treffer, samme regler som bulk-filtreringen. */
+export function segmentsForContact<S extends StoredSegment>(contact: SegmentContact, segments: readonly S[]): S[] {
+  return segments.filter((segment) => contactMatchesSegment(contact, parseSegmentRules(segment.rules)));
+}
+
+const FIELD_LABELS: Record<string, string> = {
+  stage: 'Stadium',
+  source: 'Kilde',
+  email: 'E-post',
+  organizationId: 'Bedrift',
+  lastActivityAt: 'Sist aktiv',
+  tags: 'Tagg',
+  'deal.eventType': 'type',
+  'deal.eventDate': 'dato',
+  'deal.status': 'status',
+};
+
+const VALUE_LABELS: Record<string, Record<string, string>> = {
+  stage: { lead: 'Interessent', active: 'Aktiv', customer: 'Kunde', dormant: 'Sovende', lost: 'Tapt' },
+  'deal.status': { open: 'åpen', won: 'vunnet', lost: 'tapt' },
+};
+
+function formatValue(field: string, value: unknown): string {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}/.test(value)) {
+    const [y, m, d] = value.slice(0, 10).split('-');
+    return `${d}.${m}.${y}`;
+  }
+  const text = String(value ?? '');
+  return VALUE_LABELS[field]?.[text] ?? text;
+}
+
+function describeOp(rule: SegmentRule): string {
+  const value = formatValue(rule.field, rule.value);
+  const isDate = rule.field === 'deal.eventDate' || rule.field === 'lastActivityAt';
+  switch (rule.op) {
+    case 'eq': return `= ${value}`;
+    case 'neq': return `≠ ${value}`;
+    case 'contains': return rule.field === 'tags' ? `= ${value}` : `inneholder «${value}»`;
+    case 'lt': return isDate ? `før ${value}` : `< ${value}`;
+    case 'gt': return isDate ? `etter ${value}` : `> ${value}`;
+    case 'is_null': return 'mangler';
+    case 'not_null': return 'finnes';
+  }
+}
+
+export function describeSegmentRule(rule: SegmentRule): string {
+  return `${FIELD_LABELS[rule.field] ?? rule.field} ${describeOp(rule)}`;
+}
+
+/**
+ * Reglene i klartekst, én linje per kontaktregel. Deal-regler slås sammen til
+ * én linje fordi de må gjelde samme deal: «Deal: type = julebord, dato før 01.01.2026».
+ */
+export function describeSegmentRules(rules: SegmentRules): string[] {
+  if (rules.all.length === 0) return ['Alle kontakter (ingen regler)'];
+  const lines = rules.all.filter((r) => !isDealRule(r)).map(describeSegmentRule);
+  const dealParts = rules.all.filter(isDealRule).map(describeSegmentRule);
+  if (dealParts.length > 0) lines.push(`Deal: ${dealParts.join(', ')}`);
+  return lines;
+}

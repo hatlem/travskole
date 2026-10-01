@@ -4,14 +4,20 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { segmentMemberCounts } from '@/lib/crm/segment-members';
 
-export async function GET() {
+// ?counts=1 legger på memberCount (laster alle kontakter én gang).
+export async function GET(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
   const segments = await prisma.segment.findMany({ orderBy: { name: 'asc' } });
-  return NextResponse.json({ segments });
+  if (request.nextUrl.searchParams.get('counts') !== '1') {
+    return NextResponse.json({ segments });
+  }
+  const counts = await segmentMemberCounts(segments);
+  return NextResponse.json({ segments: segments.map((s) => ({ ...s, memberCount: counts[s.id] ?? 0 })) });
 }
 
 const rulesSchema = z.object({
