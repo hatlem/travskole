@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { FLOW_STATUS_LABELS, isTemplateStatus } from '@/lib/flows/status';
+import { Button } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 
 export interface ValidationError {
   nodeId: number | null;
@@ -67,10 +69,8 @@ export function FlowToolbar({
   onSendWindowClick,
 }: FlowToolbarProps) {
   const isTemplate = isTemplateStatus(status);
-  const secondaryCls =
-    'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:scale-[0.96] disabled:opacity-50';
-  const successCls =
-    'rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-800 active:scale-[0.96] disabled:opacity-50';
+  // Aktiver/Gjenoppta er hovedhandlingen når den finnes; ellers Lagre.
+  const lifecyclePrimary = status === 'draft' || status === 'paused';
 
   return (
     <>
@@ -81,11 +81,7 @@ export function FlowToolbar({
           </Link>
           <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
             <h1 className="text-xl font-bold text-balance">{name}</h1>
-            <span
-              className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status] ?? STATUS_STYLES.draft}`}
-            >
-              {STATUS_LABELS[status] ?? status}
-            </span>
+            <Badge className={STATUS_STYLES[status] ?? STATUS_STYLES.draft}>{STATUS_LABELS[status] ?? status}</Badge>
             <button
               type="button"
               onClick={onSendWindowClick}
@@ -110,34 +106,37 @@ export function FlowToolbar({
         <div className="flex flex-wrap items-center gap-2">
           {!isTemplate && enrollmentCounter}
           {onEnroll && (
-            <button type="button" onClick={onEnroll} className={secondaryCls}>
+            <Button variant="secondary" onClick={onEnroll}>
               Legg til personer
-            </button>
+            </Button>
           )}
           {!isTemplate && status !== 'archived' && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={onSaveAsTemplate}
-              disabled={savingTemplate || saving}
+              disabled={saving}
+              loading={savingTemplate}
+              loadingLabel="Lagrer mal …"
               title={dirty ? 'Endringene lagres først' : 'Lag en kopi som kan brukes som utgangspunkt for nye flyter'}
-              className={secondaryCls}
             >
-              {savingTemplate ? 'Lagrer mal …' : 'Lagre som mal'}
-            </button>
+              Lagre som mal
+            </Button>
           )}
           {isTemplate && (
             <span className="text-xs text-gray-500">Dette er en mal og sender aldri e-post. Bruk «Start fra en mal» i listen over e-postflyter.</span>
           )}
           {status !== 'archived' && (
-            <button
-              type="button"
+            <Button
+              variant={lifecyclePrimary ? 'secondary' : 'primary'}
               onClick={onSave}
-              disabled={saving || !dirty}
+              disabled={!dirty}
+              loading={saving}
+              loadingLabel="Lagrer …"
               title={dirty ? 'Lagrer stegene, innstillingene og sendetidene' : 'Ingen endringer å lagre'}
-              className="min-w-[6.5rem] rounded-md bg-bjerke-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-bjerke-blue-dark active:scale-[0.96] disabled:opacity-50"
+              className="min-w-[6.5rem]"
             >
-              {saving ? 'Lagrer …' : 'Lagre'}
-            </button>
+              Lagre
+            </Button>
           )}
           {pendingProblems > 0 && activationErrors.length === 0 && (
             <span className="text-xs text-amber-700" role="status">
@@ -145,36 +144,37 @@ export function FlowToolbar({
             </span>
           )}
           {status === 'draft' && (
-            <button
-              type="button"
+            <Button
               onClick={onActivate}
-              disabled={activating || saving}
+              disabled={saving}
+              loading={activating}
+              loadingLabel="Aktiverer …"
               title={dirty ? 'Endringene lagres først' : undefined}
-              className={successCls}
             >
-              {activating ? 'Aktiverer …' : 'Aktiver flyten'}
-            </button>
+              Aktiver flyten
+            </Button>
           )}
           {status === 'active' && (
-            <button
-              type="button"
+            <Button
+              variant="secondary"
               onClick={onPause}
-              disabled={changingStatus || saving}
-              className={secondaryCls}
+              disabled={saving}
+              loading={changingStatus}
+              loadingLabel="Setter på pause …"
             >
-              {changingStatus ? 'Setter på pause …' : 'Sett på pause'}
-            </button>
+              Sett på pause
+            </Button>
           )}
           {status === 'paused' && (
-            <button
-              type="button"
+            <Button
               onClick={onResume}
-              disabled={changingStatus || saving}
+              disabled={saving}
+              loading={changingStatus}
+              loadingLabel="Starter igjen …"
               title={dirty ? 'Endringene lagres først' : undefined}
-              className={successCls}
             >
-              {changingStatus ? 'Starter igjen …' : 'Gjenoppta'}
-            </button>
+              Gjenoppta
+            </Button>
           )}
         </div>
       </div>

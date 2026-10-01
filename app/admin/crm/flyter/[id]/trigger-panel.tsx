@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { Button } from '@/components/admin/Button';
 import {
   buildTriggerFilter,
   courseFilterKeyFor,
@@ -162,13 +163,15 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
                     <div className="mt-0.5 text-amber-700">Virker ikke når flyten gjelder et kurs</div>
                   )}
                 </div>
-                <button
+                <Button
+                  variant="dangerText"
+                  size="sm"
                   onClick={() => deleteTrigger(t.id)}
                   disabled={deletingId === t.id}
-                  className="shrink-0 text-red-600 hover:underline disabled:opacity-50"
+                  className="shrink-0"
                 >
                   Fjern
-                </button>
+                </Button>
               </li>
             );
           })}
@@ -235,10 +238,10 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
               ))}
             </select>
             {lists.length === 0 && (
-              <p className="mt-1 text-[11px] text-gray-500">Ingen lister ennå. Lag en under CRM → Kunder → Segmenter og lister.</p>
+              <p className="mt-1 text-xs text-gray-500">Ingen lister ennå. Lag en under CRM → Kunder → Segmenter og lister.</p>
             )}
             {anchorMode === 'course' && (
-              <p className="mt-1 text-[11px] text-amber-700">
+              <p className="mt-1 text-xs text-amber-700">
                 Denne flyten gjelder et kurs og må startes av en kurspåmelding. En liste har ikke noe kurs, så personen
                 stopper ved første «Vent til kursdato». Velg «En person» under Innstillinger for å bruke lister.
               </p>
@@ -271,7 +274,7 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
                 }}
                 className="mt-1 w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm font-mono"
               />
-              <p className="text-[11px] text-gray-500">
+              <p className="text-xs text-gray-500">
                 Skrives som JSON. Navnene må være nøyaktig som i hendelsens data (tall og tekst er ikke det samme).
                 {courseKey ? ' Kursvalget over legges til av seg selv.' : ''}
                 {listEvent ? ' Listevalget over legges til av seg selv.' : ''}
@@ -281,13 +284,16 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
           {filterError && <p className="mt-1 text-xs text-red-600">{filterError}</p>}
         </div>
 
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={addTrigger}
-          disabled={creating || !eventType}
-          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+          disabled={!eventType}
+          loading={creating}
+          loadingLabel="Legger til …"
         >
-          {creating ? 'Legger til …' : 'Legg til startregel'}
-        </button>
+          Legg til startregel
+        </Button>
       </div>
     </div>
   );

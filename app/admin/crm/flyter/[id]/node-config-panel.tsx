@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { Button } from '@/components/admin/Button';
 import type { EntityRef } from '@/components/admin/crm/EntityPicker';
 import { NODE_DESCRIPTIONS, NODE_LABELS, type FlowRFNode } from './node-types';
 import { HelpTip } from '@/components/admin/HelpTip';
@@ -201,12 +202,9 @@ export function NodeConfigPanel({
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-800">{NODE_LABELS[node.type as keyof typeof NODE_LABELS] ?? node.type}</h3>
           {!disabled && (
-            <button
-              onClick={() => onDeleteNode(node.id)}
-              className="text-xs text-red-600 hover:underline"
-            >
+            <Button variant="dangerText" size="sm" onClick={() => onDeleteNode(node.id)}>
               Slett steget
-            </button>
+            </Button>
           )}
         </div>
         <p className="mt-0.5 text-xs text-gray-500">{NODE_DESCRIPTIONS[node.type as keyof typeof NODE_DESCRIPTIONS]}</p>
@@ -257,26 +255,23 @@ export function NodeConfigPanel({
             <div className="border-t border-gray-200 pt-3">
               <label className={labelCls}>KI-hjelp</label>
               <div className="flex flex-wrap gap-2">
-                <button onClick={() => runAssist('subject_variants')} disabled={disabled || aiBusy}
-                  className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
+                <Button variant="secondary" size="sm" onClick={() => runAssist('subject_variants')} disabled={disabled || aiBusy}>
                   {aiBusy ? 'Jobber …' : 'Emneforslag'}
-                </button>
+                </Button>
                 <select value={aiTone} onChange={(e) => setAiTone(e.target.value as 'formell' | 'vennlig' | 'kort')}
                   disabled={disabled || aiBusy} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm">
                   <option value="formell">Formell</option>
                   <option value="vennlig">Vennlig</option>
                   <option value="kort">Kort og direkte</option>
                 </select>
-                <button onClick={() => runAssist('tone')} disabled={disabled || aiBusy}
-                  className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
+                <Button variant="secondary" size="sm" onClick={() => runAssist('tone')} disabled={disabled || aiBusy}>
                   Juster tone
-                </button>
-                <button onClick={() => runAssist('shorten')} disabled={disabled || aiBusy}
-                  className="bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => runAssist('shorten')} disabled={disabled || aiBusy}>
                   Forkort
-                </button>
+                </Button>
               </div>
-              {aiError && <p className="mt-1 text-[11px] text-red-600">{aiError}</p>}
+              {aiError && <p className="mt-1 text-xs text-red-600">{aiError}</p>}
               {subjectSuggestions.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {subjectSuggestions.map((s) => (
@@ -301,19 +296,23 @@ export function NodeConfigPanel({
                 disabled={!isPersisted || sending}
                 className={inputCls}
               />
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={sendTest}
-                disabled={!isPersisted || sending || !testEmail.trim()}
-                className="whitespace-nowrap bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+                disabled={!isPersisted || !testEmail.trim()}
+                loading={sending}
+                loadingLabel="Sender …"
+                className="whitespace-nowrap"
               >
-                {sending ? 'Sender …' : 'Send test'}
-              </button>
+                Send test
+              </Button>
             </div>
             {!isPersisted && (
-              <p className="mt-1 text-[11px] text-gray-500">Trykk «Lagre» øverst først, så kan du sende en test til deg selv.</p>
+              <p className="mt-1 text-xs text-gray-500">Trykk «Lagre» øverst først, så kan du sende en test til deg selv.</p>
             )}
             {aiConfigured && config.aiPersonalize === true && (
-              <p className="mt-1 text-[11px] text-gray-500">
+              <p className="mt-1 text-xs text-gray-500">
                 {previewContact
                   ? `KI-personaliseres med historikken til ${previewContact.name}. Test-e-posten bruker den lagrede versjonen av noden.`
                   : 'Velg en kontakt under «Forhåndsvis for kontakt» for å få KI-versjonen i test-e-posten.'}
@@ -369,12 +368,12 @@ export function NodeConfigPanel({
             </select>
           </div>
           {typeof config.kind === 'string' && ENGAGEMENT_HELP[config.kind] && (
-            <p className="text-[11px] text-gray-500">
+            <p className="text-xs text-gray-500">
               {ENGAGEMENT_HELP[config.kind]} Har personen ikke fått noen e-post i flyten ennå, blir svaret «nei».
             </p>
           )}
           {!isMarketing && (config.kind === 'opened_email' || config.kind === 'clicked_email') && (
-            <p className="text-[11px] text-amber-700">
+            <p className="text-xs text-amber-700">
               Vi følger bare med på åpning og klikk i markedsføringsflyter. I denne flyten blir svaret derfor alltid «nei».
             </p>
           )}
@@ -565,7 +564,7 @@ export function NodeConfigPanel({
                   className={inputCls}
                 />
               </div>
-              <p className="text-[11px] text-gray-500">Oppgaven knyttes til kontakten og dukker opp under CRM → Salg → Oppgaver.</p>
+              <p className="text-xs text-gray-500">Oppgaven knyttes til kontakten og dukker opp under CRM → Salg → Oppgaver.</p>
             </div>
           )}
         </div>
@@ -596,7 +595,7 @@ export function NodeConfigPanel({
               disabled={disabled}
               className={inputCls}
             />
-            <p className="mt-1 text-[11px] text-gray-500">Minus betyr før, pluss betyr etter. Eksempel: «Kursstart» og −3 = tre dager før kursstart. 0 = samme dag.</p>
+            <p className="mt-1 text-xs text-gray-500">Minus betyr før, pluss betyr etter. Eksempel: «Kursstart» og −3 = tre dager før kursstart. 0 = samme dag.</p>
           </div>
         </div>
       )}

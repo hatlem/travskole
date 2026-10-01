@@ -56,7 +56,7 @@ export function DeletableEdge({
             style={{ transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`, pointerEvents: 'all' }}
           >
             {branch && (
-              <span className={`rounded border px-1.5 text-[10px] font-semibold ${BRANCH_STYLES[branch]}`}>{branch}</span>
+              <span className={`rounded border px-1.5 text-xs font-semibold ${BRANCH_STYLES[branch]}`}>{branch}</span>
             )}
             {canDelete && (
               <button

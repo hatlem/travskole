@@ -18,6 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
+import { Button } from '@/components/admin/Button';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { HelpTip } from '@/components/admin/HelpTip';
@@ -574,7 +575,9 @@ export function FlowEditor({
         toast(data.error || 'Malen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
-      toast(`Lagret som malen «${data.flow.name}». Du finner den under «Maler» i listen over e-postflyter.`, 'success');
+      toast(`Lagret som malen «${data.flow.name}». Du finner den under «Maler» i listen over e-postflyter.`, 'success', {
+        action: { label: 'Åpne malen', href: `/admin/crm/flyter/${data.flow.id}` },
+      });
     } catch {
       toast('Malen ble ikke lagret. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
@@ -663,13 +666,9 @@ export function FlowEditor({
                 </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={() => setHelperHidden(true)}
-              className="text-sm text-gray-500 hover:text-gray-800 hover:underline"
-            >
+            <Button variant="link" size="sm" onClick={() => setHelperHidden(true)}>
               Skjul hjelpen
-            </button>
+            </Button>
           </div>
           <ol className="mt-3 grid gap-3 md:grid-cols-3">
             {helperSteps.map((step, i) => (
@@ -691,14 +690,15 @@ export function FlowEditor({
                 </p>
                 <p className="mt-1 text-xs text-gray-600">{step.text}</p>
                 {!step.done && step.action && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => runHelperAction(step.action!.kind)}
                     disabled={step.action.disabled}
-                    className="mt-2 rounded-md border border-bjerke-blue px-3 py-1.5 text-xs font-medium text-bjerke-blue hover:bg-bjerke-blue hover:text-white disabled:opacity-50"
+                    className="mt-2"
                   >
                     {step.action.label}
-                  </button>
+                  </Button>
                 )}
               </li>
             ))}
@@ -720,11 +720,11 @@ export function FlowEditor({
               className="lg:w-full text-left border border-gray-300 bg-white rounded-md px-3 py-2 text-sm hover:border-bjerke-blue hover:bg-blue-50/50 disabled:opacity-50 cursor-grab active:cursor-grabbing disabled:cursor-not-allowed"
             >
               <span className="block font-medium text-gray-900">{NODE_LABELS[type]}</span>
-              <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{NODE_DESCRIPTIONS[type]}</span>
+              <span className="mt-0.5 block text-xs leading-snug text-gray-500">{NODE_DESCRIPTIONS[type]}</span>
             </button>
           ))}
           {!editingDisabled && (
-            <p className="col-span-full text-[11px] text-gray-500 pt-1">
+            <p className="col-span-full text-xs text-gray-500 pt-1">
               Klikk på et steg, eller dra det inn i tegningen. Koble stegene ved å dra en pil fra prikken nederst på et
               steg til det neste. For å fjerne en pil: klikk på den og trykk ×.
             </p>

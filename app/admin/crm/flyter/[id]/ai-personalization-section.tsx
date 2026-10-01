@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/admin/Button';
 import { EntityPicker, type EntityRef } from '@/components/admin/crm/EntityPicker';
 import { FactList, SanitizedHtmlPane, VerdictBadge } from '@/components/admin/crm/AiEmailCompare';
 
@@ -73,7 +74,7 @@ export function AiPersonalizationSection({
         La KI tilpasse teksten til hver mottaker
       </label>
       {enabled && !isMarketing && (
-        <p className="text-[11px] text-amber-700">
+        <p className="text-xs text-amber-700">
           KI-tilpasning brukes bare i markedsføringsflyter. I denne flyten sendes teksten slik du har skrevet den.
         </p>
       )}
@@ -87,7 +88,7 @@ export function AiPersonalizationSection({
                 onChange={() => onChange({ aiReview: 'approve' })} disabled={disabled} className="mt-1" />
               <span>
                 Godkjenn hver e-post (anbefalt)
-                <span className="block text-[11px] text-gray-500">
+                <span className="block text-xs text-gray-500">
                   Utkastet havner under <Link href="/admin/crm/godkjenning" className="text-blue-700 hover:underline">CRM → Godkjenning</Link>.
                   Hvis ingen ser på utkastet innen fristen (se Innstillinger), sendes teksten slik du skrev den.
                 </span>
@@ -98,12 +99,12 @@ export function AiPersonalizationSection({
                 onChange={() => onChange({ aiReview: 'auto' })} disabled={disabled} className="mt-1" />
               <span>
                 Send automatisk
-                <span className="block text-[11px] text-gray-500">Sendes uten at noen leser den først, så lenge den automatiske kontrollen godtar teksten.</span>
+                <span className="block text-xs text-gray-500">Sendes uten at noen leser den først, så lenge den automatiske kontrollen godtar teksten.</span>
               </span>
             </label>
           </div>
           {review === null && (
-            <p className="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
+            <p className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
               Denne e-posten ble satt opp før godkjenning fantes og sender KI-tekst automatisk. Vi anbefaler «Godkjenn hver e-post».
             </p>
           )}
@@ -113,14 +114,21 @@ export function AiPersonalizationSection({
       <div>
         <label className={labelCls}>Se hvordan e-posten blir for en kontakt</label>
         <EntityPicker kind="contact" value={contact} onChange={(c) => { onContactChange(c); setPreview(null); }} />
-        <p className="mt-1 text-[11px] text-gray-500">
+        <p className="mt-1 text-xs text-gray-500">
           Kontakten brukes også når du sender test-e-post, så du ser det mottakeren får.
         </p>
-        <button onClick={runPreview} disabled={!contact || previewing}
-          className="mt-2 bg-purple-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">
-          {previewing ? 'Lager forhåndsvisning …' : 'Forhåndsvis'}
-        </button>
-        {error && <p className="mt-1 text-[11px] text-red-600">{error}</p>}
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={runPreview}
+          disabled={!contact}
+          loading={previewing}
+          loadingLabel="Lager forhåndsvisning …"
+          className="mt-2"
+        >
+          Forhåndsvis
+        </Button>
+        {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
       </div>
 
       {preview && (
@@ -135,7 +143,7 @@ export function AiPersonalizationSection({
           {preview.personalizedHtml !== null && (
             <SanitizedHtmlPane title="KI-versjon" html={preview.personalizedHtml} tone="ai" />
           )}
-          <p className="text-[11px] text-gray-500">
+          <p className="text-xs text-gray-500">
             Forhåndsvisningen sender ingenting. Kursfelt (barnets navn, kursdato osv.) fylles først inn når e-posten faktisk sendes.
           </p>
         </div>

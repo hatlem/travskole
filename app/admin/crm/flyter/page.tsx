@@ -15,6 +15,8 @@ import { HINTS } from '@/lib/admin-copy';
 import { FLOW_STATUS_LABELS, canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
 import { deleteFlowMessage, formatNorwegianDate, groupFlows } from '@/lib/crm/flow-list';
 import { RowMenu } from '@/components/admin/crm/RowMenu';
+import { Button } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
 import { DEFAULT_FLOW_SETTINGS, FlowSettingsFields, type FlowSettingsValues } from './flow-settings-fields';
 
@@ -54,11 +56,7 @@ const STATUS_STYLES: Record<string, string> = {
 function StatusBadge({ status }: { status: string }) {
   const cls = STATUS_STYLES[status] ?? STATUS_STYLES.draft;
   const label = STATUS_LABELS[status] ?? status;
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>
-      {label}
-    </span>
-  );
+  return <Badge className={cls}>{label}</Badge>;
 }
 
 type ConfirmAction = { type: 'archive' | 'delete' | 'resume'; flow: FlowRow };
@@ -96,11 +94,6 @@ function legacyStatusMessage(result: LegacyImportResult): string {
 }
 
 const ANCHOR_LABELS: Record<string, string> = { contact: 'En person', course: 'Et kurs' };
-
-const primaryBtn =
-  'inline-flex items-center rounded-md bg-bjerke-blue px-4 py-2 text-sm font-medium text-white hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2';
-const secondaryBtn =
-  'inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2';
 
 function enrollmentText(n: number): string {
   return n === 1 ? '1 person er underveis' : `${n} personer er underveis`;
@@ -544,13 +537,9 @@ export default function FlyterPage() {
     const canDelete = canDeleteStatus(flow.status);
     if (flow.status === 'archived') {
       return canDelete ? (
-        <button
-          onClick={() => setConfirmAction({ type: 'delete', flow })}
-          disabled={isPending}
-          className="inline-flex h-9 items-center rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
-        >
+        <Button variant="dangerText" size="sm" onClick={() => setConfirmAction({ type: 'delete', flow })} disabled={isPending}>
           Slett
-        </button>
+        </Button>
       ) : null;
     }
     const menuItems = [
@@ -560,13 +549,15 @@ export default function FlyterPage() {
     return (
       <>
         {(flow.status === 'active' || flow.status === 'paused') && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={() => (flow.status === 'active' ? toggleStatus(flow) : setConfirmAction({ type: 'resume', flow }))}
             disabled={isPending}
-            className="inline-flex h-9 items-center whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2 disabled:opacity-50"
+            className="whitespace-nowrap"
           >
             {flow.status === 'active' ? 'Sett på pause' : 'Gjenoppta'}
-          </button>
+          </Button>
         )}
         <RowMenu label={`Flere valg for ${flow.name}`} disabled={isPending} items={menuItems} />
       </>
@@ -579,19 +570,17 @@ export default function FlyterPage() {
         actions={
           <>
             {aiConfigured && (
-              <button
+              <Button
+                variant="secondary"
                 onClick={() => { setShowNew(false); setShowFromTemplate(false); setShowGenerate((v) => !v); }}
-                className="inline-flex items-center rounded-md border border-purple-300 bg-white px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-50"
               >
                 Lag utkast med KI
-              </button>
+              </Button>
             )}
-            <button onClick={() => (showFromTemplate ? setShowFromTemplate(false) : openTemplatePicker())} className={secondaryBtn}>
+            <Button variant="secondary" onClick={() => (showFromTemplate ? setShowFromTemplate(false) : openTemplatePicker())}>
               Start fra en mal
-            </button>
-            <button onClick={openNewFlow} className={primaryBtn}>
-              Ny e-postflyt
-            </button>
+            </Button>
+            <Button variant={showNew || showFromTemplate || showGenerate ? 'secondary' : 'primary'} onClick={openNewFlow}>Ny e-postflyt</Button>
           </>
         }
       />
@@ -600,20 +589,22 @@ export default function FlyterPage() {
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-indigo-50">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-sm font-semibold text-gray-800">Velg en mal å starte fra</h3>
-            <button onClick={() => setShowFromTemplate(false)} className="text-sm text-gray-600 hover:underline">
+            <Button variant="secondary" size="sm" onClick={() => setShowFromTemplate(false)}>
               Avbryt
-            </button>
+            </Button>
           </div>
           {templates.length === 0 ? (
             <div className="text-sm text-gray-700">
               <p>Det finnes ingen maler ennå.</p>
               {isSuperAdmin ? (
-                <button
+                <Button
+                  variant="secondary"
+                  size="sm"
                   onClick={() => { setShowFromTemplate(false); setTemplateReport(null); setTemplateAction('standard'); }}
-                  className="mt-2 inline-flex items-center rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                  className="mt-2"
                 >
                   Legg til de ferdige malene
-                </button>
+                </Button>
               ) : (
                 <p className="mt-1 text-gray-600">
                   Be en superadmin legge til de ferdige malene, eller trykk «Ny e-postflyt» for å lage en fra bunnen.
@@ -688,14 +679,16 @@ export default function FlyterPage() {
               ))}
             </select>
           </label>
-          <button
+          <Button
             onClick={generateFlow}
-            disabled={goal.trim().length < 10 || senderIdentityId === '' || generating}
-            className="bg-purple-600 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+            disabled={goal.trim().length < 10 || senderIdentityId === ''}
+            loading={generating}
+            loadingLabel="Lager utkast …"
           >
-            {generating ? 'Lager utkast …' : 'Lag utkast'}
-          </button>
-          <button
+            Lag utkast
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => {
               setShowGenerate(false);
               setGoal('');
@@ -703,10 +696,9 @@ export default function FlyterPage() {
               setSenderIdentityId('');
               setGenerateError(null);
             }}
-            className="text-sm text-gray-600 px-2 py-2"
           >
             Avbryt
-          </button>
+          </Button>
           <p className="w-full text-xs text-gray-600">
             KI lager et utkast du kan se over og endre. Ingenting sendes før du aktiverer flyten.
           </p>
@@ -724,19 +716,17 @@ export default function FlyterPage() {
             onChange={(patch) => setNewSettings((prev) => ({ ...prev, ...patch }))}
           />
           <div className="mt-4 flex gap-2">
-            <button
+            <Button
               onClick={createFlow}
-              disabled={!newSettings.name.trim() || creating}
-              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+              disabled={!newSettings.name.trim()}
+              loading={creating}
+              loadingLabel="Lager flyten …"
             >
-              {creating ? 'Lager flyten …' : 'Lag flyten'}
-            </button>
-            <button
-              onClick={() => { setShowNew(false); setNewSettings(DEFAULT_FLOW_SETTINGS); }}
-              className="text-sm text-gray-600 px-2 py-2"
-            >
+              Lag flyten
+            </Button>
+            <Button variant="secondary" onClick={() => { setShowNew(false); setNewSettings(DEFAULT_FLOW_SETTINGS); }}>
               Avbryt
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -805,18 +795,20 @@ export default function FlyterPage() {
               </div>
               {isSuperAdmin && (
                 <div className="flex flex-wrap gap-2">
-                  <button
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => { setTemplateReport(null); setTemplateAction((a) => (a === 'standard' ? null : 'standard')); }}
-                    className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
                   >
                     Legg til ferdige maler
-                  </button>
-                  <button
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
                     onClick={() => { setTemplateReport(null); setTemplateAction((a) => (a === 'legacy' ? null : 'legacy')); }}
-                    className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
                   >
                     Importer gamle kursmaler
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
@@ -847,16 +839,17 @@ export default function FlyterPage() {
                       ))}
                     </select>
                   </label>
-                  <button
+                  <Button
                     onClick={runTemplateAction}
-                    disabled={templateSenderId === '' || templateBusy}
-                    className="bg-indigo-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-indigo-700 disabled:opacity-50"
+                    disabled={templateSenderId === ''}
+                    loading={templateBusy}
+                    loadingLabel="Jobber …"
                   >
-                    {templateBusy ? 'Jobber …' : templateAction === 'standard' ? 'Legg til maler' : 'Importer'}
-                  </button>
-                  <button onClick={() => setTemplateAction(null)} className="text-sm text-gray-600 px-2 py-2">
+                    {templateAction === 'standard' ? 'Legg til maler' : 'Importer'}
+                  </Button>
+                  <Button variant="secondary" onClick={() => setTemplateAction(null)}>
                     Avbryt
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -905,9 +898,9 @@ export default function FlyterPage() {
                       </>
                     )}
                   </div>
-                  <button onClick={() => setTemplateReport(null)} className="text-gray-500 hover:text-gray-700">
+                  <Button variant="secondary" size="sm" onClick={() => setTemplateReport(null)}>
                     Lukk
-                  </button>
+                  </Button>
                 </div>
               </div>
             )}
@@ -916,12 +909,13 @@ export default function FlyterPage() {
               <div className="text-sm text-gray-600 border border-dashed border-gray-300 rounded-lg px-4 py-6 text-center">
                 <p>Ingen maler ennå.</p>
                 {isSuperAdmin ? (
-                  <button
+                  <Button
+                    variant="link"
                     onClick={() => { setTemplateReport(null); setTemplateAction('standard'); }}
-                    className="mt-2 text-sm font-medium text-bjerke-blue hover:underline"
+                    className="mt-2"
                   >
                     Legg til de ferdige malene
-                  </button>
+                  </Button>
                 ) : (
                   <p className="mt-1 text-gray-500">Åpne en flyt og trykk «Lagre som mal» for å lage din egen.</p>
                 )}
@@ -948,16 +942,18 @@ export default function FlyterPage() {
                               }}
                               className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm sm:max-w-sm"
                             />
-                            <button
+                            <Button
+                              size="sm"
                               onClick={saveRename}
-                              disabled={isPending || !renaming.name.trim()}
-                              className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+                              disabled={!renaming.name.trim()}
+                              loading={isPending}
+                              loadingLabel="Lagrer …"
                             >
-                              {isPending ? 'Lagrer …' : 'Lagre'}
-                            </button>
-                            <button onClick={() => setRenaming(null)} className="px-2 py-1.5 text-sm text-gray-600 hover:underline">
+                              Lagre
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>
                               Avbryt
-                            </button>
+                            </Button>
                           </div>
                         ) : (
                           <>
@@ -980,13 +976,15 @@ export default function FlyterPage() {
                       </div>
                       {!isRenaming && (
                         <div className="flex shrink-0 items-center gap-2">
-                          <button
+                          <Button
+                            variant="secondary"
+                            size="sm"
                             onClick={() => createFromTemplate(template)}
-                            disabled={isPending}
-                            className="inline-flex h-9 items-center rounded-md bg-bjerke-blue px-3 text-sm font-medium text-white hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2 disabled:opacity-50"
+                            loading={isPending}
+                            loadingLabel="Lager flyt …"
                           >
-                            {isPending ? 'Lager flyt …' : 'Bruk mal'}
-                          </button>
+                            Bruk mal
+                          </Button>
                           <RowMenu
                             label={`Flere valg for malen ${template.name}`}
                             disabled={isPending}

@@ -20,7 +20,7 @@ export const DEFAULT_FLOW_SETTINGS: FlowSettingsValues = {
 const inputCls =
   'w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm disabled:opacity-50 disabled:bg-gray-50';
 const labelCls = 'block text-xs font-medium text-gray-600 mb-1';
-const helpCls = 'mt-1 text-[11px] text-gray-500';
+const helpCls = 'mt-1 text-xs text-gray-500';
 
 const ANCHOR_OPTIONS: { value: AnchorMode; label: string; help: string }[] = [
   {
@@ -111,7 +111,7 @@ export function FlowSettingsFields({ values, onChange, disabled = false, anchorL
               />
               <span>
                 <span className="font-medium text-gray-800">{option.label}</span>
-                <span className="block text-[11px] text-gray-500">{option.help}</span>
+                <span className="block text-xs text-gray-500">{option.help}</span>
               </span>
             </label>
           ))}

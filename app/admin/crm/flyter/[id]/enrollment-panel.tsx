@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { Button } from '@/components/admin/Button';
 import { CardSkeleton } from '@/components/admin/Skeleton';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { formatSendTime } from '@/lib/flows/send-window';
@@ -85,13 +86,14 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
 
   return (
     <>
-      <button
+      <Button
+        variant="secondary"
         onClick={() => setModalOpen(true)}
-        className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
+        className="whitespace-nowrap"
         title="Se hvem som er med i flyten. «Underveis» venter fortsatt på flere e-poster."
       >
         {active ?? 0} underveis · {total ?? 0} totalt
-      </button>
+      </Button>
 
       {modalOpen && (
         <div
@@ -133,21 +135,18 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
                   ))}
                 </ul>
                 <div className="mt-4 flex items-center justify-between text-sm">
-                  <button
-                    onClick={() => load(page - 1)}
-                    disabled={loading || page <= 1}
-                    className="text-blue-700 hover:underline disabled:opacity-40 disabled:no-underline"
-                  >
+                  <Button variant="link" size="sm" onClick={() => load(page - 1)} disabled={loading || page <= 1}>
                     Forrige
-                  </button>
+                  </Button>
                   <span className="text-gray-500">Side {page}</span>
-                  <button
+                  <Button
+                    variant="link"
+                    size="sm"
                     onClick={() => load(page + 1)}
                     disabled={loading || page * pageSize >= (total ?? 0)}
-                    className="text-blue-700 hover:underline disabled:opacity-40 disabled:no-underline"
                   >
                     Neste
-                  </button>
+                  </Button>
                 </div>
               </>
             )}

@@ -52,7 +52,7 @@ export function FlowSendWindowSection({ flowId, isMarketing, global, value, onCh
             />
             <span>
               <span className="font-medium text-gray-800">{option.label}</span>
-              <span className="block text-[11px] text-gray-500">{option.help}</span>
+              <span className="block text-xs text-gray-500">{option.help}</span>
             </span>
           </label>
           {option.mode === 'custom' && value.mode === 'custom' && (
@@ -70,12 +70,12 @@ export function FlowSendWindowSection({ flowId, isMarketing, global, value, onCh
       ))}
 
       {!isMarketing && value.mode !== 'anytime' && (
-        <p className="rounded-md bg-amber-50 px-2 py-1.5 text-[11px] text-amber-800">
+        <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
           Dette er en flyt med viktig informasjon. Inneholder den kursinformasjon som må fram raskt (f.eks. endringer rett før kursstart), bør du velge «Når som helst».
         </p>
       )}
 
-      <p className="text-[11px] text-gray-500">
+      <p className="text-xs text-gray-500">
         Kan endres mens flyten kjører, og gjelder fra neste utsending. Standarden endres under{' '}
         <Link href="/admin/settings" className="text-blue-700 hover:underline">
           Innstillinger

@@ -153,7 +153,7 @@ export function EmailBodyEditor({ subject, bodyHtml, anchorMode, disabled, onCha
             ) : (
               <p className="px-3 py-6 text-center text-sm text-gray-500">Skriv teksten først, så ser du den her.</p>
             )}
-            <p className="border-t border-gray-100 px-3 py-2 text-[11px] text-gray-500">
+            <p className="border-t border-gray-100 px-3 py-2 text-xs text-gray-500">
               Vist med eksempeldata (Kari Nordmann{anchorMode === 'course' ? ', Emma, Begynnerkurs' : ''}). Avmeldingslenken legges til nederst når e-posten sendes.
             </p>
           </div>
@@ -171,7 +171,7 @@ export function EmailBodyEditor({ subject, bodyHtml, anchorMode, disabled, onCha
           </div>
         ) : (
           <div className={preview ? 'hidden' : 'space-y-2'}>
-            <p className="rounded-md bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900">
+            <p className="rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-900">
               Denne teksten har formatering som tekstredigereren ikke kan vise (for eksempel tabeller, farger eller bilder), så du redigerer HTML-koden direkte.
               {!disabled && (
                 <>
@@ -202,7 +202,7 @@ export function EmailBodyEditor({ subject, bodyHtml, anchorMode, disabled, onCha
 
       {!disabled && tab === 'write' && (
         <div>
-          <p className="mb-1 text-[11px] text-gray-500">
+          <p className="mb-1 text-xs text-gray-500">
             Sett inn flettefelt — byttes ut med riktig verdi for hver mottaker:
           </p>
           <div className="flex flex-wrap gap-1.5">
@@ -221,7 +221,7 @@ export function EmailBodyEditor({ subject, bodyHtml, anchorMode, disabled, onCha
             ))}
           </div>
           {anchorMode !== 'course' && (
-            <p className="mt-1 text-[11px] text-gray-500">Barnets navn, kursnavn og kursdatoer finnes bare i flyter som gjelder et kurs.</p>
+            <p className="mt-1 text-xs text-gray-500">Barnets navn, kursnavn og kursdatoer finnes bare i flyter som gjelder et kurs.</p>
           )}
         </div>
       )}

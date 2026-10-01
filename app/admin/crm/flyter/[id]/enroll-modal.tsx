@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { Button } from '@/components/admin/Button';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { enrollTimingNote } from '@/lib/flows/send-window';
 import { enrollResultMessage, type MarketingReach } from '@/lib/flows/enroll-message';
@@ -242,25 +243,17 @@ export function EnrollModal({ flowId, isMarketing, isDraft, onActivate, sendWind
               </p>
             )}
             <div className="flex flex-wrap justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => { setResult(null); setSelected([]); }}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-              >
+              <Button variant="secondary" size="sm" onClick={() => { setResult(null); setSelected([]); }}>
                 Legg til flere
-              </button>
+              </Button>
               {result.awaitingActivation && onActivate ? (
-                <button
-                  type="button"
-                  onClick={() => { onClose(); onActivate(); }}
-                  className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm text-white hover:bg-bjerke-blue-dark"
-                >
+                <Button size="sm" onClick={() => { onClose(); onActivate(); }}>
                   Aktiver flyten nå
-                </button>
+                </Button>
               ) : (
-                <button type="button" onClick={onClose} className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm text-white hover:bg-bjerke-blue-dark">
+                <Button size="sm" onClick={onClose}>
                   Ferdig
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -374,18 +367,10 @@ export function EnrollModal({ flowId, isMarketing, isDraft, onActivate, sendWind
             </div>
 
             <div className="flex justify-end gap-2">
-              <button onClick={onClose} className="text-sm text-gray-700 px-3 py-1.5">Avbryt</button>
-              <button
-                onClick={submit}
-                disabled={!canSubmit}
-                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
-              >
-                {submitting
-                  ? 'Legger til …'
-                  : mode === 'contacts' && selected.length > 0
-                    ? `Legg til ${selected.length} i flyten`
-                    : 'Legg til i flyten'}
-              </button>
+              <Button variant="secondary" size="sm" onClick={onClose}>Avbryt</Button>
+              <Button size="sm" onClick={submit} disabled={!canSubmit} loading={submitting} loadingLabel="Legger til …">
+                {mode === 'contacts' && selected.length > 0 ? `Legg til ${selected.length} i flyten` : 'Legg til i flyten'}
+              </Button>
             </div>
           </div>
         )}
