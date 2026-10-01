@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { analyzeFlowEngagement, osloHour, type FlowEngagementInput } from '@/lib/ai/analyze';
+import { DEFAULT_SEND_WINDOW } from '@/lib/flows/send-window';
 
 const NOW = new Date('2026-07-18T12:00:00Z');
 const FLOW_ID = 7;
@@ -109,6 +110,39 @@ describe('analyzeFlowEngagement — send_timing', () => {
     ];
     const result = analyzeFlowEngagement(baseInput({ sends }), NOW);
     expect(result.find((c) => c.kind === 'send_timing')).toBeUndefined();
+  });
+});
+
+describe('analyzeFlowEngagement — send_timing innenfor sendetiden', () => {
+  it('beste time innenfor vinduet foreslås som før', () => {
+    const sends = Array.from({ length: 10 }, () => mkSend(9, 18));
+    const timing = analyzeFlowEngagement(baseInput({ sends, sendWindow: DEFAULT_SEND_WINDOW }), NOW).find((c) => c.kind === 'send_timing');
+    expect(timing?.detail).toEqual({ bestHour: 18, sendHour: 9, openShare: 1 });
+  });
+
+  it('åpninger kl 22 (utenfor 08–20) gir forslag om nærmeste tillatte time, kl 19', () => {
+    const sends = Array.from({ length: 10 }, () => mkSend(9, 22));
+    const timing = analyzeFlowEngagement(baseInput({ sends, sendWindow: DEFAULT_SEND_WINDOW }), NOW).find((c) => c.kind === 'send_timing');
+    expect(timing?.detail).toEqual({ bestHour: 22, sendHour: 9, openShare: 1, suggestedHour: 19 });
+    expect(timing?.title).toContain('utenfor sendetiden');
+    expect(timing?.title).toContain('kl 19');
+  });
+
+  it('åpninger tidlig om morgenen gir forslag om vinduets første time', () => {
+    const sends = Array.from({ length: 10 }, () => mkSend(12, 6));
+    const timing = analyzeFlowEngagement(baseInput({ sends, sendWindow: DEFAULT_SEND_WINDOW }), NOW).find((c) => c.kind === 'send_timing');
+    expect(timing?.detail).toMatchObject({ bestHour: 6, suggestedHour: 8 });
+  });
+
+  it('ingen forslag når nærmeste tillatte time allerede er sendetimen', () => {
+    const sends = Array.from({ length: 10 }, () => mkSend(19, 23));
+    expect(analyzeFlowEngagement(baseInput({ sends, sendWindow: DEFAULT_SEND_WINDOW }), NOW).find((c) => c.kind === 'send_timing')).toBeUndefined();
+  });
+
+  it('flyt som sender når som helst kan få forslag om natten', () => {
+    const sends = Array.from({ length: 10 }, () => mkSend(9, 22));
+    const timing = analyzeFlowEngagement(baseInput({ sends, sendWindow: null }), NOW).find((c) => c.kind === 'send_timing');
+    expect(timing?.detail).toEqual({ bestHour: 22, sendHour: 9, openShare: 1 });
   });
 });
 
