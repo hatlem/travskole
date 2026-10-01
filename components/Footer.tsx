@@ -36,36 +36,36 @@ export default function Footer() {
 
           <div>
             <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">{t('footer.links_heading')}</h3>
-            <ul className="space-y-2 text-sm">
+            <ul className="text-sm">
               <li>
-                <Link href="/" className="text-white/70 hover:text-white transition">
+                <Link href="/" className="inline-flex min-h-11 items-center text-white/80 hover:text-white transition">
                   {t('footer.home')}
                 </Link>
               </li>
               <li>
-                <Link href="/arrangementer" className="text-white/70 hover:text-white transition">
+                <Link href="/arrangementer" className="inline-flex min-h-11 items-center text-white/80 hover:text-white transition">
                   {settings.nav_courses_label || 'Kurs & Leirer'}
                 </Link>
               </li>
               <li>
-                <Link href="/dashboard" className="text-white/70 hover:text-white transition">
-                  Min Side
+                <Link href="/dashboard" className="inline-flex min-h-11 items-center text-white/80 hover:text-white transition">
+                  {t('nav.my_page')}
                 </Link>
               </li>
               <li>
-                <a href="https://bjerke.no" target="_blank" rel="noopener noreferrer" className="text-white/70 hover:text-white transition">
+                <a href="https://bjerke.no" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center text-white/80 hover:text-white transition">
                   {t('footer.parent_site')}
                 </a>
               </li>
               {LEGAL_PAGES.map((page) => (
                 <li key={page.slug}>
-                  <Link href={`/${page.slug}`} className="text-white/70 hover:text-white transition">
+                  <Link href={`/${page.slug}`} className="inline-flex min-h-11 items-center text-white/80 hover:text-white transition">
                     {page.navLabel}
                   </Link>
                 </li>
               ))}
               <li>
-                <Link href="/feedback" className="text-white/70 hover:text-white transition">
+                <Link href="/feedback" className="inline-flex min-h-11 items-center text-white/80 hover:text-white transition">
                   {t('feedback.footer_link')}
                 </Link>
               </li>
@@ -74,27 +74,27 @@ export default function Footer() {
 
           <div>
             <h3 className="text-lg font-bold mb-4 uppercase tracking-wide">{t('footer.contact_heading')}</h3>
-            <ul className="space-y-2 text-sm text-white/70">
+            <ul className="space-y-1 text-sm text-white/80">
               <li>
                 {t('footer.email_label')}{' '}
-                <a href={`mailto:${contactEmail}`} className="hover:text-white transition">
+                <a href={`mailto:${contactEmail}`} className="inline-flex min-h-11 items-center hover:text-white transition">
                   {contactEmail}
                 </a>
               </li>
               {settings.contact_phone && (
                 <li>
                   {t('footer.phone_label')}{' '}
-                  <a href={`tel:${settings.contact_phone}`} className="hover:text-white transition">
+                  <a href={`tel:${settings.contact_phone}`} className="inline-flex min-h-11 items-center hover:text-white transition">
                     {settings.contact_phone}
                   </a>
                 </li>
               )}
-              <li>{t('footer.address_label')} {contactAddress}</li>
+              <li className="py-2">{t('footer.address_label')} {contactAddress}</li>
             </ul>
           </div>
         </div>
 
-        <div className="border-t border-white/20 mt-10 pt-8 text-sm text-center text-white/50">
+        <div className="border-t border-white/20 mt-10 pt-8 text-sm text-center text-white/70">
           <p>&copy; {new Date().getFullYear()} {siteName}. {t('footer.copyright')}</p>
         </div>
       </div>

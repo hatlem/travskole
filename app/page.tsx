@@ -52,19 +52,19 @@ export default async function Home({
       />
 
       {/* Kommende Kurs Section */}
-      <section className="max-w-7xl mx-auto px-6 py-20">
-        <div className="flex justify-between items-center mb-10">
-          <h2 className="text-3xl md:text-4xl font-bold text-gray-900">{settings.home_courses_heading}</h2>
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-14 md:py-20">
+        <div className="flex justify-between items-center gap-4 mb-6 md:mb-10">
+          <h2 className="text-2xl md:text-4xl font-bold text-gray-900 text-balance">{settings.home_courses_heading}</h2>
           <Link
             href="/arrangementer"
-            className="text-bjerke-blue hover:underline font-semibold text-sm uppercase tracking-wide"
+            className="inline-flex min-h-11 shrink-0 items-center text-bjerke-blue hover:underline font-semibold text-sm uppercase tracking-wide"
           >
             {t('home.see_all')} &rarr;
           </Link>
         </div>
 
         {upcomingCourses.length > 0 ? (
-          <div className="grid gap-6 md:grid-cols-1">
+          <div className="grid gap-6 md:grid-cols-2">
             {upcomingCourses.map(course => (
               <CourseCard key={course.id} course={course} />
             ))}

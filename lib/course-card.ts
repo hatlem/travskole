@@ -15,6 +15,8 @@ export interface CourseCardProps {
   age_min?: number;
   age_max?: number;
   price: number;
+  /** false når kurset ikke har pris (forespørsel: «Pris avtales»). */
+  price_set: boolean;
   max_participants: number;
   status: 'open' | 'full' | 'closed';
   image_url?: string | null;
@@ -51,6 +53,7 @@ export function toCourseCardProps(c: Course): CourseCardProps {
     age_min: c.ageMin ?? undefined,
     age_max: c.ageMax ?? undefined,
     price: c.price ?? 0,
+    price_set: c.price != null,
     max_participants: c.maxParticipants ?? 0,
     status: c.status as 'open' | 'full' | 'closed',
     image_url: c.imageUrl ?? null,

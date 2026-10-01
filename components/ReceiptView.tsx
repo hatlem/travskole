@@ -120,7 +120,7 @@ export function BuyerNextActions({ email, kind = 'registration' }: { email?: str
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
           <h2 className="text-base font-semibold text-gray-900">Se påmeldingene dine senere</h2>
           <div className="mt-2">
-            <LoginLinkOffer email={email} hint={t('receipt.login_hint')} label={t('receipt.send_login_link')} />
+            <LoginLinkOffer key={email ?? ''} email={email} hint={t('receipt.login_hint')} label={t('receipt.send_login_link')} />
           </div>
         </div>
       )}

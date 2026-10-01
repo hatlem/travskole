@@ -1,10 +1,10 @@
 'use client';
 
-import React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useSettings, useStrings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
+import { audienceLabel, formatDateRange, formatKr } from '@/lib/buyer-display';
 
 export interface Course {
   id: string;
@@ -20,6 +20,8 @@ export interface Course {
   age_min?: number;
   age_max?: number;
   price: number;
+  /** Mangler = eldre data; behandles som satt pris. */
+  price_set?: boolean;
   max_participants: number;
   status: 'open' | 'full' | 'closed';
   image_url?: string | null;
@@ -33,103 +35,96 @@ export default function CourseCard({ course }: CourseCardProps) {
   const settings = useSettings();
   const t = useStrings();
   const courseTypes = parseCourseTypes(settings.course_types);
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('nb-NO', { 
-      day: 'numeric', 
-      month: 'long', 
-      year: 'numeric' 
-    });
-  };
-
+  const isRequest = course.registration_mode === 'request';
   const courseHref = `/arrangementer/${course.type}/${course.year}/${course.slug}`;
 
-  const getStatusBadge = () => {
+  const priceText =
+    course.price_set === false && isRequest
+      ? t('course.price_by_agreement')
+      : course.price > 0
+        ? formatKr(course.price)
+        : t('course.free');
+
+  const status = (() => {
     switch (course.status) {
       case 'full':
-        return <span className="text-sm font-medium text-red-600">{t('course.status_full')}</span>;
+        return <span className="text-sm font-medium text-red-700">{t('course.status_full')}</span>;
       case 'closed':
         return <span className="text-sm font-medium text-gray-600">{t('course.status_closed')}</span>;
       default:
-        return <span className="text-sm font-medium text-green-600">{t('course.status_open')}</span>;
+        return <span className="text-sm font-medium text-green-800">{t('course.status_open')}</span>;
     }
-  };
+  })();
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-4 hover:shadow-md transition">
+    <article className="flex flex-col overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm transition-shadow hover:shadow-md">
       {course.image_url && (
         <div className="relative h-48 w-full">
           <Image
             src={course.image_url}
-            alt={course.name}
+            alt=""
             fill
+            sizes="(min-width: 768px) 50vw, 100vw"
             className="object-cover"
           />
         </div>
       )}
-      <div className="p-6">
-      <div className="flex justify-between items-start mb-3">
-        <div>
-          <h3 className="text-2xl font-semibold text-gray-900 mb-1">
-            {course.name}
-          </h3>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-block px-3 py-1 text-sm font-medium text-bjerke-blue bg-blue-50 rounded-full">
-              {courseTypeLabel(courseTypes, course.type)}
-            </span>
-            {course.registration_mode === 'request' && (
-              <span className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-amber-100 text-amber-800">Avtal tid</span>
-            )}
-            {course.audience === 'voksen'
-              ? <span className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-slate-100 text-slate-700">For voksne</span>
-              : <span className="inline-block px-2 py-0.5 text-xs font-medium rounded bg-emerald-100 text-emerald-800">For barn</span>}
+      <div className="flex flex-1 flex-col p-5 sm:p-6">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="mb-2 text-xl font-semibold text-gray-900 text-balance sm:text-2xl">
+              <Link href={courseHref} className="hover:underline">
+                {course.name}
+              </Link>
+            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-block rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-bjerke-blue">
+                {courseTypeLabel(courseTypes, course.type)}
+              </span>
+              <span
+                className={`inline-block rounded px-2 py-0.5 text-xs font-medium ${
+                  course.audience === 'voksen' ? 'bg-slate-100 text-slate-700' : 'bg-emerald-100 text-emerald-900'
+                }`}
+              >
+                {audienceLabel({ audience: course.audience, ageMin: course.age_min, ageMax: course.age_max })}
+              </span>
+              {isRequest && (
+                <span className="inline-block rounded bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">
+                  {t('course.request_badge')}
+                </span>
+              )}
+            </div>
           </div>
+          <div className="shrink-0">{status}</div>
         </div>
-        {getStatusBadge()}
-      </div>
-      
-      <p className="text-gray-600 mb-4">{course.description}</p>
-      
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-        {course.start_date && (
+
+        {course.description && <p className="mb-4 line-clamp-3 text-gray-600 text-pretty">{course.description}</p>}
+
+        <dl className="mb-5 mt-auto grid grid-cols-2 gap-4">
           <div>
-            <p className="text-sm text-gray-500">{t('course.start_date')}</p>
-            <p className="font-semibold">{formatDate(course.start_date)}</p>
+            <dt className="text-sm text-gray-500">{t('course.date')}</dt>
+            <dd className="font-semibold">
+              {course.start_date ? formatDateRange(course.start_date, course.end_date) : t('course.time_by_appointment')}
+            </dd>
           </div>
-        )}
-        {course.end_date && (
           <div>
-            <p className="text-sm text-gray-500">{t('course.end_date')}</p>
-            <p className="font-semibold">{formatDate(course.end_date)}</p>
+            <dt className="text-sm text-gray-500">{t('course.price')}</dt>
+            <dd className="font-semibold tabular-nums">{priceText}</dd>
           </div>
-        )}
-        <div>
-          <p className="text-sm text-gray-500">{t('course.age_group')}</p>
-          <p className="font-semibold">
-            {course.age_min && course.age_max
-              ? t('course.age_range', { min: course.age_min, max: course.age_max })
-              : t('course.all_ages')}
-          </p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-500">{t('course.price')}</p>
-          <p className="font-semibold">
-            {course.price === 0 ? t('course.free') : `${course.price} ${t('course.currency_suffix')}`}
-          </p>
-        </div>
+        </dl>
+
+        <Link
+          href={courseHref}
+          aria-label={`${course.status === 'open' ? t('course.details_and_register') : t('course.details')}: ${course.name}`}
+          className={`inline-flex min-h-12 w-full items-center justify-center rounded-lg px-6 font-semibold transition-colors ${
+            course.status === 'open'
+              ? 'bg-bjerke-blue text-white hover:bg-bjerke-blue-dark'
+              : 'border border-gray-300 bg-white text-gray-800 hover:bg-gray-50'
+          }`}
+        >
+          {course.status === 'open' ? t('course.details_and_register') : t('course.details')}
+        </Link>
       </div>
-      
-      <Link
-        href={courseHref}
-        className={`inline-block w-full text-center px-6 py-3 rounded-lg font-semibold transition ${
-          course.status === 'open'
-            ? 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
-            : 'bg-gray-200 text-gray-600 cursor-not-allowed'
-        }`}
-      >
-        {course.status === 'open' ? t('course.details_and_register') : t('course.details')}
-      </Link>
-      </div>
-    </div>
+    </article>
   );
 }
