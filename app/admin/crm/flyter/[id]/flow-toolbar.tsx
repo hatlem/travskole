@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { FLOW_STATUS_LABELS, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
+import { FLOW_STATUS_LABELS, isTemplateStatus } from '@/lib/flows/status';
 
 export interface ValidationError {
   nodeId: number | null;
@@ -22,6 +22,7 @@ const STATUS_STYLES: Record<string, string> = {
 interface FlowToolbarProps {
   name: string;
   status: string;
+  /** Noe (tegning, innstillinger eller sendetider) er endret og ikke lagret. */
   dirty: boolean;
   saving: boolean;
   activating: boolean;
@@ -34,7 +35,7 @@ interface FlowToolbarProps {
   onActivate: () => void;
   onPause: () => void;
   onResume: () => void;
-  /** Utelatt for kursflyter, som kun startes av påmeldinger. */
+  /** Utelatt for kursflyter (startes kun av påmeldinger), maler og arkiverte flyter. */
   onEnroll?: () => void;
   onSaveAsTemplate: () => void;
   savingTemplate: boolean;
@@ -65,8 +66,11 @@ export function FlowToolbar({
   sendWindowLabel,
   onSendWindowClick,
 }: FlowToolbarProps) {
-  const editingDisabled = !isFlowEditable(status);
   const isTemplate = isTemplateStatus(status);
+  const secondaryCls =
+    'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 active:scale-[0.96] disabled:opacity-50';
+  const successCls =
+    'rounded-md bg-green-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-green-800 active:scale-[0.96] disabled:opacity-50';
 
   return (
     <>
@@ -75,8 +79,8 @@ export function FlowToolbar({
           <Link href="/admin/crm/flyter" className="text-sm text-gray-500 hover:underline">
             ← Tilbake til alle e-postflyter
           </Link>
-          <div className="mt-1 flex items-center gap-3">
-            <h1 className="text-xl font-bold">{name}</h1>
+          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h1 className="text-xl font-bold text-balance">{name}</h1>
             <span
               className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_STYLES[status] ?? STATUS_STYLES.draft}`}
             >
@@ -90,26 +94,33 @@ export function FlowToolbar({
             >
               Sendes {sendWindowLabel}
             </button>
-            {dirty && <span className="text-xs text-amber-700">Endringer er ikke lagret</span>}
+            <span
+              role="status"
+              aria-live="polite"
+              className={`inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 transition-opacity duration-150 ${
+                dirty ? 'opacity-100' : 'invisible opacity-0'
+              }`}
+            >
+              <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              {dirty ? 'Ulagrede endringer' : ''}
+            </span>
           </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           {!isTemplate && enrollmentCounter}
-          {status === 'active' && onEnroll && (
-            <button
-              onClick={onEnroll}
-              className="border border-bjerke-blue text-bjerke-blue px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50"
-            >
+          {onEnroll && (
+            <button type="button" onClick={onEnroll} className={secondaryCls}>
               Legg til personer
             </button>
           )}
           {!isTemplate && status !== 'archived' && (
             <button
+              type="button"
               onClick={onSaveAsTemplate}
-              disabled={savingTemplate || dirty}
-              title={dirty ? 'Trykk «Lagre» først' : 'Lag en kopi som kan brukes som utgangspunkt for nye flyter'}
-              className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+              disabled={savingTemplate || saving}
+              title={dirty ? 'Endringene lagres først' : 'Lag en kopi som kan brukes som utgangspunkt for nye flyter'}
+              className={secondaryCls}
             >
               {savingTemplate ? 'Lagrer mal …' : 'Lagre som mal'}
             </button>
@@ -117,15 +128,16 @@ export function FlowToolbar({
           {isTemplate && (
             <span className="text-xs text-gray-500">Dette er en mal og sender aldri e-post. Bruk «Start fra en mal» i listen over e-postflyter.</span>
           )}
-          <button
-            onClick={onSave}
-            disabled={saving || !dirty || editingDisabled}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
-          >
-            {saving ? 'Lagrer …' : 'Lagre'}
-          </button>
-          {status === 'active' && (
-            <span className="text-xs text-gray-500">Sett flyten på pause for å endre den</span>
+          {status !== 'archived' && (
+            <button
+              type="button"
+              onClick={onSave}
+              disabled={saving || !dirty}
+              title={dirty ? 'Lagrer stegene, innstillingene og sendetidene' : 'Ingen endringer å lagre'}
+              className="min-w-[6.5rem] rounded-md bg-bjerke-blue px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-bjerke-blue-dark active:scale-[0.96] disabled:opacity-50"
+            >
+              {saving ? 'Lagrer …' : 'Lagre'}
+            </button>
           )}
           {pendingProblems > 0 && activationErrors.length === 0 && (
             <span className="text-xs text-amber-700" role="status">
@@ -134,35 +146,44 @@ export function FlowToolbar({
           )}
           {status === 'draft' && (
             <button
+              type="button"
               onClick={onActivate}
-              disabled={activating || dirty}
-              title={dirty ? 'Trykk «Lagre» først' : undefined}
-              className="bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-800 disabled:opacity-50"
+              disabled={activating || saving}
+              title={dirty ? 'Endringene lagres først' : undefined}
+              className={successCls}
             >
               {activating ? 'Aktiverer …' : 'Aktiver flyten'}
             </button>
           )}
           {status === 'active' && (
             <button
+              type="button"
               onClick={onPause}
-              disabled={changingStatus}
-              className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+              disabled={changingStatus || saving}
+              className={secondaryCls}
             >
               {changingStatus ? 'Setter på pause …' : 'Sett på pause'}
             </button>
           )}
           {status === 'paused' && (
             <button
+              type="button"
               onClick={onResume}
-              disabled={changingStatus || dirty}
-              title={dirty ? 'Trykk «Lagre» først' : undefined}
-              className="bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-800 disabled:opacity-50"
+              disabled={changingStatus || saving}
+              title={dirty ? 'Endringene lagres først' : undefined}
+              className={successCls}
             >
               {changingStatus ? 'Starter igjen …' : 'Gjenoppta'}
             </button>
           )}
         </div>
       </div>
+
+      {status === 'active' && (
+        <p className="-mt-2 mb-4 text-xs text-gray-500">
+          Flyten kjører. Sett den på pause for å endre stegene eller innstillingene — sendetidene kan endres nå.
+        </p>
+      )}
 
       {activationErrors.length > 0 && (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
