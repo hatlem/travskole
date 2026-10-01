@@ -4,6 +4,7 @@ import { parseNodeConfig, type FlowNodeType } from '@/lib/flows/graph';
 import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 import { FlowEditor } from './flow-editor';
 import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
+import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
 
 /** Tolerant JSON parse for trigger filters: garbage/non-object JSON becomes {}. */
 function parseFilter(raw: string): Record<string, unknown> {
@@ -29,7 +30,7 @@ export default async function FlyterEditorPage({
 
   await ensureSenderIdentitiesSeeded();
 
-  const [flow, senderIdentities, segments, lists, courses, adminUsers, activeEnrollments] = await Promise.all([
+  const [flow, senderIdentities, segments, lists, courses, adminUsers, activeEnrollments, sendWindow] = await Promise.all([
     prisma.flow.findUnique({
       where: { id: flowId },
       include: {
@@ -51,6 +52,7 @@ export default async function FlyterEditorPage({
       select: { id: true, email: true },
     }),
     prisma.flowEnrollment.count({ where: { flowId, status: 'active' } }),
+    getFlowSendWindowState(flowId),
   ]);
 
   if (!flow) {
@@ -102,6 +104,7 @@ export default async function FlyterEditorPage({
         }))}
         adminUsers={adminUsers}
         initialActiveEnrollments={activeEnrollments}
+        initialSendWindow={{ global: sendWindow.global, override: sendWindow.override }}
       />
     </>
   );

@@ -38,6 +38,8 @@ import { EnrollmentPanel } from './enrollment-panel';
 import { EnrollModal } from './enroll-modal';
 import { FlowSettingsPanel } from './flow-settings-panel';
 import { FlowToolbar, type ValidationError } from './flow-toolbar';
+import type { FlowSendWindowValue } from './flow-send-window-section';
+import { describeSendWindow, resolveEffectiveSendWindow } from '@/lib/flows/send-window';
 
 interface InitialNode {
   id: number;
@@ -74,6 +76,7 @@ interface FlowEditorProps {
   lists: ListOption[];
   adminUsers: AdminUserOption[];
   initialActiveEnrollments: number;
+  initialSendWindow: FlowSendWindowValue;
 }
 
 const DRAG_MIME = 'application/x-flow-node-type';
@@ -98,6 +101,7 @@ export function FlowEditor({
   lists,
   adminUsers,
   initialActiveEnrollments,
+  initialSendWindow,
 }: FlowEditorProps) {
   const { toast } = useToast();
   const [flow, setFlow] = useState<FlowMeta>(initialFlow);
@@ -136,6 +140,8 @@ export function FlowEditor({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [confirmStatus, setConfirmStatus] = useState<'activate' | 'resume' | null>(null);
   const [helperHidden, setHelperHidden] = useState(false);
+  const [sendWindow, setSendWindow] = useState<FlowSendWindowValue>(initialSendWindow);
+  const sendWindowLabel = describeSendWindow(resolveEffectiveSendWindow(sendWindow.global, sendWindow.override));
   const savingRef = useRef(false);
   const activatingRef = useRef(false);
   const statusChangeRef = useRef(false);
@@ -537,6 +543,8 @@ export function FlowEditor({
         onSaveAsTemplate={handleSaveAsTemplate}
         savingTemplate={savingTemplate}
         enrollmentCounter={<EnrollmentPanel key={enrollmentsVersion} flowId={flow.id} />}
+        sendWindowLabel={sendWindowLabel}
+        onSendWindowClick={() => setSettingsOpen(true)}
       />
 
       {showHelper && (
@@ -665,7 +673,7 @@ export function FlowEditor({
             >
               <span>Innstillinger</span>
               <span className="text-xs font-normal text-gray-500">
-                {flow.isMarketing ? 'Markedsføring' : 'Viktig informasjon'} · {flow.anchorMode === 'course' ? 'Gjelder et kurs' : 'Gjelder en person'}
+                {flow.isMarketing ? 'Markedsføring' : 'Viktig informasjon'} · {flow.anchorMode === 'course' ? 'Gjelder et kurs' : 'Gjelder en person'} · Sendes {sendWindowLabel}
                 {settingsOpen ? ' ▲' : ' ▼'}
               </span>
             </button>
@@ -677,6 +685,8 @@ export function FlowEditor({
                   disabled={editingDisabled}
                   hasActiveEnrollments={hasActiveEnrollments}
                   onSaved={(patch) => setFlow((f) => ({ ...f, ...patch }))}
+                  sendWindow={sendWindow}
+                  onSendWindowSaved={(override) => setSendWindow((prev) => ({ ...prev, override }))}
                 />
               </div>
             )}

@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
 import logger from '@/lib/logger';
 import { analyzeFlowEngagement } from './analyze';
+import { effectiveWindowFor, loadSendWindowConfig } from '@/lib/flows/send-window-store';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -14,6 +15,7 @@ export async function runAiAnalysis(now: Date = new Date()): Promise<{ created: 
   let created = 0;
   try {
     const flows = await prisma.flow.findMany({ where: { status: 'active' }, select: { id: true } });
+    const sendWindows = flows.length > 0 ? await loadSendWindowConfig() : null;
     for (const flow of flows) {
       try {
         const key = `ai_analysis_last_${flow.id}`;
@@ -48,7 +50,12 @@ export async function runAiAnalysis(now: Date = new Date()): Promise<{ created: 
         );
 
         const candidates = analyzeFlowEngagement(
-          { flowId: flow.id, sends: flowSends, lastEmailHasFollowup },
+          {
+            flowId: flow.id,
+            sends: flowSends,
+            lastEmailHasFollowup,
+            sendWindow: sendWindows ? effectiveWindowFor(sendWindows, flow.id) : null,
+          },
           now,
         );
         for (const c of candidates) {

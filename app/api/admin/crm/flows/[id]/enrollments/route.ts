@@ -5,6 +5,8 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { enrollContacts, enrollList, enrollSegment, type EnrollSummary } from '@/lib/flows/enroll';
 import { canEnrollIntoStatus, isTemplateStatus } from '@/lib/flows/status';
+import { isWaitingForSendWindow } from '@/lib/flows/send-window';
+import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
 
 const PAGE_SIZE = 50;
 
@@ -29,7 +31,7 @@ export async function GET(
 
   const page = Math.max(1, Number(request.nextUrl.searchParams.get('page')) || 1);
 
-  const [enrollments, total, active] = await Promise.all([
+  const [enrollments, total, active, emailNodes, sendWindow] = await Promise.all([
     prisma.flowEnrollment.findMany({
       where: { flowId },
       include: { contact: { select: { id: true, name: true } } },
@@ -39,9 +41,22 @@ export async function GET(
     }),
     prisma.flowEnrollment.count({ where: { flowId } }),
     prisma.flowEnrollment.count({ where: { flowId, status: 'active' } }),
+    prisma.flowNode.findMany({ where: { flowId, type: 'email' }, select: { id: true } }),
+    getFlowSendWindowState(flowId),
   ]);
 
-  return NextResponse.json({ enrollments, total, active, page, pageSize: PAGE_SIZE });
+  const emailNodeIds = new Set(emailNodes.map((node) => node.id));
+  const now = new Date();
+  return NextResponse.json({
+    enrollments: enrollments.map((enrollment) => ({
+      ...enrollment,
+      waitingForSendWindow: isWaitingForSendWindow(enrollment, emailNodeIds, sendWindow.effective, now),
+    })),
+    total,
+    active,
+    page,
+    pageSize: PAGE_SIZE,
+  });
 }
 
 const MAX_CONTACT_IDS = 500;

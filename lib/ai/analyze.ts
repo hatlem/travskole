@@ -1,9 +1,13 @@
 // Deterministisk engasjementsanalyse (ingen LLM): regelbaserte forslag som
 // lagres som AiSuggestion-rader. Visning/handling kommer i delprosjekt 6.
+import { allowedSendHours, type SendWindow } from '@/lib/flows/send-window';
+
 export interface FlowEngagementInput {
   flowId: number;
   sends: { sentAt: Date; openedAt: Date | null }[];
   lastEmailHasFollowup: boolean;
+  /** Flytens sendetid — forslaget peker aldri på en time utenfor den. */
+  sendWindow?: SendWindow | null;
 }
 export interface SuggestionCandidate {
   kind: 'followup' | 'send_timing';
@@ -33,9 +37,16 @@ function modalHour(dates: Date[]): number | null {
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1])[0][0];
 }
 
+/** Nærmeste klokketime flyten faktisk kan sende i. */
+function nearestAllowedHour(hour: number, sendWindow: SendWindow | null | undefined): number | null {
+  const allowed = allowedSendHours(sendWindow ?? null);
+  if (allowed.length === 0) return null;
+  return allowed.reduce((best, h) => (Math.abs(h - hour) < Math.abs(best - hour) ? h : best));
+}
+
 export function analyzeFlowEngagement(input: FlowEngagementInput, now: Date): SuggestionCandidate[] {
   const out: SuggestionCandidate[] = [];
-  const { flowId, sends, lastEmailHasFollowup } = input;
+  const { flowId, sends, lastEmailHasFollowup, sendWindow } = input;
   const month = monthKey(now);
 
   const unopened = sends.filter((s) => s.openedAt === null).length;
@@ -53,11 +64,21 @@ export function analyzeFlowEngagement(input: FlowEngagementInput, now: Date): Su
     const bestHour = modalHour(opened.map((s) => s.openedAt))!;
     const openShare = opened.filter((s) => osloHour(s.openedAt) === bestHour).length / opened.length;
     const sendHour = modalHour(sends.map((s) => s.sentAt));
-    if (openShare >= 0.3 && sendHour !== null && bestHour !== sendHour) {
+    const suggestedHour = nearestAllowedHour(bestHour, sendWindow);
+    if (openShare >= 0.3 && sendHour !== null && suggestedHour !== null && suggestedHour !== sendHour) {
+      const hh = (h: number) => String(h).padStart(2, '0');
+      const insideWindow = suggestedHour === bestHour;
       out.push({
         kind: 'send_timing',
-        title: `Flest åpninger skjer rundt kl ${String(bestHour).padStart(2, '0')} — vurder å sende nærmere dette tidspunktet`,
-        detail: { bestHour, sendHour, openShare: Math.round(openShare * 100) / 100 },
+        title: insideWindow
+          ? `Flest åpninger skjer rundt kl ${hh(bestHour)} — vurder å sende nærmere dette tidspunktet`
+          : `Flest åpninger skjer rundt kl ${hh(bestHour)}, utenfor sendetiden — vurder å sende nærmere kl ${hh(suggestedHour)}`,
+        detail: {
+          bestHour,
+          sendHour,
+          openShare: Math.round(openShare * 100) / 100,
+          ...(!insideWindow && { suggestedHour }),
+        },
         dedupeKey: `send_timing:${flowId}:${month}`,
       });
     }

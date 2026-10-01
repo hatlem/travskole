@@ -4,12 +4,15 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { CardSkeleton } from '@/components/admin/Skeleton';
 import { useModalEscape } from '@/components/admin/useModalEscape';
+import { formatSendTime } from '@/lib/flows/send-window';
 
 interface EnrollmentRow {
   id: number;
   status: string;
   enteredAt: string;
   finishedAt: string | null;
+  nextRunAt: string;
+  waitingForSendWindow?: boolean;
   contact: { id: number; name: string };
 }
 
@@ -22,6 +25,11 @@ const STATUS_LABELS_NO: Record<string, string> = {
 
 function fmtDate(d: string | null): string {
   return d ? new Date(d).toLocaleDateString('nb-NO') : '—';
+}
+
+function statusLabel(e: EnrollmentRow): string {
+  if (e.waitingForSendWindow) return `Venter på sendetid (${formatSendTime(new Date(e.nextRunAt), new Date())})`;
+  return STATUS_LABELS_NO[e.status] ?? e.status;
 }
 
 /** Teller for «personer i flyten» i verktøylinjen; klikk åpner listen (GET /enrollments). */
@@ -120,7 +128,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
                     >
                       <span className="text-gray-800">{e.contact.name}</span>
                       <span className="text-gray-500">
-                        {STATUS_LABELS_NO[e.status] ?? e.status} · {fmtDate(e.enteredAt)}
+                        {statusLabel(e)} · {fmtDate(e.enteredAt)}
                       </span>
                     </li>
                   ))}

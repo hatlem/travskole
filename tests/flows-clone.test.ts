@@ -71,6 +71,7 @@ function mockTx() {
     flowNode: { create: vi.fn(async () => ({ id: nextNodeId++ })) },
     flowEdge: { createMany: vi.fn(async () => ({ count: 0 })) },
     flowTrigger: { createMany: vi.fn(async () => ({ count: 0 })) },
+    setting: { create: vi.fn(async () => ({})) },
   };
 }
 
@@ -98,12 +99,19 @@ describe('writeFlowCopy', () => {
     await writeFlowCopy(tx as never, buildFlowCopy({ ...source, edges: [], triggers: [] }, { status: 'draft' }));
     expect(tx.flowEdge.createMany).not.toHaveBeenCalled();
     expect(tx.flowTrigger.createMany).not.toHaveBeenCalled();
+    expect(tx.setting.create).not.toHaveBeenCalled();
+  });
+
+  it('kopierer flytens egne sendetider til den nye flyten', async () => {
+    const tx = mockTx();
+    await writeFlowCopy(tx as never, buildFlowCopy({ ...source, sendWindow: 'anytime' }, { status: 'draft' }));
+    expect(tx.setting.create).toHaveBeenCalledWith({ data: { key: 'flow_send_window_55', value: 'anytime' } });
   });
 });
 
 describe('cloneFlow', () => {
   it('returnerer null når kilden ikke finnes', async () => {
-    const db = { flow: { findUnique: vi.fn(async () => null) }, $transaction: vi.fn() };
+    const db = { flow: { findUnique: vi.fn(async () => null) }, setting: { findUnique: vi.fn() }, $transaction: vi.fn() };
     expect(await cloneFlow(db as never, 1, { status: 'draft' })).toBeNull();
     expect(db.$transaction).not.toHaveBeenCalled();
   });
@@ -112,9 +120,23 @@ describe('cloneFlow', () => {
     const tx = mockTx();
     const db = {
       flow: { findUnique: vi.fn(async () => source) },
+      setting: { findUnique: vi.fn(async () => null) },
       $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
     };
     expect(await cloneFlow(db as never, 1, { status: 'draft' })).toEqual({ id: 55, name: 'Velkomst (kopi)', status: 'draft' });
     expect(db.$transaction).toHaveBeenCalledTimes(1);
+    expect(tx.setting.create).not.toHaveBeenCalled();
+  });
+
+  it('tar med kildens sendetider (f.eks. når som helst for kursinfo)', async () => {
+    const tx = mockTx();
+    const db = {
+      flow: { findUnique: vi.fn(async () => source) },
+      setting: { findUnique: vi.fn(async () => ({ value: '10:00-14:00 lør,søn' })) },
+      $transaction: vi.fn(async (cb: (t: unknown) => unknown) => cb(tx)),
+    };
+    await cloneFlow(db as never, 1, { status: 'template' });
+    expect(db.setting.findUnique).toHaveBeenCalledWith({ where: { key: 'flow_send_window_1' }, select: { value: true } });
+    expect(tx.setting.create).toHaveBeenCalledWith({ data: { key: 'flow_send_window_55', value: '10:00-14:00 lør,søn' } });
   });
 });

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import type { SiteSettings } from '@/lib/settings-shared';
 import { VILKAR_DEFAULT, PERSONVERN_DEFAULT } from '@/lib/legal-defaults';
+import { DEFAULT_SEND_WINDOW_VALUE } from '@/lib/flows/send-window';
 
 export const SETTING_DEFAULTS: Record<string, string> = {
   // Generelt
@@ -100,6 +101,10 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   ai_context_include_history: 'true',
   ai_context_include_value: 'false',
   ai_review_timeout_hours: '48',
+  // Sendetider for flyt-e-post (Europe/Oslo): «TT:MM-TT:MM dager». Utenfor
+  // tidsrommet venter e-posten til det åpner. Hver flyt kan overstyre.
+  send_window_enabled: 'true',
+  send_window: DEFAULT_SEND_WINDOW_VALUE,
   // Sporing på bjerke.no — nettsteder som får sende hendelser til /api/track (kommaseparert)
   tracking_allowed_origins: 'https://bjerke.no,https://www.bjerke.no',
 };
@@ -143,6 +148,8 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'data_retention_days',
   'attribution_window_days',
   'tracking_allowed_origins',
+  'send_window',
+  'flow_send_window_',
 ];
 
 export function toClientSettings(settings: SiteSettings): SiteSettings {

@@ -6,6 +6,7 @@
 
 import { parseOriginEntry, splitOriginEntries } from '@/lib/tracking/origins';
 import { PHONE_ERROR, isValidPhone } from '@/lib/validation/phone';
+import { FLOW_SEND_WINDOW_PREFIX, validateFlowSendWindowValue, validateSendWindowValue } from '@/lib/flows/send-window';
 
 export type SiteSettings = Record<string, string>;
 
@@ -79,6 +80,8 @@ export const ADMIN_EDITABLE_SETTINGS: readonly string[] = [
   'marketing_optin_enabled',
   'marketing_optin_text',
   'attribution_window_days',
+  'send_window_enabled',
+  'send_window',
 ];
 
 const TOGGLE_SETTINGS: readonly string[] = [
@@ -90,6 +93,7 @@ const TOGGLE_SETTINGS: readonly string[] = [
   'marketing_optin_enabled',
   'ai_context_include_history',
   'ai_context_include_value',
+  'send_window_enabled',
 ];
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -127,7 +131,10 @@ export function validateSettingValue(key: string, value: string): string | null 
   if (TOGGLE_SETTINGS.includes(key) && value !== 'true' && value !== 'false') {
     return 'Verdien må være «true» eller «false»';
   }
+  if (key.startsWith(FLOW_SEND_WINDOW_PREFIX)) return validateFlowSendWindowValue(value);
   switch (key) {
+    case 'send_window':
+      return validateSendWindowValue(value);
     case 'graph_mailboxes': {
       const list = parseEmailList(value);
       if (list.length === 0) return 'Oppgi minst én postboks';

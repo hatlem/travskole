@@ -115,6 +115,33 @@ describe('validateSettingValue — contact and format settings', () => {
   });
 });
 
+describe('validateSettingValue — sendetider', () => {
+  it('send_window_enabled er en av/på-bryter', () => {
+    expect(validateSettingValue('send_window_enabled', 'true')).toBeNull();
+    expect(validateSettingValue('send_window_enabled', 'false')).toBeNull();
+    expect(validateSettingValue('send_window_enabled', 'ja')).not.toBeNull();
+  });
+
+  it('send_window krever gyldig tidsrom og minst én dag', () => {
+    expect(validateSettingValue('send_window', '08:00-20:00 man,tir,ons,tor,fre,lør,søn')).toBeNull();
+    expect(validateSettingValue('send_window', '09:30-16:00 man,fre')).toBeNull();
+    expect(validateSettingValue('send_window', '22:00-06:00 man')).toMatch(/etter starttid/);
+    expect(validateSettingValue('send_window', '08:00-08:30 man')).toMatch(/minst én time/);
+    expect(validateSettingValue('send_window', '08:00-20:00 ')).toBe('Velg minst én dag');
+    expect(validateSettingValue('send_window', 'hele dagen')).toMatch(/TT:MM/);
+  });
+
+  it('overstyring per flyt godtar «anytime» eller et gyldig tidsrom', () => {
+    expect(validateSettingValue('flow_send_window_4', 'anytime')).toBeNull();
+    expect(validateSettingValue('flow_send_window_4', '10:00-14:00 lør')).toBeNull();
+    expect(validateSettingValue('flow_send_window_4', 'alltid')).toMatch(/TT:MM/);
+  });
+
+  it('vanlige admins kan endre de globale sendetidene', () => {
+    expect(ADMIN_EDITABLE_SETTINGS).toEqual(expect.arrayContaining(['send_window_enabled', 'send_window']));
+  });
+});
+
 describe('normalizeSettingValue', () => {
   it('trims format settings and uppercases GTM ids, leaves free text alone', () => {
     expect(normalizeSettingValue('contact_email', ' a@b.no ')).toBe('a@b.no');

@@ -19,6 +19,9 @@ describe('toClientSettings', () => {
       ai_analysis_last_3: '2026-09-01T00:00:00Z',
       data_retention_days: '0',
       attribution_window_days: '14',
+      send_window_enabled: 'true',
+      send_window: '08:00-20:00 man',
+      flow_send_window_3: 'anytime',
     });
 
     expect(result).toEqual({
