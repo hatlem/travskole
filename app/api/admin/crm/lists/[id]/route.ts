@@ -4,6 +4,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
+import { addContactsToList } from '@/lib/crm/list-membership';
 
 const addSchema = z.object({ contactIds: z.array(z.number().int().positive()).min(1).max(1000) });
 
@@ -33,23 +34,16 @@ export async function POST(
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  try {
-    const result = await prisma.contactListMembership.createMany({
-      data: parsed.data.contactIds.map((contactId) => ({ listId, contactId })),
-      skipDuplicates: true,
-    });
-
-    logActivity({ action: 'add_members', entity: 'contact_list', entityId: listId, details: JSON.stringify({ added: result.count }), userEmail: session.user.email }).catch(() => {});
-    return NextResponse.json({ added: result.count });
-  } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      (error.code === 'P2025' || error.code === 'P2003')
-    ) {
-      return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
-    }
-    throw error;
+  const result = await addContactsToList(listId, parsed.data.contactIds, {
+    source: 'manual',
+    actorEmail: session.user.email,
+  });
+  if (!result) {
+    return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
+
+  logActivity({ action: 'add_members', entity: 'contact_list', entityId: listId, details: JSON.stringify({ added: result.added }), userEmail: session.user.email }).catch(() => {});
+  return NextResponse.json({ added: result.added, alreadyMember: result.alreadyMember, missing: result.missing });
 }
 
 export async function DELETE(

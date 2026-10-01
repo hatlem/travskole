@@ -14,6 +14,7 @@ import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { AddToFlow } from '@/components/admin/crm/AddToFlow';
+import { ContactLists, type ContactListMembershipRow } from '@/components/admin/crm/ContactLists';
 import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
 import { isSuperAdmin } from '@/lib/settings-shared';
 import { dateInputToIso } from '@/lib/crm/form-utils';
@@ -36,6 +37,7 @@ interface ContactDetail {
   tasks: { id: number; title: string; dueAt: string | null; status: string; assigneeId: number | null }[];
   notes: { id: number; body: string; authorEmail: string; createdAt: string }[];
   activities: { id: number; type: string; title: string; body: string | null; actorEmail: string | null; occurredAt: string }[];
+  lists: ContactListMembershipRow[];
 }
 
 const STAGES = [
@@ -56,7 +58,7 @@ const SUPPRESSION_REASONS: Record<string, string> = {
 
 const ACTIVITY_ICONS: Record<string, string> = {
   booking: '📅', registration: '📝', note: '🗒️', task: '✅',
-  deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄',
+  deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄', list: '📋',
 };
 
 function fmtDate(d: string | null): string {
@@ -474,6 +476,11 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                   </button>
                 </div>
               )}
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <h3 className="text-sm font-medium mb-2">Lister</h3>
+              <ContactLists contactId={contactId} contactName={contact.name} lists={contact.lists} onChanged={load} />
             </div>
 
             <div className="border-t border-gray-100 pt-3">

@@ -70,6 +70,32 @@ describe('enrollFromEvent: kurs-forankret gren', () => {
   });
 });
 
+describe('enrollFromEvent: listeutløser', () => {
+  const triggers = [
+    { flowId: 5, eventType: 'list.member_added', filter: '{"listId":3}', flow: { anchorMode: 'contact' } },
+    { flowId: 6, eventType: 'list.member_added', filter: '{"listId":4}', flow: { anchorMode: 'contact' } },
+  ];
+
+  it('melder bare inn i flyten med samme listId (tall)', async () => {
+    prisma.flowTrigger.findMany.mockResolvedValue(triggers);
+    prisma.flowEnrollment.findFirst.mockResolvedValue(null);
+    prisma.flowEnrollment.create.mockResolvedValue({ id: 9 });
+    await enrollFromEvent({
+      type: 'list.member_added',
+      contactId: 7,
+      meta: { listId: 3, listName: 'Nyhetsbrev', source: 'manual' },
+    });
+    const flows = prisma.flowEnrollment.create.mock.calls.map((c) => c[0].data.flowId);
+    expect(flows).toEqual([5]);
+  });
+
+  it('listId som tekst matcher ikke', async () => {
+    prisma.flowTrigger.findMany.mockResolvedValue(triggers);
+    await enrollFromEvent({ type: 'list.member_added', contactId: 7, meta: { listId: '3' } });
+    expect(prisma.flowEnrollment.create).not.toHaveBeenCalled();
+  });
+});
+
 describe('enrollFromEvent: suppressFlows', () => {
   it('logs-only events (meta.suppressFlows) never enroll into any flow', async () => {
     prisma.flowTrigger.findMany.mockResolvedValue([

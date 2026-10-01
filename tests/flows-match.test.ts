@@ -184,4 +184,20 @@ describe('matchTriggers', () => {
     ];
     expect(matchTriggers(event, triggers)).toEqual([1]);
   });
+
+  it('list.member_added: listId-filter (tall) treffer bare riktig liste', () => {
+    const event: EventLike = {
+      type: 'list.member_added',
+      meta: { listId: 3, listName: 'Nyhetsbrev', source: 'import' },
+    };
+    const triggers: TriggerLike[] = [
+      { flowId: 1, eventType: 'list.member_added', filter: '{"listId":3}' },
+      { flowId: 2, eventType: 'list.member_added', filter: '{"listId":4}' },
+      { flowId: 3, eventType: 'list.member_added', filter: '{}' },
+      { flowId: 4, eventType: 'list.member_added', filter: '{"listId":"3"}' },
+      { flowId: 5, eventType: 'list.member_removed', filter: '{"listId":3}' },
+      { flowId: 6, eventType: 'list.member_added', filter: '{"listId":3,"source":"manual"}' },
+    ];
+    expect(matchTriggers(event, triggers)).toEqual([1, 3]);
+  });
 });

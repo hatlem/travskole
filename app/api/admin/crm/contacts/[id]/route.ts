@@ -36,6 +36,10 @@ export async function GET(
       tasks: { orderBy: [{ status: 'asc' }, { dueAt: 'asc' }] },
       notes: { orderBy: { createdAt: 'desc' } },
       activities: { orderBy: { occurredAt: 'desc' }, take: 100 },
+      memberships: {
+        orderBy: { addedAt: 'desc' },
+        select: { addedAt: true, list: { select: { id: true, name: true } } },
+      },
     },
   });
   if (!contact) {
@@ -50,7 +54,9 @@ export async function GET(
       })
     : null;
 
-  return NextResponse.json({ contact: { ...contact, tags: parseJsonArray(contact.tags), suppression } });
+  const { memberships, ...rest } = contact;
+  const lists = memberships.map((m) => ({ id: m.list.id, name: m.list.name, addedAt: m.addedAt }));
+  return NextResponse.json({ contact: { ...rest, tags: parseJsonArray(contact.tags), suppression, lists } });
 }
 
 const patchSchema = z.object({
