@@ -18,7 +18,10 @@ export default function CrmIndexPage() {
   return (
     <div className="max-w-5xl">
       <h1 className="text-3xl font-bold text-gray-900">Hva vil du gjøre?</h1>
-      <p className="mt-2 text-gray-600">Velg en vanlig handling, eller gå til ett av de fire områdene i CRM.</p>
+      <p className="mt-2 text-gray-600">
+        CRM er kundeoversikten deres: alle dere har kontakt med, salg som pågår, og e-poster som går ut av seg selv.
+        Start med en vanlig handling, eller velg et område.
+      </p>
 
       <section aria-labelledby="crm-quick-actions" className="mt-6">
         <h2 id="crm-quick-actions" className="sr-only">Vanlige handlinger</h2>
