@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
+import { notifyTaskAssignee } from '@/lib/crm/task-notify';
 
 const patchSchema = z.object({
   title: z.string().min(1).max(300).optional(),
@@ -45,6 +46,9 @@ export async function PATCH(
   }
 
   try {
+    const previous = data.assigneeId !== undefined && data.assigneeId !== null
+      ? await prisma.task.findUnique({ where: { id: taskId }, select: { assigneeId: true } })
+      : null;
     const task = await prisma.task.update({
       where: { id: taskId },
       data: {
@@ -61,6 +65,14 @@ export async function PATCH(
       entityId: task.id,
       userEmail: session.user.email,
     }).catch(() => {});
+    if (previous && previous.assigneeId !== task.assigneeId) {
+      void notifyTaskAssignee({
+        taskId: task.id,
+        actorUserId: Number(session.user.id) || null,
+        actorEmail: session.user.email,
+        previousAssigneeId: previous.assigneeId,
+      });
+    }
     return NextResponse.json({ task });
   } catch (error) {
     if (

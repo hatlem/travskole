@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 import { ownerFilterWhere, parseOwnerFilter } from '@/lib/crm/owner-filter';
+import { notifyTaskAssignee } from '@/lib/crm/task-notify';
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
@@ -119,6 +120,9 @@ export async function POST(request: NextRequest) {
       entityId: task.id,
       userEmail: session.user.email,
     }).catch(() => {});
+    if (task.assigneeId !== null) {
+      void notifyTaskAssignee({ taskId: task.id, actorUserId: Number(session.user.id) || null, actorEmail: session.user.email });
+    }
     return NextResponse.json({ task }, { status: 201 });
   } catch (error) {
     if (
