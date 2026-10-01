@@ -30,6 +30,10 @@ export function TrackingInstallSnippet() {
   return (
     <div className="mb-6 space-y-3">
       <div className="text-sm text-gray-700 space-y-2">
+        <p className="rounded-md bg-blue-50 px-3 py-2 text-blue-900">
+          Dette gjøres én gang av den som drifter bjerke.no. Kopier koden under og send den til dem sammen med
+          denne forklaringen.
+        </p>
         <p>
           Legg inn skriptet under som en <strong>Custom HTML</strong>-tag i GTM-containeren til bjerke.no
           (utløser: All Pages — skriptet hopper selv over registrering.bjerke.no, som har egen sporing). Da

@@ -45,7 +45,7 @@ function ToolbarButton({
 function Toolbar({ editor }: { editor: Editor }) {
   function setLink() {
     const previous = editor.getAttributes('link').href as string | undefined;
-    const url = window.prompt('Lenke (URL). La stå tom for å fjerne lenken.', previous ?? 'https://');
+    const url = window.prompt('Lim inn nettadressen lenken skal gå til. La feltet stå tomt for å fjerne lenken.', previous ?? 'https://');
     if (url === null) return; // avbrutt
     if (url.trim() === '') {
       editor.chain().focus().extendMarkRange('link').unsetLink().run();
