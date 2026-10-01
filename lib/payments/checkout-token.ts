@@ -11,7 +11,8 @@ import crypto from 'crypto';
  * den tilbake ved checkout — uten at noen sesjon er involvert.
  *
  * Format: `${kind}.${id}.${expMs}` base64url + `.` + base64url
- * HMAC-SHA256(secret, payload). Kort levetid (satt av kalleren, typisk 1t).
+ * HMAC-SHA256(secret, payload). Levetid settes av kalleren (24 t fra kvitteringen,
+ * 14 d i booking-godkjenningen); tokenen gir bare rett til å betale for den ene raden.
  */
 
 export type CheckoutTokenKind = 'registration' | 'booking';

@@ -20,9 +20,9 @@ import { normalizeEmail } from '@/lib/crm/normalize';
 import { recordMarketingOptIn } from '@/lib/crm/marketing-consent';
 import { parsePaymentMethods } from '@/lib/payments';
 import { signCheckoutToken } from '@/lib/payments/checkout-token';
+import { RECEIPT_CHECKOUT_TOKEN_TTL_MS } from '@/lib/receipt';
 import { validateBirthdate } from '@/lib/profile';
 
-const CHECKOUT_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 time
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 interface RegistrationData {
@@ -447,7 +447,7 @@ export async function POST(request: NextRequest) {
 
     // Anonym påmelding (ingen sesjon) er hovedstrømmen for foresatte, men
     // /api/payments/checkout krever normalt sesjon + e-postmatch for eierskap.
-    // Utsted en kortlevd checkout-token her slik at "betal nå" er nåbart uten
+    // Utsted en checkout-token (like lang levetid som kvitteringen) slik at "betal nå" er nåbart uten
     // innlogging. Best-effort: en manglende NEXTAUTH_SECRET er en
     // server-feilkonfig, ikke noe som skal blokkere selve påmeldingen.
     let checkoutToken: string | undefined;
@@ -456,7 +456,7 @@ export async function POST(request: NextRequest) {
         checkoutToken = signCheckoutToken({
           kind: 'registration',
           id: registration.id,
-          expMs: Date.now() + CHECKOUT_TOKEN_TTL_MS,
+          expMs: Date.now() + RECEIPT_CHECKOUT_TOKEN_TTL_MS,
         });
       } catch (error) {
         logger.error('Kunne ikke signere checkout-token', { error });

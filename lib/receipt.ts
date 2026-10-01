@@ -37,6 +37,31 @@ export type Receipt = z.infer<typeof receiptSchema>;
 /** Kvitteringen er bare relevant rett etter innsending. */
 export const RECEIPT_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
+/** Checkout-tokenen for anonyme betaler lever like lenge som kvitteringen som viser «Betal nå». */
+export const RECEIPT_CHECKOUT_TOKEN_TTL_MS = RECEIPT_MAX_AGE_MS;
+
+/**
+ * Utløpstiden i en checkout-token (`base64url(kind.id.expMs).signatur`). Bare for visning —
+ * serveren verifiserer signaturen. null ved ukjent format.
+ */
+export function checkoutTokenExpiresAt(token: string | null | undefined): number | null {
+  if (!token) return null;
+  try {
+    const payloadB64 = token.split('.')[0];
+    const padded = payloadB64.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payloadB64.length / 4) * 4, '=');
+    const exp = atob(padded).split('.')[2];
+    return exp && /^\d+$/.test(exp) ? Number(exp) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Kan en anonym kjøper fortsatt starte betaling fra kvitteringen? */
+export function hasUsableCheckoutToken(receipt: Pick<Receipt, 'checkoutToken'>, now: number = Date.now()): boolean {
+  const expiresAt = checkoutTokenExpiresAt(receipt.checkoutToken);
+  return expiresAt !== null && expiresAt > now;
+}
+
 export function parseReceipt(raw: string | null | undefined, now: number = Date.now()): Receipt | null {
   if (!raw) return null;
   try {

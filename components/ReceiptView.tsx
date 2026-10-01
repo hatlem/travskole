@@ -6,7 +6,9 @@ import { useSession } from 'next-auth/react';
 import { LoginLinkOffer } from '@/components/LoginLinkOffer';
 import { useStrings } from '@/components/SettingsProvider';
 import { participantsLabel, payButtonLabel, type PayProvider } from '@/lib/buyer-display';
-import { BOOKING_NO_ACCOUNT_TEXT, loadReceipt, nextSteps, offersLoginLink, paymentStatusText, type Receipt } from '@/lib/receipt';
+import {
+  BOOKING_NO_ACCOUNT_TEXT, hasUsableCheckoutToken, loadReceipt, nextSteps, offersLoginLink, paymentStatusText, type Receipt,
+} from '@/lib/receipt';
 
 /** Leser kvitteringen etter mount (sessionStorage finnes ikke på serveren). */
 export function useStoredReceipt(): { receipt: Receipt | null; ready: boolean } {
@@ -40,11 +42,23 @@ export function ReceiptSummaryCard({ receipt, paid = false }: { receipt: Receipt
   );
 }
 
+export const PAY_LINK_EXPIRED_TEXT =
+  'Betalingslenken fra påmeldingen har utløpt. Få en innloggingslenke på e-post, så betaler du fra Min side.';
+
 /** Betal-knapper for en fersk, ubetalt påmelding — fungerer uten innlogging via checkout-token. */
 export function PayNowButtons({ receipt }: { receipt: Receipt }) {
   const [busy, setBusy] = useState<PayProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [now] = useState(() => Date.now());
+  const { status } = useSession();
   if (receipt.kind !== 'registration' || receipt.providers.length === 0 || !receipt.amountKr) return null;
+  // Uten innlogging trengs en gyldig checkout-token — ellers ville knappen bare feilet.
+  if (status !== 'authenticated' && !hasUsableCheckoutToken(receipt, now)) {
+    if (status === 'loading') return null;
+    return (
+      <p className="text-sm text-gray-700 text-pretty">{PAY_LINK_EXPIRED_TEXT}</p>
+    );
+  }
 
   async function pay(provider: PayProvider) {
     setBusy(provider);
@@ -63,7 +77,7 @@ export function PayNowButtons({ receipt }: { receipt: Receipt }) {
       if (!res.ok || !body.url) {
         setError(
           res.status === 401 || res.status === 403
-            ? 'Betalingslenken har utløpt. Logg inn med en lenke på e-post for å betale fra Min side.'
+            ? PAY_LINK_EXPIRED_TEXT
             : 'Betalingen kunne ikke startes. Prøv igjen om litt.'
         );
         setBusy(null);
