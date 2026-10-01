@@ -40,7 +40,7 @@ export function ContactSegments({ contactId, refreshKey, onAddToList }: ContactS
   return (
     <div className="space-y-2">
       {failed ? (
-        <p className="text-sm text-red-600">Kunne ikke hente segmenter.</p>
+        <p className="text-sm text-red-600">Kunne ikke hente segmentene akkurat nå. Last siden på nytt for å prøve igjen.</p>
       ) : segments === null ? (
         <p className="text-sm text-gray-400">Sjekker segmenter …</p>
       ) : segments.length === 0 ? (

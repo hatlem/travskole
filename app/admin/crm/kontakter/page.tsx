@@ -7,6 +7,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { Pagination } from '@/components/admin/Pagination';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
 
@@ -117,7 +118,7 @@ export default function KontakterPage({
       if (owner) params.set('owner', owner);
       params.set('page', String(page));
       const res = await fetch(`/api/admin/crm/contacts?${params}`, { signal: controller.signal });
-      if (!res.ok) throw new Error('Kunne ikke laste kontakter');
+      if (!res.ok) throw new Error('Kunne ikke hente kontaktene. Sjekk nettforbindelsen og prøv igjen.');
       const data = await res.json();
       setContacts(data.contacts || []);
       setTotal(data.total || 0);
@@ -128,7 +129,7 @@ export default function KontakterPage({
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setContacts([]);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste kontakter', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente kontaktene. Prøv igjen.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -169,18 +170,46 @@ export default function KontakterPage({
     });
     const data = await res.json();
     if (!res.ok) {
-      toast(data.error || 'Kunne ikke opprette kontakt', 'error');
+      toast(data.error || 'Kunne ikke lagre kontakten. Sjekk feltene og prøv igjen.', 'error');
       return;
     }
-    toast('Kontakt opprettet', 'success');
+    toast(`${newContact.name} er lagt til som kontakt`, 'success');
     setShowNew(false);
     setNewContact({ name: '', email: '', phone: '' });
     load();
   }
 
+  const hasFilters = Boolean(q || stage || segmentId || listId || tag || owner);
+  const clearFilters = () => {
+    setPage(1);
+    setQ('');
+    setStage('');
+    setSegmentId('');
+    setListId('');
+    setTag('');
+    setOwner('');
+  };
+
   return (
     <div>
-      <CrmTabs />
+      <CrmTabs
+        actions={
+          <>
+            <Link
+              href="/admin/crm/import"
+              className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
+            >
+              Importer fra Excel
+            </Link>
+            <button
+              onClick={() => setShowNew(true)}
+              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
+            >
+              Legg til kontakt
+            </button>
+          </>
+        }
+      />
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
           type="search"
@@ -215,10 +244,10 @@ export default function KontakterPage({
         <select
           value={stage}
           onChange={(e) => { setPage(1); setStage(e.target.value); }}
-          aria-label="Filtrer på stadium"
+          aria-label="Filtrer på kundestatus"
           className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
         >
-          <option value="">Alle stadier</option>
+          <option value="">Alle kundestatuser</option>
           {Object.entries(STAGE_LABELS).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
@@ -226,10 +255,10 @@ export default function KontakterPage({
         <select
           value={tag}
           onChange={(e) => { setPage(1); setTag(e.target.value); }}
-          aria-label="Filtrer på tagg"
+          aria-label="Filtrer på stikkord"
           className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
         >
-          <option value="">Alle tagger</option>
+          <option value="">Alle stikkord</option>
           {/* Behold valgt tagg selv om gjeldende filtre ikke lenger gir den som fasett */}
           {[...new Set([...(tag ? [tag] : []), ...availableTags])].map((t) => (
             <option key={t} value={t}>{t}</option>
@@ -248,19 +277,12 @@ export default function KontakterPage({
             <option key={a.id} value={a.id}>{assigneeLabel(a)}</option>
           ))}
         </select>
-        <span className="text-sm text-gray-500">{total} kontakter</span>
-        <Link
-          href="/admin/crm/import"
-          className="ml-auto border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
-        >
-          Importer
-        </Link>
-        <button
-          onClick={() => setShowNew(true)}
-          className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-        >
-          Ny kontakt
-        </button>
+        <span className="text-sm text-gray-500">{total === 1 ? '1 kontakt' : `${total} kontakter`}</span>
+        {hasFilters && (
+          <button type="button" onClick={clearFilters} className="text-sm text-blue-700 underline hover:no-underline">
+            Nullstill filtre
+          </button>
+        )}
       </div>
 
       {(segmentId || listId) && (
@@ -269,12 +291,14 @@ export default function KontakterPage({
             <span>
               Viser kontakter i segmentet <strong>{segments.find((s) => String(s.id) === segmentId)?.name ?? '…'}</strong>
               <span className="text-gray-500"> (oppdateres automatisk ut fra reglene)</span>
+              <HelpTip term="segment" />
             </span>
           )}
           {segmentId && listId && <span aria-hidden>·</span>}
           {listId && (
             <span>
               Viser kontakter i listen <strong>{lists.find((l) => String(l.id) === listId)?.name ?? '…'}</strong>
+              <HelpTip term="list" />
             </span>
           )}
           <button
@@ -289,8 +313,11 @@ export default function KontakterPage({
 
       {showNew && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50 flex flex-wrap gap-3 items-end">
+          <p className="w-full text-sm text-gray-600">
+            Bare navn er påkrevd. Legg inn e-post hvis personen skal kunne få e-post fra dere.
+          </p>
           <div className="text-sm">
-            <label htmlFor="new-contact-name" className="block text-gray-600 mb-1">Navn *</label>
+            <label htmlFor="new-contact-name" className="block text-gray-600 mb-1">Navn</label>
             <input id="new-contact-name" required value={newContact.name} onChange={(e) => setNewContact({ ...newContact, name: e.target.value })}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm" />
           </div>
@@ -306,7 +333,7 @@ export default function KontakterPage({
           </div>
           <button onClick={createContact} disabled={!newContact.name}
             className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
-            Lagre
+            Lagre kontakt
           </button>
           <button onClick={() => setShowNew(false)} className="text-sm text-gray-600 px-2 py-2">Avbryt</button>
         </div>
@@ -316,12 +343,24 @@ export default function KontakterPage({
         <TableSkeleton rows={8} />
       ) : loadError ? (
         <EmptyState
-          title="Kunne ikke laste kontakter"
-          description="Noe gikk galt under henting av kontakter. Prøv igjen."
+          title="Kunne ikke hente kontaktene"
+          description="Det kan skyldes nettforbindelsen. Prøv igjen om litt."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
+      ) : contacts.length === 0 && hasFilters ? (
+        <EmptyState
+          title="Ingen kontakter passer søket"
+          description="Prøv et annet søkeord, eller fjern noen av filtrene."
+          action={{ label: 'Nullstill filtre', onClick: clearFilters }}
+        />
       ) : contacts.length === 0 ? (
-        <EmptyState title="Ingen kontakter" description="Opprett en kontakt eller importer fra CSV." />
+        <EmptyState
+          icon="users"
+          title="Ingen kontakter ennå"
+          description="Kontakter er personene dere har kontakt med. Legg til én for hånd, eller last opp en hel liste fra Excel."
+          action={{ label: 'Legg til kontakt', onClick: () => setShowNew(true) }}
+          secondaryAction={{ label: 'Importer fra Excel', href: '/admin/crm/import' }}
+        />
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
           <table className="min-w-full text-sm">
@@ -330,11 +369,11 @@ export default function KontakterPage({
                 <th className="px-4 py-3 font-medium">Navn</th>
                 <th className="px-4 py-3 font-medium">E-post</th>
                 <th className="px-4 py-3 font-medium">Bedrift</th>
-                <th className="px-4 py-3 font-medium">Stadium</th>
+                <th className="px-4 py-3 font-medium">Kundestatus</th>
                 <th className="px-4 py-3 font-medium">Segmenter</th>
                 <th className="px-4 py-3 font-medium">Lister</th>
                 <th className="px-4 py-3 font-medium">Ansvarlig</th>
-                <th className="px-4 py-3 font-medium">Deals</th>
+                <th className="px-4 py-3 font-medium">Avtaler</th>
                 <th className="px-4 py-3 font-medium">Sist aktiv</th>
               </tr>
             </thead>

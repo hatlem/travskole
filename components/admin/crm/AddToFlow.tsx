@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useToast } from '@/components/admin/Toast';
 
 interface FlowOption { id: number; name: string; status: string; isMarketing: boolean; anchorMode: string }
@@ -49,49 +50,54 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }:
     try {
       const { res, data } = await postEnrollment(selected.id, { contactIds: [contactId] });
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke legge til i flyten', 'error');
+        toast(data.error || 'Kunne ikke legge kontakten i flyten. Prøv igjen.', 'error');
         return;
       }
       const enrolled = typeof data.enrolled === 'number' ? data.enrolled : 0;
-      if (enrolled > 0) toast(`Lagt til i «${selected.name}»`, 'success');
-      else if (data.skippedSuppressed > 0) toast('Kontakten står på ikke-kontakt-listen og ble ikke lagt til', 'error');
-      else toast(`Kontakten er allerede aktiv i «${selected.name}»`, 'info');
+      if (enrolled > 0) toast(`Lagt til i «${selected.name}» — første e-post går ut etter oppsettet i flyten`, 'success');
+      else if (data.skippedSuppressed > 0) toast('Kontakten står på ikke-kontakt-listen og kan ikke få e-post fra flytene', 'error');
+      else toast(`Kontakten er allerede med i «${selected.name}»`, 'info');
       setFlowId('');
       if (enrolled > 0) onEnrolled?.();
     } catch {
-      toast('Kunne ikke legge til i flyten', 'error');
+      toast('Kunne ikke legge kontakten i flyten. Prøv igjen.', 'error');
     } finally {
       setBusy(false);
     }
   }
 
   if (flows === null) return <p className="text-sm text-gray-400">Laster flyter …</p>;
-  if (flows.length === 0) return <p className="text-sm text-gray-500">Ingen aktive flyter.</p>;
+  if (flows.length === 0) return (
+    <p className="text-sm text-gray-500">
+      Ingen e-postflyter er slått på ennå.{' '}
+      <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">Gå til E-postflyter</Link>
+    </p>
+  );
 
   return (
     <div className="space-y-2">
       <div className="flex gap-2">
         <select
-          aria-label="Velg flyt"
+          aria-label="Velg e-postflyt"
           value={flowId}
           onChange={(e) => setFlowId(e.target.value)}
           className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1"
         >
-          <option value="">Velg aktiv flyt …</option>
+          <option value="">Velg e-postflyt …</option>
           {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
         <button
           type="button"
           onClick={enroll}
           disabled={!selected || busy}
-          className="bg-gray-800 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
+          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50"
         >
-          {busy ? 'Legger til …' : 'Legg til i flyt'}
+          {busy ? 'Legger til …' : 'Legg til'}
         </button>
       </div>
       {selected?.isMarketing && !hasMarketingConsent && (
         <p className="text-xs text-amber-700">
-          Dette er en markedsføringsflyt og kontakten har ikke samtykket — e-poster fra flyten vil bli hoppet over.
+          Dette er en markedsføringsflyt, og kontakten har ikke sagt ja til markedsføring. Kontakten blir med i flyten, men får ingen av e-postene.
         </p>
       )}
     </div>

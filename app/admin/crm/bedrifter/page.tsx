@@ -62,7 +62,7 @@ export default function BedrifterPage() {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setOrgs([]);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste bedrifter', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente bedriftene. Prøv igjen.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -99,15 +99,15 @@ export default function BedrifterPage() {
         // non-JSON response body; fall through to generic error handling below
       }
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke opprette bedrift', 'error');
+        toast(data.error || 'Kunne ikke lagre bedriften. Sjekk feltene og prøv igjen.', 'error');
         return;
       }
-      toast('Bedrift opprettet', 'success');
+      toast(`${newOrg.name} er lagt til`, 'success');
       setShowNew(false);
       setNewOrg({ name: '', domain: '', phone: '' });
       load();
     } catch {
-      toast('Kunne ikke opprette bedrift', 'error');
+      toast('Kunne ikke lagre bedriften. Prøv igjen.', 'error');
     } finally {
       setCreating(false);
     }
@@ -115,11 +115,21 @@ export default function BedrifterPage() {
 
   return (
     <div>
-      <CrmTabs />
+      <CrmTabs
+        actions={
+          <button
+            onClick={() => setShowNew(true)}
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
+          >
+            Legg til bedrift
+          </button>
+        }
+      />
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
           type="search"
-          placeholder="Søk navn, domene, org.nr …"
+          placeholder="Søk på navn, nettadresse eller org.nr …"
+          aria-label="Søk i bedrifter"
           value={q}
           onChange={(e) => {
             setPage(1);
@@ -127,19 +137,13 @@ export default function BedrifterPage() {
           }}
           className="border border-gray-300 rounded-md px-3 py-2 text-sm w-64"
         />
-        <span className="text-sm text-gray-500">{total} bedrifter</span>
-        <button
-          onClick={() => setShowNew(true)}
-          className="ml-auto bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-        >
-          Ny bedrift
-        </button>
+        <span className="text-sm text-gray-500">{total === 1 ? '1 bedrift' : `${total} bedrifter`}</span>
       </div>
 
       {showNew && (
         <div className="border border-gray-200 rounded-lg p-4 mb-4 bg-gray-50 flex flex-wrap gap-3 items-end">
           <label className="text-sm">
-            <span className="block text-gray-600 mb-1">Navn *</span>
+            <span className="block text-gray-600 mb-1">Navn</span>
             <input
               value={newOrg.name}
               onChange={(e) => setNewOrg({ ...newOrg, name: e.target.value })}
@@ -147,16 +151,16 @@ export default function BedrifterPage() {
             />
           </label>
           <label className="text-sm">
-            <span className="block text-gray-600 mb-1">Domene</span>
+            <span className="block text-gray-600 mb-1">Nettadresse (valgfri)</span>
             <input
-              placeholder="acme.no"
+              placeholder="firma.no"
               value={newOrg.domain}
               onChange={(e) => setNewOrg({ ...newOrg, domain: e.target.value })}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm"
             />
           </label>
           <label className="text-sm">
-            <span className="block text-gray-600 mb-1">Telefon</span>
+            <span className="block text-gray-600 mb-1">Telefon (valgfri)</span>
             <input
               value={newOrg.phone}
               onChange={(e) => setNewOrg({ ...newOrg, phone: e.target.value })}
@@ -168,7 +172,7 @@ export default function BedrifterPage() {
             disabled={!newOrg.name || creating}
             className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
           >
-            {creating ? 'Lagrer …' : 'Lagre'}
+            {creating ? 'Lagrer …' : 'Lagre bedrift'}
           </button>
           <button
             onClick={() => setShowNew(false)}
@@ -184,14 +188,22 @@ export default function BedrifterPage() {
         <TableSkeleton rows={8} />
       ) : loadError ? (
         <EmptyState
-          title="Kunne ikke laste bedrifter"
-          description="Noe gikk galt under henting av bedrifter. Prøv igjen."
+          title="Kunne ikke hente bedriftene"
+          description="Det kan skyldes nettforbindelsen. Prøv igjen om litt."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
+        />
+      ) : orgs.length === 0 && q ? (
+        <EmptyState
+          title={`Ingen bedrifter passer «${q}»`}
+          description="Prøv et annet søkeord, eller legg til bedriften."
+          action={{ label: 'Legg til bedrift', onClick: () => setShowNew(true) }}
         />
       ) : orgs.length === 0 ? (
         <EmptyState
-          title="Ingen bedrifter"
-          description="Bedrifter opprettes automatisk fra bookinger med firmadomene, eller manuelt her."
+          icon="users"
+          title="Ingen bedrifter ennå"
+          description="Bedrifter dukker opp av seg selv når noen sender forespørsel med firma-e-post. Du kan også legge dem inn selv."
+          action={{ label: 'Legg til bedrift', onClick: () => setShowNew(true) }}
         />
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -199,10 +211,10 @@ export default function BedrifterPage() {
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
                 <th className="px-4 py-3 font-medium">Navn</th>
-                <th className="px-4 py-3 font-medium">Domene</th>
-                <th className="px-4 py-3 font-medium">Stadium</th>
+                <th className="px-4 py-3 font-medium">Nettadresse</th>
+                <th className="px-4 py-3 font-medium">Kundestatus</th>
                 <th className="px-4 py-3 font-medium">Kontakter</th>
-                <th className="px-4 py-3 font-medium">Deals</th>
+                <th className="px-4 py-3 font-medium">Avtaler</th>
                 <th className="px-4 py-3 font-medium">Sist aktiv</th>
               </tr>
             </thead>

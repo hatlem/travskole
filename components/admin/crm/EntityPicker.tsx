@@ -101,7 +101,7 @@ export function EntityPicker({ kind, value, onChange, disabled, placeholder }: E
           {searching && results.length === 0 ? (
             <li className="px-3 py-2 text-gray-400">Søker …</li>
           ) : results.length === 0 ? (
-            <li className="px-3 py-2 text-gray-400">Ingen treff</li>
+            <li className="px-3 py-2 text-gray-500">Ingen treff — prøv et kortere søkeord</li>
           ) : (
             results.map((r) => (
               <li key={r.id} role="option" aria-selected={false}>

@@ -23,7 +23,7 @@ function fetchAssignees() {
   if (!cache) {
     cache = fetch('/api/admin/crm/assignees')
       .then((res) => {
-        if (!res.ok) throw new Error('Kunne ikke laste ansvarlige');
+        if (!res.ok) throw new Error('Kunne ikke hente listen over ansvarlige');
         return res.json();
       })
       .then((data) => ({ assignees: data.assignees ?? [], currentUserId: data.currentUserId ?? null }))

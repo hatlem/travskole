@@ -10,6 +10,7 @@ import { useToast } from '@/components/admin/Toast';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CardSkeleton } from '@/components/admin/Skeleton';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
@@ -54,7 +55,12 @@ const LAWFUL_BASIS_LABELS: Record<string, string> = {
 };
 
 const SUPPRESSION_REASONS: Record<string, string> = {
-  unsubscribe: 'avmeldt', bounce: 'returnert (bounce)', complaint: 'klage', manual: 'lagt til manuelt',
+  unsubscribe: 'meldte seg av', bounce: 'e-posten kom i retur', complaint: 'klaget', manual: 'lagt til for hånd',
+};
+
+const CONSENT_SOURCES: Record<string, string> = {
+  server: 'registrert av admin', manual: 'registrert av admin', import: 'import', booking: 'forespørsel',
+  registration: 'påmelding', web: 'nettsiden', signup: 'registrering', system: 'automatisk',
 };
 
 const ACTIVITY_ICONS: Record<string, string> = {
@@ -88,6 +94,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const [deleting, setDeleting] = useState(false);
   const [suppressionBusy, setSuppressionBusy] = useState(false);
   const [confirmUnsuppress, setConfirmUnsuppress] = useState(false);
+  const [confirmSuppress, setConfirmSuppress] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [dealDialog, setDealDialog] = useState<{ dealId: number | null } | null>(null);
   const { toast } = useToast();
@@ -105,7 +112,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         setLoadError(false);
         return;
       }
-      if (!res.ok) throw new Error('Kunne ikke laste kontaktdetaljer');
+      if (!res.ok) throw new Error('Kunne ikke hente kontakten. Prøv igjen.');
       const data = await res.json();
       setContact(data.contact);
       setLoadError(false);
@@ -113,7 +120,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setContact(null);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste kontaktdetaljer', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente kontakten. Prøv igjen.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setInitialLoading(false);
@@ -152,14 +159,14 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return false;
       }
       toast(okMsg, 'success');
       load();
       return true;
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
       return false;
     }
   }
@@ -170,7 +177,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       return;
     }
     setSaving(true);
-    const ok = await patch(changed, 'Kontakt oppdatert');
+    const ok = await patch(changed, 'Endringene er lagret');
     setSaving(false);
     if (ok) setEditing(false);
   }
@@ -181,13 +188,13 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/admin/crm/contacts/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke slette kontakten', 'error');
+        toast(data.error || 'Kunne ikke slette kontakten. Prøv igjen.', 'error');
         return;
       }
-      toast('Kontakt slettet', 'success');
+      toast(`${contact?.name ?? 'Kontakten'} er slettet`, 'success');
       router.push('/admin/crm/kontakter');
     } catch {
-      toast('Kunne ikke slette kontakten', 'error');
+      toast('Kunne ikke slette kontakten. Prøv igjen.', 'error');
     } finally {
       setDeleting(false);
       setConfirmDelete(false);
@@ -205,13 +212,13 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
-      toast('Samtykke oppdatert', 'success');
+      toast('Samtykket er oppdatert', 'success');
       load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
     } finally {
       setConsentBusy(false);
     }
@@ -224,13 +231,13 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/admin/crm/contacts/${id}/suppression`, { method: suppressed ? 'POST' : 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
-      toast(suppressed ? 'Lagt til i ikke-kontakt-listen' : 'Fjernet fra ikke-kontakt-listen', 'success');
+      toast(suppressed ? 'Lagt på ikke-kontakt-listen — får ingen flere e-poster fra flytene' : 'Fjernet fra ikke-kontakt-listen — kan igjen få e-post', 'success');
       load();
     } catch {
-      toast('Noe gikk galt', 'error');
+      toast('Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
     } finally {
       setSuppressionBusy(false);
     }
@@ -246,14 +253,14 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
       setNoteText('');
       toast('Notat lagret', 'success');
       load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
     }
   }
 
@@ -272,16 +279,16 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
       setTaskTitle('');
       setTaskDue('');
       setTaskAssigneeTouched(false);
-      toast('Oppgave opprettet', 'success');
+      toast('Oppgaven er lagt til — du finner den også under Oppgaver', 'success');
       load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
     }
   }
 
@@ -294,13 +301,13 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
       if (okMsg) toast(okMsg, 'success');
       load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
     }
   }
 
@@ -325,8 +332,8 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
       <div>
         <CrmTabs />
         <EmptyState
-          title="Kunne ikke laste kontaktdetaljer"
-          description="Noe gikk galt under henting av kontaktdetaljer. Prøv igjen."
+          title="Kunne ikke hente kontakten"
+          description="Det kan skyldes nettforbindelsen. Prøv igjen om litt."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       </div>
@@ -335,7 +342,12 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   if (!contact) return (
     <div>
       <CrmTabs />
-      <div className="text-gray-500 p-8">Kontakten finnes ikke.</div>
+      <EmptyState
+        icon="users"
+        title="Fant ikke kontakten"
+        description="Den kan ha blitt slettet eller slått sammen med en annen kontakt."
+        action={{ label: 'Til alle kontakter', href: '/admin/crm/kontakter' }}
+      />
     </div>
   );
 
@@ -367,10 +379,10 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600">
-            Stadium:{' '}
+            Kundestatus:{' '}
             <select
               value={contact.stage}
-              onChange={(e) => patch({ stage: e.target.value }, 'Stadium oppdatert')}
+              onChange={(e) => patch({ stage: e.target.value }, 'Kundestatus er oppdatert')}
               className="border border-gray-300 rounded-md px-2 py-1 text-sm"
             >
               {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -380,16 +392,17 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             Ansvarlig:{' '}
             <AssigneeSelect
               value={contact.ownerId}
-              onChange={(ownerId) => patch({ ownerId }, 'Ansvarlig oppdatert')}
+              onChange={(ownerId) => patch({ ownerId }, 'Ansvarlig er oppdatert')}
               className="border border-gray-300 rounded-md px-2 py-1 text-sm"
             />
           </label>
+          <HelpTip term="owner" align="right" />
           {!editing && (
             <button
               onClick={() => setEditing(true)}
-              className="border border-gray-300 text-gray-700 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50"
+              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
             >
-              Rediger
+              Rediger kontakt
             </button>
           )}
           <button
@@ -415,7 +428,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         <div className="space-y-6">
           <section className="border border-gray-200 rounded-lg p-4 space-y-4">
             <div>
-              <h2 className="font-semibold mb-2">Samtykke</h2>
+              <h2 className="font-semibold mb-2">Samtykke til markedsføring</h2>
               <div className="flex flex-wrap items-center gap-4 text-sm">
                 <label className="flex items-center gap-2 text-gray-700">
                   <input
@@ -424,11 +437,12 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                     disabled={consentBusy}
                     onChange={(e) => saveConsent(e.target.checked, lawfulBasis)}
                   />
-                  Markedsføring tillatt
+                  Kan få nyhetsbrev og tilbud
                 </label>
+                <HelpTip term="marketing" />
                 {marketing && (
                   <label className="text-gray-600">
-                    Rettslig grunnlag:{' '}
+                    Hvorfor vi har lov:{' '}
                     <select
                       value={lawfulBasis ?? 'consent'}
                       disabled={consentBusy}
@@ -441,17 +455,18 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                     </select>
                   </label>
                 )}
+                {marketing && <HelpTip term="legitimateInterest" align="right" />}
               </div>
               {contact.consent && (
                 <p className="text-xs text-gray-400 mt-2">
-                  {contact.consent.consentAt ? `Registrert ${fmtDate(contact.consent.consentAt)}` : 'Ikke samtykket'}
-                  {contact.consent.source && <> · kilde: {contact.consent.source}</>}
+                  {contact.consent.consentAt ? `Registrert ${fmtDate(contact.consent.consentAt)}` : 'Har ikke sagt ja'}
+                  {contact.consent.source && <> · fra {CONSENT_SOURCES[contact.consent.source] ?? contact.consent.source}</>}
                 </p>
               )}
             </div>
 
             <div className="border-t border-gray-100 pt-3">
-              <h3 className="text-sm font-medium mb-1">Ikke-kontakt-liste</h3>
+              <h3 className="text-sm font-medium mb-1">Ikke-kontakt-liste <HelpTip term="suppression" /></h3>
               {!contact.email ? (
                 <p className="text-sm text-gray-500">Kontakten har ingen e-post.</p>
               ) : contact.suppression ? (
@@ -468,14 +483,14 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                       {suppressionBusy ? 'Fjerner …' : 'Fjern fra listen'}
                     </button>
                   ) : (
-                    <span className="text-xs text-gray-400">Kun superadmin kan fjerne</span>
+                    <span className="text-xs text-gray-500">Bare en superadmin kan fjerne adressen herfra</span>
                   )}
                 </div>
               ) : (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <span className="text-gray-600">Mottar utsendelser.</span>
+                  <span className="text-gray-600">Kan få e-post fra flytene.</span>
                   <button
-                    onClick={() => setSuppressed(true)}
+                    onClick={() => setConfirmSuppress(true)}
                     disabled={suppressionBusy}
                     className="text-xs text-red-700 hover:underline disabled:opacity-50"
                   >
@@ -486,19 +501,19 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             </div>
 
             <div className="border-t border-gray-100 pt-3">
-              <h3 className="text-sm font-medium mb-1">Segmenter</h3>
+              <h3 className="text-sm font-medium mb-1">Segmenter <HelpTip term="segment" /></h3>
               <p className="text-xs text-gray-500 mb-2">Grupper kontakten havner i automatisk.</p>
               <ContactSegments contactId={contactId} refreshKey={contact} onAddToList={focusLists} />
             </div>
 
             <div id="kontakt-lister" className="border-t border-gray-100 pt-3 scroll-mt-4">
-              <h3 className="text-sm font-medium mb-1">Lister</h3>
+              <h3 className="text-sm font-medium mb-1">Lister <HelpTip term="list" /></h3>
               <p className="text-xs text-gray-500 mb-2">Grupper du legger kontakten i selv.</p>
               <ContactLists contactId={contactId} contactName={contact.name} lists={contact.lists} onChanged={load} />
             </div>
 
             <div className="border-t border-gray-100 pt-3">
-              <h3 className="text-sm font-medium mb-2">Legg til i flyt</h3>
+              <h3 className="text-sm font-medium mb-2">Legg til i en e-postflyt</h3>
               <AddToFlow contactId={contactId} hasMarketingConsent={marketing} onEnrolled={load} />
             </div>
           </section>
@@ -506,7 +521,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Tidslinje</h2>
             {contact.activities.length === 0 ? (
-              <p className="text-sm text-gray-500">Ingen aktivitet ennå.</p>
+              <p className="text-sm text-gray-500">Ingen aktivitet ennå. Påmeldinger, e-poster og notater havner her etter hvert.</p>
             ) : (
               <ol className="space-y-3">
                 {contact.activities.map((a) => (
@@ -528,16 +543,16 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         <div className="space-y-6">
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold">Deals ({contact.deals.length})</h2>
+              <h2 className="font-semibold">Avtaler ({contact.deals.length}) <HelpTip term="deal" /></h2>
               <button
                 onClick={() => setDealDialog({ dealId: null })}
                 className="text-sm text-blue-700 hover:underline"
               >
-                + Ny deal
+                + Ny avtale
               </button>
             </div>
             {contact.deals.length === 0 ? (
-              <p className="text-sm text-gray-500">Ingen deals.</p>
+              <p className="text-sm text-gray-500">Ingen avtaler ennå. Lag en når kontakten vurderer å bestille noe, f.eks. et julebord.</p>
             ) : (
               <ul className="space-y-2">
                 {contact.deals.map((d) => (
@@ -563,7 +578,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Oppgaver</h2>
             <div className="flex flex-wrap gap-2 mb-2">
-              <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Ny oppgave …"
+              <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Hva skal gjøres? F.eks. Ring tilbake"
                 onKeyDown={(e) => e.key === 'Enter' && addTask()}
                 className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1 min-w-[10rem]" />
               <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} aria-label="Frist"
@@ -573,7 +588,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                 onChange={(v) => { setTaskAssignee(v); setTaskAssigneeTouched(true); }}
               />
               <button onClick={addTask} disabled={!taskTitle.trim()}
-                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Legg til</button>
+                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Legg til oppgave</button>
             </div>
             <ul className="space-y-1">
               {contact.tasks.map((t) => (
@@ -582,14 +597,14 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                     type="checkbox"
                     checked={t.status === 'done'}
                     onChange={() => patchTask(t.id, { status: t.status === 'done' ? 'open' : 'done' })}
-                    aria-label="Fullført"
+                    aria-label={`Merk «${t.title}» som gjort`}
                   />
                   <span className={t.status === 'done' ? 'line-through text-gray-400' : ''}>{t.title}</span>
                   <span className="ml-auto flex items-center gap-2">
                     {t.dueAt && <span className="text-gray-500 text-xs">{fmtDate(t.dueAt)}</span>}
                     <AssigneeSelect
                       value={t.assigneeId}
-                      onChange={(assigneeId) => patchTask(t.id, { assigneeId }, 'Ansvarlig oppdatert')}
+                      onChange={(assigneeId) => patchTask(t.id, { assigneeId }, 'Ansvarlig er oppdatert')}
                       emptyLabel="Uten ansvarlig"
                       className="border border-gray-200 rounded px-1 py-0.5 text-xs text-gray-600 max-w-[10rem]"
                     />
@@ -605,7 +620,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
               <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat …"
                 rows={2} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1" />
               <button onClick={addNote} disabled={!noteText.trim()}
-                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre</button>
+                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre notat</button>
             </div>
             <ul className="space-y-2">
               {contact.notes.map((n) => (
@@ -634,8 +649,8 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
 
       <ConfirmModal
         open={confirmDelete}
-        title="Slett kontakt"
-        message={`Slette ${contact.name} permanent? Notater, oppgaver, tidslinje, samtykke og flytinnmeldinger slettes også. Deals beholdes uten kontakt, og ikke-kontakt-listen påvirkes ikke.`}
+        title={`Slette ${contact.name}?`}
+        message={`${contact.name} slettes for godt, sammen med notater, oppgaver, tidslinje, samtykke og plassen i e-postflytene. Avtalene beholdes, men uten kontakt. Står adressen på ikke-kontakt-listen, blir den stående. Dette kan ikke angres.`}
         confirmLabel="Slett kontakt"
         loading={deleting}
         onConfirm={deleteContact}
@@ -645,7 +660,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
         open={confirmUnsuppress}
         title="Fjerne fra ikke-kontakt-listen?"
         message={`${contact.email ?? ''} kan da igjen motta e-post fra flyter og utsendelser. Gjør dette bare hvis personen selv har bedt om det${contact.suppression?.reason === 'unsubscribe' ? ' — adressen meldte seg av selv' : ''}.`}
-        confirmLabel="Fjern"
+        confirmLabel="Fjern fra listen"
         variant="warning"
         loading={suppressionBusy}
         onConfirm={async () => {
@@ -653,6 +668,19 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           setConfirmUnsuppress(false);
         }}
         onCancel={() => setConfirmUnsuppress(false)}
+      />
+      <ConfirmModal
+        open={confirmSuppress}
+        title="Legge på ikke-kontakt-listen?"
+        message={`${contact.email ?? ''} får da ingen flere e-poster fra flyter og utsendelser. Bare en superadmin kan fjerne adressen fra listen igjen.`}
+        confirmLabel="Legg på listen"
+        variant="warning"
+        loading={suppressionBusy}
+        onConfirm={async () => {
+          await setSuppressed(true);
+          setConfirmSuppress(false);
+        }}
+        onCancel={() => setConfirmSuppress(false)}
       />
     </div>
   );

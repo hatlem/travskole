@@ -13,6 +13,7 @@ import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { CrmDialog, Field } from '@/components/admin/crm/CrmDialog';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { HelpTip } from '@/components/admin/HelpTip';
 
 interface OrgDetail {
   id: number;
@@ -103,7 +104,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setOrg(null);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste bedriftdetaljer', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente bedriften. Prøv igjen.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setInitialLoading(false);
@@ -129,14 +130,14 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return false;
       }
       toast(okMsg, 'success');
       load();
       return true;
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
       return false;
     }
   }
@@ -158,7 +159,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       return;
     }
     setSaving(true);
-    const ok = await patchOrg(changed, 'Bedrift oppdatert');
+    const ok = await patchOrg(changed, 'Endringene er lagret');
     setSaving(false);
     if (ok) setEditValues(null);
   }
@@ -169,13 +170,13 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       const res = await fetch(`/api/admin/crm/organizations/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke slette bedriften', 'error');
+        toast(data.error || 'Kunne ikke slette bedriften. Prøv igjen.', 'error');
         return;
       }
-      toast('Bedrift slettet', 'success');
+      toast(`${org?.name ?? 'Bedriften'} er slettet`, 'success');
       router.push('/admin/crm/bedrifter');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Kunne ikke slette bedriften', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke slette bedriften. Prøv igjen.', 'error');
     } finally {
       setDeleting(false);
       setConfirmDelete(false);
@@ -192,14 +193,14 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       });
       if (!res.ok) {
         const data = await res.json();
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
       setNoteText('');
       toast('Notat lagret', 'success');
       load();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt — endringen ble ikke lagret. Prøv igjen.', 'error');
     }
   }
 
@@ -225,8 +226,8 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
       <div>
         <CrmTabs />
         <EmptyState
-          title="Kunne ikke laste bedriftdetaljer"
-          description="Noe gikk galt under henting av bedriftdetaljer. Prøv igjen."
+          title="Kunne ikke hente bedriften"
+          description="Det kan skyldes nettforbindelsen. Prøv igjen om litt."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       </div>
@@ -237,7 +238,12 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
     return (
       <div>
         <CrmTabs />
-        <div className="text-gray-500 p-8">Bedriften finnes ikke.</div>
+        <EmptyState
+          icon="users"
+          title="Fant ikke bedriften"
+          description="Den kan ha blitt slettet."
+          action={{ label: 'Til alle bedrifter', href: '/admin/crm/bedrifter' }}
+        />
       </div>
     );
   }
@@ -254,19 +260,19 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
         <div>
           <h1 className="text-2xl font-bold">{org.name}</h1>
           <p className="text-gray-600 text-sm mt-1">
-            {org.domain ?? 'Ikke noe domene'} · {org.phone ?? 'Ingen telefon'}
+            {org.domain ?? 'Ingen nettadresse'} · {org.phone ?? 'Ingen telefon'}
             {org.orgNumber && <> · Org.nr {org.orgNumber}</>}
           </p>
           <p className="text-gray-700 text-sm mt-2 font-medium">
-            Samlet verdi (åpne + vunnede deals): {totalValue.toLocaleString('nb-NO')} kr
+            Samlet verdi (åpne og vunne avtaler): {totalValue.toLocaleString('nb-NO')} kr
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <label className="text-sm text-gray-600">
-            Stadium:{' '}
+            Kundestatus:{' '}
             <select
               value={org.stage}
-              onChange={(e) => patchOrg({ stage: e.target.value }, 'Stadium oppdatert')}
+              onChange={(e) => patchOrg({ stage: e.target.value }, 'Kundestatus er oppdatert')}
               className="border border-gray-300 rounded-md px-2 py-1 text-sm"
             >
               {STAGES.map((s) => (
@@ -280,16 +286,17 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
             Ansvarlig:{' '}
             <AssigneeSelect
               value={org.ownerId}
-              onChange={(ownerId) => patchOrg({ ownerId }, 'Ansvarlig oppdatert')}
+              onChange={(ownerId) => patchOrg({ ownerId }, 'Ansvarlig er oppdatert')}
               className="border border-gray-300 rounded-md px-2 py-1 text-sm"
             />
           </label>
+          <HelpTip term="owner" align="right" />
           <button
             type="button"
             onClick={openEdit}
-            className="border border-gray-300 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
+            className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
           >
-            Rediger
+            Rediger bedrift
           </button>
           <button
             type="button"
@@ -306,7 +313,9 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Kontaktpersoner ({org.contacts.length})</h2>
             {org.contacts.length === 0 ? (
-              <p className="text-sm text-gray-500">Ingen kontaktpersoner.</p>
+              <p className="text-sm text-gray-500">
+                Ingen kontaktpersoner ennå. Åpne en kontakt og velg denne bedriften under «Rediger kontakt».
+              </p>
             ) : (
               <ul className="space-y-2">
                 {org.contacts.map((c) => (
@@ -329,13 +338,13 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
 
           <section>
             <div className="flex items-center justify-between mb-3">
-              <h2 className="font-semibold">Bookinghistorikk ({org.deals.length})</h2>
+              <h2 className="font-semibold">Avtaler ({org.deals.length}) <HelpTip term="deal" /></h2>
               <button onClick={() => setDealDialog({ dealId: null })} className="text-sm text-blue-700 hover:underline">
-                + Ny deal
+                + Ny avtale
               </button>
             </div>
             {org.deals.length === 0 ? (
-              <p className="text-sm text-gray-500">Ingen deals ennå.</p>
+              <p className="text-sm text-gray-500">Ingen avtaler ennå. Lag en når bedriften vurderer å bestille noe.</p>
             ) : (
               <ul className="space-y-2">
                 {org.deals.map((d) => (
@@ -381,7 +390,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                 disabled={!noteText.trim()}
                 className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50"
               >
-                Lagre
+                Lagre notat
               </button>
             </div>
           </section>
@@ -389,7 +398,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Tidslinje</h2>
             {org.activities.length === 0 ? (
-              <p className="text-sm text-gray-500">Ingen aktivitet ennå.</p>
+              <p className="text-sm text-gray-500">Ingen aktivitet ennå. Forespørsler, avtaler og notater havner her etter hvert.</p>
             ) : (
               <ol className="space-y-3">
                 {org.activities.map((a) => (
@@ -454,7 +463,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
               saveEdit();
             }}
           >
-            <Field label="Navn *" htmlFor="org-name" hint={editValues.name.trim() ? undefined : 'Navn er påkrevd'}>
+            <Field label="Navn" htmlFor="org-name" hint={editValues.name.trim() ? undefined : 'Navn er påkrevd'}>
               <input
                 id="org-name"
                 value={editValues.name}
@@ -463,7 +472,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                 className={inputCls}
               />
             </Field>
-            <Field label="Domene" htmlFor="org-domain" hint="F.eks. firma.no — brukes til å koble kontakter automatisk">
+            <Field label="Nettadresse" htmlFor="org-domain" hint="F.eks. firma.no — kontakter med e-post på denne adressen kobles til bedriften automatisk">
               <input
                 id="org-domain"
                 value={editValues.domain}
@@ -482,7 +491,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                 className={inputCls}
               />
             </Field>
-            <Field label="Stadium" htmlFor="org-stage">
+            <Field label="Kundestatus" htmlFor="org-stage">
               <select
                 id="org-stage"
                 value={editValues.stage}
@@ -502,9 +511,9 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
 
       <ConfirmModal
         open={confirmDelete}
-        title="Slett bedrift"
-        message={`Er du sikker på at du vil slette «${org.name}»? Kontaktpersoner, deals og kontaktenes tidslinjer beholdes, men kobles fra bedriften. Notater som kun gjelder bedriften slettes. Dette kan ikke angres.`}
-        confirmLabel="Slett"
+        title={`Slette ${org.name}?`}
+        message={`Bedriften slettes for godt. Kontaktpersonene, avtalene og tidslinjene deres blir værende, men kobles fra bedriften. Notater som bare gjelder bedriften, slettes. Dette kan ikke angres.`}
+        confirmLabel="Slett bedriften"
         variant="danger"
         loading={deleting}
         onConfirm={deleteOrg}

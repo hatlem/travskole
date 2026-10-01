@@ -69,7 +69,7 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
       if (creating) {
         const { res, data } = await requestJson('/api/admin/crm/lists', 'POST', { name: newName.trim() });
         if (!res.ok) {
-          toast(data.error || 'Kunne ikke opprette liste', 'error');
+          toast(data.error || 'Kunne ikke lage listen. Prøv et annet navn, eller prøv igjen.', 'error');
           return;
         }
         target = { id: data.list.id, name: data.list.name };
@@ -79,15 +79,15 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
 
       const { res, data } = await requestJson(`/api/admin/crm/lists/${target.id}`, 'POST', { contactIds: [contactId] });
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke legge til i listen', 'error');
+        toast(data.error || 'Kunne ikke legge kontakten i listen. Prøv igjen.', 'error');
         return;
       }
-      toast(data.added > 0 ? `Lagt til i «${target.name}»` : `Allerede i «${target.name}»`, data.added > 0 ? 'success' : 'info');
+      toast(data.added > 0 ? `Lagt i listen «${target.name}»` : `Kontakten er allerede i «${target.name}»`, data.added > 0 ? 'success' : 'info');
       setChoice('');
       setNewName('');
       onChanged();
     } catch {
-      toast('Kunne ikke legge til i listen', 'error');
+      toast('Kunne ikke legge kontakten i listen. Prøv igjen.', 'error');
     } finally {
       setBusy(false);
     }
@@ -101,13 +101,13 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
         contactIds: [contactId],
       });
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke fjerne fra listen', 'error');
+        toast(data.error || 'Kunne ikke ta kontakten ut av listen. Prøv igjen.', 'error');
         return;
       }
-      toast(`Fjernet fra «${pendingRemove.name}»`, 'success');
+      toast(`Tatt ut av «${pendingRemove.name}»`, 'success');
       onChanged();
     } catch {
-      toast('Kunne ikke fjerne fra listen', 'error');
+      toast('Kunne ikke ta kontakten ut av listen. Prøv igjen.', 'error');
     } finally {
       setRemoving(false);
       setPendingRemove(null);
@@ -181,7 +181,7 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
       <ConfirmModal
         open={pendingRemove !== null}
         title="Fjerne fra listen?"
-        message={`Fjerne ${contactName} fra «${pendingRemove?.name ?? ''}»? Løp som allerede er i gang stoppes ikke, men flyter med utløseren «Fjernet fra CRM-liste» kan starte.`}
+        message={`${contactName} tas ut av «${pendingRemove?.name ?? ''}». Kontakten slettes ikke. E-postflyter som allerede er i gang, fortsetter, men flyter som starter «når noen fjernes fra en liste», kan starte.`}
         confirmLabel="Fjern"
         variant="warning"
         loading={removing}

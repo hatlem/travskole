@@ -32,7 +32,7 @@ export function TagInput({ value, onChange, suggestions = [], disabled, id }: Ta
               type="button"
               onClick={() => onChange(value.filter((t) => t !== tag))}
               className="text-gray-400 hover:text-red-600"
-              aria-label={`Fjern tagg ${tag}`}
+              aria-label={`Fjern stikkordet ${tag}`}
             >
               ×
             </button>
@@ -59,7 +59,7 @@ export function TagInput({ value, onChange, suggestions = [], disabled, id }: Ta
             }
           }}
           onBlur={() => draft.trim() && commit(draft)}
-          placeholder={value.length === 0 ? 'Legg til tagg …' : ''}
+          placeholder={value.length === 0 ? 'Legg til stikkord …' : ''}
           className="flex-1 min-w-[8rem] text-sm outline-none bg-transparent"
         />
       )}

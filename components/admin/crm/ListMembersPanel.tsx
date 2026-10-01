@@ -90,7 +90,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
         setResults(data.contacts || []);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        toast('Kunne ikke søke etter kontakter', 'error');
+        toast('Søket virket ikke akkurat nå. Prøv igjen.', 'error');
       } finally {
         if (!controller.signal.aborted) setSearching(false);
       }
@@ -114,7 +114,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
     try {
       const { res, data } = await requestJson(`/api/admin/crm/lists/${listId}`, 'POST', { contactIds: selected });
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke legge til kontakter', 'error');
+        toast(data.error || 'Kunne ikke legge kontaktene i listen. Prøv igjen.', 'error');
         return;
       }
       const already = data.alreadyMember > 0 ? ` (${data.alreadyMember} var allerede med)` : '';
@@ -125,7 +125,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
       await loadMembers();
       onChanged();
     } catch {
-      toast('Kunne ikke legge til kontakter', 'error');
+      toast('Kunne ikke legge kontaktene i listen. Prøv igjen.', 'error');
     } finally {
       setAdding(false);
     }
@@ -139,7 +139,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
         contactIds: [pendingRemove.id],
       });
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke fjerne fra listen', 'error');
+        toast(data.error || 'Kunne ikke ta kontakten ut av listen. Prøv igjen.', 'error');
         return;
       }
       toast(`${pendingRemove.name} er fjernet fra «${listName}»`, 'success');
@@ -147,7 +147,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
       else await loadMembers();
       onChanged();
     } catch {
-      toast('Kunne ikke fjerne fra listen', 'error');
+      toast('Kunne ikke ta kontakten ut av listen. Prøv igjen.', 'error');
     } finally {
       setRemoving(false);
       setPendingRemove(null);
@@ -172,7 +172,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
         {searching ? (
           <p className="text-xs text-gray-400">Søker …</p>
         ) : query.trim() && visibleResults.length === 0 ? (
-          <p className="text-xs text-gray-400">Fant ingen kontakter.</p>
+          <p className="text-xs text-gray-400">Fant ingen kontakter. Prøv bare fornavn eller en del av e-posten.</p>
         ) : visibleResults.length > 0 ? (
           <ul className="max-h-48 overflow-y-auto border border-gray-100 rounded-md divide-y divide-gray-100">
             {visibleResults.map((c) => (
@@ -210,7 +210,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
       <div>
         <p className="text-xs font-medium text-gray-700 mb-1">I listen nå ({memberTotal})</p>
         {membersFailed ? (
-          <p className="text-xs text-red-600">Kunne ikke hente kontaktene i listen.</p>
+          <p className="text-xs text-red-600">Kunne ikke hente kontaktene i listen. Lukk og åpne listen igjen.</p>
         ) : members === null ? (
           <p className="text-xs text-gray-400">Henter …</p>
         ) : members.length === 0 ? (
@@ -242,7 +242,7 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
       <ConfirmModal
         open={pendingRemove !== null}
         title="Fjerne fra listen?"
-        message={`Fjerne ${pendingRemove?.name ?? ''} fra «${listName}»? Kontakten slettes ikke, den tas bare ut av listen. Flyter som starter når noen fjernes fra en liste, kan starte.`}
+        message={`${pendingRemove?.name ?? ''} tas ut av «${listName}». Kontakten slettes ikke. E-postflyter som starter «når noen fjernes fra en liste», kan starte.`}
         confirmLabel="Fjern"
         variant="warning"
         loading={removing}

@@ -68,28 +68,28 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
       onSubmit={(e) => { e.preventDefault(); submit(); }}
     >
       <div className="grid md:grid-cols-2 gap-3">
-        <Field label="Navn *" htmlFor="contact-name">
+        <Field label="Navn" htmlFor="contact-name">
           <input id="contact-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={200}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white" />
         </Field>
-        <Field label="E-post" htmlFor="contact-email" hint={emailInvalid ? 'Ugyldig e-postadresse' : undefined}>
+        <Field label="E-post" htmlFor="contact-email" hint={emailInvalid ? 'Sjekk e-postadressen — den ser ikke riktig ut (f.eks. navn@firma.no)' : undefined}>
           <input id="contact-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)}
             className={`border rounded-md px-3 py-1.5 text-sm w-full bg-white ${emailInvalid ? 'border-red-400' : 'border-gray-300'}`} />
         </Field>
-        <Field label="Telefon" htmlFor="contact-phone">
+        <Field label="Telefon (valgfri)" htmlFor="contact-phone">
           <input id="contact-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white" />
         </Field>
-        <Field label="Rolle/tittel" htmlFor="contact-role">
+        <Field label="Rolle eller tittel (valgfri)" htmlFor="contact-role">
           <input id="contact-role" value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} maxLength={100}
             placeholder="f.eks. Arrangementsansvarlig"
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white" />
         </Field>
-        <Field label="Bedrift">
+        <Field label="Bedrift (valgfri)">
           <EntityPicker kind="organization" value={organization} onChange={setOrganization} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Stadium" htmlFor="contact-stage">
+          <Field label="Kundestatus" htmlFor="contact-stage">
             <select id="contact-stage" value={stage} onChange={(e) => setStage(e.target.value)}
               className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full bg-white">
               {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
@@ -101,7 +101,7 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
           </Field>
         </div>
         <div className="md:col-span-2">
-          <Field label="Tagger" htmlFor="contact-tags" hint="Enter eller komma for å legge til">
+          <Field label="Stikkord" htmlFor="contact-tags" hint="Skriv et ord og trykk Enter, f.eks. «ponni» eller «julebord-2025». Brukes til å finne og gruppere kontakter.">
             <div className="bg-white rounded-md">
               <TagInput id="contact-tags" value={tags} onChange={setTags} suggestions={tagSuggestions} />
             </div>
