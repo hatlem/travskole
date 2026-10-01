@@ -1,26 +1,57 @@
 /** E-posttekst i flyter: sanitering ved lagring, kompatibilitet med tekstredigereren og forhåndsvisning. */
 import DOMPurify from 'isomorphic-dompurify';
-import { mergeTagsForAnchor, renderPreview } from '@/lib/email-templates';
+import { PREVIEW_MERGE_DATA, mergeTagsForAnchor, replaceMergeTags, type MergeTagData } from '@/lib/email-templates';
 
 // Bredere enn sanitizeLegalHtml: eldre kursmaler kan ha tabeller, bilder og inline-stil.
 const EMAIL_TAGS = [
   'h1', 'h2', 'h3', 'h4', 'p', 'br', 'hr', 'ul', 'ol', 'li',
   'strong', 'b', 'em', 'i', 'u', 's', 'a', 'blockquote', 'code', 'pre',
-  'span', 'div', 'img', 'table', 'thead', 'tbody', 'tr', 'td', 'th',
+  'span', 'div', 'center', 'font', 'img', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th',
 ];
-const EMAIL_ATTRS = ['href', 'target', 'rel', 'src', 'alt', 'width', 'height', 'style', 'align', 'colspan', 'rowspan'];
+// Layout-attributtene e-postklienter fortsatt forstår (tabelloppsett, farger, størrelser).
+const EMAIL_LAYOUT_ATTRS = [
+  'target', 'rel', 'alt', 'title', 'width', 'height', 'align', 'valign', 'colspan', 'rowspan',
+  'bgcolor', 'border', 'cellpadding', 'cellspacing', 'color', 'style',
+];
+const EMAIL_ATTRS = ['href', 'src', ...EMAIL_LAYOUT_ATTRS];
+// {{flettefelt}} som hele lenken; verdien kontrolleres på nytt etter utfylling (renderFlowEmailBody).
+const EMAIL_URI_RE = /^(?:(?:https?|mailto|tel):|\/(?!\/)|#|\{\{[a-z_]+\}\}$)/i;
+// Inline-stil beholdes, men ikke CSS-escapes, gamle skript-hull eller url() til annet enn https.
+const UNSAFE_STYLE_RE = /\\|expression\s*\(|javascript:|vbscript:|data:|-moz-binding|behaviou?r\s*:|@import|url\s*\(\s*(?!['"]?\s*https:\/\/)/i;
 
-export function sanitizeFlowEmailHtml(html: string): string {
-  return DOMPurify.sanitize(html ?? '', {
-    ALLOWED_TAGS: EMAIL_TAGS,
-    ALLOWED_ATTR: EMAIL_ATTRS,
-    ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel):|\/(?!\/)|#)/i,
-  });
+function dropUnsafeStyle(_node: Element, data: { attrName: string; attrValue: string; keepAttr: boolean }): void {
+  if (data.attrName === 'style' && UNSAFE_STYLE_RE.test(data.attrValue)) data.keepAttr = false;
 }
 
-/** Saniterer bodyHtml i alle e-postnoder; andre noder og felt røres ikke. */
-export function sanitizeEmailNodeConfig(type: string, config: Record<string, unknown>): Record<string, unknown> {
+/**
+ * Egen URI-regex gjør at DOMPurify også regex-sjekker attributter som ikke er URI-er,
+ * så layout-attributtene må merkes URI-trygge eksplisitt — ellers forsvinner width/colspan/target ved lagring.
+ */
+export function sanitizeFlowEmailHtml(html: string): string {
+  DOMPurify.addHook('uponSanitizeAttribute', dropUnsafeStyle);
+  try {
+    return DOMPurify.sanitize(html ?? '', {
+      ALLOWED_TAGS: EMAIL_TAGS,
+      ALLOWED_ATTR: EMAIL_ATTRS,
+      ADD_URI_SAFE_ATTR: EMAIL_LAYOUT_ATTRS,
+      ALLOWED_URI_REGEXP: EMAIL_URI_RE,
+    });
+  } finally {
+    DOMPurify.removeHook('uponSanitizeAttribute', dropUnsafeStyle);
+  }
+}
+
+/**
+ * Saniterer bodyHtml i e-postnoder; andre noder og felt røres ikke. Uendret tekst
+ * (lik `storedBodyHtml`) lagres som den er, så en lagring aldri endrer en mal ingen har rørt.
+ */
+export function sanitizeEmailNodeConfig(
+  type: string,
+  config: Record<string, unknown>,
+  storedBodyHtml?: string,
+): Record<string, unknown> {
   if (type !== 'email' || typeof config.bodyHtml !== 'string') return config;
+  if (storedBodyHtml !== undefined && config.bodyHtml === storedBodyHtml) return config;
   return { ...config, bodyHtml: sanitizeFlowEmailHtml(config.bodyHtml) };
 }
 
@@ -100,8 +131,18 @@ export function insertAtCursor(
   return { value: value.slice(0, start) + insert + value.slice(end), cursor: start + insert.length };
 }
 
+/**
+ * E-postteksten slik mottakeren får den: ren tekst blir avsnitt (som i redigereren),
+ * flettefelt fylles inn, og resultatet saneres — så forhåndsvisning, test og utsending er like.
+ */
+export function renderFlowEmailBody(bodyHtml: string, data: MergeTagData): string {
+  return sanitizeFlowEmailHtml(replaceMergeTags(toEditorHtml(bodyHtml), data));
+}
+
 /** Emne og tekst med eksempeldata, sanitert for visning i adminpanelet. */
 export function renderFlowEmailPreview(subject: string, bodyHtml: string): { subject: string; html: string } {
-  const preview = renderPreview(subject, toEditorHtml(bodyHtml));
-  return { subject: preview.subject, html: sanitizeFlowEmailHtml(preview.body) };
+  return {
+    subject: replaceMergeTags(subject, PREVIEW_MERGE_DATA),
+    html: renderFlowEmailBody(bodyHtml, PREVIEW_MERGE_DATA),
+  };
 }

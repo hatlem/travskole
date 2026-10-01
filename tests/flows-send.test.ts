@@ -373,3 +373,20 @@ describe('sendFlowEmail', () => {
     });
   });
 });
+
+describe('sendFlowEmail — samme rendring som forhåndsvisningen', () => {
+  it('sender ren tekst som avsnitt, slik redigereren og forhåndsvisningen viser den', async () => {
+    const result = await sendFlowEmail({ ...baseInput, isMarketing: false, bodyHtml: 'Hei {{forelder_navn}},\nvelkommen!\n\nHilsen Bjerke' });
+    expect(result).toBe('sent');
+    const html = mockedSendMailAs.mock.calls[0][0].html as string;
+    expect(html).toContain('<p>Hei Kari Nordmann,<br>velkommen!</p><p>Hilsen Bjerke</p>');
+  });
+
+  it('fjerner en lenke som ble utrygg etter utfylling av flettefelt', async () => {
+    prisma.contact.findUnique.mockResolvedValue({ ...CONTACT, name: 'javascript:alert(1)' });
+    await sendFlowEmail({ ...baseInput, isMarketing: false, bodyHtml: '<p><a href="{{forelder_navn}}">Klikk</a></p>' });
+    const html = mockedSendMailAs.mock.calls[0][0].html as string;
+    expect(html).toContain('<p><a>Klikk</a></p>');
+    expect(html).not.toContain('href="javascript:');
+  });
+});

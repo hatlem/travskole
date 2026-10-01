@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { isFlowEditable } from '@/lib/flows/status';
 import { sanitizeEmailNodeConfig } from '@/lib/flows/email-html';
+import { parseNodeConfig } from '@/lib/flows/graph';
 
 const NODE_TYPES = ['start', 'email', 'wait', 'condition', 'action', 'schedule', 'end'] as const;
 
@@ -95,6 +96,14 @@ export async function PUT(
 
   try {
     const saved = await prisma.$transaction(async (tx) => {
+      // Bare endrede e-posttekster saneres på nytt (sammenlignet med det som er lagret).
+      const storedEmailBodies = new Map<number, string>();
+      const storedNodes = await tx.flowNode.findMany({ where: { flowId, type: 'email' }, select: { id: true, config: true } });
+      for (const stored of storedNodes) {
+        const body = parseNodeConfig(stored.config).bodyHtml;
+        if (typeof body === 'string') storedEmailBodies.set(stored.id, body);
+      }
+
       // Replace-all: edges first (FK to nodes), then nodes.
       await tx.flowEdge.deleteMany({ where: { flowId } });
       await tx.flowNode.deleteMany({ where: { flowId } });
@@ -106,7 +115,9 @@ export async function PUT(
           data: {
             flowId,
             type: node.type,
-            config: JSON.stringify(sanitizeEmailNodeConfig(node.type, node.config)),
+            config: JSON.stringify(
+              sanitizeEmailNodeConfig(node.type, node.config, node.id !== undefined ? storedEmailBodies.get(node.id) : undefined),
+            ),
             posX: node.posX,
             posY: node.posY,
           },

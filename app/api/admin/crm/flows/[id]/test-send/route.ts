@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth';
 import { sendMailAs } from '@/lib/mail';
 import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { parseNodeConfig } from '@/lib/flows/graph';
+import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { logActivity } from '@/lib/activity';
 import logger from '@/lib/logger';
@@ -138,7 +139,7 @@ export async function POST(
   }
 
   let renderedSubject = replaceMergeTags(subject, TEST_MERGE_DATA);
-  let renderedBody = replaceMergeTags(bodyHtml, TEST_MERGE_DATA);
+  let renderedBody = renderFlowEmailBody(bodyHtml, TEST_MERGE_DATA);
   let aiNote: string | null = null;
   let aiPersonalized = false;
 

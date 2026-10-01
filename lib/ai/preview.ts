@@ -3,6 +3,7 @@
 import { prisma } from '@/lib/prisma';
 import { replaceMergeTags } from '@/lib/email-templates';
 import { contactMergeTagData } from '@/lib/flows/send';
+import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { getSetting } from '@/lib/settings';
 import type { LLMProvider } from './provider';
 import { personalizeForContact } from './personalize';
@@ -26,13 +27,13 @@ export async function previewPersonalization(
   if (!contact) return null;
   const mergeData = contactMergeTagData(contact, await getSetting('contact_email'));
   const renderedSubject = replaceMergeTags(subject, mergeData);
-  const originalBody = replaceMergeTags(bodyHtml, mergeData);
+  const originalBody = renderFlowEmailBody(bodyHtml, mergeData);
   const outcome = await personalizeForContact(provider, contact.id, originalBody);
   return {
     contact,
     subject: renderedSubject,
     originalBody,
-    personalizedBody: outcome.ok ? outcome.body : null,
+    personalizedBody: outcome.ok ? renderFlowEmailBody(outcome.body, mergeData) : null,
     verdict: outcome.ok ? { ok: true } : { ok: false, reason: outcome.reason },
     factLines: outcome.factLines,
   };

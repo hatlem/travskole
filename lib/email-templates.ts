@@ -54,7 +54,8 @@ export function replaceMergeTags(template: string, data: MergeTagData): string {
     .replace(/\{\{kontakt_epost\}\}/g, escapeHtmlValue(data.kontakt_epost));
 }
 
-const SAMPLE_DATA: MergeTagData = {
+/** Eksempeldata for forhåndsvisning i adminpanelet. */
+export const PREVIEW_MERGE_DATA: MergeTagData = {
   forelder_navn: 'Kari Nordmann',
   barnets_navn: 'Emma Nordmann',
   kurs_navn: 'Begynnerkurs - Våren 2026',
@@ -63,13 +64,6 @@ const SAMPLE_DATA: MergeTagData = {
   allergier: 'Ingen',
   kontakt_epost: 'registrering@bjerke.no',
 };
-
-export function renderPreview(subject: string, body: string): { subject: string; body: string } {
-  return {
-    subject: replaceMergeTags(subject, SAMPLE_DATA),
-    body: replaceMergeTags(body, SAMPLE_DATA),
-  };
-}
 
 export const TRIGGER_TYPE_LABELS: Record<string, string> = {
   registration_confirmed: 'Påmelding bekreftet',

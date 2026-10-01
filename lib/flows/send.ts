@@ -30,6 +30,7 @@ import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
 import { sendDeferral, type SendWindow } from './send-window';
+import { renderFlowEmailBody } from './email-html';
 
 /**
  * Fellespostboksen alle automatiske utsendelser ber om svar til, uavhengig av
@@ -295,7 +296,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     if (courseCtx) mergeData = { ...mergeData, ...courseCtx };
   }
   const subject = replaceMergeTags(input.subject, mergeData);
-  const renderedBody = replaceMergeTags(input.bodyHtml, mergeData);
+  const renderedBody = renderFlowEmailBody(input.bodyHtml, mergeData);
 
   const ai = await resolveAiBody(input, renderedBody, subject, contact.name);
   if (ai.kind === 'pending_review') return ai;
@@ -305,7 +306,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     if (deferred) return deferred;
   }
   // Admin-redigert/KI-tekst kan inneholde flettefelt som ikke var fylt inn.
-  const personalizedBody = ai.aiPersonalized ? replaceMergeTags(ai.body, mergeData) : ai.body;
+  const personalizedBody = ai.aiPersonalized ? renderFlowEmailBody(ai.body, mergeData) : ai.body;
   const aiPersonalized = ai.aiPersonalized;
 
   const unsubToken = signUnsubscribeToken(input.contactId);
