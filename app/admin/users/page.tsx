@@ -6,6 +6,8 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { PageHeader } from '@/components/admin/PageHeader';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { canManageUser } from '@/lib/user-admin';
 import { UserFormModal, type EditableUser } from './UserFormModal';
 import { ChildrenEditor, type AdminChild } from './ChildrenEditor';
@@ -71,6 +73,17 @@ function statusColor(status: string): string {
   }
 }
 
+const DESCRIPTION = 'Alle med konto: foreldre, deltakere og dere i staben. Endre rolle, send ny innloggingslenke eller steng en konto.';
+
+const ROLE_LABELS: Record<string, string> = { parent: 'Forelder', admin: 'Admin', superadmin: 'Superadmin' };
+
+/** Hva rollebyttet betyr i praksis — vises før det lagres. */
+function roleChangeMessage(name: string, role: string): string {
+  if (role === 'superadmin') return `${name} får full tilgang til alt, også innstillinger og andre administratorer.`;
+  if (role === 'admin') return `${name} får tilgang til admin: kurs, påmeldinger, kontakter og e-poster.`;
+  return `${name} mister tilgangen til admin og kan bare se sine egne påmeldinger.`;
+}
+
 const PER_PAGE = 25;
 /** Ventetid før et tastetrykk i søkefeltet blir en spørring mot serveren. */
 const SEARCH_DEBOUNCE_MS = 300;
@@ -101,6 +114,7 @@ export default function AdminUsersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<'deactivate' | 'reactivate' | null>(null);
   const [bulkLoading, setBulkLoading] = useState(false);
+  const [pendingRole, setPendingRole] = useState<{ user: User; role: string } | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -110,13 +124,13 @@ export default function AdminUsersPage() {
       if (statusFilter !== 'all') params.set('status', statusFilter);
 
       const res = await fetch(`/api/admin/users?${params}`);
-      if (!res.ok) throw new Error('Kunne ikke hente brukere');
+      if (!res.ok) throw new Error('Kunne ikke hente brukerne. Last siden på nytt.');
       const data = await res.json();
       setUsers(data.users);
       setTotal(data.total ?? data.users.length);
       if (data.stats) setStats(data.stats);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setLoading(false);
     }
@@ -146,13 +160,13 @@ export default function AdminUsersPage() {
         body: JSON.stringify({ role }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Kunne ikke oppdatere rolle');
+      if (!res.ok) throw new Error(data.error || 'Rollen ble ikke endret. Prøv igjen.');
       setUsers((prev) =>
         prev.map((u) => (u.id === id ? { ...u, role } : u))
       );
-      toast('Rolle oppdatert', 'success');
+      toast(`Rollen er endret til ${ROLE_LABELS[role] ?? role}`, 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -164,10 +178,10 @@ export default function AdminUsersPage() {
     try {
       const res = await fetch(`/api/admin/users/${user.id}/magic-link`, { method: 'POST' });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Kunne ikke sende innloggingslenke');
-      toast(`Innloggingslenke sendt til ${user.email}`, 'success');
+      if (!res.ok) throw new Error(data.error || 'Innloggingslenken ble ikke sendt. Sjekk e-postadressen og prøv igjen.');
+      toast(`Innloggingslenke er sendt til ${user.email}. Den virker i en begrenset tid.`, 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setMagicLinkId(null);
     }
@@ -219,19 +233,19 @@ export default function AdminUsersPage() {
               body: JSON.stringify({ deactivated: action === 'deactivate' }),
             });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Handlingen feilet');
+      if (!res.ok) throw new Error(data.error || 'Det ble ikke lagret. Prøv igjen.');
       toast(
         action === 'anonymize'
-          ? 'Bruker anonymisert'
+          ? 'Personopplysningene er slettet'
           : action === 'deactivate'
-          ? 'Bruker deaktivert'
-          : 'Bruker reaktivert',
+          ? 'Kontoen er stengt. Brukeren kan ikke logge inn.'
+          : 'Kontoen er åpnet igjen. Brukeren kan logge inn.',
         'success',
       );
       setConfirm(null);
       fetchUsers();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setActionLoading(false);
     }
@@ -290,21 +304,21 @@ export default function AdminUsersPage() {
         body: JSON.stringify({ ids: Array.from(selectedIds), action: bulkAction }),
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Handlingen feilet');
+      if (!res.ok) throw new Error(data.error || 'Det ble ikke lagret. Prøv igjen.');
 
       const verb = bulkAction === 'deactivate' ? 'deaktivert' : 'reaktivert';
       const skipped = data.skipped?.length ?? 0;
       toast(
         skipped > 0
           ? `${data.updated} ${verb}, ${skipped} hoppet over: ${data.skipped[0].error}`
-          : `${data.updated} bruker(e) ${verb}`,
+          : `${data.updated === 1 ? '1 bruker' : `${data.updated} brukere`} ${verb}`,
         skipped > 0 ? 'error' : 'success'
       );
       setSelectedIds(new Set());
       setBulkAction(null);
       fetchUsers();
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setBulkLoading(false);
     }
@@ -313,7 +327,7 @@ export default function AdminUsersPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Brukere</h1>
+        <PageHeader title="Brukere" description={DESCRIPTION} />
         <TableSkeleton />
       </div>
     );
@@ -321,23 +335,27 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Brukere</h1>
-        <div className="flex gap-2">
-          <button
-            onClick={() => window.open('/api/admin/users/export')}
-            className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Eksporter CSV
-          </button>
-          <button
-            onClick={() => setFormModal({ mode: 'create', user: null })}
-            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            + Ny bruker
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Brukere"
+        description={DESCRIPTION}
+        actions={
+          <>
+            <button
+              onClick={() => setFormModal({ mode: 'create', user: null })}
+              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              + Ny bruker
+            </button>
+            <button
+              onClick={() => window.open('/api/admin/users/export')}
+              title="Laster ned alle brukerne som en fil du kan åpne i Excel"
+              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Last ned til Excel
+            </button>
+          </>
+        }
+      />
 
       {/* Stats bar */}
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -357,7 +375,14 @@ export default function AdminUsersPage() {
 
       {users.length === 0 && !searchQuery && roleFilter === 'all' && statusFilter === 'all' ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-gray-500">Ingen brukere funnet.</p>
+          <p className="text-gray-900 font-medium">Ingen brukere ennå</p>
+          <p className="mt-1 text-gray-500">Kontoer opprettes når noen melder seg på via nettsiden, eller når du lager en selv.</p>
+          <button
+            onClick={() => setFormModal({ mode: 'create', user: null })}
+            className="mt-4 bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+          >
+            + Ny bruker
+          </button>
         </div>
       ) : (
         <>
@@ -393,8 +418,8 @@ export default function AdminUsersPage() {
             >
               <option value="all">Alle statuser</option>
               <option value="active">Aktiv</option>
-              <option value="deactivated">Deaktivert</option>
-              <option value="anonymized">Anonymisert</option>
+              <option value="deactivated">Stengt</option>
+              <option value="anonymized">Persondata slettet</option>
             </select>
           </div>
           <p className="text-sm text-gray-500 mb-4">
@@ -410,13 +435,13 @@ export default function AdminUsersPage() {
                 onClick={() => setBulkAction('deactivate')}
                 className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
               >
-                Deaktiver
+                Steng kontoene
               </button>
               <button
                 onClick={() => setBulkAction('reactivate')}
                 className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
               >
-                Reaktiver
+                Åpne kontoene
               </button>
               <button
                 onClick={() => setSelectedIds(new Set())}
@@ -446,7 +471,13 @@ export default function AdminUsersPage() {
                     <th className="px-4 py-3 text-left hidden lg:table-cell">Kontakt</th>
                     <th className="px-4 py-3 text-left hidden 2xl:table-cell">Barn</th>
                     <th className="px-4 py-3 text-left hidden 2xl:table-cell" title="Påmeldinger">Påm.</th>
-                    <th className="px-4 py-3 text-left">Rolle</th>
+                    <th className="px-4 py-3 text-left">
+                      Rolle
+                      <HelpTip label="Roller">
+                        Forelder: ser bare egne påmeldinger. Admin: jobber i admin med kurs, påmeldinger og kontakter.
+                        Superadmin: kan i tillegg endre innstillinger og andre administratorer.
+                      </HelpTip>
+                    </th>
                     <th className="px-4 py-3 text-left">Status</th>
                     <th className="px-4 py-3 text-left hidden 2xl:table-cell">Opprettet</th>
                     {/* Handlinger klebes til høyre, så de alltid er synlige når tabellen scroller. */}
@@ -508,7 +539,7 @@ export default function AdminUsersPage() {
                               value={user.role}
                               onChange={(e) => {
                                 e.stopPropagation();
-                                updateRole(user.id, e.target.value);
+                                setPendingRole({ user, role: e.target.value });
                               }}
                               onClick={(e) => e.stopPropagation()}
                               disabled={updatingId === user.id || !manageable}
@@ -543,7 +574,7 @@ export default function AdminUsersPage() {
                                   : 'bg-green-100 text-green-800'
                               }`}
                             >
-                              {status === 'anonymized' ? 'Anonymisert' : status === 'deactivated' ? 'Deaktivert' : 'Aktiv'}
+                              {status === 'anonymized' ? 'Persondata slettet' : status === 'deactivated' ? 'Stengt' : 'Aktiv'}
                             </span>
                           </td>
                           <td className="px-4 py-4 text-gray-500 hidden 2xl:table-cell whitespace-nowrap">
@@ -577,13 +608,13 @@ export default function AdminUsersPage() {
                                   }
                                   className="text-xs font-medium text-gray-600 hover:underline"
                                 >
-                                  {status === 'deactivated' ? 'Reaktiver' : 'Deaktiver'}
+                                  {status === 'deactivated' ? 'Åpne konto' : 'Steng konto'}
                                 </button>
                                 <button
                                   onClick={() => setConfirm({ user, action: 'anonymize' })}
                                   className="text-xs font-medium text-red-600 hover:underline"
                                 >
-                                  Anonymiser
+                                  Slett persondata
                                 </button>
                               </div>
                             ) : (
@@ -689,15 +720,32 @@ export default function AdminUsersPage() {
           open
           loading={bulkLoading}
           variant={bulkAction === 'deactivate' ? 'warning' : 'info'}
-          title={bulkAction === 'deactivate' ? 'Deaktiver valgte brukere?' : 'Reaktiver valgte brukere?'}
+          title={bulkAction === 'deactivate' ? 'Stenge kontoene?' : 'Åpne kontoene igjen?'}
           message={
             bulkAction === 'deactivate'
-              ? `${selectedIds.size} bruker(e) kan ikke logge inn før kontoene reaktiveres. All data beholdes.`
-              : `${selectedIds.size} bruker(e) kan logge inn igjen.`
+              ? `${selectedIds.size === 1 ? '1 bruker' : `${selectedIds.size} brukere`} kan ikke logge inn før du åpner kontoene igjen. Ingenting slettes.`
+              : `${selectedIds.size === 1 ? '1 bruker' : `${selectedIds.size} brukere`} kan logge inn igjen.`
           }
-          confirmLabel={bulkAction === 'deactivate' ? 'Deaktiver' : 'Reaktiver'}
+          confirmLabel={bulkAction === 'deactivate' ? 'Steng kontoene' : 'Åpne kontoene'}
           onConfirm={runBulkAction}
           onCancel={() => setBulkAction(null)}
+        />
+      )}
+
+      {pendingRole && (
+        <ConfirmModal
+          open
+          variant={pendingRole.role === 'parent' ? 'warning' : 'info'}
+          title={`Gjøre ${pendingRole.user.parent?.name || pendingRole.user.email} til ${(ROLE_LABELS[pendingRole.role] ?? pendingRole.role).toLowerCase()}?`}
+          message={roleChangeMessage(pendingRole.user.parent?.name || pendingRole.user.email, pendingRole.role)}
+          confirmLabel="Ja, endre rolle"
+          loading={updatingId === pendingRole.user.id}
+          onConfirm={async () => {
+            const { user, role } = pendingRole;
+            await updateRole(user.id, role);
+            setPendingRole(null);
+          }}
+          onCancel={() => setPendingRole(null)}
         />
       )}
 
@@ -708,20 +756,20 @@ export default function AdminUsersPage() {
           variant={confirm.action === 'anonymize' ? 'danger' : confirm.action === 'deactivate' ? 'warning' : 'info'}
           title={
             confirm.action === 'anonymize'
-              ? 'Anonymiser bruker?'
+              ? 'Slette personopplysningene?'
               : confirm.action === 'deactivate'
-              ? 'Deaktiver bruker?'
-              : 'Reaktiver bruker?'
+              ? 'Stenge kontoen?'
+              : 'Åpne kontoen igjen?'
           }
           message={
             confirm.action === 'anonymize'
               ? 'Persondata slettes permanent: navn, kontaktinfo og barn, CRM-kontakten (notater, samtykke, tagger), forespørsler og innholdet i sendte e-poster. Påmeldinger, bookinger og betalinger beholdes avidentifisert for regnskapet. Dette kan ikke angres.'
               : confirm.action === 'deactivate'
-              ? 'Brukeren kan ikke logge inn før kontoen reaktiveres. All data beholdes.'
-              : 'Brukeren kan logge inn igjen.'
+              ? 'Brukeren kan ikke logge inn før du åpner kontoen igjen. Ingenting slettes.'
+              : 'Brukeren kan logge inn igjen med sin e-post.'
           }
           confirmLabel={
-            confirm.action === 'anonymize' ? 'Anonymiser' : confirm.action === 'deactivate' ? 'Deaktiver' : 'Reaktiver'
+            confirm.action === 'anonymize' ? 'Ja, slett for godt' : confirm.action === 'deactivate' ? 'Steng kontoen' : 'Åpne kontoen'
           }
           onConfirm={runConfirmedAction}
           onCancel={() => setConfirm(null)}

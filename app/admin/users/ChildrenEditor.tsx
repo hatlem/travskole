@@ -73,16 +73,16 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
         }
       );
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Kunne ikke lagre barnet');
+      if (!res.ok) throw new Error(data.error || 'Barnet ble ikke lagret. Sjekk navnet og prøv igjen.');
       onChange(
         creating
           ? [...items, data.child]
           : items.map((c) => (c.id === data.child.id ? data.child : c))
       );
       setEditingId(null);
-      toast(creating ? 'Barn lagt til' : 'Barn oppdatert', 'success');
+      toast(creating ? 'Barnet er lagt til' : 'Endringene er lagret', 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setSaving(false);
     }
@@ -95,11 +95,11 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
         method: 'DELETE',
       });
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || 'Kunne ikke fjerne barnet');
+      if (!res.ok) throw new Error(data.error || 'Barnet ble ikke fjernet. Prøv igjen.');
       onChange(items.filter((c) => c.id !== child.id));
-      toast('Barn fjernet', 'success');
+      toast('Barnet er fjernet', 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setBusyId(null);
       setConfirmRemove(null);
@@ -209,8 +209,8 @@ export function ChildrenEditor({ userId, items, onChange }: ChildrenEditorProps)
 
       <ConfirmModal
         open={confirmRemove !== null}
-        title="Fjern barn"
-        message={`Fjern ${confirmRemove?.name ?? 'barnet'}? Påmeldingshistorikken beholdes.`}
+        title="Fjerne barnet?"
+        message={`${confirmRemove?.name ?? 'Barnet'} fjernes fra familien. Tidligere påmeldinger beholdes.`}
         confirmLabel="Fjern"
         variant="danger"
         loading={busyId !== null}

@@ -80,11 +80,11 @@ export function UserFormModal({ open, mode, user, isSuperAdmin, onClose, onSaved
 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Kunne ikke lagre bruker');
+        setError(data.error || 'Brukeren ble ikke lagret. Sjekk e-postadressen og prøv igjen.');
         setSaving(false);
         return;
       }
-      onSaved(mode === 'create' ? 'Bruker opprettet' : 'Bruker oppdatert');
+      onSaved(mode === 'create' ? 'Brukeren er opprettet' : 'Endringene er lagret');
       onClose();
     } catch {
       setError('Noe gikk galt. Prøv igjen.');
