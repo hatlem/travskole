@@ -9,6 +9,7 @@ import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
 import { EVENT_LABELS, eventLabel, eventSourceLabel, groupedEventTypes } from '@/lib/flows/event-labels';
+import { describeEventMeta, formatEventTime } from '@/lib/crm/event-details';
 
 interface EventRow {
   id: number;
@@ -184,42 +185,78 @@ function HendelserContent() {
             : undefined}
         />
       ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-lg">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50 text-left text-gray-600">
-              <tr>
-                <th className="px-4 py-3 font-medium">Tidspunkt</th>
-                <th className="px-4 py-3 font-medium">Hva skjedde</th>
-                <th className="px-4 py-3 font-medium">Hvor</th>
-                <th className="px-4 py-3 font-medium">Kontakt</th>
-                <th className="px-4 py-3 font-medium">Detaljer</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {events.map((e) => (
-                <tr key={e.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-600 whitespace-nowrap">
-                    {new Date(e.occurredAt).toLocaleString('nb-NO')}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="font-medium">{eventLabel(e.type)}</span>
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{sourceLabel(e.source)}</td>
-                  <td className="px-4 py-3">
-                    {e.contact ? (
-                      <Link href={`/admin/crm/kontakter/${e.contact.id}`} className="text-blue-700 hover:underline">
-                        {e.contact.name}
-                      </Link>
-                    ) : '—'}
-                  </td>
-                  <td className="px-4 py-3">
+        <>
+          <ul className="space-y-2 md:hidden" aria-label="Hendelser">
+            {events.map((e) => {
+              const summary = describeEventMeta(e.type, e.meta);
+              return (
+                <li key={e.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-medium text-gray-900">{eventLabel(e.type)}</p>
+                    <time dateTime={e.occurredAt} className="shrink-0 text-xs text-gray-500 tabular-nums">
+                      {formatEventTime(e.occurredAt)}
+                    </time>
+                  </div>
+                  {summary && <p className="mt-0.5 break-words text-gray-600">{summary}</p>}
+                  <p className="mt-1 text-xs text-gray-500">
+                    {sourceLabel(e.source)}
+                    {e.contact && (
+                      <>
+                        {' · '}
+                        <Link href={`/admin/crm/kontakter/${e.contact.id}`} className="text-blue-700 hover:underline">
+                          {e.contact.name}
+                        </Link>
+                      </>
+                    )}
+                  </p>
+                  <div className="mt-2 text-xs">
                     <EventDetails meta={e.meta} type={e.type} source={e.source} />
-                  </td>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="hidden md:block overflow-x-auto border border-gray-200 rounded-lg">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Tidspunkt</th>
+                  <th className="px-4 py-3 font-medium">Hva skjedde</th>
+                  <th className="px-4 py-3 font-medium">Hvor</th>
+                  <th className="px-4 py-3 font-medium">Kontakt</th>
+                  <th className="px-4 py-3 font-medium">Detaljer</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {events.map((e) => {
+                  const summary = describeEventMeta(e.type, e.meta);
+                  return (
+                    <tr key={e.id} className="hover:bg-gray-50 align-top">
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap tabular-nums">
+                        <time dateTime={e.occurredAt}>{formatEventTime(e.occurredAt)}</time>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="font-medium">{eventLabel(e.type)}</span>
+                        {summary && <span className="block max-w-sm break-words text-gray-600">{summary}</span>}
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{sourceLabel(e.source)}</td>
+                      <td className="px-4 py-3">
+                        {e.contact ? (
+                          <Link href={`/admin/crm/kontakter/${e.contact.id}`} className="text-blue-700 hover:underline">
+                            {e.contact.name}
+                          </Link>
+                        ) : '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <EventDetails meta={e.meta} type={e.type} source={e.source} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {!loading && !loadError && events.length > 0 && (
