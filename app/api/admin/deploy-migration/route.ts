@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
 
   const { secret, activateFlow: activateFlowId } = await request.json().catch(() => ({}));
   if (secret !== process.env.SEED_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   const applied: { migration: string; statements: number; skipped: number }[] = [];
@@ -181,7 +181,7 @@ export async function GET(request: NextRequest) {
   }
   const secret = request.nextUrl.searchParams.get('secret');
   if (secret !== process.env.SEED_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   try {

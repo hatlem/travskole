@@ -17,7 +17,7 @@ import { emailChangeLimiter, checkRateLimit } from '@/lib/rate-limiter';
 export async function POST(request: NextRequest) {
   const session = await getServerSession();
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   // SECURITY: rate limiting — bremser både passordgjetting og e-postbombing.

@@ -27,7 +27,7 @@ async function parseIds(params: Params['params']) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const ids = await parseIds(params);
   if (!ids) return NextResponse.json({ error: 'Ugyldig id' }, { status: 400 });
@@ -93,14 +93,14 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 export async function DELETE(_request: NextRequest, { params }: Params) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const ids = await parseIds(params);
   if (!ids) return NextResponse.json({ error: 'Ugyldig id' }, { status: 400 });
 
   try {
     const stages = await loadPipelineStages(ids.pipelineId);
-    if (!stages) return NextResponse.json({ error: 'Pipelinen ble ikke funnet' }, { status: 404 });
+    if (!stages) return NextResponse.json({ error: 'Salgstavlen ble ikke funnet' }, { status: 404 });
 
     const dealCount = await prisma.deal.count({ where: { stageId: ids.stageId } });
     const check = checkStageDeletion(stages, ids.stageId, dealCount);

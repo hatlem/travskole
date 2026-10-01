@@ -25,7 +25,7 @@ export async function POST(
 ) {
   const session = await getServerSession();
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   const { id: idParam } = await params;

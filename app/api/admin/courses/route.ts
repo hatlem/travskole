@@ -10,7 +10,7 @@ import logger from '@/lib/logger';
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   try {
@@ -29,7 +29,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   try {

@@ -22,7 +22,7 @@ export async function GET(
 ) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const { id } = await params;
   const flowId = Number(id);
@@ -81,7 +81,7 @@ export async function PATCH(
 ) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const { id } = await params;
   const flowId = Number(id);
@@ -250,7 +250,7 @@ export async function DELETE(
 ) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const { id } = await params;
   const flowId = Number(id);

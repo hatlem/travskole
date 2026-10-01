@@ -11,7 +11,7 @@ import logger from '@/lib/logger';
  */
 async function resolve(idParam: string, email: string | null | undefined) {
   const childId = Number(idParam);
-  if (!email) return { error: 'Unauthorized', status: 401 as const };
+  if (!email) return { error: 'Du må være logget inn.', status: 401 as const };
   if (!Number.isInteger(childId)) return { error: 'Ugyldig id', status: 400 as const };
 
   const user = await prisma.user.findUnique({

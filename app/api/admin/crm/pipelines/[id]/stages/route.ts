@@ -30,7 +30,7 @@ async function readBody(request: NextRequest): Promise<unknown | undefined> {
 export async function POST(request: NextRequest, { params }: Params) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const pipelineId = Number((await params).id);
   if (!Number.isInteger(pipelineId)) {
@@ -45,7 +45,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   try {
     const stages = await loadPipelineStages(pipelineId);
-    if (!stages) return NextResponse.json({ error: 'Pipelinen ble ikke funnet' }, { status: 404 });
+    if (!stages) return NextResponse.json({ error: 'Salgstavlen ble ikke funnet' }, { status: 404 });
 
     const stage = await prisma.stage.create({
       data: {
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest, { params }: Params) {
 export async function PATCH(request: NextRequest, { params }: Params) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const pipelineId = Number((await params).id);
   if (!Number.isInteger(pipelineId)) {
@@ -88,7 +88,7 @@ export async function PATCH(request: NextRequest, { params }: Params) {
 
   try {
     const stages = await loadPipelineStages(pipelineId);
-    if (!stages) return NextResponse.json({ error: 'Pipelinen ble ikke funnet' }, { status: 404 });
+    if (!stages) return NextResponse.json({ error: 'Salgstavlen ble ikke funnet' }, { status: 404 });
 
     const plan = planReorder(stages, parsed.data.stageIds);
     if (!plan.ok) return NextResponse.json({ error: plan.error }, { status: 400 });

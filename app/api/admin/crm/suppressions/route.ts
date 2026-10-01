@@ -10,7 +10,7 @@ import { normalizeEmail } from '@/lib/crm/normalize';
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const suppressions = await prisma.suppression.findMany({ orderBy: { createdAt: 'desc' } });
   return NextResponse.json({ suppressions });
@@ -24,7 +24,7 @@ const createSchema = z.object({
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   let body;
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   // Å gjenåpne utsending til en sperret adresse er et personvernvalg — kun superadmin.
   if (!isSuperAdmin(session.user.role)) {

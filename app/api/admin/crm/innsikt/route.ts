@@ -160,7 +160,7 @@ async function safeSection<T>(name: string, fn: () => Promise<T>): Promise<T | n
 
 export async function GET() {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
 
   const now = new Date();
   const [flows, pipeline, visits, suggestions] = await Promise.all([

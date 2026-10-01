@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
     const { message, screenshots, pageUrl: bodyPageUrl } = await req.json();
 
     if (!message?.trim()) {
-      return NextResponse.json({ error: "Message is required" }, { status: 400 });
+      return NextResponse.json({ error: "Skriv en tilbakemelding først." }, { status: 400 });
     }
 
     const pageUrl = bodyPageUrl || req.headers.get("referer") || undefined;
@@ -27,7 +27,7 @@ export async function POST(req: NextRequest) {
         "Feedback not delivered: GETPLATFORM_API_KEY is not configured on this deployment"
       );
       return NextResponse.json(
-        { error: "Feedback service is not configured" },
+        { error: "Tilbakemeldinger er ikke satt opp ennå." },
         { status: 503 }
       );
     }
@@ -50,14 +50,14 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      logger.error("Failed to send feedback", { responseText: await response.text() });
-      return NextResponse.json({ error: "Failed to send feedback" }, { status: 500 });
+      logger.error("Tilbakemeldingen ble ikke sendt. Prøv igjen.", { responseText: await response.text() });
+      return NextResponse.json({ error: "Tilbakemeldingen ble ikke sendt. Prøv igjen." }, { status: 500 });
     }
 
     const data = await response.json();
     return NextResponse.json({ success: true, id: data.id });
   } catch (error) {
     logger.error("Feedback error", error instanceof Error ? error : undefined);
-    return NextResponse.json({ error: "Failed to send feedback" }, { status: 500 });
+    return NextResponse.json({ error: "Tilbakemeldingen ble ikke sendt. Prøv igjen." }, { status: 500 });
   }
 }

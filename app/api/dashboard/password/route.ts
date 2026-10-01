@@ -16,7 +16,7 @@ import { passwordChangeLimiter, checkRateLimit } from '@/lib/rate-limiter';
 export async function PUT(request: NextRequest) {
   const session = await getServerSession();
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   // SECURITY: rate limiting — bremser gjetting av det nåværende passordet.

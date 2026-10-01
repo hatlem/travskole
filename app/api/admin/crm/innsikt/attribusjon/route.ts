@@ -19,7 +19,7 @@ const querySchema = z.object({
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
 
   const parsed = querySchema.safeParse({ dager: request.nextUrl.searchParams.get('dager') || undefined });
   if (!parsed.success) return NextResponse.json({ error: 'Ugyldig periode' }, { status: 400 });

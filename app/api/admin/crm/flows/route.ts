@@ -9,7 +9,7 @@ import { ANCHOR_MODES } from '@/lib/flows/status';
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   const [flows, enrollmentCounts] = await Promise.all([
@@ -46,7 +46,7 @@ const createSchema = z.object({
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   let body;

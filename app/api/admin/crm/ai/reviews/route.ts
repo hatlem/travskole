@@ -15,7 +15,7 @@ const HANDLED_LIMIT = 50;
  */
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
 
   const sp = request.nextUrl.searchParams;
   // Fane-merket hentes på hver CRM-side — hold det til én count-spørring.

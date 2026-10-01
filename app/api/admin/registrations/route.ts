@@ -45,7 +45,7 @@ const adminRegistrationSchema = z.object({
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   try {
@@ -203,7 +203,7 @@ function syncAndEmitCreated(
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   try {

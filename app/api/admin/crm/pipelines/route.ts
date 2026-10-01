@@ -7,7 +7,7 @@ import { resolveDealPayment } from '@/lib/crm/deal-payment';
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   await ensureDefaultPipeline();

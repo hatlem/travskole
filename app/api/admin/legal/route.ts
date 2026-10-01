@@ -15,7 +15,7 @@ function isLegalKey(key: unknown): key is LegalPageMeta['key'] {
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   const rows = await prisma.setting.findMany({ where: { key: { in: ALLOWED_KEYS } } });
@@ -40,7 +40,7 @@ export async function GET() {
 export async function PUT(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   const body = await request.json().catch(() => null);

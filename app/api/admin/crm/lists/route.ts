@@ -8,7 +8,7 @@ import { logActivity } from '@/lib/activity';
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   const lists = await prisma.contactList.findMany({
@@ -26,7 +26,7 @@ const createSchema = z.object({ name: z.string().min(1, 'Navn er påkrevd').max(
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   let body;

@@ -16,7 +16,7 @@ export async function PATCH(
 ) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   const pipelineId = Number((await params).id);
   if (!Number.isInteger(pipelineId)) {
@@ -50,7 +50,7 @@ export async function PATCH(
     return NextResponse.json({ pipeline });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2025') return NextResponse.json({ error: 'Pipelinen ble ikke funnet' }, { status: 404 });
+      if (error.code === 'P2025') return NextResponse.json({ error: 'Salgstavlen ble ikke funnet' }, { status: 404 });
       if (error.code === 'P2002') return NextResponse.json({ error: 'En pipeline med dette navnet finnes allerede' }, { status: 409 });
     }
     logger.error('Error renaming pipeline', { error });

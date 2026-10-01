@@ -117,7 +117,7 @@ export async function POST(request: NextRequest) {
 
   // Ingen sesjon og ingen token oppgitt: ingenting å bevise eierskap med.
   if (!sessionEmail && !token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   const target: TargetResult =
@@ -143,7 +143,7 @@ export async function POST(request: NextRequest) {
     if (sessionEmail) {
       return NextResponse.json({ error: 'Ingen tilgang' }, { status: 403 });
     }
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   if (isSettledPaymentStatus(target.paymentStatus)) {

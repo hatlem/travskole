@@ -18,7 +18,7 @@ const schema = z.object({
 /** Kjører personaliseringen for én kontakt uten å sende noe. */
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
 
   let body;
   try {

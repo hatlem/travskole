@@ -14,7 +14,7 @@ import {
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   await ensureSenderIdentitiesSeeded();
@@ -53,7 +53,7 @@ const createSchema = z.object({
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   if (!isSuperAdmin(session.user.role)) {
     return NextResponse.json({ error: 'Kun superadmin kan legge til avsendere' }, { status: 403 });
@@ -120,7 +120,7 @@ const patchSchema = z
 export async function PATCH(request: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   let body;

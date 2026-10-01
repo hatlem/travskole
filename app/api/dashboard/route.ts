@@ -58,7 +58,7 @@ export async function PUT(request: NextRequest) {
   const session = await getServerSession();
 
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -108,7 +108,7 @@ export async function GET() {
   const session = await getServerSession();
 
   if (!session?.user?.email) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
   }
 
   const user = await prisma.user.findUnique({
@@ -133,7 +133,7 @@ export async function GET() {
   });
 
   if (!user) {
-    return NextResponse.json({ error: 'User not found' }, { status: 404 });
+    return NextResponse.json({ error: 'Fant ikke brukeren.' }, { status: 404 });
   }
 
   // hasPassword styrer om passord-seksjonen ber om det nåværende passordet:

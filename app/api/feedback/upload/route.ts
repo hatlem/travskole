@@ -22,15 +22,15 @@ export async function POST(req: NextRequest) {
     try {
       formData = await req.formData();
     } catch {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Velg et bilde å laste opp." }, { status: 400 });
     }
     const file = formData.get("file") as File | null;
 
     if (!file) {
-      return NextResponse.json({ error: "No file provided" }, { status: 400 });
+      return NextResponse.json({ error: "Velg et bilde å laste opp." }, { status: 400 });
     }
     if (!ALLOWED_TYPES.includes(file.type) || file.size > MAX_SIZE) {
-      return NextResponse.json({ error: "Invalid file" }, { status: 400 });
+      return NextResponse.json({ error: "Filen er ikke et gyldig bilde." }, { status: 400 });
     }
 
     const gpFormData = new FormData();
@@ -42,13 +42,13 @@ export async function POST(req: NextRequest) {
     });
 
     if (!response.ok) {
-      return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+      return NextResponse.json({ error: "Bildet ble ikke lastet opp. Prøv igjen." }, { status: 500 });
     }
 
     const data = await response.json();
     return NextResponse.json({ url: `${GETPLATFORM_URL}${data.url}` });
   } catch (error) {
     logger.error("Upload error", error instanceof Error ? error : undefined);
-    return NextResponse.json({ error: "Upload failed" }, { status: 500 });
+    return NextResponse.json({ error: "Bildet ble ikke lastet opp. Prøv igjen." }, { status: 500 });
   }
 }

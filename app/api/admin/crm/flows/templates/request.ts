@@ -15,7 +15,7 @@ type Parsed =
 export async function parseTemplateRequest(request: NextRequest): Promise<Parsed> {
   const session = await requireAdmin();
   if (!session) {
-    return { ok: false, response: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) };
+    return { ok: false, response: NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 }) };
   }
   if (!isSuperAdmin(session.user.role)) {
     return { ok: false, response: NextResponse.json({ error: 'Kun superadmin kan legge til maler' }, { status: 403 }) };

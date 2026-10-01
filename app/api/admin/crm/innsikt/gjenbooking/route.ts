@@ -17,7 +17,7 @@ const querySchema = z.object({
 
 export async function GET(request: NextRequest) {
   const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!session) return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
 
   const sp = request.nextUrl.searchParams;
   const parsed = querySchema.safeParse({ aar: sp.get('aar') || undefined, type: sp.get('type') || undefined });

@@ -21,7 +21,7 @@ const postSchema = z.object({
 export async function GET() {
   const session = await requireSuperAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
   try {
     const missing = await countMissingCrmDeals();
@@ -35,7 +35,7 @@ export async function GET() {
 export async function POST(request: NextRequest) {
   const session = await requireSuperAdmin();
   if (!session) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Du må være logget inn som administrator.' }, { status: 401 });
   }
 
   let body: unknown;
