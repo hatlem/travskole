@@ -61,7 +61,7 @@ describe('checkStageDeletion', () => {
   it('refuses with 409 when the stage has deals', () => {
     const res = checkStageDeletion(stages, 2, 3);
     expect(res).toMatchObject({ ok: false, status: 409 });
-    expect(!res.ok && res.error).toMatch(/3 deals.*Flytt/);
+    expect(!res.ok && res.error).toMatch(/3 avtaler.*Flytt/);
   });
   it('refuses deleting the last lost stage', () => {
     expect(checkStageDeletion(stages, 6, 0)).toMatchObject({ ok: false, status: 409, error: expect.stringMatching(/tapt/) });
@@ -106,7 +106,7 @@ describe('planReorder / nextStagePosition', () => {
 describe('stageDeleteBlockedReason', () => {
   it('explains why a stage with deals cannot be deleted', () => {
     expect(stageDeleteBlockedReason(0)).toBeNull();
-    expect(stageDeleteBlockedReason(1)).toBe('Stadiet har 1 deal. Flytt dem til et annet stadium før du sletter.');
-    expect(stageDeleteBlockedReason(3)).toContain('3 deals');
+    expect(stageDeleteBlockedReason(1)).toBe('Steget har 1 avtale. Flytt den til et annet steg på salgstavlen før du sletter.');
+    expect(stageDeleteBlockedReason(3)).toContain('3 avtaler');
   });
 });

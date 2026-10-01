@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { useToast } from '@/components/admin/Toast';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { stageDeleteBlockedReason, stageRole, type StageRole } from '@/lib/crm/stages';
 
 export interface EditableStage {
@@ -25,7 +26,7 @@ interface StageEditorProps {
 }
 
 const ROLE_OPTIONS: { value: StageRole; label: string }[] = [
-  { value: 'open', label: 'Åpen' },
+  { value: 'open', label: 'Pågår' },
   { value: 'won', label: 'Vunnet' },
   { value: 'lost', label: 'Tapt' },
 ];
@@ -63,14 +64,14 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Noe gikk galt', 'error');
+        toast(data.error || 'Endringen ble ikke lagret. Prøv igjen.', 'error');
         return false;
       }
       toast(success, 'success');
       await onChanged();
       return true;
     } catch {
-      toast('Noe gikk galt. Prøv igjen.', 'error');
+      toast('Endringen ble ikke lagret — sjekk nettforbindelsen og prøv igjen.', 'error');
       return false;
     } finally {
       setBusy(false);
@@ -80,19 +81,19 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
   function renamePipeline() {
     const trimmed = name.trim();
     if (!trimmed || trimmed === pipelineName) return;
-    request(base, 'PATCH', { name: trimmed }, 'Pipelinen har fått nytt navn');
+    request(base, 'PATCH', { name: trimmed }, 'Salgstavlen har fått nytt navn');
   }
 
   function renameStage(stage: EditableStage, next: string) {
     const trimmed = next.trim();
     if (!trimmed || trimmed === stage.name) return;
-    request(`${base}/stages/${stage.id}`, 'PATCH', { name: trimmed }, 'Stadiet har fått nytt navn');
+    request(`${base}/stages/${stage.id}`, 'PATCH', { name: trimmed }, 'Steget har fått nytt navn');
   }
 
   function changeRole(stage: EditableStage, role: StageRole) {
     if (role === stageRole(stage)) return;
     const run = async () => {
-      await request(`${base}/stages/${stage.id}`, 'PATCH', { role }, 'Stadiets type er endret');
+      await request(`${base}/stages/${stage.id}`, 'PATCH', { role }, 'Steget har fått ny type');
     };
     if (stage.dealCount === 0) {
       run();
@@ -100,8 +101,8 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
     }
     const label = ROLE_OPTIONS.find((o) => o.value === role)!.label.toLowerCase();
     setConfirm({
-      title: 'Endre type på stadiet?',
-      message: `«${stage.name}» har ${stage.dealCount} deals. De får status «${label}» når stadiet endres.`,
+      title: 'Endre type på steget?',
+      message: `«${stage.name}» har ${stage.dealCount} ${stage.dealCount === 1 ? 'avtale' : 'avtaler'}. ${stage.dealCount === 1 ? 'Den' : 'Alle'} får status «${label}» når du endrer typen.`,
       confirmLabel: 'Endre type',
       variant: 'warning',
       run,
@@ -118,12 +119,12 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
 
   function removeStage(stage: EditableStage) {
     setConfirm({
-      title: 'Slette stadiet?',
-      message: `«${stage.name}» slettes permanent.`,
-      confirmLabel: 'Slett',
+      title: 'Slette steget?',
+      message: `Kolonnen «${stage.name}» fjernes fra salgstavlen for godt. Steget er tomt, så ingen avtaler påvirkes.`,
+      confirmLabel: 'Slett steget',
       variant: 'danger',
       run: async () => {
-        await request(`${base}/stages/${stage.id}`, 'DELETE', undefined, 'Stadiet er slettet');
+        await request(`${base}/stages/${stage.id}`, 'DELETE', undefined, 'Steget er slettet');
       },
     });
   }
@@ -132,7 +133,7 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
     e.preventDefault();
     const trimmed = newStageName.trim();
     if (!trimmed) return;
-    const ok = await request(`${base}/stages`, 'POST', { name: trimmed, role: newStageRole }, 'Stadiet er lagt til');
+    const ok = await request(`${base}/stages`, 'POST', { name: trimmed, role: newStageRole }, 'Steget er lagt til på salgstavlen');
     if (ok) {
       setNewStageName('');
       setNewStageRole('open');
@@ -149,14 +150,20 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
       <div className="fixed inset-0 bg-black/50" />
       <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-lg bg-white p-6 shadow-xl">
         <div className="flex items-start justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">Rediger stadier</h3>
+          <div>
+            <h3 className="flex items-center text-lg font-semibold text-gray-900">
+              Endre steg på salgstavlen
+              <HelpTip term="stage" />
+            </h3>
+            <p className="mt-0.5 text-sm text-gray-600">Hvert steg er en kolonne på tavla. Gi dem navn, endre rekkefølgen eller legg til nye.</p>
+          </div>
           <button onClick={onClose} disabled={busy} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Lukk">
             ×
           </button>
         </div>
 
         <section className="mb-6">
-          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="pipeline-name">Navn på pipeline</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1" htmlFor="pipeline-name">Navn på salgstavlen</label>
           <div className="flex gap-2">
             <input
               id="pipeline-name"
@@ -177,15 +184,15 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
         </section>
 
         <section className="mb-6">
-          <h4 className="text-sm font-medium text-gray-700 mb-1">Stadier</h4>
+          <h4 className="text-sm font-medium text-gray-700 mb-1">Steg</h4>
           <p className="text-xs text-gray-500 mb-3">
-            Nye bookinger og påmeldinger havner i første åpne stadium. Bekreftede går til første vunnet-stadium,
-            kansellerte til første tapt-stadium. Pipelinen må ha minst ett av hver type.
+            Nye forespørsler og påmeldinger havner i det første «Pågår»-steget. Bekreftede flyttes til første
+            «Vunnet»-steg, avlyste til første «Tapt»-steg. Tavla må derfor ha minst ett steg av hver type.
           </p>
           <ul className="divide-y divide-gray-100 border border-gray-200 rounded-lg">
             {sorted.map((stage, index) => (
               <StageRow
-                // Nullstill utkastet når stadiet er lagret med nytt navn
+                // Nullstill utkastet når steget er lagret med nytt navn
                 key={`${stage.id}:${stage.name}`}
                 stage={stage}
                 busy={busy}
@@ -202,7 +209,7 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
         </section>
 
         <form onSubmit={addStage}>
-          <h4 className="text-sm font-medium text-gray-700 mb-2">Legg til stadium</h4>
+          <h4 className="text-sm font-medium text-gray-700 mb-2">Legg til steg</h4>
           <div className="flex flex-wrap gap-2">
             <input
               value={newStageName}
@@ -287,20 +294,20 @@ function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMove
         }}
         maxLength={60}
         disabled={busy}
-        aria-label="Navn på stadium"
+        aria-label="Navn på steget"
         className={`${inputClass} flex-1 min-w-32`}
       />
       <select
         value={role}
         onChange={(e) => onRoleChange(e.target.value as StageRole)}
         disabled={busy}
-        aria-label="Type"
+        aria-label="Type steg"
         className="border border-gray-300 rounded-md px-2 py-1.5 text-sm"
       >
         {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      <span className="text-xs text-gray-500 w-16 text-right tabular-nums">
-        {stage.dealCount} {stage.dealCount === 1 ? 'deal' : 'deals'}
+      <span className="text-xs text-gray-500 w-20 text-right tabular-nums">
+        {stage.dealCount} {stage.dealCount === 1 ? 'avtale' : 'avtaler'}
       </span>
       <div className="flex">
         <button onClick={onMoveUp} disabled={busy || isFirst} className={iconButton} aria-label="Flytt opp" title="Flytt opp">↑</button>
@@ -312,7 +319,7 @@ function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMove
           className={`px-2 py-1 text-sm rounded disabled:opacity-30 ${
             blockedReason ? 'text-red-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'
           }`}
-          title={blockedReason ?? 'Slett stadium'}
+          title={blockedReason ?? 'Slett steget'}
         >
           Slett
         </button>

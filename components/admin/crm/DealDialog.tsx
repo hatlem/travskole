@@ -87,7 +87,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
           fetch('/api/admin/crm/pipelines', { signal: controller.signal }),
           isEdit ? fetch(`/api/admin/crm/deals/${dealId}`, { signal: controller.signal }) : Promise.resolve(null),
         ]);
-        if (!pipeRes.ok) throw new Error('Kunne ikke laste pipelines');
+        if (!pipeRes.ok) throw new Error('Kunne ikke hente salgstavlen. Lukk og prøv igjen.');
         const pipeData = await pipeRes.json();
         const options: PipelineOption[] = (pipeData.pipelines ?? []).map(
           (p: { id: number; name: string; stages: { id: number; name: string }[] }) => ({
@@ -97,7 +97,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
         setPipelines(options);
 
         if (dealRes) {
-          if (!dealRes.ok) throw new Error('Kunne ikke laste deal');
+          if (!dealRes.ok) throw new Error('Kunne ikke hente avtalen. Den kan være slettet — lukk og last siden på nytt.');
           const { deal } = (await dealRes.json()) as { deal: LoadedDeal };
           setOriginal(deal);
           setTitle(deal.title);
@@ -119,7 +119,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
         }
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+        toast(err instanceof Error ? err.message : 'Kunne ikke hente avtalen. Lukk og prøv igjen.', 'error');
         onClose();
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -168,14 +168,14 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke lagre deal', 'error');
+        toast(data.error || 'Avtalen ble ikke lagret. Sjekk feltene og prøv igjen.', 'error');
         return;
       }
-      toast(isEdit ? 'Deal oppdatert' : 'Deal opprettet', 'success');
+      toast(isEdit ? 'Avtalen er lagret' : 'Avtalen er lagt på salgstavlen', 'success');
       onSaved({ id: data.deal.id });
       onClose();
     } catch {
-      toast('Kunne ikke lagre deal', 'error');
+      toast('Avtalen ble ikke lagret — sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setSaving(false);
     }
@@ -188,14 +188,14 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
       const res = await fetch(`/api/admin/crm/deals/${dealId}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke slette deal', 'error');
+        toast(data.error || 'Avtalen ble ikke slettet. Prøv igjen.', 'error');
         return;
       }
-      toast('Deal slettet', 'success');
+      toast('Avtalen er slettet', 'success');
       onDeleted?.(dealId);
       onClose();
     } catch {
-      toast('Kunne ikke slette deal', 'error');
+      toast('Avtalen ble ikke slettet — sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setSaving(false);
     }
@@ -203,12 +203,12 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
 
   const footer = confirmDelete ? (
     <div className="flex items-center gap-3">
-      <span className="text-sm text-red-700 flex-1">Slette denne dealen permanent?</span>
+      <span className="text-sm text-red-700 flex-1">Slette avtalen for godt? Den forsvinner fra salgstavlen, kontakten og bedriften. Dette kan ikke angres.</span>
       <button type="button" onClick={() => setConfirmDelete(false)} disabled={saving} className="text-sm text-gray-600 px-3 py-1.5">
         Avbryt
       </button>
       <button type="button" onClick={remove} disabled={saving} className="bg-red-600 text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50">
-        {saving ? 'Sletter …' : 'Slett'}
+        {saving ? 'Sletter …' : 'Ja, slett avtalen'}
       </button>
     </div>
   ) : (
@@ -228,14 +228,14 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
           disabled={!valid || saving || loading}
           className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
         >
-          {saving ? 'Lagrer …' : isEdit ? 'Lagre' : 'Opprett deal'}
+          {saving ? 'Lagrer …' : isEdit ? 'Lagre' : 'Legg til avtale'}
         </button>
       </div>
     </div>
   );
 
   return (
-    <CrmDialog open title={isEdit ? 'Rediger deal' : 'Ny deal'} onClose={onClose} busy={saving} footer={footer}>
+    <CrmDialog open title={isEdit ? 'Rediger avtale' : 'Ny avtale'} onClose={onClose} busy={saving} footer={footer}>
       {loading ? (
         <p className="text-sm text-gray-400 py-6 text-center">Laster …</p>
       ) : (
@@ -250,12 +250,12 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
               onChange={(e) => setTitle(e.target.value)}
               maxLength={300}
               autoFocus
-              placeholder="f.eks. Julebord Acme 2026"
+              placeholder="F.eks. Julebord Firma AS 2026"
               className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
             />
           </Field>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Pipeline" htmlFor="deal-pipeline">
+            <Field label="Salgstavle" htmlFor="deal-pipeline">
               <select
                 id="deal-pipeline"
                 value={pipelineId ?? ''}
@@ -265,7 +265,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
                 {pipelines.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </Field>
-            <Field label="Stadium" htmlFor="deal-stage">
+            <Field label="Steg" htmlFor="deal-stage" hint="Hvor langt avtalen har kommet">
               <select
                 id="deal-stage"
                 value={stageId ?? ''}
@@ -277,7 +277,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Verdi (kr)" htmlFor="deal-value" hint={parsedValue === undefined ? 'Ugyldig beløp' : undefined}>
+            <Field label="Verdi (kr)" htmlFor="deal-value" hint={parsedValue === undefined ? 'Skriv bare tall, f.eks. 25000' : undefined}>
               <input
                 id="deal-value"
                 inputMode="decimal"
@@ -316,11 +316,11 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
           <Field label="Bedrift">
             <EntityPicker kind="organization" value={organization} onChange={setOrganization} />
           </Field>
-          <Field label="Ansvarlig" htmlFor="deal-owner">
+          <Field label="Ansvarlig" htmlFor="deal-owner" hint="Den i staben som følger opp avtalen">
             <AssigneeSelect id="deal-owner" value={ownerId} onChange={setOwnerId} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full" />
           </Field>
           {original && original.source !== 'manual' && (
-            <p className="text-xs text-gray-400">Opprettet automatisk fra {original.source === 'booking' ? 'booking' : 'påmelding'}.</p>
+            <p className="text-xs text-gray-400">Opprettet automatisk fra {original.source === 'booking' ? 'en forespørsel på nettsiden' : 'en påmelding'}.</p>
           )}
           <button type="submit" className="hidden" aria-hidden tabIndex={-1} />
         </form>

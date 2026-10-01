@@ -9,6 +9,7 @@ import { useToast } from '@/components/admin/Toast';
 import { paymentStatusBadge } from '@/lib/payments/badge';
 import { StageEditor } from './StageEditor';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
+import { HelpTip } from '@/components/admin/HelpTip';
 
 interface DealCard {
   id: number;
@@ -50,7 +51,7 @@ export default function PipelinePage() {
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
-  // silent: oppdater tavla uten skjelett (brukes etter stadieredigering)
+  // silent: oppdater tavla uten skjelett (brukes etter redigering av steg)
   const load = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -59,7 +60,7 @@ export default function PipelinePage() {
     if (!silent) setLoading(true);
     try {
       const res = await fetch('/api/admin/crm/pipelines', { signal: controller.signal });
-      if (!res.ok) throw new Error('Kunne ikke laste pipeline');
+      if (!res.ok) throw new Error('Kunne ikke hente salgstavlen. Last siden på nytt om litt.');
       const data = await res.json();
       setPipelines(data.pipelines || []);
       setActivePipelineId((prev) => prev ?? data.pipelines?.[0]?.id ?? null);
@@ -70,7 +71,7 @@ export default function PipelinePage() {
         setLoadError(true);
         setPipelines([]);
       }
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste pipeline', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente salgstavlen. Last siden på nytt om litt.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -131,11 +132,11 @@ export default function PipelinePage() {
         // ikke-JSON svar; håndteres av res.ok-sjekken under
       }
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke flytte deal', 'error');
+        toast(data.error || 'Avtalen ble ikke flyttet og står der den sto. Prøv igjen.', 'error');
         applyDealMove(pipelineId, dealId, originStageId);
       }
     } catch {
-      toast('Kunne ikke flytte deal', 'error');
+      toast('Avtalen ble ikke flyttet — sjekk nettforbindelsen og prøv igjen.', 'error');
       applyDealMove(pipelineId, dealId, originStageId);
     } finally {
       setMovingIds((prev) => {
@@ -151,8 +152,8 @@ export default function PipelinePage() {
       <div>
         <CrmTabs />
         <EmptyState
-          title="Kunne ikke laste pipeline"
-          description="Noe gikk galt under henting av pipeline. Prøv igjen."
+          title="Kunne ikke hente salgstavlen"
+          description="Noe gikk galt da avtalene skulle hentes. Ingenting er endret — prøv igjen."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       </div>
@@ -180,16 +181,35 @@ export default function PipelinePage() {
     return (
       <div>
         <CrmTabs />
-        <EmptyState title="Ingen pipeline" description="Ingen pipeline er konfigurert ennå." />
+        <EmptyState
+          title="Salgstavlen er ikke satt opp ennå"
+          description="Salgstavlen opprettes automatisk når den første forespørselen kommer inn. Last siden på nytt om en stund, eller kontakt den som drifter løsningen."
+          action={{ label: 'Last på nytt', onClick: () => load() }}
+        />
       </div>
     );
   }
 
+  const totalDeals = pipeline.stages.reduce((acc, st) => acc + st.deals.length, 0);
+
   return (
     <div>
-      <CrmTabs />
+      <CrmTabs
+        actions={
+          <button
+            onClick={() => setDealDialog({ dealId: null })}
+            className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Ny avtale
+          </button>
+        }
+      />
       {pipelines.length > 1 && (
         <select
+          aria-label="Velg salgstavle"
           value={activePipelineId ?? ''}
           onChange={(e) => setActivePipelineId(Number(e.target.value))}
           className="border border-gray-300 rounded-md px-3 py-2 text-sm mb-4"
@@ -199,14 +219,24 @@ export default function PipelinePage() {
       )}
 
       <div className="flex items-center justify-between gap-3 mb-4">
-        <h2 className="font-semibold text-gray-900">{pipeline.name}</h2>
+        <h2 className="flex items-center font-semibold text-gray-900">
+          {pipeline.name}
+          <HelpTip term="pipeline" />
+        </h2>
         <button
           onClick={() => setEditingStages(true)}
           className="border border-gray-300 bg-white text-gray-700 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50"
         >
-          Rediger stadier
+          Endre steg
         </button>
       </div>
+
+      {totalDeals === 0 && (
+        <div className="mb-4 rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+          Ingen avtaler ennå. En avtale er et mulig salg, for eksempel «Julebord for Firma AS, 40 personer».
+          Trykk «Ny avtale» for å legge inn den første — eller vent: forespørsler fra nettsiden havner her av seg selv.
+        </div>
+      )}
 
       {editingStages && (
         <StageEditor
@@ -250,14 +280,17 @@ export default function PipelinePage() {
                   <button
                     onClick={() => setDealDialog({ dealId: null, stageId: stage.id })}
                     className="text-gray-500 hover:text-gray-900 text-base leading-none px-1"
-                    aria-label={`Ny deal i ${stage.name}`}
-                    title="Ny deal"
+                    aria-label={`Ny avtale i steget ${stage.name}`}
+                    title="Ny avtale i dette steget"
                   >
                     +
                   </button>
                 </span>
               </div>
               <div className="p-2 space-y-2 min-h-24">
+                {stage.deals.length === 0 && (
+                  <p className="px-1 py-4 text-center text-xs text-gray-400">Dra en avtale hit, eller trykk +</p>
+                )}
                 {stage.deals.map((deal) => {
                   const isMoving = movingIds.has(deal.id);
                   return (

@@ -52,14 +52,14 @@ function lastOfRoleError(role: StageRole): StageCheck {
   return {
     ok: false,
     status: 409,
-    error: `Pipelinen må ha minst ett ${STAGE_ROLE_LABELS[role]} stadium.`,
+    error: `Salgstavlen må ha minst ett ${STAGE_ROLE_LABELS[role]} steg. Lag et nytt ${STAGE_ROLE_LABELS[role]} steg først.`,
   };
 }
 
 /** Hvorfor et stadium ikke kan slettes på grunn av deals (null = ingen deals). Deles av API og UI. */
 export function stageDeleteBlockedReason(dealCount: number): string | null {
   if (dealCount <= 0) return null;
-  return `Stadiet har ${dealCount} ${dealCount === 1 ? 'deal' : 'deals'}. Flytt dem til et annet stadium før du sletter.`;
+  return `Steget har ${dealCount} ${dealCount === 1 ? 'avtale' : 'avtaler'}. Flytt ${dealCount === 1 ? 'den' : 'dem'} til et annet steg på salgstavlen før du sletter.`;
 }
 
 export function checkStageDeletion(
@@ -68,7 +68,7 @@ export function checkStageDeletion(
   dealCount: number,
 ): StageCheck {
   const stage = stages.find((s) => s.id === stageId);
-  if (!stage) return { ok: false, status: 404, error: 'Stadiet ble ikke funnet' };
+  if (!stage) return { ok: false, status: 404, error: 'Fant ikke steget. Last siden på nytt.' };
   const blocked = stageDeleteBlockedReason(dealCount);
   if (blocked) return { ok: false, status: 409, error: blocked };
   const missing = missingRole(stages.filter((s) => s.id !== stageId));
@@ -81,7 +81,7 @@ export function checkStageRoleChange(
   role: StageRole,
 ): StageCheck {
   const stage = stages.find((s) => s.id === stageId);
-  if (!stage) return { ok: false, status: 404, error: 'Stadiet ble ikke funnet' };
+  if (!stage) return { ok: false, status: 404, error: 'Fant ikke steget. Last siden på nytt.' };
   const after = stages.map((s) => (s.id === stageId ? { ...s, ...roleFlags(role) } : s));
   const missing = missingRole(after);
   return missing ? lastOfRoleError(missing) : { ok: true };
@@ -98,7 +98,7 @@ export function planReorder(
   const current = new Set(stages.map((s) => s.id));
   const next = new Set(orderedIds);
   if (next.size !== orderedIds.length || next.size !== current.size || orderedIds.some((id) => !current.has(id))) {
-    return { ok: false, error: 'Rekkefølgen må inneholde alle stadiene i pipelinen nøyaktig én gang' };
+    return { ok: false, error: 'Rekkefølgen ble ikke lagret fordi noen andre har endret stegene samtidig. Last siden på nytt og prøv igjen.' };
   }
   const positionById = new Map(stages.map((s) => [s.id, s.position]));
   const updates = orderedIds
