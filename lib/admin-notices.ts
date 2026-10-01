@@ -22,13 +22,16 @@ export interface AdminNotice {
 /** Kortere enn dette regnes som placeholder/tomt, ikke reell vilkårstekst. */
 const MIN_TERMS_LENGTH = 30;
 
+export const isRealTermsText = (text: string | null | undefined): boolean =>
+  (text ?? '').trim().length >= MIN_TERMS_LENGTH;
+
 export async function getPendingAdminNotices(): Promise<AdminNotice[]> {
   const notices: AdminNotice[] = [];
 
   // Vilkårsaksept-teksten i påmeldingsskjemaet må være reell juridisk tekst —
   // fanger både tomt felt og placeholder-verdier (f.eks. «x»).
   const terms = ((await getSetting('consent_terms_text')) ?? '').trim();
-  if (terms.length < MIN_TERMS_LENGTH) {
+  if (!isRealTermsText(terms)) {
     notices.push({
       id: 'consent-terms-placeholder',
       title: 'Vilkårsteksten i påmeldingsskjemaet må fylles inn',

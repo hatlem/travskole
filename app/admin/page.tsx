@@ -3,8 +3,12 @@ import Link from 'next/link';
 import { getServerSession } from '@/lib/auth';
 import { isSuperAdmin } from '@/lib/settings';
 import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
-import { getPendingAdminNotices } from '@/lib/admin-notices';
 import SuperadminNoticesDialog from '@/components/admin/SuperadminNoticesDialog';
+import { getPendingAdminNotices, isRealTermsText } from '@/lib/admin-notices';
+import { buildOnboardingSteps } from '@/lib/admin-onboarding';
+import { getSetting } from '@/lib/settings';
+import { GettingStartedChecklist } from '@/components/admin/GettingStartedChecklist';
+import { PageHeader } from '@/components/admin/PageHeader';
 
 export default async function AdminDashboard() {
   // Superadmin-oppgaver (vilkårstekst m.m.) — vises som dialog til de er utført.
@@ -26,6 +30,10 @@ export default async function AdminDashboard() {
     upcomingCourses,
     recentRegistrations,
     openCoursesWithCount,
+    contactInfoSettings,
+    importedContactCount,
+    flowCount,
+    termsText,
   ] = await Promise.all([
     prisma.course.count(),
     prisma.course.count({ where: { status: 'open' } }),
@@ -53,7 +61,19 @@ export default async function AdminDashboard() {
       where: { status: 'open', maxParticipants: { not: null } },
       include: occupiedRegistrationsCount,
     }),
+    prisma.setting.count({ where: { key: { in: ['contact_email', 'contact_phone'] } } }),
+    prisma.contact.count({ where: { source: 'import' } }),
+    prisma.flow.count({ where: { status: { not: 'template' } } }),
+    getSetting('consent_terms_text'),
   ]);
+
+  const onboardingSteps = buildOnboardingSteps({
+    courseCount: totalCourses,
+    contactInfoSaved: contactInfoSettings > 0,
+    importedContactCount,
+    flowCount,
+    termsWritten: isRealTermsText(termsText),
+  });
 
   const almostFullCourses = openCoursesWithCount.filter(
     (c) => c.maxParticipants && c._count.registrations / c.maxParticipants > 0.8
@@ -123,7 +143,26 @@ export default async function AdminDashboard() {
   return (
     <div>
       <SuperadminNoticesDialog notices={notices} />
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">Dashboard</h1>
+      <PageHeader
+        className="mb-8"
+        title="Dashboard"
+        description="Det viktigste akkurat nå: hva som venter på deg, og kursene som snart starter."
+        actions={
+          <Link
+            href="/admin/courses/new"
+            className="inline-flex items-center gap-2 rounded-md bg-bjerke-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
+          >
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+            Nytt kurs
+          </Link>
+        }
+      />
+
+      {session && (
+        <GettingStartedChecklist steps={onboardingSteps} userKey={session.user.email ?? String(session.user.id)} />
+      )}
 
       {/* Stats cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-10">
@@ -205,7 +244,12 @@ export default async function AdminDashboard() {
           </Link>
         </div>
         {upcomingCourses.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">Ingen kommende kurs.</div>
+          <div className="p-6 text-center">
+            <p className="text-gray-600">Ingen kurs med startdato fremover.</p>
+            <Link href="/admin/courses/new" className="mt-2 inline-block text-sm font-medium text-bjerke-blue hover:underline">
+              Lag et nytt kurs &rarr;
+            </Link>
+          </div>
         ) : (
           <div className="divide-y divide-gray-100">
             {upcomingCourses.map((course) => {
@@ -272,7 +316,9 @@ export default async function AdminDashboard() {
           </Link>
         </div>
         {recentRegistrations.length === 0 ? (
-          <div className="p-6 text-center text-gray-500">Ingen påmeldinger ennå.</div>
+          <div className="p-6 text-center text-gray-600">
+            Ingen påmeldinger ennå. De dukker opp her så snart noen melder seg på et kurs.
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
