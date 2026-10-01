@@ -263,6 +263,25 @@ export function isParkedForSendWindow(seed: number, nextRunAt: Date, w: SendWind
   return opensAt(t - sendJitterMs(seed, w)) || opensAt(t);
 }
 
+/**
+ * Strengere enn isParkedForSendWindow: `nextRunAt` er nøyaktig vindusåpning +
+ * enrollmentets egen spredning, slik `sendDeferral` parkerer. Brukes før et
+ * parkert løp vekkes, så et vente-/kurssteg som tilfeldigvis slutter ved
+ * vindusåpning (f.eks. midnatt) aldri hoppes over.
+ */
+export function isExactSendWindowParking(seed: number, nextRunAt: Date, w: SendWindow | null): boolean {
+  if (!w) return false;
+  const jitter = sendJitterMs(seed, w);
+  if (jitter === 0) return false;
+  const opening = nextRunAt.getTime() - jitter;
+  return isWithinWindow(new Date(opening), w) && !isWithinWindow(new Date(opening - 1), w);
+}
+
+export function sameSendWindow(a: SendWindow | null, b: SendWindow | null): boolean {
+  if (a === null || b === null) return a === b;
+  return formatSendWindowValue(a) === formatSendWindowValue(b);
+}
+
 export interface EnrollmentWaitState {
   id: number;
   status: string;

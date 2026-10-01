@@ -7,8 +7,14 @@ import { logActivity } from '@/lib/activity';
 import { exitActiveEnrollments } from '@/lib/flows/exit';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 import { ANCHOR_MODES, canDeleteStatus, isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
-import { flowSendWindowInputSchema, overrideToInput } from '@/lib/flows/send-window';
-import { deleteFlowSendWindowOverride, saveFlowSendWindowOverride } from '@/lib/flows/send-window-store';
+import {
+  flowSendWindowInputSchema, overrideToInput, resolveEffectiveSendWindow, sameSendWindow,
+} from '@/lib/flows/send-window';
+import {
+  deleteFlowSendWindowOverride, getFlowSendWindowState, saveFlowSendWindowOverride,
+} from '@/lib/flows/send-window-store';
+import { wakeSendWindowParked } from '@/lib/flows/runner';
+import logger from '@/lib/logger';
 
 export async function GET(
   request: NextRequest,
@@ -182,8 +188,19 @@ export async function PATCH(
         ...(data.status !== undefined && { status: data.status }),
       },
     });
+    let wokenEnrollments = 0;
     if (data.sendWindow !== undefined) {
+      const previous = await getFlowSendWindowState(flowId).catch(() => null);
       await saveFlowSendWindowOverride(flowId, data.sendWindow);
+      // Løp parkert til forrige sendetid vurderes på nytt — ellers venter de på det gamle vinduet.
+      if (previous && !sameSendWindow(previous.effective, resolveEffectiveSendWindow(previous.global, data.sendWindow))) {
+        wokenEnrollments = await wakeSendWindowParked(flowId, previous.effective).catch((error) => {
+          logger.error('Kunne ikke vekke parkerte løp etter ny sendetid', {
+            flowId, error: error instanceof Error ? error.message : String(error),
+          });
+          return 0;
+        });
+      }
     }
 
     // Arkivert er terminal — ingen kontakter skal bli stående «aktive» i en død flyt.
@@ -200,7 +217,7 @@ export async function PATCH(
         exitedEnrollments > 0 || data.sendWindow !== undefined
           ? JSON.stringify({
               ...(exitedEnrollments > 0 && { status: 'archived', exitedEnrollments }),
-              ...(data.sendWindow !== undefined && { sendWindow: data.sendWindow.mode }),
+              ...(data.sendWindow !== undefined && { sendWindow: data.sendWindow.mode, wokenEnrollments }),
             })
           : undefined,
       userEmail: session.user.email,
@@ -208,7 +225,7 @@ export async function PATCH(
     return NextResponse.json({
       flow,
       exitedEnrollments,
-      ...(data.sendWindow !== undefined && { sendWindow: overrideToInput(data.sendWindow) }),
+      ...(data.sendWindow !== undefined && { sendWindow: overrideToInput(data.sendWindow), wokenEnrollments }),
     });
   } catch (error) {
     if (

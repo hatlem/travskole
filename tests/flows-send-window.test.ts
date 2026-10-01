@@ -13,6 +13,7 @@ import {
   flowSendWindowInputSchema,
   flowSendWindowKey,
   formatSendTime,
+  isExactSendWindowParking,
   isParkedForSendWindow,
   isWaitingForSendWindow,
   isWithinWindow,
@@ -23,6 +24,7 @@ import {
   parseTime,
   resolveEffectiveSendWindow,
   resolveGlobalSendWindow,
+  sameSendWindow,
   sendDeferral,
   sendJitterMs,
   serializeFlowSendWindowOverride,
@@ -359,5 +361,33 @@ describe('tekster om når e-post sendes', () => {
     );
     expect(activatedFlowNote('når som helst')).toContain('innenfor flytens sendetider (nå: når som helst)');
     for (const text of [enrollTimingNote(label), activatedFlowNote(label)]) expect(text).not.toMatch(/med en gang|går nå ut/);
+  });
+});
+
+describe('isExactSendWindowParking / sameSendWindow', () => {
+  const night = new Date('2026-10-01T22:00:00Z');
+
+  it('kjenner igjen nøyaktig det sendDeferral parkerer til', () => {
+    for (const id of [1, 2, 77, 4093]) {
+      const resumeAt = sendDeferral(night, DEFAULT_SEND_WINDOW, id)!;
+      expect(isExactSendWindowParking(id, resumeAt, DEFAULT_SEND_WINDOW)).toBe(true);
+      expect(isExactSendWindowParking(id + 1, resumeAt, DEFAULT_SEND_WINDOW)).toBe(sendJitterMs(id + 1, DEFAULT_SEND_WINDOW) === sendJitterMs(id, DEFAULT_SEND_WINDOW));
+    }
+  });
+
+  it('et kurssteg som venter til midnatt er ikke en sendetid-parkering, selv når vinduet åpner 00:00', () => {
+    const midnightWindow = { ...DEFAULT_SEND_WINDOW, startHour: 0, startMinute: 0 };
+    const osloMidnight = new Date('2026-10-04T22:00:00Z');
+    expect(isParkedForSendWindow(5, osloMidnight, midnightWindow)).toBe(true);
+    expect(isExactSendWindowParking(5, osloMidnight, midnightWindow)).toBe(false);
+    expect(isExactSendWindowParking(5, new Date('2026-10-04T09:13:27.512Z'), DEFAULT_SEND_WINDOW)).toBe(false);
+    expect(isExactSendWindowParking(5, osloMidnight, null)).toBe(false);
+  });
+
+  it('sammenligner effektive vinduer', () => {
+    expect(sameSendWindow(null, null)).toBe(true);
+    expect(sameSendWindow(DEFAULT_SEND_WINDOW, null)).toBe(false);
+    expect(sameSendWindow(DEFAULT_SEND_WINDOW, { ...DEFAULT_SEND_WINDOW, days: [...DEFAULT_SEND_WINDOW.days].reverse() })).toBe(true);
+    expect(sameSendWindow(DEFAULT_SEND_WINDOW, { ...DEFAULT_SEND_WINDOW, endHour: 18 })).toBe(false);
   });
 });

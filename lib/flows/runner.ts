@@ -18,7 +18,7 @@ import { ENGAGEMENT_CONDITION_KINDS, parseNodeConfig, type FlowNodeType, type Gr
 import { planStep, type PlannedAction, type StepContext, type TaskActionPayload } from './step';
 import { sendFlowEmail } from './send';
 import { findReview } from '@/lib/ai/review';
-import type { SendWindow } from './send-window';
+import { isExactSendWindowParking, type SendWindow } from './send-window';
 import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
 
 export const BATCH_SIZE = 50;
@@ -552,4 +552,44 @@ export async function runEnrollmentNow(
   });
   if (count === 0) return { processed: 0, sent: 0, failed: 0, completed: 0 };
   return processClaimed(await claimDueEnrollmentIds(now, enrollmentId), now);
+}
+
+/**
+ * Etter endret sendetid: vekker løp som står parkert på en e-post-node og
+ * venter på at den FORRIGE sendetiden åpner, så de vurderes mot den nye
+ * (utenfor vinduet parkeres de bare på nytt). Vente-/kurssteg og KI-godkjenning
+ * røres ikke. Rader med `nextRunAt` innenfor leasehorisonten kan være claimet
+ * av en pågående batch og hoppes over — de kjører uansett innen LEASE_MINUTES.
+ */
+export async function wakeSendWindowParked(
+  flowId: number,
+  previousWindow: SendWindow | null,
+  now: Date = new Date(),
+): Promise<number> {
+  if (!previousWindow) return 0;
+  const emailNodes = await prisma.flowNode.findMany({ where: { flowId, type: 'email' }, select: { id: true } });
+  if (emailNodes.length === 0) return 0;
+
+  const emailNodeIds = emailNodes.map((node) => node.id);
+  const leaseHorizon = new Date(now.getTime() + LEASE_MINUTES * 60_000);
+  const parkedWhere = {
+    flowId,
+    status: 'active',
+    currentNodeId: { in: emailNodeIds },
+    nextRunAt: { gt: leaseHorizon },
+  };
+  const candidates = await prisma.flowEnrollment.findMany({
+    where: parkedWhere,
+    select: { id: true, nextRunAt: true },
+  });
+  const ids = candidates
+    .filter((e) => isExactSendWindowParking(e.id, e.nextRunAt, previousWindow))
+    .map((e) => e.id);
+  if (ids.length === 0) return 0;
+
+  const { count } = await prisma.flowEnrollment.updateMany({
+    where: { ...parkedWhere, id: { in: ids } },
+    data: { nextRunAt: now },
+  });
+  return count;
 }

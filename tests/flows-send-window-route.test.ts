@@ -9,7 +9,7 @@ import { NextRequest } from 'next/server';
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     flow: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(async () => ({})) },
-    flowEnrollment: { count: vi.fn(), findMany: vi.fn() },
+    flowEnrollment: { count: vi.fn(), findMany: vi.fn(), updateMany: vi.fn() },
     flowNode: { findMany: vi.fn() },
     setting: { upsert: vi.fn(), deleteMany: vi.fn(), findMany: vi.fn() },
   },
@@ -98,6 +98,63 @@ describe('PATCH sendWindow', () => {
     await PATCH(req('PATCH', { name: 'Nytt navn' }), params);
     expect(prisma.setting.upsert).not.toHaveBeenCalled();
     expect(prisma.setting.deleteMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('PATCH sendWindow vekker løp parkert til forrige sendetid', () => {
+  const NIGHT = new Date('2026-10-01T22:00:00Z');
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(NIGHT);
+    prisma.flowNode.findMany.mockResolvedValue([{ id: 12 }]);
+    prisma.flowEnrollment.updateMany.mockResolvedValue({ count: 1 });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('ny sendetid vekker bare løp som venter på det gamle vinduet', async () => {
+    prisma.setting.findMany.mockResolvedValue([]); // standard 08–20 alle dager
+    prisma.flowEnrollment.findMany.mockResolvedValue([
+      { id: 1, nextRunAt: sendDeferral(NIGHT, DEFAULT_SEND_WINDOW, 1) },
+      { id: 2, nextRunAt: new Date('2026-10-04T09:13:27.512Z') }, // vent-steg foran e-posten
+    ]);
+
+    const res = await PATCH(req('PATCH', { sendWindow: { mode: 'anytime' } }), params);
+
+    expect(res.status).toBe(200);
+    expect((await res.json()).wokenEnrollments).toBe(1);
+    const horizon = new Date(NIGHT.getTime() + 10 * 60_000);
+    expect(prisma.flowEnrollment.findMany).toHaveBeenCalledWith({
+      where: { flowId: 9, status: 'active', currentNodeId: { in: [12] }, nextRunAt: { gt: horizon } },
+      select: { id: true, nextRunAt: true },
+    });
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { flowId: 9, status: 'active', currentNodeId: { in: [12] }, nextRunAt: { gt: horizon }, id: { in: [1] } },
+      data: { nextRunAt: NIGHT },
+    });
+  });
+
+  it('samme effektive sendetid vekker ingen', async () => {
+    prisma.setting.findMany.mockResolvedValue([]);
+    const res = await PATCH(req('PATCH', { sendWindow: { mode: 'custom', start: '08:00', end: '20:00', days: ['man', 'tir', 'ons', 'tor', 'fre', 'lør', 'søn'] } }), params);
+    expect(res.status).toBe(200);
+    expect((await res.json()).wokenEnrollments).toBe(0);
+    expect(prisma.flowEnrollment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('fra «når som helst» finnes ingen parkerte løp å vekke', async () => {
+    prisma.setting.findMany.mockResolvedValue([{ key: 'flow_send_window_9', value: 'anytime' }]);
+    await PATCH(req('PATCH', { sendWindow: { mode: 'default' } }), params);
+    expect(prisma.flowEnrollment.findMany).not.toHaveBeenCalled();
+    expect(prisma.flowEnrollment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('feil ved vekking stopper ikke lagringen', async () => {
+    prisma.setting.findMany.mockResolvedValue([]);
+    prisma.flowEnrollment.findMany.mockRejectedValue(new Error('db'));
+    const res = await PATCH(req('PATCH', { sendWindow: { mode: 'anytime' } }), params);
+    expect(res.status).toBe(200);
+    expect(prisma.setting.upsert).toHaveBeenCalled();
+    expect((await res.json()).wokenEnrollments).toBe(0);
   });
 });
 
