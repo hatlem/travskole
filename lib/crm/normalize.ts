@@ -1,10 +1,20 @@
 // Normalisering og tolerant JSON-parsing for CRM-kjernen.
 // Alt her er rene funksjoner — testet i tests/crm-normalize.test.ts.
 
+/** Private e-posttilbydere: domenet sier ingenting om hvilken bedrift personen hører til. */
 const FREEMAIL_DOMAINS = new Set([
-  'gmail.com', 'hotmail.com', 'hotmail.no', 'outlook.com', 'outlook.no',
-  'live.no', 'live.com', 'yahoo.com', 'yahoo.no', 'icloud.com', 'me.com',
-  'msn.com', 'online.no', 'getmail.no', 'protonmail.com', 'proton.me',
+  // Internasjonale
+  'gmail.com', 'googlemail.com', 'hotmail.com', 'hotmail.no', 'hotmail.se', 'hotmail.dk', 'hotmail.co.uk',
+  'outlook.com', 'outlook.no', 'live.no', 'live.com', 'live.se', 'live.dk', 'msn.com', 'windowslive.com',
+  'yahoo.com', 'yahoo.no', 'yahoo.se', 'yahoo.dk', 'yahoo.co.uk', 'ymail.com', 'rocketmail.com',
+  'icloud.com', 'me.com', 'mac.com', 'protonmail.com', 'protonmail.ch', 'proton.me', 'pm.me',
+  'gmx.com', 'gmx.net', 'gmx.de', 'aol.com', 'mail.com', 'email.com', 'yandex.com', 'yandex.ru',
+  'zoho.com', 'tutanota.com', 'tuta.io', 'fastmail.com', 'hey.com', 'mail.ru', 'inbox.com',
+  // Norske og nordiske leverandører
+  'online.no', 'getmail.no', 'broadpark.no', 'frisurf.no', 'start.no', 'c2i.net', 'chello.no',
+  'altibox.no', 'lyse.net', 'telia.no', 'telia.com', 'haugnett.no', 'tele2.no', 'nextgentel.com',
+  'netcom.no', 'ice.no', 'bluezone.no', 'vikenfiber.no', 'eidsiva.net', 'tdcadsl.dk',
+  'post.com', 'sol.no', 'kvinne.no', 'epost.no', 'jubii.dk', 'spray.se', 'bredband.net',
 ]);
 
 export function normalizeEmail(raw: string | null | undefined): string | null {
@@ -20,8 +30,12 @@ export function emailDomain(email: string | null): string | null {
   return domain || null;
 }
 
+export function isFreemailDomain(domain: string | null): boolean {
+  return !!domain && FREEMAIL_DOMAINS.has(domain.toLowerCase());
+}
+
 export function isCompanyDomain(domain: string | null): boolean {
-  return !!domain && !FREEMAIL_DOMAINS.has(domain);
+  return !!domain && !isFreemailDomain(domain);
 }
 
 export function orgNameFromDomain(domain: string): string {

@@ -32,6 +32,11 @@ describe('isCompanyDomain', () => {
     expect(isCompanyDomain('hotmail.com')).toBe(false);
     expect(isCompanyDomain('online.no')).toBe(false);
   });
+  it('Norwegian ISP and other consumer providers are not companies', () => {
+    for (const d of ['altibox.no', 'lyse.net', 'broadpark.no', 'getmail.no', 'c2i.net', 'icloud.com', 'mac.com', 'gmx.com', 'aol.com', 'yandex.com', 'proton.me', 'Telia.com']) {
+      expect(isCompanyDomain(d)).toBe(false);
+    }
+  });
   it('other domains are companies', () => {
     expect(isCompanyDomain('acme.no')).toBe(true);
   });

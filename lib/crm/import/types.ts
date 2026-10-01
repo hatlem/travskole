@@ -86,6 +86,13 @@ export type OrgRef =
   | { kind: 'existing'; id: number; name: string; matchedBy: 'orgnr' | 'domain' | 'name' }
   | { kind: 'new'; key: string; name: string };
 
+/** Bedrift funnet via e-postdomenet: vises som forslag, kobles ikke automatisk. */
+export interface OrgSuggestion {
+  id: number;
+  name: string;
+  domain: string;
+}
+
 export interface RowValues {
   name: string;
   /** false når navnet er utledet fra e-posten — skal aldri overskrive et ekte navn. */
@@ -120,6 +127,8 @@ export interface PlannedRow {
   warnings: string[];
   values: RowValues | null;
   organization: OrgRef | null;
+  /** Kun når Bedrift-cellen er tom: eksisterende bedrift med samme e-postdomene. */
+  suggestedOrganization?: OrgSuggestion | null;
   match: MatchedContact | null;
   suppressed: boolean;
   consent: ConsentOutcome;

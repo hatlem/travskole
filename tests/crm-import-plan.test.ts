@@ -208,9 +208,19 @@ describe('planImport – organizations', () => {
     expect(resolve(r('K', 'k@gmail.com', '', 'navnelikt'))).toMatchObject({ id: 12, matchedBy: 'name' });
   });
 
-  it('uses the company email domain only when the row has no company name', () => {
-    expect(resolve(r('K', 'k@bjerke.no'))).toMatchObject({ id: 11, matchedBy: 'domain' });
+  it('never fills an empty company cell from the email domain — suggests the matching company instead', () => {
+    const planFor = (row: string[]) => plan([row], ctx({ organizations: orgs })).rows[0];
+    const row = planFor(r('K', 'k@bjerke.no'));
+    expect(row.organization).toBeNull();
+    expect(row.suggestedOrganization).toEqual({ id: 11, name: 'Bjerke Travbane', domain: 'bjerke.no' });
     expect(resolve(r('K', 'k@bjerke.no', '', 'Konsulent AS'))).toMatchObject({ kind: 'new', name: 'Konsulent AS' });
+    expect(planFor(r('K', 'k@bjerke.no', '', 'Konsulent AS')).suggestedOrganization).toBeNull();
+  });
+
+  it('suggests nothing for unknown or freemail domains', () => {
+    const withGmailOrg = [...orgs, { id: 13, name: 'Gmail', orgNumber: null, domain: 'gmail.com' }];
+    expect(plan([r('K', 'k@ukjent.no')], ctx({ organizations: orgs })).rows[0].suggestedOrganization).toBeNull();
+    expect(plan([r('K', 'k@gmail.com')], ctx({ organizations: withGmailOrg })).rows[0].suggestedOrganization).toBeNull();
   });
 
   it('never matches freemail domains and does not create orgs from email alone', () => {

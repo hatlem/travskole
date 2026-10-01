@@ -5,7 +5,7 @@
 import { emailDomain, isCompanyDomain, normalizePhone, orgNameFromDomain } from '@/lib/crm/normalize';
 import { extractRow, mergeTags, orgNameKey, personNameKey } from '@/lib/crm/import/values';
 import type {
-  ApplyOptions, ColumnTarget, ConsentOutcome, ImportPlan, MatchedContact, NewOrganization, OrgRef,
+  ApplyOptions, ColumnTarget, ConsentOutcome, ImportPlan, MatchedContact, NewOrganization, OrgRef, OrgSuggestion,
   PlannedRow, RowAction, RowDecision, RowValues, StatusCounts,
 } from '@/lib/crm/import/types';
 
@@ -66,18 +66,15 @@ class OrganizationIndex {
   }
 
   /**
-   * Org.nr. → nettside-domene → bedriftsnavn → e-postdomene. E-postdomenet
-   * brukes bare når raden ikke har bedriftsnavn, så en konsulent med
-   * kundens e-post ikke havner i feil bedrift. Ukjent bedrift opprettes.
+   * Org.nr. → nettside-domene → bedriftsnavn. E-postdomenet fyller aldri en
+   * tom Bedrift-celle (se suggest). Ukjent bedrift opprettes.
    */
   resolve(values: RowValues): OrgRef | null {
     const nameKey = values.organizationName ? orgNameKey(values.organizationName) : '';
-    const mailDomain = emailDomain(values.email);
     const found =
       (values.orgNumber && this.byOrgNumber.get(values.orgNumber)) ||
       (values.website && this.byDomain.get(values.website)) ||
       (nameKey && this.byName.get(nameKey)) ||
-      (!values.organizationName && isCompanyDomain(mailDomain) && mailDomain && this.byDomain.get(mailDomain)) ||
       null;
     if (found) return found;
 
@@ -90,6 +87,15 @@ class OrganizationIndex {
     if (values.website) setOnce(this.byDomain, values.website, ref);
     setOnce(this.byName, key, ref);
     return ref;
+  }
+
+  /** Eksisterende bedrift med samme e-postdomene — bare et forslag i forhåndsvisningen, kobles ikke. */
+  suggest(values: RowValues): OrgSuggestion | null {
+    if (values.organizationName || values.orgNumber || values.website) return null;
+    const mailDomain = emailDomain(values.email);
+    if (!mailDomain || !isCompanyDomain(mailDomain)) return null;
+    const hit = this.byDomain.get(mailDomain);
+    return hit?.kind === 'existing' ? { id: hit.id, name: hit.name, domain: mailDomain } : null;
   }
 
   /** Fyller org.nr./domene på en planlagt ny bedrift fra senere rader. */
@@ -193,6 +199,7 @@ export function planImport(input: PlanInput, context: PlanContext): ImportPlan {
     const organization = orgs.resolve(values);
     if (organization) orgs.enrich(organization, values);
     planned.organization = organization;
+    planned.suggestedOrganization = organization ? null : orgs.suggest(values);
 
     let existing: ExistingContact | null = values.email ? byEmail.get(values.email) ?? null : null;
     if (existing) {

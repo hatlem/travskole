@@ -16,14 +16,16 @@ const registration = (o: Partial<RegistrationForCrm> = {}): RegistrationForCrm =
 });
 
 describe('bookingToCrm', () => {
-  it('company email creates organization, normalized contact email', () => {
+  it('company email only carries the domain (link to existing org, never create), normalized contact email', () => {
     const input = bookingToCrm(booking(), course());
-    expect(input.organization).toEqual({ name: 'Acme', domain: 'acme.no' });
+    expect(input.organization).toEqual({ domain: 'acme.no' });
     expect(input.contact.email).toBe('kari@acme.no');
     expect(input.contact.source).toBe('booking');
   });
-  it('freemail creates no organization', () => {
-    expect(bookingToCrm(booking({ email: 'kari@gmail.com' }), course()).organization).toBeNull();
+  it('freemail and Norwegian ISP addresses carry no organization', () => {
+    for (const email of ['kari@gmail.com', 'kari@online.no', 'kari@altibox.no', 'kari@icloud.com', 'kari@proton.me']) {
+      expect(bookingToCrm(booking({ email }), course()).organization).toBeNull();
+    }
   });
   it('deal carries eventType/date/value from course and participants', () => {
     const { deal } = bookingToCrm(booking(), course());
