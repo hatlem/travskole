@@ -112,7 +112,7 @@ export default function NewCoursePage() {
 
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || 'Kunne ikke opprette kurs');
+        throw new Error(json.error || 'Kurset ble ikke lagret. Sjekk feltene og prøv igjen.');
       }
 
       setSuccess(true);
@@ -121,7 +121,7 @@ export default function NewCoursePage() {
         router.refresh();
       }, 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Kurset ble ikke lagret. Prøv igjen om litt.');
     } finally {
       setLoading(false);
     }
@@ -143,6 +143,9 @@ export default function NewCoursePage() {
           &larr; Tilbake til kurs
         </Link>
         <h1 className="text-3xl font-bold text-gray-900 mt-2">Nytt kurs</h1>
+        <p className="mt-1 text-sm text-gray-600">
+          Fyll inn det viktigste og trykk «Opprett kurs». Du kan endre alt senere.
+        </p>
       </div>
 
       {success && (
@@ -154,7 +157,7 @@ export default function NewCoursePage() {
               clipRule="evenodd"
             />
           </svg>
-          Kurset ble opprettet! Sender deg tilbake...
+          Kurset er opprettet! Du sendes tilbake til kurslisten …
         </div>
       )}
 
@@ -194,7 +197,7 @@ export default function NewCoursePage() {
               {/* Slug */}
               <div>
                 <label htmlFor="slug" className={labelClass}>
-                  URL-slug
+                  Nettadresse (lenke)
                 </label>
                 <input
                   type="text"
@@ -202,7 +205,7 @@ export default function NewCoursePage() {
                   name="slug"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  placeholder="Genereres automatisk fra navnet"
+                  placeholder="Lages automatisk fra navnet"
                   className={inputClass}
                 />
                 {(name || slug) && (
@@ -227,7 +230,7 @@ export default function NewCoursePage() {
                   maxLength={2000}
                 />
                 <div className="flex justify-between mt-1">
-                  <p className="text-xs text-gray-500">Beskriv kurset for foreldre og deltakere</p>
+                  <p className="text-xs text-gray-500">Det foreldre og deltakere ser på nettsiden: hva kurset er, hvem det passer for og hva de må ha med.</p>
                   <p className={`text-xs ${description.length > 1800 ? 'text-amber-600' : 'text-gray-400'}`}>
                     {description.length} / 2000
                   </p>
@@ -283,21 +286,21 @@ export default function NewCoursePage() {
 
               {/* Registreringsmodus */}
               <div>
-                <label htmlFor="registrationMode" className={labelClass}>Registreringsmodus</label>
+                <label htmlFor="registrationMode" className={labelClass}>Hvordan melder folk seg på?</label>
                 <select
                   id="registrationMode"
                   value={registrationMode}
                   onChange={(e) => setRegistrationMode(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="standard">Påmelding (fast dato/plasser)</option>
-                  <option value="request">Forespørsel (avtal tid)</option>
+                  <option value="standard">Påmelding – fast dato og et antall plasser</option>
+                  <option value="request">Forespørsel – de ber om et tidspunkt, dere avtaler</option>
                 </select>
               </div>
               {registrationMode === 'request' && (
                 <div className="space-y-2 border-l-2 border-amber-200 pl-3">
-                  <label className="flex gap-2 text-sm"><input type="checkbox" checked={requestRequiresLogin} onChange={(e) => setRequestRequiresLogin(e.target.checked)} /> Krev innlogging</label>
-                  <p className="text-sm font-medium">Samtykker som vises:</p>
+                  <label className="flex gap-2 text-sm"><input type="checkbox" checked={requestRequiresLogin} onChange={(e) => setRequestRequiresLogin(e.target.checked)} /> Må være innlogget for å sende forespørsel</label>
+                  <p className="text-sm font-medium">Hva må de krysse av for i skjemaet?</p>
                   <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentRisk} onChange={(e) => setReqConsentRisk(e.target.checked)} /> Risiko/forsikring</label>
                   <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentTerms} onChange={(e) => setReqConsentTerms(e.target.checked)} /> Vilkår</label>
                   <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentMedia} onChange={(e) => setReqConsentMedia(e.target.checked)} /> Bilder/video</label>
@@ -443,14 +446,14 @@ export default function NewCoursePage() {
                   ))}
                 </div>
                 <p className="text-xs text-gray-400 mt-1">
-                  Kortbetaling (Stripe) og Vipps aktiveres når betalingsnøklene er satt opp.
+                  Kort og Vipps virker først når betaling er satt opp for nettsiden. Spør den som drifter nettsiden hvis du er usikker.
                 </p>
               </div>
 
               {/* Min participants */}
               <div>
                 <label htmlFor="minParticipants" className={labelClass}>
-                  Min deltakere
+                  Minst antall deltakere
                 </label>
                 <input
                   type="number"
@@ -467,7 +470,7 @@ export default function NewCoursePage() {
               {/* Max participants */}
               <div>
                 <label htmlFor="maxParticipants" className={labelClass}>
-                  Maks deltakere
+                  Flest antall deltakere (plasser)
                 </label>
                 <input
                   type="number"
@@ -488,7 +491,7 @@ export default function NewCoursePage() {
                 disabled={loading}
                 className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
               >
-                {loading ? 'Oppretter...' : 'Opprett kurs'}
+                {loading ? 'Oppretter …' : 'Opprett kurs'}
               </button>
               {invalidFields.some((f) => touched[f]) && (
                 <ul role="alert" className="mt-3 text-sm text-red-600 list-disc pl-5 space-y-0.5">

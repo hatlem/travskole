@@ -46,6 +46,7 @@ interface CourseData {
   requestConsentTerms?: boolean;
   requestConsentMedia?: boolean;
   requestConsentActivities?: boolean;
+  _count?: { registrations: number };
 }
 
 const inputClass =
@@ -108,7 +109,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     async function fetchCourse() {
       try {
         const res = await fetch(`/api/admin/courses/${id}`);
-        if (!res.ok) throw new Error('Kunne ikke hente kurs');
+        if (!res.ok) throw new Error('Kunne ikke hente kurset. Last siden på nytt.');
         const data = await res.json();
         const c = data.course as CourseData;
         setCourse(c);
@@ -134,7 +135,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         setReqConsentActivities(!!c.requestConsentActivities);
         setPaymentMethods(parsePaymentMethods(c.paymentMethods));
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Noe gikk galt');
+        setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
       } finally {
         setLoading(false);
       }
@@ -186,7 +187,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || 'Kunne ikke oppdatere kurs');
+        throw new Error(json.error || 'Endringene ble ikke lagret. Sjekk feltene og prøv igjen.');
       }
 
       setSuccess(true);
@@ -195,7 +196,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         router.refresh();
       }, 1200);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setSaving(false);
     }
@@ -213,12 +214,12 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const json = await res.json();
-        throw new Error(json.error || 'Kunne ikke slette kurs');
+        throw new Error(json.error || 'Kurset ble ikke slettet. Prøv igjen om litt.');
       }
       router.push('/admin/courses');
       router.refresh();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setDeleteError(err instanceof Error ? err.message : 'Kurset ble ikke slettet. Prøv igjen om litt.');
       setDeleting(false);
     }
   }
@@ -244,7 +245,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   if (!course) {
     return (
       <div className="text-center py-20">
-        <p className="text-gray-500 mb-4">Kurset ble ikke funnet.</p>
+        <p className="text-gray-500 mb-4">Fant ikke kurset. Det kan være slettet.</p>
         <Link href="/admin/courses" className="text-bjerke-blue hover:underline font-medium">
           Tilbake til kurs
         </Link>
@@ -262,6 +263,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
             &larr; Tilbake til kurs
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mt-2">Rediger kurs</h1>
+          <p className="mt-1 text-sm text-gray-600">Endringene vises på nettsiden så snart du trykker «Lagre endringer».</p>
         </div>
         <a
           href={publicUrl}
@@ -285,7 +287,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               clipRule="evenodd"
             />
           </svg>
-          Endringene ble lagret! Sender deg tilbake...
+          Endringene er lagret! Du sendes tilbake til kurslisten …
         </div>
       )}
 
@@ -325,7 +327,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               {/* Slug */}
               <div>
                 <label htmlFor="slug" className={labelClass}>
-                  URL-slug
+                  Nettadresse (lenke)
                 </label>
                 <input
                   type="text"
@@ -333,7 +335,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   name="slug"
                   value={slug}
                   onChange={(e) => setSlug(e.target.value)}
-                  placeholder="Genereres automatisk fra navnet"
+                  placeholder="Lages automatisk fra navnet"
                   className={inputClass}
                 />
                 {(name || slug) && (
@@ -358,7 +360,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   maxLength={2000}
                 />
                 <div className="flex justify-between mt-1">
-                  <p className="text-xs text-gray-500">Beskriv kurset for foreldre og deltakere</p>
+                  <p className="text-xs text-gray-500">Det foreldre og deltakere ser på nettsiden: hva kurset er, hvem det passer for og hva de må ha med.</p>
                   <p className={`text-xs ${description.length > 1800 ? 'text-amber-600' : 'text-gray-400'}`}>
                     {description.length} / 2000
                   </p>
@@ -414,21 +416,21 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
               {/* Registreringsmodus */}
               <div>
-                <label htmlFor="registrationMode" className={labelClass}>Registreringsmodus</label>
+                <label htmlFor="registrationMode" className={labelClass}>Hvordan melder folk seg på?</label>
                 <select
                   id="registrationMode"
                   value={registrationMode}
                   onChange={(e) => setRegistrationMode(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="standard">Påmelding (fast dato/plasser)</option>
-                  <option value="request">Forespørsel (avtal tid)</option>
+                  <option value="standard">Påmelding – fast dato og et antall plasser</option>
+                  <option value="request">Forespørsel – de ber om et tidspunkt, dere avtaler</option>
                 </select>
               </div>
               {registrationMode === 'request' && (
                 <div className="space-y-2 border-l-2 border-amber-200 pl-3">
-                  <label className="flex gap-2 text-sm"><input type="checkbox" checked={requestRequiresLogin} onChange={(e) => setRequestRequiresLogin(e.target.checked)} /> Krev innlogging</label>
-                  <p className="text-sm font-medium">Samtykker som vises:</p>
+                  <label className="flex gap-2 text-sm"><input type="checkbox" checked={requestRequiresLogin} onChange={(e) => setRequestRequiresLogin(e.target.checked)} /> Må være innlogget for å sende forespørsel</label>
+                  <p className="text-sm font-medium">Hva må de krysse av for i skjemaet?</p>
                   <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentRisk} onChange={(e) => setReqConsentRisk(e.target.checked)} /> Risiko/forsikring</label>
                   <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentTerms} onChange={(e) => setReqConsentTerms(e.target.checked)} /> Vilkår</label>
                   <label className="flex gap-2 text-sm"><input type="checkbox" checked={reqConsentMedia} onChange={(e) => setReqConsentMedia(e.target.checked)} /> Bilder/video</label>
@@ -578,7 +580,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               {/* Min participants */}
               <div>
                 <label htmlFor="minParticipants" className={labelClass}>
-                  Min deltakere
+                  Minst antall deltakere
                 </label>
                 <input
                   type="number"
@@ -595,7 +597,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               {/* Max participants */}
               <div>
                 <label htmlFor="maxParticipants" className={labelClass}>
-                  Maks deltakere
+                  Flest antall deltakere (plasser)
                 </label>
                 <input
                   type="number"
@@ -716,9 +718,13 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       {/* Delete course confirmation modal */}
       <ConfirmModal
         open={showDeleteCourseModal}
-        title="Slett kurs"
-        message="Er du sikker på at du vil slette dette kurset? Alle påmeldinger vil også bli slettet. Denne handlingen kan ikke angres."
-        confirmLabel="Slett kurs"
+        title="Slette kurset?"
+        message={`«${course.name}» slettes for godt${
+          course._count?.registrations
+            ? `, sammen med ${course._count.registrations} påmelding${course._count.registrations === 1 ? '' : 'er'}`
+            : ''
+        }. Dette kan ikke angres. Vil du bare stoppe nye påmeldinger, sett status til «Stengt» i stedet.`}
+        confirmLabel="Ja, slett kurset"
         variant="danger"
         loading={deleting}
         onConfirm={confirmDeleteCourse}

@@ -6,6 +6,7 @@ import { CalendarView } from '@/components/admin/CalendarView';
 import { StatCardsSkeleton, TableSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
+import { PageHeader } from '@/components/admin/PageHeader';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel, type CourseType } from '@/lib/settings-shared';
 
@@ -33,6 +34,9 @@ interface Course {
 
 type TypeFilter = string;
 type StatusFilter = 'alle' | 'open' | 'full' | 'closed';
+
+const DESCRIPTION =
+  'Alle kurs og arrangementer. Lag nye, se hvor mange som er påmeldt, og åpne eller steng for påmelding.';
 
 const statusLabels: Record<string, string> = {
   open: 'Åpen',
@@ -154,11 +158,11 @@ export default function AdminCoursesPage() {
   const fetchCourses = async () => {
     try {
       const res = await fetch('/api/admin/courses');
-      if (!res.ok) throw new Error('Kunne ikke hente kurs');
+      if (!res.ok) throw new Error('Kunne ikke hente kursene. Sjekk nettforbindelsen og prøv igjen.');
       const data = await res.json();
       setCourses(data.courses);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Ukjent feil');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setLoading(false);
     }
@@ -243,11 +247,11 @@ export default function AdminCoursesPage() {
           imageUrl: course.imageUrl,
         }),
       });
-      if (!res.ok) throw new Error('Kunne ikke duplisere kurs');
+      if (!res.ok) throw new Error('Kunne ikke lage en kopi av kurset. Prøv igjen.');
       await fetchCourses();
-      toast('Kurs duplisert', 'success');
+      toast('Kopien er laget. Den er stengt for påmelding til du åpner den.', 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Kunne ikke duplisere kurs', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke lage en kopi av kurset. Prøv igjen.', 'error');
     } finally {
       setDuplicating(null);
     }
@@ -256,7 +260,7 @@ export default function AdminCoursesPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Kurs</h1>
+        <PageHeader title="Kurs" description={DESCRIPTION} />
         <StatCardsSkeleton count={3} />
         <div className="mt-6">
           <TableSkeleton />
@@ -268,7 +272,7 @@ export default function AdminCoursesPage() {
   if (error) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center">
-        <p className="text-red-700 font-medium mb-2">Feil ved lasting av kurs</p>
+        <p className="text-red-700 font-medium mb-2">Kursene kunne ikke vises</p>
         <p className="text-red-600 text-sm">{error}</p>
         <button
           onClick={() => { setError(null); setLoading(true); fetchCourses(); }}
@@ -285,23 +289,27 @@ export default function AdminCoursesPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Kurs</h1>
-        <div className="flex gap-3">
-          <Link
-            href="/admin/courses/new"
-            className="bg-bjerke-blue text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
-          >
-            + Nytt kurs
-          </Link>
-          <button
-            onClick={() => window.open('/api/admin/courses/export')}
-            className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
-          >
-            Eksporter CSV
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Kurs"
+        description={DESCRIPTION}
+        actions={
+          <>
+            <Link
+              href="/admin/courses/new"
+              className="bg-bjerke-blue text-white px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
+            >
+              + Nytt kurs
+            </Link>
+            <button
+              onClick={() => window.open('/api/admin/courses/export')}
+              title="Laster ned alle kursene som en fil du kan åpne i Excel"
+              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              Last ned til Excel
+            </button>
+          </>
+        }
+      />
 
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-3 mb-6">
@@ -411,12 +419,12 @@ export default function AdminCoursesPage() {
             />
           </svg>
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Ingen kurs ennå</h3>
-          <p className="text-gray-500 mb-6">Kom i gang ved å opprette ditt første kurs.</p>
+          <p className="text-gray-500 mb-6">Legg inn navn, datoer og antall plasser — så kan folk melde seg på.</p>
           <Link
             href="/admin/courses/new"
             className="inline-flex items-center bg-bjerke-blue text-white px-5 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors"
           >
-            + Opprett kurs
+            + Lag ditt første kurs
           </Link>
         </div>
       ) : filtered.length === 0 ? (
@@ -436,7 +444,7 @@ export default function AdminCoursesPage() {
           </svg>
           <h3 className="text-lg font-semibold text-gray-900 mb-1">Ingen treff</h3>
           <p className="text-gray-500">
-            Prøv å endre søk eller filtre for å finne det du leter etter.
+            Ingen kurs passer med søket eller filtrene. Prøv et annet ord, eller velg «Alle typer» og «Alle statuser».
           </p>
         </div>
       ) : (

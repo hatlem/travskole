@@ -55,12 +55,12 @@ export function CourseActions({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error('Kunne ikke oppdatere status');
+      if (!res.ok) throw new Error('Statusen ble ikke endret. Prøv igjen.');
       setRegistrations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status } : r))
       );
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setUpdatingId(null);
     }
@@ -84,14 +84,16 @@ export function CourseActions({
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Kunne ikke sende e-post');
+        throw new Error(data.error || 'E-posten ble ikke sendt. Sjekk emne og melding, og prøv igjen.');
       }
       const data = await res.json();
-      setEmailSuccess(`E-post sendt til ${data.sentCount} mottaker(e).`);
+      setEmailSuccess(
+        data.sentCount === 1 ? 'E-posten er sendt til 1 forelder.' : `E-posten er sendt til ${data.sentCount} foreldre.`,
+      );
       setEmailSubject('');
       setEmailMessage('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Kunne ikke sende e-post');
+      setError(err instanceof Error ? err.message : 'E-posten ble ikke sendt. Prøv igjen om litt.');
     } finally {
       setSendingEmail(false);
     }
@@ -99,9 +101,9 @@ export function CourseActions({
 
   const recipientLabels: Record<string, string> = {
     all: 'Alle foreldre',
-    confirmed: 'Bekreftede',
-    pending: 'Ventende',
-    waitlist: 'Venteliste',
+    confirmed: 'Bare bekreftede',
+    pending: 'Bare de som venter på svar',
+    waitlist: 'Bare de på venteliste',
   };
 
   return (
@@ -158,7 +160,7 @@ export function CourseActions({
           </div>
           <form onSubmit={handleSendEmail} className="p-6 space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Mottakere</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Hvem skal få e-posten?</label>
               <div className="flex flex-wrap gap-4">
                 {(['all', 'confirmed', 'pending', 'waitlist'] as const).map((filter) => (
                   <label key={filter} className="inline-flex items-center gap-2 cursor-pointer">
@@ -193,10 +195,13 @@ export function CourseActions({
                 rows={6}
                 value={emailMessage}
                 onChange={(e) => setEmailMessage(e.target.value)}
-                placeholder="Skriv meldingen her..."
+                placeholder="Skriv meldingen her …"
                 className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-bjerke-blue focus:border-transparent outline-none resize-y"
               />
             </div>
+            <p className="text-sm text-gray-600">
+              E-posten går ut med en gang når du trykker «Send e-post», og kan ikke kalles tilbake.
+            </p>
             <div className="flex gap-3 pt-2">
               <button
                 type="submit"
@@ -207,7 +212,7 @@ export function CourseActions({
                     : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
                 }`}
               >
-                {sendingEmail ? 'Sender...' : 'Send e-post'}
+                {sendingEmail ? 'Sender …' : 'Send e-post'}
               </button>
               <button
                 type="button"
@@ -231,7 +236,10 @@ export function CourseActions({
 
         {registrations.length === 0 ? (
           <div className="px-6 py-12 text-center">
-            <p className="text-gray-500">Ingen påmeldinger ennå.</p>
+            <p className="text-gray-600">Ingen har meldt seg på ennå.</p>
+            <p className="mt-1 text-sm text-gray-500">
+              Påmeldinger fra nettsiden dukker opp her. Du kan også legge inn en påmelding selv under Påmeldinger.
+            </p>
           </div>
         ) : (
           <>

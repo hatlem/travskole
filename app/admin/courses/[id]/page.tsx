@@ -146,7 +146,7 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
               href={`/api/admin/registrations/export?courseId=${course.id}`}
               className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
             >
-              Eksporter CSV
+              Last ned deltakerliste (Excel)
             </a>
           </div>
         </div>
@@ -210,12 +210,12 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
       {/* Consent summary */}
       {consentStats.total > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 print:hidden">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Samtykkeoversikt</h3>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">Hva foreldrene har sagt ja til</h3>
           <div className="space-y-2">
             {[
-              { label: 'Samtykke aktiviteter', count: consentStats.activities },
-              { label: 'Samtykke media', count: consentStats.media },
-              { label: 'Samtykke risiko', count: consentStats.risk },
+              { label: 'Ja til aktiviteter', count: consentStats.activities },
+              { label: 'Ja til bilder og video', count: consentStats.media },
+              { label: 'Godtatt risiko', count: consentStats.risk },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2 text-sm">
                 {item.count === consentStats.total ? (
