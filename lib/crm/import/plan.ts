@@ -142,6 +142,10 @@ function consentOutcome(values: RowValues, suppressed: boolean, existing: Existi
 }
 
 export function planImport(input: PlanInput, context: PlanContext): ImportPlan {
+  const consentIgnored = input.columns.includes('consent') && input.options.confirmConsent !== true;
+  const columns: ColumnTarget[] = consentIgnored
+    ? input.columns.map((c) => (c === 'consent' ? 'ignore' : c))
+    : input.columns;
   const orgs = new OrganizationIndex(context.organizations);
   const byEmail = new Map<string, ExistingContact>();
   const byPhone = new Map<string, ExistingContact[]>();
@@ -162,7 +166,7 @@ export function planImport(input: PlanInput, context: PlanContext): ImportPlan {
 
   input.rows.forEach((raw, i) => {
     const rowNumber = i + 2;
-    const extracted = extractRow(raw, input.headers, input.columns);
+    const extracted = extractRow(raw, input.headers, columns);
     const base: PlannedRow = {
       row: rowNumber, status: 'invalid', reason: null, warnings: extracted.warnings, values: null,
       organization: null, match: null, suppressed: false, consent: null, changes: [],
@@ -240,7 +244,7 @@ export function planImport(input: PlanInput, context: PlanContext): ImportPlan {
     if (planned.suppressed) counts.suppressed++;
   });
 
-  return { rows, counts, newOrganizations: [...orgs.created.values()] };
+  return { rows, counts, newOrganizations: [...orgs.created.values()], consentIgnored };
 }
 
 function isSuppressed(values: RowValues, context: PlanContext): boolean {

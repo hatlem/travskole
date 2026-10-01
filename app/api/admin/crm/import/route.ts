@@ -28,6 +28,8 @@ const importSchema = z.object({
     tags: z.array(z.string().trim().min(1).max(MAX_TAG_LENGTH)).max(MAX_TAGS).default([]),
     ownerId: z.number().int().positive().nullable().default(null),
     stage: z.enum(CONTACT_STAGES).nullable().default(null),
+    // Samtykke skrives bare når admin har bekreftet hva samtykke-kolonnen betyr.
+    confirmConsent: z.boolean().default(false),
     list: z
       .discriminatedUnion('kind', [
         z.object({ kind: z.literal('existing'), id: z.number().int().positive() }),
@@ -94,6 +96,7 @@ export async function POST(request: NextRequest) {
 
   const applyOptions: ApplyOptions = {
     policy: options.policy, tags: options.tags, ownerId: options.ownerId, stage: options.stage,
+    confirmConsent: options.confirmConsent === true,
   };
   const context = await loadPlanContext();
   const plan = planImport({ headers, rows, columns, options: applyOptions }, context);

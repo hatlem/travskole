@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { TagInput } from '@/components/admin/crm/TagInput';
 import { HelpTip } from '@/components/admin/HelpTip';
-import { assignColumn, columnProblems, columnSamples, headerLabel } from '@/lib/crm/import/columns';
+import { assignColumn, columnProblems, columnSamples, consentConfirmationText, headerLabel } from '@/lib/crm/import/columns';
 import { CONTACT_STAGE_LABELS, CONTACT_STAGES, FIELD_LABELS, IMPORT_FIELDS, type ColumnTarget, type ContactStage } from '@/lib/crm/import/types';
 import type { ImportSource } from '@/lib/crm/import/source';
 import type { ContactListOption, ImportSettings } from './settings';
@@ -28,9 +28,17 @@ export function ColumnsStep({
 }: ColumnsStepProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const problems = columnProblems(columns);
-  const hasConsentColumn = columns.includes('consent');
+  const consentIndex = columns.indexOf('consent');
+  const hasConsentColumn = consentIndex !== -1;
   const combinesName = !columns.includes('name') && (columns.includes('firstName') || columns.includes('lastName'));
   const update = (patch: Partial<ImportSettings>) => onSettingsChange({ ...settings, ...patch });
+
+  // En bekreftelse gjelder én bestemt kolonne — flyttes samtykke, må admin bekrefte på nytt.
+  function changeColumn(index: number, target: ColumnTarget) {
+    const next = assignColumn(columns, index, target);
+    onColumnsChange(next);
+    if (next.indexOf('consent') !== consentIndex && settings.confirmConsent) update({ confirmConsent: false });
+  }
 
   const listValue = settings.list.kind === 'existing' ? String(settings.list.id) : settings.list.kind;
   const newListName = settings.list.kind === 'new' ? settings.list.name : '';
@@ -69,7 +77,7 @@ export function ColumnsStep({
                     <select
                       aria-label={`Hva er kolonnen ${headerLabel(source.headers, i)}?`}
                       value={target}
-                      onChange={(e) => onColumnsChange(assignColumn(columns, i, e.target.value as ColumnTarget))}
+                      onChange={(e) => changeColumn(i, e.target.value as ColumnTarget)}
                       className={`${selectClass} ${target === 'ignore' ? 'text-gray-500' : 'text-gray-900'}`}
                     >
                       <option value="ignore">Ikke importer</option>
@@ -83,6 +91,28 @@ export function ColumnsStep({
           </tbody>
         </table>
       </div>
+
+      {hasConsentColumn && (
+        <div className="rounded-lg border-2 border-amber-300 bg-amber-50 p-4 text-sm text-amber-950 space-y-3">
+          <p className="font-medium">{consentConfirmationText(headerLabel(source.headers, consentIndex))}</p>
+          <p className="text-amber-900">
+            Eksempler fra fila: {columnSamples(source.rows, consentIndex).join(' · ') || 'ingen verdier'}. Er kolonnen egentlig en
+            reservasjon eller avmelding, velg «Ikke importer» på den i stedet.
+          </p>
+          <label className="flex items-start gap-2 font-medium">
+            <input
+              type="checkbox"
+              checked={settings.confirmConsent}
+              onChange={(e) => update({ confirmConsent: e.target.checked })}
+              className="mt-0.5"
+            />
+            <span>Ja, kolonnen viser samtykke til markedsføring, og jeg har dokumentasjon på det</span>
+          </label>
+          {!settings.confirmConsent && (
+            <p className="text-amber-900">Uten avkrysning importeres kontaktene, men ingen får registrert samtykke.</p>
+          )}
+        </div>
+      )}
 
       {combinesName && <p className="text-sm text-gray-600">Fornavn og etternavn settes sammen til fullt navn.</p>}
       {problems.length > 0 && (
@@ -175,7 +205,9 @@ export function ColumnsStep({
               <p className="font-medium text-gray-800 mb-1">Samtykke til markedsføring (GDPR) <HelpTip term="marketing" /></p>
               <p>
                 {hasConsentColumn
-                  ? 'Kontakter der samtykke-kolonnen sier «ja» får registrert samtykke (kilde: import). Alle andre får ikke samtykke.'
+                  ? settings.confirmConsent
+                    ? 'Kontakter der samtykke-kolonnen sier «ja» får registrert samtykke (kilde: import). Alle andre får ikke samtykke.'
+                    : 'Samtykke-kolonnen er ikke bekreftet ennå, så ingen får registrert samtykke. Bekreft kolonnen over hvis den stemmer.'
                   : 'Fila har ingen samtykke-kolonne, så ingen får registrert samtykke. Velg «Samtykke til markedsføring» på en kolonne over hvis fila har det.'}
                 {' '}Vi gir aldri samtykke automatisk, og personer som har meldt seg av får ikke samtykke igjen. Importer bare samtykke du faktisk har dokumentasjon på.
               </p>

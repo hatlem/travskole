@@ -18,9 +18,9 @@ export interface ContactListOption {
 
 /** Body til /api/admin/crm/import (uten tekst/kolonner). */
 export function settingsPayload(settings: ImportSettings) {
-  const { list, policy, tags, ownerId, stage } = settings;
+  const { list, policy, tags, ownerId, stage, confirmConsent } = settings;
   return {
-    policy, tags, ownerId, stage,
+    policy, tags, ownerId, stage, confirmConsent,
     list: list.kind === 'none' ? null : list.kind === 'new' ? { kind: 'new', name: list.name.trim() } : list,
   };
 }

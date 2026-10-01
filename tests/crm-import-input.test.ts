@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { decodeImportBytes, repairMojibake } from '@/lib/crm/import/encoding';
 import {
-  assignColumn, columnProblems, columnSamples, guessColumns, headerLabel, headersLookLikeData, normalizeHeader,
+  assignColumn, columnProblems, columnSamples, consentConfirmationText, guessColumns, isOptOutHeader, headerLabel, headersLookLikeData, normalizeHeader,
 } from '@/lib/crm/import/columns';
 import { readImportBytes, readImportText, rejectFile, SPREADSHEET_HELP } from '@/lib/crm/import/source';
 import { buildErrorReport, buildTemplateCsv, TEMPLATE_HEADERS } from '@/lib/crm/import/report';
@@ -80,7 +80,7 @@ describe('normalizeHeader / guessColumns', () => {
   });
 
   it('maps English headers and synonyms', () => {
-    expect(guessColumns(['Full Name', 'Email Address', 'Phone', 'Company', 'Job Title', 'Tags', 'Comments', 'Marketing'])).toEqual([
+    expect(guessColumns(['Full Name', 'Email Address', 'Phone', 'Company', 'Job Title', 'Tags', 'Comments', 'Marketing Consent'])).toEqual([
       'name', 'email', 'phone', 'organization', 'roleTitle', 'tags', 'note', 'consent',
     ]);
     expect(guessColumns(['navn', 'epost', 'tlf', 'bedrift', 'organisasjonsnummer', 'domene', 'rolle', 'stikkord', 'kommentar']))
@@ -94,6 +94,37 @@ describe('normalizeHeader / guessColumns', () => {
 
   it('uses each field once and ignores unknown columns', () => {
     expect(guessColumns(['E-post', 'Epost', 'Medlemsnummer', ''])).toEqual(['email', 'ignore', 'ignore', 'ignore']);
+  });
+});
+
+describe('guessColumns – samtykke', () => {
+  const consentGuess = (header: string) => guessColumns(['E-post', header])[1];
+
+  it.each([
+    'Reservert mot markedsføring', 'Reservasjon', 'Avmeldt nyhetsbrev', 'Ikke samtykke', 'Ønsker ikke nyhetsbrev',
+    'Samtykke trukket', 'Samtykke: nei', 'Unsubscribed', 'Opt-out', 'Opt out', 'Marketing opt-out', 'No marketing',
+    'Stop', 'Avslått samtykke', 'Consent withdrawn',
+  ])('aldri samtykke for reservasjon/avmelding: %s', (header) => {
+    expect(consentGuess(header)).not.toBe('consent');
+  });
+
+  it.each([
+    'Samtykke', 'Samtykke markedsføring', 'Samtykke til markedsføring', 'Ønsker nyhetsbrev', 'Marketing consent',
+    'Newsletter opt-in', 'Opt-in', 'Samtykke (nyhetsbrev)',
+  ])('kobler tydelig positive overskrifter: %s', (header) => {
+    expect(consentGuess(header)).toBe('consent');
+  });
+
+  it.each(['Markedsføring', 'Nyhetsbrev', 'Marketing', 'Newsletter'])('tvetydige overskrifter kobles ikke: %s', (header) => {
+    expect(consentGuess(header)).toBe('ignore');
+  });
+
+  it('isOptOutHeader og bekreftelsesteksten', () => {
+    expect(isOptOutHeader('Reservert')).toBe(true);
+    expect(isOptOutHeader('Samtykke')).toBe(false);
+    expect(consentConfirmationText('Nyhetsbrev')).toBe(
+      'Kolonnen «Nyhetsbrev» tolkes som samtykke til markedsføring: verdier som ja/x/1 gir samtykke. Stemmer det?',
+    );
   });
 });
 

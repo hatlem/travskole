@@ -108,6 +108,12 @@ export function PreviewStep({ plan, policy, decisions, onDecisionsChange, busy, 
         <p className="text-sm text-gray-600">Ingenting er lagret ennå. Sjekk at det ser riktig ut, og trykk «Importer».</p>
       </div>
 
+      {plan.consentIgnored && (
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Samtykke-kolonnen er ikke bekreftet, så ingen får registrert samtykke. Gå tilbake og kryss av hvis kolonnen viser samtykke.
+        </p>
+      )}
+
       <div className="grid gap-3 grid-cols-2 lg:grid-cols-3">
         {cards.filter((c) => c.count > 0 || c.key === 'new' || c.key === 'update').map((c) => (
           <button

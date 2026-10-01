@@ -32,11 +32,27 @@ const SYNONYMS: Record<ImportField, string[]> = {
     'notat', 'notater', 'kommentar', 'kommentarer', 'merknad', 'merknader', 'beskrivelse',
     'note', 'notes', 'comment', 'comments',
   ],
+  // Bare tydelig positive overskrifter: «Markedsføring»/«Nyhetsbrev» alene kan like gjerne være en reservasjon.
   consent: [
-    'samtykke', 'samtykke markedsforing', 'markedsforing', 'markedsforingssamtykke', 'nyhetsbrev',
-    'consent', 'marketing', 'marketing consent', 'opt in', 'newsletter',
+    'samtykke', 'samtykker', 'samtykke markedsforing', 'samtykke til markedsforing', 'markedsforingssamtykke',
+    'samtykke nyhetsbrev', 'onsker nyhetsbrev', 'onsker markedsforing', 'onsker e post',
+    'consent', 'marketing consent', 'opt in', 'optin', 'newsletter opt in', 'marketing opt in',
   ],
 };
+
+const OPT_OUT_STEMS = /reserv|avmeld|ikke|trukket|unsub|opt ?out|avsla|stop|withdr|nekt/;
+const OPT_OUT_WORDS = /(^| )(nei|no|not|ingen)( |$)/;
+
+/** «Reservert mot markedsføring», «Avmeldt nyhetsbrev», «No marketing» … — kobles aldri automatisk til samtykke. */
+export function isOptOutHeader(header: string): boolean {
+  const h = normalizeHeader(header);
+  return OPT_OUT_STEMS.test(h) || OPT_OUT_WORDS.test(h);
+}
+
+/** Teksten admin må bekrefte før samtykke importeres. */
+export function consentConfirmationText(header: string): string {
+  return `Kolonnen «${header}» tolkes som samtykke til markedsføring: verdier som ja/x/1 gir samtykke. Stemmer det?`;
+}
 
 /** «E-post (jobb)» → «e post jobb»; æøå → a/o/a så «Markedsføring» = «markedsforing». */
 export function normalizeHeader(header: string): string {
@@ -50,10 +66,12 @@ export function normalizeHeader(header: string): string {
 
 const compact = (s: string) => s.replace(/ /g, '');
 
+const allowed = (field: ImportField, header: string) => field !== 'consent' || !isOptOutHeader(header);
+
 function exactField(header: string): ImportField | null {
   const h = compact(normalizeHeader(header));
   if (!h) return null;
-  return IMPORT_FIELDS.find((field) => SYNONYMS[field].some((syn) => compact(syn) === h)) ?? null;
+  return IMPORT_FIELDS.find((field) => allowed(field, header) && SYNONYMS[field].some((syn) => compact(syn) === h)) ?? null;
 }
 
 // Delvis treff («E-post (jobb)», «Kontakt e-post»): spesifikke felt før generelle som navn.
@@ -66,6 +84,7 @@ function partialField(header: string): ImportField | null {
   const h = ` ${normalizeHeader(header)} `;
   if (h.trim().length === 0) return null;
   for (const field of PARTIAL_ORDER) {
+    if (!allowed(field, header)) continue;
     if (SYNONYMS[field].some((syn) => syn.length >= 3 && h.includes(` ${syn} `))) return field;
   }
   return null;

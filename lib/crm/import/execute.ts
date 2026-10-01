@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events/bus';
 import logger from '@/lib/logger';
 import { buildContactCreate, buildContactUpdate, type ContactPatch, type PlanContext } from '@/lib/crm/import/plan';
+import { CONSENT_NOT_CONFIRMED_NOTICE } from '@/lib/crm/import/types';
 import type { ApplyOptions, ImportPlan, ImportProblem, ImportResult, OrgRef, RowAction } from '@/lib/crm/import/types';
 
 export const IMPORT_BATCH_SIZE = 100;
@@ -34,6 +35,7 @@ export async function executeImport(input: ExecuteImportInput): Promise<ImportRe
   const now = input.now ?? new Date();
   const result: ImportResult = {
     created: 0, updated: 0, unchanged: 0, skipped: 0, failed: 0, organizationsCreated: 0, contactIds: [], problems: [],
+    consentNotice: input.plan.consentIgnored ? CONSENT_NOT_CONFIRMED_NOTICE : null,
   };
   const writes: WriteAction[] = [];
   for (const action of input.actions) {
@@ -92,7 +94,7 @@ export async function executeImport(input: ExecuteImportInput): Promise<ImportRe
       }
     }
 
-    const grant = action.planned.consent === 'grant';
+    const grant = action.planned.consent === 'grant' && input.options.confirmConsent === true;
     if (grant) {
       const data = { marketing: true, lawfulBasis: 'consent', consentAt: now, source: 'import' };
       await tx.consent.upsert({ where: { contactId }, create: { contactId, ...data }, update: data });

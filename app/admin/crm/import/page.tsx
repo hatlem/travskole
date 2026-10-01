@@ -51,6 +51,7 @@ export default function ImportPage() {
   function onLoaded(next: ImportSource) {
     setSource(next);
     setColumns(guessColumns(next.headers));
+    setSettings((s) => ({ ...s, confirmConsent: false }));
     setPlan(null);
     setDecisions({});
     setStep('columns');

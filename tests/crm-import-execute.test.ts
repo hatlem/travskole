@@ -31,7 +31,9 @@ function existing(patch: Partial<ExistingContact> & { id: number }): ExistingCon
   };
 }
 
-function run(rows: string[][], context: Partial<PlanContext> = {}, options: ApplyOptions = DEFAULT_APPLY_OPTIONS, decisions: RowDecision[] = []) {
+const CONFIRMED: ApplyOptions = { ...DEFAULT_APPLY_OPTIONS, confirmConsent: true };
+
+function run(rows: string[][], context: Partial<PlanContext> = {}, options: ApplyOptions = CONFIRMED, decisions: RowDecision[] = []) {
   const ctx: PlanContext = { contacts: [], organizations: [], suppressedEmails: new Set(), ...context };
   const plan = planImport({ headers: HEADERS, rows, columns: COLUMNS, options }, ctx);
   return executeImport({
@@ -69,7 +71,7 @@ describe('executeImport', () => {
       }),
     });
     expect(result).toEqual({
-      created: 1, updated: 0, unchanged: 0, skipped: 0, failed: 0, organizationsCreated: 1, contactIds: [100], problems: [],
+      created: 1, updated: 0, unchanged: 0, skipped: 0, failed: 0, organizationsCreated: 1, contactIds: [100], problems: [], consentNotice: null,
     });
   });
 
@@ -107,6 +109,26 @@ describe('executeImport', () => {
     });
     expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'consent.updated', contactId: 100 }));
   });
+
+  it('writes no consent and reports it when the consent column was not confirmed', async () => {
+    const result = await run([['Kari', 'kari@x.no', '', '', '', '', 'ja']], {}, DEFAULT_APPLY_OPTIONS);
+    expect(prisma.contact.create).toHaveBeenCalled();
+    expect(prisma.consent.upsert).not.toHaveBeenCalled();
+    expect(emitEvent).not.toHaveBeenCalled();
+    expect(result.consentNotice).toMatch(/Samtykke ble ikke registrert/);
+  });
+
+  it('never grants consent from a confirmed-looking plan when options are not confirmed', async () => {
+    const ctx: PlanContext = { contacts: [], organizations: [], suppressedEmails: new Set() };
+    const plan = planImport({ headers: HEADERS, rows: [['Kari', 'kari@x.no', '', '', '', '', 'ja']], columns: COLUMNS, options: CONFIRMED }, ctx);
+    await executeImport({
+      plan, actions: resolveActions(plan, []), context: ctx, options: DEFAULT_APPLY_OPTIONS,
+      fileName: 'x.csv', actorEmail: 'admin@x.no', now: NOW,
+    });
+    expect(prisma.consent.upsert).not.toHaveBeenCalled();
+  });
+
+
 
   it('never grants consent to suppressed addresses', async () => {
     await run([['Kari', 'kari@x.no', '', '', '', '', 'ja']], { suppressedEmails: new Set(['kari@x.no']) });
@@ -169,7 +191,7 @@ describe('executeImport', () => {
   });
 
   it('applies options (owner, stage, tags) to new contacts', async () => {
-    await run([['Kari', 'kari@x.no', '', '', '', '', '']], {}, { policy: 'fill_empty', tags: ['Import'], ownerId: 4, stage: 'customer' });
+    await run([['Kari', 'kari@x.no', '', '', '', '', '']], {}, { policy: 'fill_empty', tags: ['Import'], ownerId: 4, stage: 'customer', confirmConsent: false });
     expect(prisma.contact.create.mock.calls[0][0].data).toMatchObject({ ownerId: 4, stage: 'customer', tags: '["Import"]' });
   });
 });

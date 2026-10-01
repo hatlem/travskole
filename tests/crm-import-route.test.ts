@@ -93,6 +93,21 @@ describe('POST /api/admin/crm/import', () => {
     expect(executeImport).not.toHaveBeenCalled();
   });
 
+  it('ignores consent values unless the admin confirmed the consent column', async () => {
+    const text = 'Navn;E-post;Reservert\nKari;kari@x.no;ja\n';
+    const columns = ['name', 'email', 'consent'];
+    const unconfirmed = (await (await POST(req(body({ text, columns })))).json()) as { plan: ImportPlan };
+    expect(unconfirmed.plan.consentIgnored).toBe(true);
+    expect(unconfirmed.plan.rows[0].consent).toBeNull();
+
+    const confirmed = (await (await POST(req(body({ text, columns, options: { confirmConsent: true } })))).json()) as { plan: ImportPlan };
+    expect(confirmed.plan.consentIgnored).toBe(false);
+    expect(confirmed.plan.rows[0].consent).toBe('grant');
+
+    await POST(req(body({ text, columns, dryRun: false })));
+    expect(executeImport.mock.calls[0][0].options).toMatchObject({ confirmConsent: false });
+  });
+
   it('repairs mojibake in the submitted text', async () => {
     const broken = new TextDecoder('windows-1252').decode(Buffer.from('Navn;E-post\nBjørn;b@x.no', 'utf8'));
     const res = await POST(req(body({ text: broken, columns: ['name', 'email'] })));

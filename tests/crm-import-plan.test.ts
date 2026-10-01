@@ -24,7 +24,9 @@ function r(name = '', email = '', phone = '', org = '', orgnr = '', website = ''
   return [name, email, phone, org, orgnr, website, tags, consent];
 }
 
-function plan(rows: string[][], context = ctx(), options: ApplyOptions = DEFAULT_APPLY_OPTIONS) {
+const CONFIRMED: ApplyOptions = { ...DEFAULT_APPLY_OPTIONS, confirmConsent: true };
+
+function plan(rows: string[][], context = ctx(), options: ApplyOptions = CONFIRMED) {
   return planImport({ headers: HEADERS, rows, columns: COLUMNS, options }, context);
 }
 
@@ -159,6 +161,13 @@ describe('planImport – consent', () => {
     const p = plan([r('Kari', 'kari@ny.no', '', 'Acme', '', '', '', 'ja')], ctx({ contacts: [existing], organizations: [ACME] }));
     expect(p.rows[0]).toMatchObject({ status: 'possible_duplicate', consent: 'blocked' });
   });
+
+  it('ignores consent values entirely until the consent column is confirmed', () => {
+    const p = plan([r('A', 'a@x.no', '', '', '', '', '', 'ja'), r('B', 'b@x.no', '', '', '', '', '', 'kanskje')], ctx(), DEFAULT_APPLY_OPTIONS);
+    expect(p.consentIgnored).toBe(true);
+    expect(p.rows.map((x) => [x.consent, x.values?.consent, x.warnings])).toEqual([[null, null, []], [null, null, []]]);
+    expect(plan([r('A', 'a@x.no', '', '', '', '', '', 'ja')]).consentIgnored).toBe(false);
+  });
 });
 
 describe('planImport – organizations', () => {
@@ -240,7 +249,7 @@ describe('buildContactUpdate', () => {
   });
 
   it('overwrite replaces differing values but keeps what the file does not have', () => {
-    const { patch, changes } = buildContactUpdate(existing, values, { kind: 'existing', id: 11 }, { policy: 'overwrite', tags: ['Import'], ownerId: 4, stage: 'lead' });
+    const { patch, changes } = buildContactUpdate(existing, values, { kind: 'existing', id: 11 }, { policy: 'overwrite', tags: ['Import'], ownerId: 4, stage: 'lead', confirmConsent: false });
     expect(patch).toEqual({
       name: 'Kari Ny', phone: '+4799999999', roleTitle: 'Leder', organization: { kind: 'existing', id: 11 }, ownerId: 4,
       stage: 'lead', tags: ['Gammel', 'VIP', 'Import'], customFields: { Medlemsnr: '2', Annet: 'x' },

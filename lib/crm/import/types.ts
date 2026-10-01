@@ -38,9 +38,16 @@ export interface ApplyOptions {
   tags: string[];
   ownerId: number | null;
   stage: ContactStage | null;
+  /** Admin har bekreftet at samtykke-kolonnen faktisk er samtykke. Uten dette registreres aldri samtykke. */
+  confirmConsent: boolean;
 }
 
-export const DEFAULT_APPLY_OPTIONS: ApplyOptions = { policy: 'fill_empty', tags: [], ownerId: null, stage: null };
+export const DEFAULT_APPLY_OPTIONS: ApplyOptions = {
+  policy: 'fill_empty', tags: [], ownerId: null, stage: null, confirmConsent: false,
+};
+
+export const CONSENT_NOT_CONFIRMED_NOTICE =
+  'Samtykke ble ikke registrert: samtykke-kolonnen ble ikke bekreftet før importen.';
 
 export const MAX_IMPORT_ROWS = 5000;
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
@@ -132,6 +139,8 @@ export interface ImportPlan {
   rows: PlannedRow[];
   counts: StatusCounts;
   newOrganizations: NewOrganization[];
+  /** Fila har en samtykke-kolonne, men den er ikke bekreftet — samtykkeverdiene er ignorert. */
+  consentIgnored: boolean;
 }
 
 export type RowDecisionAction = 'import' | 'skip' | 'merge' | 'create';
@@ -162,4 +171,6 @@ export interface ImportResult {
   organizationsCreated: number;
   contactIds: number[];
   problems: ImportProblem[];
+  /** Satt når fila hadde samtykke som ikke ble registrert (ikke bekreftet). */
+  consentNotice: string | null;
 }
