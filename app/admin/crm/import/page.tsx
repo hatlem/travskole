@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { parseCsv } from '@/lib/crm/csv';
 import { CrmTabs } from '@/components/admin/CrmTabs';
@@ -160,6 +161,12 @@ export default function ImportPage() {
   return (
     <div>
       <CrmTabs />
+      <Link
+        href="/admin/crm/kontakter"
+        className="inline-block mb-4 text-sm text-blue-700 hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      >
+        ← Tilbake til kontakter
+      </Link>
       <div className="max-w-3xl space-y-6">
         {isSuperAdmin && <HistoryBackfillCard />}
 

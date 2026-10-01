@@ -8,6 +8,7 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
+import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { FLOW_STATUS_LABELS, canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
 import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
@@ -121,6 +122,7 @@ export default function FlyterPage() {
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
   const router = useRouter();
+  useOpenFromQuery('ny', () => setShowNew(true));
 
   const load = useCallback(async () => {
     abortRef.current?.abort();
