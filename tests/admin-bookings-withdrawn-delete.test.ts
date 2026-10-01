@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const prisma = vi.hoisted(() => ({
   bookingRequest: { findUnique: vi.fn(), findMany: vi.fn(), delete: vi.fn(async () => ({})) },
   activityLog: { findMany: vi.fn() },
-  deal: { deleteMany: vi.fn(async () => ({ count: 0 })) },
+  deal: { deleteMany: vi.fn(async () => ({ count: 0 })), findMany: vi.fn(async () => []) },
   $transaction: vi.fn(async (ops: Promise<unknown>[]) => Promise.all(ops)),
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
