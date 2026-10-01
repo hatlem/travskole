@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { isFlowEditable } from '@/lib/flows/status';
+import { sanitizeEmailNodeConfig } from '@/lib/flows/email-html';
 
 const NODE_TYPES = ['start', 'email', 'wait', 'condition', 'action', 'schedule', 'end'] as const;
 
@@ -105,7 +106,7 @@ export async function PUT(
           data: {
             flowId,
             type: node.type,
-            config: JSON.stringify(node.config),
+            config: JSON.stringify(sanitizeEmailNodeConfig(node.type, node.config)),
             posX: node.posX,
             posY: node.posY,
           },

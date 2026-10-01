@@ -2,11 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
-import { mergeTagsForAnchor } from '@/lib/email-templates';
 import type { EntityRef } from '@/components/admin/crm/EntityPicker';
 import { NODE_DESCRIPTIONS, NODE_LABELS, type FlowRFNode } from './node-types';
 import { HelpTip } from '@/components/admin/HelpTip';
 import { AiPersonalizationSection } from './ai-personalization-section';
+import { EmailBodyEditor } from './email-body-editor';
 
 export interface SenderIdentityOption {
   id: number;
@@ -23,16 +23,6 @@ export interface AdminUserOption {
   id: number;
   email: string;
 }
-
-const MERGE_TAG_LABELS_NO: Record<string, string> = {
-  '{{forelder_navn}}': 'Foresattes/kontaktens navn',
-  '{{barnets_navn}}': 'Barnets navn',
-  '{{kurs_navn}}': 'Kursnavn',
-  '{{kurs_startdato}}': 'Kursets startdato',
-  '{{kurs_sluttdato}}': 'Kursets sluttdato',
-  '{{allergier}}': 'Allergier',
-  '{{kontakt_epost}}': 'Bjerkes kontakt-e-post',
-};
 
 const STAGE_OPTIONS = [
   { value: 'lead', label: 'Interessent' },
@@ -224,37 +214,18 @@ export function NodeConfigPanel({
 
       {node.type === 'email' && (
         <div className="space-y-3">
+          <EmailBodyEditor
+            key={node.id}
+            subject={typeof config.subject === 'string' ? config.subject : ''}
+            bodyHtml={typeof config.bodyHtml === 'string' ? config.bodyHtml : ''}
+            anchorMode={anchorMode}
+            disabled={disabled}
+            onChange={set}
+          />
           <div>
-            <label className={labelCls}>Emne (det mottakeren ser først i innboksen)</label>
-            <input
-              type="text"
-              value={typeof config.subject === 'string' ? config.subject : ''}
-              onChange={(e) => set({ subject: e.target.value })}
-              disabled={disabled}
-              className={inputCls}
-            />
-          </div>
-          <div>
-            <label className={labelCls}>Tekst i e-posten</label>
-            <textarea
-              rows={6}
-              value={typeof config.bodyHtml === 'string' ? config.bodyHtml : ''}
-              onChange={(e) => set({ bodyHtml: e.target.value })}
-              disabled={disabled}
-              className={inputCls}
-            />
-            <p className="mt-1 text-[11px] text-gray-500">
-              Flettefelt (byttes ut med riktig navn osv. når e-posten sendes):{' '}
-              {mergeTagsForAnchor(anchorMode).map((t) => `${t.tag} (${MERGE_TAG_LABELS_NO[t.tag] ?? t.description})`).join(', ')}
-              {anchorMode !== 'course' && '. Kursfelt (barnets navn, kursnavn, datoer, allergier) finnes kun i kursflyter.'}
-            </p>
-            <p className="mt-1 text-[11px] text-gray-500">
-              {'{{kontakt_epost}}'} er Bjerkes egen kontaktadresse (Innstillinger → Kontaktinformasjon), ikke mottakerens e-post.
-            </p>
-          </div>
-          <div>
-            <label className={labelCls}>Avsender (hvem e-posten kommer fra)</label>
+            <label htmlFor="email-sender" className={labelCls}>Avsender (hvem e-posten kommer fra)</label>
             <select
+              id="email-sender"
               value={typeof config.senderIdentityId === 'number' ? config.senderIdentityId : ''}
               onChange={(e) => set({ senderIdentityId: Number(e.target.value) || undefined })}
               disabled={disabled}
