@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
+import { EXCEL_CSV, csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
+import { formatPhoneForExport } from '@/lib/admin-format';
 import { ROLE_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
 
@@ -31,13 +32,13 @@ export async function GET() {
       },
     });
 
-    const headers = ['ID', 'E-post', 'Navn', 'Telefon', 'Adresse', 'Rolle', 'Opprettet'];
+    const headers = ['ID', 'E-post', 'Navn', 'Telefon', 'Adresse', 'Rolle', 'Registrert'];
 
     const rows = users.map((user) => [
       user.id,
       user.email,
       user.parent?.name ?? '',
-      user.parent?.phone ?? '',
+      formatPhoneForExport(user.parent?.phone),
       user.parent?.address ?? '',
       label(ROLE_LABELS, user.role),
       formatOsloDate(user.createdAt),
@@ -50,7 +51,7 @@ export async function GET() {
       userEmail: session.user.email,
     }).catch(() => {});
 
-    return csvResponse(toCsv(headers, rows), csvFilename('brukere'));
+    return csvResponse(toCsv(headers, rows, EXCEL_CSV), csvFilename('brukere'));
   } catch (error) {
     logger.error('Error exporting users', { error });
     return NextResponse.json({ error: 'Kunne ikke eksportere brukere' }, { status: 500 });

@@ -109,7 +109,17 @@ describe('admin CSV exports', () => {
       id: 2, email: 'b@x.no', role: 'superadmin', createdAt: created, parent: { name: 'Bjørn', phone: null, address: null },
     }]);
     const [, row] = await csvOf(await exportUsers());
-    expect(row).toBe('2,b@x.no,Bjørn,,,Superadmin,01.03.2026');
+    expect(row).toBe('2;b@x.no;Bjørn;;;Superadmin;01.03.2026');
     expect(logActivity).toHaveBeenCalledWith(expect.objectContaining({ action: 'export', entity: 'user', details: '{"rows":1}' }));
+  });
+
+  it('users: Excel-ready with Norwegian headers and phone numbers Excel keeps', async () => {
+    prisma.user.findMany.mockResolvedValue([{
+      id: 3, email: 'k@x.no', role: 'parent', createdAt: created,
+      parent: { name: 'Kari', phone: '+4790000001', address: 'Storgata 1; 0155 Oslo' },
+    }]);
+    const [header, row] = await csvOf(await exportUsers());
+    expect(header).toBe('ID;E-post;Navn;Telefon;Adresse;Rolle;Registrert');
+    expect(row).toBe('3;k@x.no;Kari;900 00 001;"Storgata 1; 0155 Oslo";Forelder;01.03.2026');
   });
 });
