@@ -4,6 +4,7 @@ import {
   isSettingsDirty,
   planFlowSave,
   sendWindowStateFrom,
+  settingsDraftAfterSave,
   settingsDraftFrom,
   settingsPatch,
 } from '@/lib/flows/editor-save';
@@ -96,5 +97,21 @@ describe('planFlowSave', () => {
 
   it('ingenting å gjøre når alt er lagret', () => {
     expect(planFlowSave(base)).toEqual({ patch: null, sendWindowOverride: null, saveGraph: false, errors: [] });
+  });
+});
+
+describe('settingsDraftAfterSave', () => {
+  const sent = { name: 'Velkomst ', description: '', isMarketing: true, anchorMode: 'contact' as const };
+  const saved = { name: 'Velkomst', description: null, isMarketing: true, anchorMode: 'contact' };
+
+  it('takes the server values for fields untouched during the save', () => {
+    expect(settingsDraftAfterSave(sent, sent, saved)).toEqual({ name: 'Velkomst', description: '', isMarketing: true, anchorMode: 'contact' });
+  });
+
+  it('keeps what the user typed while the save was in flight (regression: overwritten)', () => {
+    const current = { ...sent, name: 'Velkomst 2', isMarketing: false };
+    expect(settingsDraftAfterSave(current, sent, saved)).toEqual({
+      name: 'Velkomst 2', description: '', isMarketing: false, anchorMode: 'contact',
+    });
   });
 });

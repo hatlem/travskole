@@ -43,6 +43,24 @@ export function isSettingsDirty(saved: SavedFlowSettings, draft: FlowSettingsDra
   );
 }
 
+/**
+ * Utkastet etter en lagring: felt som ikke er rørt siden lagringen startet (like
+ * `sent`), tar serverens verdi; felt brukeren har skrevet i mens, beholdes.
+ */
+export function settingsDraftAfterSave(
+  current: FlowSettingsDraft,
+  sent: FlowSettingsDraft,
+  saved: SavedFlowSettings,
+): FlowSettingsDraft {
+  const fromServer = settingsDraftFrom(saved);
+  return {
+    name: current.name === sent.name ? fromServer.name : current.name,
+    description: current.description === sent.description ? fromServer.description : current.description,
+    isMarketing: current.isMarketing === sent.isMarketing ? fromServer.isMarketing : current.isMarketing,
+    anchorMode: current.anchorMode === sent.anchorMode ? fromServer.anchorMode : current.anchorMode,
+  };
+}
+
 export type SettingsPatch = Partial<{
   name: string;
   description: string | null;

@@ -46,6 +46,7 @@ import {
   isSettingsDirty,
   planFlowSave,
   sendWindowStateFrom,
+  settingsDraftAfterSave,
   settingsDraftFrom,
   type FlowSettingsDraft,
   type SendWindowState,
@@ -416,6 +417,9 @@ export function FlowEditor({
 
     savingRef.current = true;
     setSaving(true);
+    // Det som sendes; endringer gjort mens lagringen pågår, skal ikke overskrives av svaret.
+    const sentSettings = settingsDraft;
+    const sentSendWindow = sendWindowDraft;
     try {
       if (plan.patch) {
         const res = await fetch(`/api/admin/crm/flows/${flow.id}`, {
@@ -436,11 +440,11 @@ export function FlowEditor({
           anchorMode: data.flow.anchorMode as string,
         };
         setFlow((f) => ({ ...f, ...saved }));
-        setSettingsDraft(settingsDraftFrom(saved));
+        setSettingsDraft((current) => settingsDraftAfterSave(current, sentSettings, saved));
         const override = plan.sendWindowOverride;
         if (override) {
           setSendWindow((prev) => ({ ...prev, override }));
-          setSendWindowDraft(sendWindowStateFrom(sendWindow.global, override));
+          setSendWindowDraft((current) => (current === sentSendWindow ? sendWindowStateFrom(sendWindow.global, override) : current));
         }
       }
       if (plan.saveGraph && !(await saveGraph())) return false;
