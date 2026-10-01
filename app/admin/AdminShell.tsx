@@ -11,6 +11,7 @@ import { buildBreadcrumbs } from '@/lib/admin-breadcrumbs';
 import { adminDocumentTitle } from '@/lib/admin-title';
 import { CRM_GROUPS, CRM_ROOT, findCrmLocation, groupHref, matchesPath } from '@/lib/admin-nav';
 import { FeedbackWidget } from '@/components/FeedbackWidget';
+import { LinkPending } from '@/components/admin/LinkPending';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
@@ -138,6 +139,7 @@ export function AdminShell({
                   <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                 </svg>
                 {item.label}
+                <LinkPending className="ml-auto h-3.5 w-3.5" />
               </Link>
               {item.href === CRM_ROOT && inCrm && (
                 <ul aria-label="CRM-områder" className="mt-1 mb-2 ml-6 pl-3 border-l border-white/20 space-y-0.5">
@@ -156,7 +158,10 @@ export function AdminShell({
                               : 'text-blue-100 hover:bg-white/10 hover:text-white'
                           }`}
                         >
-                          {group.label}
+                          <span className="flex items-center justify-between gap-2">
+                            {group.label}
+                            <LinkPending />
+                          </span>
                         </Link>
                       </li>
                     );
@@ -186,6 +191,7 @@ export function AdminShell({
                       <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                     </svg>
                     {item.label}
+                    <LinkPending className="ml-auto h-3.5 w-3.5" />
                   </Link>
                 </li>
               );

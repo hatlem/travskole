@@ -10,6 +10,7 @@ import { Pagination } from '@/components/admin/Pagination';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Button, ButtonLink, buttonClass } from '@/components/admin/Button';
 import { CourseStatusBadge } from '@/components/admin/StatusBadge';
+import { LinkPending } from '@/components/admin/LinkPending';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 import { formatPrice } from '@/lib/admin-format';
@@ -395,7 +396,10 @@ export default function AdminCoursesPage() {
                   <li key={course.id} className="rounded-xl border border-gray-200 bg-white">
                     <Link href={`/admin/courses/${course.id}`} className="block rounded-xl p-4 hover:bg-gray-50">
                       <div className="flex items-start justify-between gap-3">
-                        <h3 className="font-semibold text-gray-900">{course.name}</h3>
+                        <h3 className="flex items-center gap-2 font-semibold text-gray-900">
+                          {course.name}
+                          <LinkPending />
+                        </h3>
                         <CourseStatusBadge status={course.display} />
                       </div>
                       <p className="mt-1 text-sm text-gray-600">
@@ -441,8 +445,9 @@ export default function AdminCoursesPage() {
                           className="cursor-pointer hover:bg-gray-50"
                         >
                           <td className="px-4 py-3">
-                            <Link href={`/admin/courses/${course.id}`} className="font-medium text-gray-900 hover:text-bjerke-blue hover:underline">
+                            <Link href={`/admin/courses/${course.id}`} className="inline-flex items-center gap-2 font-medium text-gray-900 hover:text-bjerke-blue hover:underline">
                               {course.name}
+                              <LinkPending />
                             </Link>
                             <p className="text-gray-600">{courseTypeLabel(courseTypes, course.type)}</p>
                           </td>

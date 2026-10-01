@@ -12,6 +12,7 @@ import { buttonClass } from '@/components/admin/Button';
 import { CourseParticipants, type CourseParticipant } from './CourseParticipants';
 import { CourseEmailPanel } from './CourseEmailPanel';
 import { CourseStatusActions, PrintButton } from './CourseStatusActions';
+import { LinkPending } from '@/components/admin/LinkPending';
 
 const TABS = [
   { id: 'deltakere', label: 'Deltakere' },
@@ -142,6 +143,7 @@ export default async function CourseDetailPage({
                 >
                   {t.label}
                   {t.id === 'deltakere' && <span className="ml-1.5 rounded-full bg-gray-100 px-2 text-xs tabular-nums text-gray-700">{regs.length}</span>}
+                  <LinkPending className="ml-2 h-3 w-3" />
                 </Link>
               </li>
             );
@@ -152,6 +154,7 @@ export default async function CourseDetailPage({
               className="inline-flex min-h-11 items-center whitespace-nowrap border-b-2 border-transparent px-4 text-sm font-medium text-gray-600 hover:border-gray-300 hover:text-gray-900"
             >
               Rediger
+              <LinkPending className="ml-2 h-3 w-3" />
             </Link>
           </li>
         </ul>
