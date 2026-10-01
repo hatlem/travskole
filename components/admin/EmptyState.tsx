@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { buttonClass } from './Button';
 
 type IconType = 'courses' | 'registrations' | 'users' | 'bookings' | 'activity' | 'search' | 'email';
 
@@ -20,10 +21,8 @@ interface EmptyStateProps {
   secondaryAction?: EmptyStateAction;
 }
 
-const BUTTON_BASE =
-  'inline-flex items-center rounded-lg px-4 py-2.5 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2';
-const PRIMARY = `${BUTTON_BASE} bg-bjerke-blue text-white hover:bg-bjerke-blue-dark`;
-const SECONDARY = `${BUTTON_BASE} border border-gray-300 bg-white text-gray-800 hover:bg-gray-50`;
+const PRIMARY = buttonClass('primary');
+const SECONDARY = buttonClass('secondary');
 
 function ActionButton({ action, className }: { action: EmptyStateAction; className: string }) {
   if (action.href) {

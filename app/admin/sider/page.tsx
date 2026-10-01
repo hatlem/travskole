@@ -3,6 +3,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import RichTextEditor from '@/components/admin/RichTextEditor';
+import { PageHeader } from '@/components/admin/PageHeader';
+import { Button } from '@/components/admin/Button';
+import { useToast } from '@/components/admin/Toast';
 
 interface LegalPage {
   key: string;
@@ -17,7 +20,7 @@ export default function AdminLegalPagesPage() {
   const [pages, setPages] = useState<LegalPage[] | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
-  const [savedKey, setSavedKey] = useState<string | null>(null);
+  const { toast } = useToast();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -40,7 +43,6 @@ export default function AdminLegalPagesPage() {
 
   async function handleSave(page: LegalPage) {
     setSavingKey(page.key);
-    setSavedKey(null);
     setError(null);
     try {
       const res = await fetch('/api/admin/legal', {
@@ -57,8 +59,9 @@ export default function AdminLegalPagesPage() {
             )
           : prev,
       );
-      setSavedKey(page.key);
-      setTimeout(() => setSavedKey((k) => (k === page.key ? null : k)), 3000);
+      toast(`${page.title} er lagret og vises på /${page.slug}.`, 'success', {
+        action: { label: 'Se siden', onClick: () => window.open(`/${page.slug}`, '_blank', 'noopener') },
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
@@ -68,15 +71,23 @@ export default function AdminLegalPagesPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Sider</h1>
-        <p className="text-gray-500 mt-1">
-          Rediger innholdet på vilkår- og personvernsidene. Endringene vises umiddelbart på nettstedet.
-        </p>
-      </div>
+      <PageHeader
+        className="mb-8"
+        title="Sider"
+        description={
+          <>
+            Innholdet på vilkår- og personvernsidene. Vilkårssiden er selve vilkårene (avbestilling, eget ansvar osv.).
+            Setningen deltakerne krysser av for ved påmelding endrer du under{' '}
+            <Link href="/admin/settings#consent_terms_text" className="font-medium text-bjerke-blue underline underline-offset-2">
+              Innstillinger → Påmelding
+            </Link>
+            .
+          </>
+        }
+      />
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
           {error}
           <button onClick={() => setError(null)} className="ml-2 font-medium underline">Lukk</button>
         </div>
@@ -113,20 +124,9 @@ export default function AdminLegalPagesPage() {
               />
 
               <div className="mt-4 flex items-center justify-end gap-3">
-                {savedKey === page.key && (
-                  <span className="text-sm text-green-600">Lagret</span>
-                )}
-                <button
-                  onClick={() => handleSave(page)}
-                  disabled={savingKey === page.key}
-                  className={`px-6 py-2.5 rounded-lg font-semibold text-sm transition ${
-                    savingKey === page.key
-                      ? 'bg-gray-300 text-gray-600 cursor-not-allowed'
-                      : 'bg-bjerke-blue hover:bg-bjerke-blue-dark text-white'
-                  }`}
-                >
-                  {savingKey === page.key ? 'Lagrer …' : `Lagre ${page.title.toLowerCase()}`}
-                </button>
+                <Button onClick={() => handleSave(page)} loading={savingKey === page.key} loadingLabel="Lagrer …">
+                  Lagre {page.title.toLowerCase()}
+                </Button>
               </div>
             </div>
           ))}

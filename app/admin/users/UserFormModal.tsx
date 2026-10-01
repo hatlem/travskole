@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { Button } from '@/components/admin/Button';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 
 export interface EditableUser {
@@ -147,12 +148,12 @@ export function UserFormModal({ open, mode, user, isSuperAdmin, onClose, onSaved
           )}
 
           <div className="flex gap-3 pt-2">
-            <button type="button" disabled={saving} onClick={onClose} className="flex-1 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+            <Button variant="secondary" disabled={saving} onClick={onClose} className="flex-1">
               Avbryt
-            </button>
-            <button type="submit" disabled={saving} className="flex-1 rounded-lg bg-bjerke-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50">
-              {saving ? 'Lagrer …' : mode === 'create' ? 'Opprett' : 'Lagre'}
-            </button>
+            </Button>
+            <Button type="submit" loading={saving} loadingLabel="Lagrer …" className="flex-1">
+              {mode === 'create' ? 'Opprett' : 'Lagre'}
+            </Button>
           </div>
         </form>
       </div>

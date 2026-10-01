@@ -249,7 +249,7 @@ export function CalendarView({ courses }: CalendarViewProps) {
                         : 'bg-gray-100 text-gray-700'
                     }`}
                   >
-                    <span className="text-[10px] leading-none uppercase">
+                    <span className="text-xs leading-none uppercase">
                       {DAY_NAMES[startDate.getDay() === 0 ? 6 : startDate.getDay() - 1]}
                     </span>
                     <span className="text-sm leading-none">{dayNum}</span>
