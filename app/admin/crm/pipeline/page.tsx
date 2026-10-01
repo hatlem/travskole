@@ -11,6 +11,7 @@ import { paymentStatusBadge } from '@/lib/payments/badge';
 import { StageEditor } from './StageEditor';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { locateDeal, parseDealParam, withoutDealParam } from '@/lib/crm/pipeline-deep-link';
 
 interface DealCard {
   id: number;
@@ -49,8 +50,11 @@ export default function PipelinePage() {
   const [movingIds, setMovingIds] = useState<Set<number>>(new Set());
   const [editingStages, setEditingStages] = useState(false);
   const [dealDialog, setDealDialog] = useState<{ dealId: number | null; stageId?: number } | null>(null);
+  const [highlightId, setHighlightId] = useState<number | null>(null);
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
+  // ?deal=<id> fra «Se avtalen i salgstavlen» — leses én gang og brukes når tavla er lastet.
+  const linkedDealRef = useRef<number | null | undefined>(undefined);
 
   // silent: oppdater tavla uten skjelett (brukes etter redigering av steg)
   const load = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -88,6 +92,34 @@ export default function PipelinePage() {
   useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
+
+  useEffect(() => {
+    if (linkedDealRef.current === undefined) {
+      linkedDealRef.current = parseDealParam(window.location.search);
+      if (linkedDealRef.current !== null) {
+        window.history.replaceState(window.history.state, '', withoutDealParam(window.location.href));
+      }
+    }
+    const dealId = linkedDealRef.current;
+    if (loading || dealId === null) return;
+    linkedDealRef.current = null;
+    const location = locateDeal(pipelines, dealId);
+    if (location) {
+      setActivePipelineId(location.pipelineId);
+      setHighlightId(dealId);
+    }
+    setDealDialog({ dealId });
+  }, [loading, pipelines]);
+
+  // Vis kortet til den lenkede avtalen: rull det fram og marker det en liten stund.
+  useEffect(() => {
+    if (highlightId === null) return;
+    const card = document.querySelector<HTMLElement>(`[data-deal-id="${highlightId}"]`);
+    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    card?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'nearest', inline: 'center' });
+    const t = setTimeout(() => setHighlightId(null), 4000);
+    return () => clearTimeout(t);
+  }, [highlightId, activePipelineId]);
 
   const pipeline = pipelines.find((p) => p.id === activePipelineId) ?? null;
 
@@ -305,6 +337,7 @@ export default function PipelinePage() {
                   return (
                     <div
                       key={deal.id}
+                      data-deal-id={deal.id}
                       draggable={!isMoving}
                       onDragStart={() => setDragId(deal.id)}
                       onDragEnd={() => setDragId(null)}
@@ -314,7 +347,9 @@ export default function PipelinePage() {
                       }}
                       className={`bg-white border border-gray-200 rounded-md p-3 text-sm shadow-sm ${
                         isMoving ? 'opacity-50 cursor-wait' : 'cursor-grab active:cursor-grabbing'
-                      } ${dragId === deal.id ? 'opacity-50' : ''}`}
+                      } ${dragId === deal.id ? 'opacity-50' : ''} ${
+                        highlightId === deal.id ? 'ring-2 ring-bjerke-blue ring-offset-2' : ''
+                      }`}
                     >
                       <p className="font-medium leading-snug">{deal.title}</p>
                       <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-gray-500">
