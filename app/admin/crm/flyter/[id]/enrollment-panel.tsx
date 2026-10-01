@@ -14,21 +14,17 @@ interface EnrollmentRow {
 }
 
 const STATUS_LABELS_NO: Record<string, string> = {
-  active: 'Aktiv',
-  completed: 'Fullført',
-  exited: 'Avsluttet',
-  failed: 'Feilet',
+  active: 'Underveis',
+  completed: 'Ferdig',
+  exited: 'Tatt ut',
+  failed: 'Stoppet (feil)',
 };
 
 function fmtDate(d: string | null): string {
   return d ? new Date(d).toLocaleDateString('nb-NO') : '—';
 }
 
-/**
- * Enrollment counter + link, meant to sit in the editor's top bar. Renders
- * its own count badge and, on click, a modal with the (paginated) enrollment
- * list fetched from GET /enrollments.
- */
+/** Teller for «personer i flyten» i verktøylinjen; klikk åpner listen (GET /enrollments). */
 export function EnrollmentPanel({ flowId }: { flowId: number }) {
   const { toast } = useToast();
   const [enrollments, setEnrollments] = useState<EnrollmentRow[]>([]);
@@ -52,7 +48,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
         const res = await fetch(`/api/admin/crm/flows/${flowId}/enrollments?page=${targetPage}`, {
           signal: controller.signal,
         });
-        if (!res.ok) throw new Error('Kunne ikke laste påmeldinger');
+        if (!res.ok) throw new Error('Listen over personer i flyten kunne ikke hentes. Last siden på nytt.');
         const data = await res.json();
         setEnrollments(data.enrollments ?? []);
         setTotal(data.total ?? 0);
@@ -60,7 +56,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
         setPage(data.page ?? targetPage);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') return;
-        toast(err instanceof Error ? err.message : 'Kunne ikke laste påmeldinger', 'error');
+        toast(err instanceof Error ? err.message : 'Listen over personer i flyten kunne ikke hentes. Last siden på nytt.', 'error');
       } finally {
         if (abortRef.current === controller) {
           setLoading(false);
@@ -85,9 +81,9 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
       <button
         onClick={() => setModalOpen(true)}
         className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 whitespace-nowrap"
-        title="Aktive påmeldinger er kontakter som fortsatt er underveis i flyten"
+        title="Se hvem som er med i flyten. «Underveis» venter fortsatt på flere e-poster."
       >
-        {active ?? 0} aktive · {total ?? 0} totalt
+        {active ?? 0} underveis · {total ?? 0} totalt
       </button>
 
       {modalOpen && (
@@ -100,7 +96,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
           <div className="fixed inset-0 bg-black/50" />
           <div className="relative w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-semibold text-gray-900">Påmeldinger</h3>
+              <h3 className="text-base font-semibold text-gray-900">Personer i flyten</h3>
               <button
                 onClick={() => setModalOpen(false)}
                 className="text-gray-400 hover:text-gray-600"
@@ -113,7 +109,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
             {initialLoading ? (
               <CardSkeleton />
             ) : enrollments.length === 0 ? (
-              <p className="text-sm text-gray-500">Ingen påmeldinger ennå.</p>
+              <p className="text-sm text-gray-500">Ingen har vært med i flyten ennå. Folk blir med når flyten er aktiv og startregelen slår inn, eller når du legger dem til selv.</p>
             ) : (
               <>
                 <ul className="space-y-1.5 max-h-96 overflow-y-auto">

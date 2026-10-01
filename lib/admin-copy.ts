@@ -25,9 +25,9 @@ export const GLOSSARY = {
     help: 'De som er med i flyten og får e-postene. «Underveis» betyr at de fortsatt venter på flere e-poster.',
   },
   trigger: {
-    term: 'Når skal flyten starte?',
+    term: 'Startregel',
     replaces: 'trigger / utløser',
-    help: 'Det som gjør at en person automatisk blir med i flyten. Eksempel: «Når noen melder seg på et kurs».',
+    help: 'Svarer på «Når skal flyten starte?» — det som gjør at en person automatisk blir med. Eksempel: «Når noen melder seg på et kurs».',
   },
   template: {
     term: 'Mal',

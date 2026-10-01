@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { mergeTagsForAnchor } from '@/lib/email-templates';
 import type { EntityRef } from '@/components/admin/crm/EntityPicker';
-import type { FlowRFNode } from './node-types';
+import { NODE_DESCRIPTIONS, NODE_LABELS, type FlowRFNode } from './node-types';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { AiPersonalizationSection } from './ai-personalization-section';
 
 export interface SenderIdentityOption {
@@ -48,34 +49,34 @@ const DEAL_STATUS_OPTIONS = [
 ];
 
 const ACTION_KIND_OPTIONS = [
-  { value: 'add_tag', label: 'Legg til tagg' },
-  { value: 'remove_tag', label: 'Fjern tagg' },
-  { value: 'set_stage', label: 'Sett stadium' },
-  { value: 'notify_admin', label: 'Varsle admin' },
-  { value: 'create_task', label: 'Opprett oppgave' },
-  { value: 'exit', label: 'Avslutt flyten' },
+  { value: 'add_tag', label: 'Gi personen et stikkord' },
+  { value: 'remove_tag', label: 'Fjern et stikkord' },
+  { value: 'set_stage', label: 'Endre kundestatus' },
+  { value: 'notify_admin', label: 'Send varsel til dere (admin)' },
+  { value: 'create_task', label: 'Lag en oppgave til noen i staben' },
+  { value: 'exit', label: 'Ta personen ut av flyten' },
 ];
 
 const CONDITION_KIND_OPTIONS = [
-  { value: 'in_segment', label: 'I segment' },
-  { value: 'stage_is', label: 'Stadium er' },
-  { value: 'deal_status', label: 'Deal-status er' },
-  { value: 'opened_email', label: 'Åpnet forrige e-post' },
-  { value: 'clicked_email', label: 'Klikket i forrige e-post' },
-  { value: 'replied_email', label: 'Svarte på forrige e-post' },
+  { value: 'in_segment', label: 'Er personen med i et segment?' },
+  { value: 'stage_is', label: 'Har personen en bestemt kundestatus?' },
+  { value: 'deal_status', label: 'Har personen en avtale med en bestemt status?' },
+  { value: 'opened_email', label: 'Åpnet personen forrige e-post?' },
+  { value: 'clicked_email', label: 'Klikket personen på en lenke i forrige e-post?' },
+  { value: 'replied_email', label: 'Svarte personen på forrige e-post?' },
 ];
 
 const ENGAGEMENT_HELP: Record<string, string> = {
-  opened_email: 'Ja hvis siste e-post kontakten fikk i denne flyten er åpnet.',
-  clicked_email: 'Ja hvis kontakten har klikket en lenke i siste e-post i denne flyten.',
-  replied_email: 'Ja hvis kontakten har svart på siste e-post i denne flyten. Flyter med denne betingelsen fortsetter etter svar (ellers stopper et svar flyten automatisk). Krever at svarfanging (Microsoft Graph) er satt opp.',
+  opened_email: '«Ja» hvis personen har åpnet den siste e-posten fra denne flyten.',
+  clicked_email: '«Ja» hvis personen har klikket på en lenke i den siste e-posten fra denne flyten.',
+  replied_email: '«Ja» hvis personen har svart på den siste e-posten fra denne flyten. Da fortsetter flyten etter et svar (ellers stopper et svar flyten av seg selv). Virker bare når svar på e-post hentes inn automatisk (Microsoft 365 er satt opp).',
 };
 
 const ACTION_KINDS_WITH_VALUE = new Set(['add_tag', 'remove_tag', 'set_stage']);
 
 const SCHEDULE_ANCHOR_OPTIONS = [
   { value: 'course_start', label: 'Kursstart' },
-  { value: 'course_midway', label: 'Halvveis' },
+  { value: 'course_midway', label: 'Halvveis i kurset' },
   { value: 'course_end', label: 'Kursslutt' },
 ];
 
@@ -135,7 +136,7 @@ export function NodeConfigPanel({
   if (!node) {
     return (
       <div className="text-sm text-gray-500">
-        Velg en node i lerretet for å redigere konfigurasjonen.
+        Klikk på et steg i tegningen for å endre det. Nye steg legger du til fra listen til venstre.
       </div>
     );
   }
@@ -164,12 +165,17 @@ export function NodeConfigPanel({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke sende test-e-post', 'error');
+        toast(data.error || 'Test-e-posten ble ikke sendt. Sjekk adressen og prøv igjen.', 'error');
         return;
       }
-      toast(data.aiPersonalized ? 'Test-e-post sendt (KI-personalisert)' : 'Test-e-post sendt', 'success');
+      toast(
+        data.aiPersonalized
+          ? `Test-e-post (KI-tilpasset) sendt til ${testEmail.trim()}. Sjekk innboksen.`
+          : `Test-e-post sendt til ${testEmail.trim()}. Sjekk innboksen.`,
+        'success',
+      );
     } catch {
-      toast('Kunne ikke sende test-e-post', 'error');
+      toast('Test-e-posten ble ikke sendt. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setSending(false);
     }
@@ -189,11 +195,11 @@ export function NodeConfigPanel({
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setAiError(data.error ?? 'Noe gikk galt'); return; }
+      if (!res.ok) { setAiError(data.error ?? 'KI-hjelpen svarte ikke. Prøv igjen om litt.'); return; }
       if (kind === 'subject_variants') setSubjectSuggestions(data.suggestions ?? []);
       else set({ bodyHtml: data.result });
     } catch {
-      setAiError('Noe gikk galt — prøv igjen');
+      setAiError('KI-hjelpen svarte ikke. Sjekk nettforbindelsen og prøv igjen.');
     } finally {
       setAiBusy(false);
     }
@@ -201,36 +207,25 @@ export function NodeConfigPanel({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-gray-800">
-          {node.type === 'email'
-            ? 'E-post'
-            : node.type === 'wait'
-              ? 'Vent'
-              : node.type === 'condition'
-                ? 'Betingelse'
-                : node.type === 'action'
-                  ? 'Handling'
-                  : node.type === 'schedule'
-                    ? 'Planlegg'
-                    : node.type === 'start'
-                      ? 'Start'
-                      : 'Slutt'}
-        </h3>
-        {!disabled && (
-          <button
-            onClick={() => onDeleteNode(node.id)}
-            className="text-xs text-red-600 hover:underline"
-          >
-            Slett node
-          </button>
-        )}
+      <div>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-gray-800">{NODE_LABELS[node.type as keyof typeof NODE_LABELS] ?? node.type}</h3>
+          {!disabled && (
+            <button
+              onClick={() => onDeleteNode(node.id)}
+              className="text-xs text-red-600 hover:underline"
+            >
+              Slett steget
+            </button>
+          )}
+        </div>
+        <p className="mt-0.5 text-xs text-gray-500">{NODE_DESCRIPTIONS[node.type as keyof typeof NODE_DESCRIPTIONS]}</p>
       </div>
 
       {node.type === 'email' && (
         <div className="space-y-3">
           <div>
-            <label className={labelCls}>Emne</label>
+            <label className={labelCls}>Emne (det mottakeren ser først i innboksen)</label>
             <input
               type="text"
               value={typeof config.subject === 'string' ? config.subject : ''}
@@ -240,7 +235,7 @@ export function NodeConfigPanel({
             />
           </div>
           <div>
-            <label className={labelCls}>Innhold (HTML)</label>
+            <label className={labelCls}>Tekst i e-posten</label>
             <textarea
               rows={6}
               value={typeof config.bodyHtml === 'string' ? config.bodyHtml : ''}
@@ -249,7 +244,7 @@ export function NodeConfigPanel({
               className={inputCls}
             />
             <p className="mt-1 text-[11px] text-gray-500">
-              Tilgjengelige merge-tags:{' '}
+              Flettefelt (byttes ut med riktig navn osv. når e-posten sendes):{' '}
               {mergeTagsForAnchor(anchorMode).map((t) => `${t.tag} (${MERGE_TAG_LABELS_NO[t.tag] ?? t.description})`).join(', ')}
               {anchorMode !== 'course' && '. Kursfelt (barnets navn, kursnavn, datoer, allergier) finnes kun i kursflyter.'}
             </p>
@@ -258,7 +253,7 @@ export function NodeConfigPanel({
             </p>
           </div>
           <div>
-            <label className={labelCls}>Avsender</label>
+            <label className={labelCls}>Avsender (hvem e-posten kommer fra)</label>
             <select
               value={typeof config.senderIdentityId === 'number' ? config.senderIdentityId : ''}
               onChange={(e) => set({ senderIdentityId: Number(e.target.value) || undefined })}
@@ -325,7 +320,7 @@ export function NodeConfigPanel({
           )}
 
           <div className="border-t border-gray-200 pt-3">
-            <label className={labelCls}>Send test-e-post</label>
+            <label className={labelCls}>Send en test til deg selv</label>
             <div className="flex gap-2">
               <input
                 type="email"
@@ -344,7 +339,7 @@ export function NodeConfigPanel({
               </button>
             </div>
             {!isPersisted && (
-              <p className="mt-1 text-[11px] text-gray-500">Lagre flyten før du sender en test-e-post.</p>
+              <p className="mt-1 text-[11px] text-gray-500">Trykk «Lagre» øverst først, så kan du sende en test til deg selv.</p>
             )}
             {aiConfigured && config.aiPersonalize === true && (
               <p className="mt-1 text-[11px] text-gray-500">
@@ -387,7 +382,7 @@ export function NodeConfigPanel({
       {node.type === 'condition' && (
         <div className="space-y-3">
           <div>
-            <label className={labelCls}>Type</label>
+            <label className={labelCls}>Hva skal sjekkes?</label>
             <select
               value={typeof config.kind === 'string' ? config.kind : ''}
               onChange={(e) => set({ kind: e.target.value, value: undefined })}
@@ -404,17 +399,20 @@ export function NodeConfigPanel({
           </div>
           {typeof config.kind === 'string' && ENGAGEMENT_HELP[config.kind] && (
             <p className="text-[11px] text-gray-500">
-              {ENGAGEMENT_HELP[config.kind]} Uten tidligere e-post i flyten går kontakten til «nei».
+              {ENGAGEMENT_HELP[config.kind]} Har personen ikke fått noen e-post i flyten ennå, blir svaret «nei».
             </p>
           )}
           {!isMarketing && (config.kind === 'opened_email' || config.kind === 'clicked_email') && (
             <p className="text-[11px] text-amber-700">
-              Åpning og klikk spores bare i markedsføringsflyter — i denne flyten vil betingelsen alltid gi «nei».
+              Vi følger bare med på åpning og klikk i markedsføringsflyter. I denne flyten blir svaret derfor alltid «nei».
             </p>
           )}
           {config.kind === 'in_segment' && (
             <div>
-              <label className={labelCls}>Segment</label>
+              <label className={labelCls}>
+                Hvilket segment?
+                <HelpTip term="segment" />
+              </label>
               <select
                 value={typeof config.value === 'number' ? config.value : ''}
                 onChange={(e) => set({ value: Number(e.target.value) || undefined })}
@@ -432,14 +430,14 @@ export function NodeConfigPanel({
           )}
           {config.kind === 'stage_is' && (
             <div>
-              <label className={labelCls}>Stadium</label>
+              <label className={labelCls}>Hvilken kundestatus?</label>
               <select
                 value={typeof config.value === 'string' ? config.value : ''}
                 onChange={(e) => set({ value: e.target.value })}
                 disabled={disabled}
                 className={inputCls}
               >
-                <option value="">Velg stadium …</option>
+                <option value="">Velg kundestatus …</option>
                 {STAGE_OPTIONS.map((s) => (
                   <option key={s.value} value={s.value}>
                     {s.label}
@@ -450,7 +448,7 @@ export function NodeConfigPanel({
           )}
           {config.kind === 'deal_status' && (
             <div>
-              <label className={labelCls}>Status</label>
+              <label className={labelCls}>Hvilken avtalestatus?</label>
               <select
                 value={typeof config.value === 'string' ? config.value : ''}
                 onChange={(e) => set({ value: e.target.value })}
@@ -472,7 +470,7 @@ export function NodeConfigPanel({
       {node.type === 'action' && (
         <div className="space-y-3">
           <div>
-            <label className={labelCls}>Type</label>
+            <label className={labelCls}>Hva skal gjøres?</label>
             <select
               value={typeof config.kind === 'string' ? config.kind : ''}
               onChange={(e) =>
@@ -489,11 +487,36 @@ export function NodeConfigPanel({
               ))}
             </select>
           </div>
-          {typeof config.kind === 'string' && ACTION_KINDS_WITH_VALUE.has(config.kind) && (
+          {config.kind === 'set_stage' && (
             <div>
-              <label className={labelCls}>Verdi</label>
+              <label className={labelCls}>Ny kundestatus</label>
+              <select
+                value={typeof config.value === 'string' ? config.value : ''}
+                onChange={(e) => set({ value: e.target.value })}
+                disabled={disabled}
+                className={inputCls}
+              >
+                <option value="">Velg kundestatus …</option>
+                {typeof config.value === 'string' && config.value && !STAGE_OPTIONS.some((s) => s.value === config.value) && (
+                  <option value={config.value}>{config.value}</option>
+                )}
+                {STAGE_OPTIONS.map((s) => (
+                  <option key={s.value} value={s.value}>
+                    {s.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {typeof config.kind === 'string' && ACTION_KINDS_WITH_VALUE.has(config.kind) && config.kind !== 'set_stage' && (
+            <div>
+              <label className={labelCls}>
+                Stikkord
+                <HelpTip term="tag" />
+              </label>
               <input
                 type="text"
+                placeholder="F.eks. julebord-2025"
                 value={typeof config.value === 'string' ? config.value : ''}
                 onChange={(e) => set({ value: e.target.value })}
                 disabled={disabled}
@@ -503,7 +526,7 @@ export function NodeConfigPanel({
           )}
           {config.kind === 'notify_admin' && (
             <div>
-              <label className={labelCls}>Melding (valgfri)</label>
+              <label className={labelCls}>Melding i varselet (valgfritt)</label>
               <input
                 type="text"
                 value={typeof config.value === 'string' ? config.value : ''}
@@ -528,15 +551,18 @@ export function NodeConfigPanel({
                 />
               </div>
               <div>
-                <label className={labelCls}>Ansvarlig</label>
+                <label className={labelCls}>
+                  Hvem skal få oppgaven?
+                  <HelpTip term="owner" />
+                </label>
                 <select
                   value={config.assignTo === 'owner' ? 'owner' : ''}
                   onChange={(e) => set({ assignTo: e.target.value === 'owner' ? 'owner' : undefined })}
                   disabled={disabled}
                   className={`${inputCls} mb-2`}
                 >
-                  <option value="">Fast person</option>
-                  <option value="owner">Kontaktens ansvarlige (ev. bedriftens)</option>
+                  <option value="">En bestemt person</option>
+                  <option value="owner">Den som er ansvarlig for kontakten (ev. bedriften)</option>
                 </select>
                 <select
                   value={typeof config.assigneeUserId === 'number' ? config.assigneeUserId : ''}
@@ -545,7 +571,7 @@ export function NodeConfigPanel({
                   className={inputCls}
                   aria-label={config.assignTo === 'owner' ? 'Reserve hvis kontakten mangler ansvarlig' : 'Ansvarlig'}
                 >
-                  <option value="">{config.assignTo === 'owner' ? 'Reserve: ingen (ufordelt)' : 'Ingen (ufordelt)'}</option>
+                  <option value="">{config.assignTo === 'owner' ? 'Hvis ingen er ansvarlig: ingen bestemt' : 'Ingen bestemt (hvem som helst kan ta den)'}</option>
                   {adminUsers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.email}
@@ -554,7 +580,7 @@ export function NodeConfigPanel({
                 </select>
               </div>
               <div>
-                <label className={labelCls}>Frist (dager etter at kontakten når noden)</label>
+                <label className={labelCls}>Frist (antall dager etter at personen kommer hit)</label>
                 <input
                   type="number"
                   min={0}
@@ -568,7 +594,7 @@ export function NodeConfigPanel({
                   className={inputCls}
                 />
               </div>
-              <p className="text-[11px] text-gray-500">Oppgaven knyttes til kontakten og vises under CRM → Oppgaver.</p>
+              <p className="text-[11px] text-gray-500">Oppgaven knyttes til kontakten og dukker opp under CRM → Salg → Oppgaver.</p>
             </div>
           )}
         </div>
@@ -577,21 +603,21 @@ export function NodeConfigPanel({
       {node.type === 'schedule' && (
         <div className="space-y-3">
           <div>
-            <label className={labelCls}>Anker (kursdato)</label>
+            <label className={labelCls}>Hvilken kursdato?</label>
             <select
               value={typeof config.anchor === 'string' ? config.anchor : ''}
               onChange={(e) => set({ anchor: e.target.value })}
               disabled={disabled}
               className={inputCls}
             >
-              <option value="">Velg anker …</option>
+              <option value="">Velg kursdato …</option>
               {SCHEDULE_ANCHOR_OPTIONS.map((a) => (
                 <option key={a.value} value={a.value}>{a.label}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className={labelCls}>Forskyvning (dager)</label>
+            <label className={labelCls}>Antall dager før eller etter</label>
             <input
               type="number"
               value={typeof config.offsetDays === 'number' ? config.offsetDays : 0}
@@ -599,13 +625,13 @@ export function NodeConfigPanel({
               disabled={disabled}
               className={inputCls}
             />
-            <p className="mt-1 text-[11px] text-gray-500">Negativt = før ankeret, positivt = etter. F.eks. Kursstart med −3 = tre dager før kursstart.</p>
+            <p className="mt-1 text-[11px] text-gray-500">Minus betyr før, pluss betyr etter. Eksempel: «Kursstart» og −3 = tre dager før kursstart. 0 = samme dag.</p>
           </div>
         </div>
       )}
 
       {(node.type === 'start' || node.type === 'end') && (
-        <p className="text-sm text-gray-500">Ingen konfigurasjon for denne noden.</p>
+        <p className="text-sm text-gray-500">Dette steget har ingen innstillinger. Koble det til de andre stegene med piler.</p>
       )}
     </div>
   );

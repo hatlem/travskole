@@ -59,26 +59,26 @@ function validateEmailConfig(node: GraphNode): ValidationError | null {
   const { subject, bodyHtml, senderIdentityId } = node.config;
   const ok = isNonEmptyString(subject) && isNonEmptyString(bodyHtml) && isInteger(senderIdentityId);
   if (ok) return null;
-  return err(node.id, 'email_config', 'E-post-noden mangler emne, innhold eller avsender.');
+  return err(node.id, 'email_config', 'E-posten mangler emne, tekst eller avsender. Klikk på steget og fyll inn det som mangler.');
 }
 
 function validateWaitConfig(node: GraphNode): ValidationError | null {
   const { days, hours } = node.config;
   if (days !== undefined && !isFiniteNumber(days)) {
-    return err(node.id, 'wait_config', 'Vent-noden har en ugyldig verdi for dager.');
+    return err(node.id, 'wait_config', 'Antall dager må være et helt tall.');
   }
   if (hours !== undefined && !isFiniteNumber(hours)) {
-    return err(node.id, 'wait_config', 'Vent-noden har en ugyldig verdi for timer.');
+    return err(node.id, 'wait_config', 'Antall timer må være et helt tall.');
   }
   if (isFiniteNumber(days) && days < 0) {
-    return err(node.id, 'wait_config', 'Vent-noden kan ikke ha negative dager.');
+    return err(node.id, 'wait_config', 'Antall dager kan ikke være mindre enn 0.');
   }
   if (isFiniteNumber(hours) && hours < 0) {
-    return err(node.id, 'wait_config', 'Vent-noden kan ikke ha negative timer.');
+    return err(node.id, 'wait_config', 'Antall timer kan ikke være mindre enn 0.');
   }
   const totalHours = (isFiniteNumber(days) ? days : 0) * 24 + (isFiniteNumber(hours) ? hours : 0);
   if (totalHours < 1) {
-    return err(node.id, 'wait_config', 'Vent-noden må ha en varighet på minst 1 time.');
+    return err(node.id, 'wait_config', 'Ventetiden må være minst 1 time. Fyll inn dager eller timer.');
   }
   return null;
 }
@@ -87,10 +87,10 @@ function validateConditionConfig(node: GraphNode): ValidationError | null {
   const { kind, value } = node.config;
   const validKind = typeof kind === 'string' && (CONDITION_KINDS as readonly string[]).includes(kind);
   if (!validKind) {
-    return err(node.id, 'condition_config', 'Betingelses-noden mangler type eller verdi.');
+    return err(node.id, 'condition_config', 'Velg hva som skal sjekkes, og hva svaret skal sammenlignes med.');
   }
   if (!ENGAGEMENT_CONDITION_KINDS.has(kind) && !hasValue(value)) {
-    return err(node.id, 'condition_config', 'Betingelses-noden mangler type eller verdi.');
+    return err(node.id, 'condition_config', 'Velg hva som skal sjekkes, og hva svaret skal sammenlignes med.');
   }
   return null;
 }
@@ -99,10 +99,10 @@ function validateActionConfig(node: GraphNode): ValidationError | null {
   const { kind, value } = node.config;
   const validKind = typeof kind === 'string' && (ACTION_KINDS as readonly string[]).includes(kind);
   if (!validKind) {
-    return err(node.id, 'action_config', 'Handlings-noden har en ugyldig type.');
+    return err(node.id, 'action_config', 'Velg hva som skal gjøres.');
   }
   if (ACTION_KINDS_REQUIRING_VALUE.has(kind as string) && !hasValue(value)) {
-    return err(node.id, 'action_config', 'Handlings-noden mangler en verdi.');
+    return err(node.id, 'action_config', 'Fyll inn stikkord eller kundestatus.');
   }
   if (kind === 'create_task') return validateCreateTaskConfig(node);
   return null;
@@ -111,16 +111,16 @@ function validateActionConfig(node: GraphNode): ValidationError | null {
 function validateCreateTaskConfig(node: GraphNode): ValidationError | null {
   const { title, assigneeUserId, assignTo, dueDays } = node.config;
   if (!isNonEmptyString(title)) {
-    return err(node.id, 'action_config', 'Oppgave-handlingen mangler en tittel.');
+    return err(node.id, 'action_config', 'Oppgaven mangler en tittel.');
   }
   if (title.length > 300) {
     return err(node.id, 'action_config', 'Oppgavetittelen kan være maks 300 tegn.');
   }
   if (assigneeUserId !== undefined && assigneeUserId !== null && !(isInteger(assigneeUserId) && assigneeUserId > 0)) {
-    return err(node.id, 'action_config', 'Oppgave-handlingen har en ugyldig ansvarlig.');
+    return err(node.id, 'action_config', 'Den valgte ansvarlige finnes ikke lenger. Velg en annen.');
   }
   if (assignTo !== undefined && assignTo !== null && assignTo !== 'owner') {
-    return err(node.id, 'action_config', 'Oppgave-handlingen har en ugyldig tildelingsregel.');
+    return err(node.id, 'action_config', 'Velg hvem som skal få oppgaven.');
   }
   if (dueDays !== undefined && dueDays !== null && !(isInteger(dueDays) && dueDays >= 0 && dueDays <= TASK_DUE_DAYS_MAX)) {
     return err(node.id, 'action_config', `Frist må være et helt antall dager mellom 0 og ${TASK_DUE_DAYS_MAX}.`);
@@ -132,10 +132,10 @@ function validateScheduleConfig(node: GraphNode): ValidationError | null {
   const { anchor, offsetDays } = node.config;
   const validAnchor = typeof anchor === 'string' && (SCHEDULE_ANCHORS as readonly string[]).includes(anchor);
   if (!validAnchor) {
-    return err(node.id, 'schedule_config', 'Planleggings-noden mangler et gyldig anker.');
+    return err(node.id, 'schedule_config', 'Velg hvilken kursdato e-posten skal regnes fra.');
   }
   if (offsetDays !== undefined && !isInteger(offsetDays)) {
-    return err(node.id, 'schedule_config', 'Planleggings-noden har en ugyldig forskyvning.');
+    return err(node.id, 'schedule_config', 'Antall dager før/etter kursdatoen må være et helt tall.');
   }
   return null;
 }
@@ -152,10 +152,10 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
 
   const startNodes = nodes.filter((node) => node.type === 'start');
   if (startNodes.length === 0) {
-    return [err(null, 'no_start', 'Flyten må ha nøyaktig én start-node.')];
+    return [err(null, 'no_start', 'Flyten mangler et «Start»-steg. Legg til «Start» og koble det til første e-post.')];
   }
   if (startNodes.length > 1) {
-    return [err(null, 'multiple_starts', 'Flyten kan bare ha én start-node.')];
+    return [err(null, 'multiple_starts', 'Flyten har flere «Start»-steg. Slett alle unntatt ett.')];
   }
   const [startNode] = startNodes;
 
@@ -180,7 +180,7 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
   }
   for (const node of nodes) {
     if (!reachable.has(node.id)) {
-      errors.push(err(node.id, 'unreachable', 'Noden kan ikke nås fra start-noden.'));
+      errors.push(err(node.id, 'unreachable', 'Steget henger ikke sammen med «Start». Dra en pil fra steget før og hit.'));
     }
   }
 
@@ -195,7 +195,7 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
       if (!nodesById.has(edge.toNodeId)) continue;
       const state = color.get(edge.toNodeId);
       if (state === 'gray') {
-        errors.push(err(edge.toNodeId, 'cycle', 'Flyten har en løkke — flyter må være uten sykler.'));
+        errors.push(err(edge.toNodeId, 'cycle', 'Pilene går i ring. En flyt må gå fremover fra start til slutt.'));
         cycleReported = true;
         return;
       }
@@ -214,7 +214,7 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
 
     if (node.type === 'end') {
       if (nodeOutgoing.length > 0) {
-        errors.push(err(node.id, 'end_with_edge', 'Slutt-noden kan ikke ha utgående koblinger.'));
+        errors.push(err(node.id, 'end_with_edge', 'Ingenting kan komme etter «Slutt». Fjern pilen ut fra steget.'));
       }
       continue;
     }
@@ -223,21 +223,21 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
       const branches = nodeOutgoing.map((edge) => edge.branch).sort();
       const isValid = nodeOutgoing.length === 2 && branches[0] === 'ja' && branches[1] === 'nei';
       if (!isValid) {
-        errors.push(err(node.id, 'missing_branch', 'Betingelses-noden må ha nøyaktig to grener: «ja» og «nei».'));
+        errors.push(err(node.id, 'missing_branch', 'Sjekken trenger to piler: én fra «ja» og én fra «nei».'));
       }
       continue;
     }
 
     if (isExitAction(node)) {
       if (nodeOutgoing.length > 0) {
-        errors.push(err(node.id, 'exit_with_edge', 'En avslutt-handling kan ikke ha utgående kobling.'));
+        errors.push(err(node.id, 'exit_with_edge', 'Ingenting kan komme etter «Ta ut av flyten». Fjern pilen ut fra steget.'));
       }
       continue;
     }
 
     const isValid = nodeOutgoing.length === 1 && nodeOutgoing[0].branch === null;
     if (!isValid) {
-      errors.push(err(node.id, 'missing_edge', 'Noden mangler en utgående kobling.'));
+      errors.push(err(node.id, 'missing_edge', 'Steget fører ingen steder. Dra en pil herfra til neste steg (eller til «Slutt»).'));
     }
   }
 
@@ -269,7 +269,7 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
   }
   for (const nodeId of reachable) {
     if (!canReachTerminal.has(nodeId)) {
-      errors.push(err(nodeId, 'dead_end', 'Det finnes en vei fra start som aldri når en slutt-node.'));
+      errors.push(err(nodeId, 'dead_end', 'Herfra kommer man aldri til «Slutt». Koble steget videre til et «Slutt»-steg.'));
     }
   }
 

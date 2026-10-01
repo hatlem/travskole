@@ -61,12 +61,12 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
     try {
       const parsed: unknown = JSON.parse(trimmed);
       if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-        setFilterError('Filteret må være et JSON-objekt');
+        setFilterError('Ekstrafilteret må stå mellom { og }, f.eks. {"status": "confirmed"}.');
         return null;
       }
       return parsed as Record<string, unknown>;
     } catch {
-      setFilterError('Ugyldig JSON i filter');
+      setFilterError('Ekstrafilteret er ikke skrevet riktig. Sjekk anførselstegn og klammer, eller fjern det.');
       return null;
     }
   }
@@ -94,7 +94,7 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke opprette utløser', 'error');
+        toast(data.error || 'Startregelen ble ikke lagt til. Prøv igjen.', 'error');
         return;
       }
       onTriggersChange([
@@ -106,9 +106,9 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
       setListId('');
       setFilterText('');
       setShowAdvanced(false);
-      toast('Utløser lagt til', 'success');
+      toast('Startregelen er lagt til. Når flyten er aktiv, blir folk med automatisk.', 'success');
     } catch {
-      toast('Kunne ikke opprette utløser', 'error');
+      toast('Startregelen ble ikke lagt til. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setCreating(false);
     }
@@ -124,13 +124,13 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
       );
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke slette utløser', 'error');
+        toast(data.error || 'Startregelen ble ikke fjernet. Prøv igjen.', 'error');
         return;
       }
       onTriggersChange(triggers.filter((t) => t.id !== triggerId));
-      toast('Utløser slettet', 'success');
+      toast('Startregelen er fjernet. Ingen nye blir med via den.', 'success');
     } catch {
-      toast('Kunne ikke slette utløser', 'error');
+      toast('Startregelen ble ikke fjernet. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setDeletingId(null);
     }
@@ -140,7 +140,8 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
     <div className="space-y-3">
       {triggers.length === 0 ? (
         <p className="text-sm text-gray-500">
-          Ingen utløsere ennå. Uten utløsere kan kontakter bare meldes inn manuelt.
+          Ingen startregel ennå. Velg en hendelse under, f.eks. «Ny kurspåmelding», så blir folk med automatisk.
+          Uten startregel kan du bare legge til personer selv.
         </p>
       ) : (
         <ul className="space-y-2">
@@ -152,12 +153,12 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
                 className="flex items-start justify-between gap-2 rounded-md border border-gray-200 px-3 py-2 text-xs"
               >
                 <div>
-                  <div className="font-medium text-gray-800" title={t.eventType}>{eventLabel(t.eventType)}</div>
+                  <div className="font-medium text-gray-800">Starter når: {eventLabel(t.eventType)}</div>
                   {details.map((d) => (
                     <div key={d} className="mt-0.5 text-gray-500">{d}</div>
                   ))}
                   {anchorMode === 'course' && isListEvent(t.eventType) && (
-                    <div className="mt-0.5 text-amber-700">Virker ikke i en kurs-forankret flyt</div>
+                    <div className="mt-0.5 text-amber-700">Virker ikke når flyten gjelder et kurs</div>
                   )}
                 </div>
                 <button
@@ -165,7 +166,7 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
                   disabled={deletingId === t.id}
                   className="shrink-0 text-red-600 hover:underline disabled:opacity-50"
                 >
-                  Slett
+                  Fjern
                 </button>
               </li>
             );
@@ -175,7 +176,7 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
 
       <div className="space-y-2 border-t border-gray-200 pt-3">
         <div>
-          <label htmlFor="trigger-event" className="block text-xs font-medium text-gray-600 mb-1">Når dette skjer</label>
+          <label htmlFor="trigger-event" className="block text-xs font-medium text-gray-600 mb-1">Start flyten når dette skjer</label>
           <select
             id="trigger-event"
             value={eventType}
@@ -220,7 +221,7 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
 
         {listEvent && (
           <div>
-            <label htmlFor="trigger-list" className="block text-xs font-medium text-gray-600 mb-1">CRM-liste</label>
+            <label htmlFor="trigger-list" className="block text-xs font-medium text-gray-600 mb-1">Liste</label>
             <select
               id="trigger-list"
               value={listId}
@@ -233,12 +234,12 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
               ))}
             </select>
             {lists.length === 0 && (
-              <p className="mt-1 text-[11px] text-gray-500">Ingen lister ennå — opprett dem under Segmenter.</p>
+              <p className="mt-1 text-[11px] text-gray-500">Ingen lister ennå. Lag en under CRM → Kunder → Segmenter og lister.</p>
             )}
             {anchorMode === 'course' && (
               <p className="mt-1 text-[11px] text-amber-700">
-                Denne flyten er kurs-forankret og må startes av en påmelding. Listehendelser har ikke noe kurs, så
-                løpet avsluttes ved første «Planlegg»-node. Bytt til kontakt-forankring i Innstillinger.
+                Denne flyten gjelder et kurs og må startes av en kurspåmelding. En liste har ikke noe kurs, så personen
+                stopper ved første «Vent til kursdato». Velg «En person» under Innstillinger for å bruke lister.
               </p>
             )}
           </div>
@@ -254,13 +255,13 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
                 setFilterError(null);
               }}
             />
-            Avansert (JSON-filter)
+            Avansert: ekstra filter (for teknisk ansatte)
           </label>
           {showAdvanced && (
             <>
               <textarea
                 rows={2}
-                aria-label="JSON-filter"
+                aria-label="Ekstra filter (JSON)"
                 placeholder='{"status": "confirmed"}'
                 value={filterText}
                 onChange={(e) => {
@@ -270,9 +271,9 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
                 className="mt-1 w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm font-mono"
               />
               <p className="text-[11px] text-gray-500">
-                Nøklene må matche hendelsens data eksakt (tall og tekst skilles).
-                {courseKey ? ' Kursvalget over legges til automatisk.' : ''}
-                {listEvent ? ' Listevalget over legges til automatisk.' : ''}
+                Skrives som JSON. Navnene må være nøyaktig som i hendelsens data (tall og tekst er ikke det samme).
+                {courseKey ? ' Kursvalget over legges til av seg selv.' : ''}
+                {listEvent ? ' Listevalget over legges til av seg selv.' : ''}
               </p>
             </>
           )}
@@ -284,7 +285,7 @@ export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onT
           disabled={creating || !eventType}
           className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
         >
-          {creating ? 'Legger til …' : 'Legg til utløser'}
+          {creating ? 'Legger til …' : 'Legg til startregel'}
         </button>
       </div>
     </div>

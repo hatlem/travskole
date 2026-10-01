@@ -16,12 +16,23 @@ export const NODE_TYPE_ORDER: FlowNodeType[] = ['start', 'email', 'wait', 'condi
 
 export const NODE_LABELS: Record<FlowNodeType, string> = {
   start: 'Start',
-  email: 'E-post',
+  email: 'Send e-post',
   wait: 'Vent',
-  condition: 'Betingelse',
-  action: 'Handling',
-  schedule: 'Planlegg',
+  condition: 'Sjekk (ja/nei)',
+  action: 'Gjør noe',
+  schedule: 'Vent til kursdato',
   end: 'Slutt',
+};
+
+/** Kort forklaring per stegtype — vises i paletten og i panelet for valgt steg. */
+export const NODE_DESCRIPTIONS: Record<FlowNodeType, string> = {
+  start: 'Her begynner flyten. Hver flyt trenger ett.',
+  email: 'Sender en e-post du skriver selv.',
+  wait: 'Venter et antall dager eller timer før neste steg.',
+  condition: 'Deler flyten i to: én vei for «ja» og én for «nei».',
+  action: 'Gir stikkord, endrer kundestatus, lager en oppgave eller varsler dere.',
+  schedule: 'Venter til f.eks. 3 dager før kursstart. Bare for kursflyter.',
+  end: 'Her er flyten ferdig for personen.',
 };
 
 const NODE_ICONS: Record<FlowNodeType, string> = {
@@ -34,28 +45,28 @@ const NODE_ICONS: Record<FlowNodeType, string> = {
   end: '⏹️',
 };
 
-const SCHEDULE_ANCHOR_LABELS: Record<string, string> = {
+export const SCHEDULE_ANCHOR_LABELS: Record<string, string> = {
   course_start: 'Kursstart',
-  course_midway: 'Halvveis',
+  course_midway: 'Halvveis i kurset',
   course_end: 'Kursslutt',
 };
 
-const CONDITION_LABELS: Record<string, string> = {
-  in_segment: 'I segment',
-  stage_is: 'Stadium er',
-  deal_status: 'Deal-status er',
+export const CONDITION_LABELS: Record<string, string> = {
+  in_segment: 'Er med i segment?',
+  stage_is: 'Har kundestatus?',
+  deal_status: 'Har avtale med status?',
   opened_email: 'Åpnet forrige e-post?',
   clicked_email: 'Klikket i forrige e-post?',
   replied_email: 'Svarte på forrige e-post?',
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  add_tag: 'Legg til tagg',
-  remove_tag: 'Fjern tagg',
-  set_stage: 'Sett stadium',
-  notify_admin: 'Varsle admin',
-  create_task: 'Opprett oppgave',
-  exit: 'Avslutt flyten',
+export const ACTION_LABELS: Record<string, string> = {
+  add_tag: 'Gi stikkord',
+  remove_tag: 'Fjern stikkord',
+  set_stage: 'Endre kundestatus',
+  notify_admin: 'Send varsel til dere',
+  create_task: 'Lag en oppgave',
+  exit: 'Ta personen ut av flyten',
 };
 
 const NODE_ACCENTS: Record<FlowNodeType, string> = {
@@ -67,6 +78,17 @@ const NODE_ACCENTS: Record<FlowNodeType, string> = {
   schedule: 'border-t-cyan-500',
   end: 'border-t-gray-500',
 };
+
+function waitSubtitle(days: number, hours: number): string {
+  const parts = [days ? `${days} ${days === 1 ? 'dag' : 'dager'}` : '', hours ? `${hours} ${hours === 1 ? 'time' : 'timer'}` : ''];
+  return parts.filter(Boolean).join(' og ');
+}
+
+function scheduleSubtitle(label: string, offsetDays: number | undefined): string {
+  if (!offsetDays) return label;
+  const n = Math.abs(offsetDays);
+  return `${n} ${n === 1 ? 'dag' : 'dager'} ${offsetDays < 0 ? 'før' : 'etter'} ${label.toLowerCase()}`;
+}
 
 function cardClasses(nodeType: FlowNodeType, selected: boolean, hasError: boolean): string {
   const ring = hasError
@@ -134,7 +156,7 @@ export function WaitNode({ data, selected }: NodeProps<FlowRFNode>) {
       nodeType="wait"
       selected={selected}
       hasError={data.hasError}
-      subtitle={days || hours ? `${days}d ${hours}t` : undefined}
+      subtitle={days || hours ? waitSubtitle(days, hours) : undefined}
     >
       <Handle type="target" position={Position.Top} />
       <Handle type="source" position={Position.Bottom} />
@@ -193,7 +215,7 @@ export function ScheduleNode({ data, selected }: NodeProps<FlowRFNode>) {
   const anchor = typeof data.config.anchor === 'string' ? data.config.anchor : undefined;
   const off = typeof data.config.offsetDays === 'number' ? data.config.offsetDays : undefined;
   const label = anchor ? SCHEDULE_ANCHOR_LABELS[anchor] ?? anchor : undefined;
-  const subtitle = label ? `${label}${off ? ` ${off > 0 ? '+' : ''}${off}d` : ''}` : undefined;
+  const subtitle = label ? scheduleSubtitle(label, off) : undefined;
   return (
     <Card nodeType="schedule" selected={selected} hasError={data.hasError} subtitle={subtitle}>
       <Handle type="target" position={Position.Top} />

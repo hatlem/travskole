@@ -34,7 +34,7 @@ interface FlowToolbarProps {
   onActivate: () => void;
   onPause: () => void;
   onResume: () => void;
-  /** Utelatt for kurs-forankrede flyter, som kun startes av påmeldinger. */
+  /** Utelatt for kursflyter, som kun startes av påmeldinger. */
   onEnroll?: () => void;
   onSaveAsTemplate: () => void;
   savingTemplate: boolean;
@@ -68,7 +68,7 @@ export function FlowToolbar({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <Link href="/admin/crm/flyter" className="text-sm text-gray-500 hover:underline">
-            ← Tilbake til flyter
+            ← Tilbake til alle e-postflyter
           </Link>
           <div className="mt-1 flex items-center gap-3">
             <h1 className="text-xl font-bold">{name}</h1>
@@ -77,7 +77,7 @@ export function FlowToolbar({
             >
               {STATUS_LABELS[status] ?? status}
             </span>
-            {dirty && <span className="text-xs text-amber-600">Ulagrede endringer</span>}
+            {dirty && <span className="text-xs text-amber-700">Endringer er ikke lagret</span>}
           </div>
         </div>
 
@@ -86,47 +86,47 @@ export function FlowToolbar({
           {status === 'active' && onEnroll && (
             <button
               onClick={onEnroll}
-              className="border border-blue-600 text-blue-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50"
+              className="border border-bjerke-blue text-bjerke-blue px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-50"
             >
-              Meld inn
+              Legg til personer
             </button>
           )}
           {!isTemplate && status !== 'archived' && (
             <button
               onClick={onSaveAsTemplate}
               disabled={savingTemplate || dirty}
-              title={dirty ? 'Lagre endringene dine først' : 'Kopier flyten til en gjenbrukbar mal'}
+              title={dirty ? 'Trykk «Lagre» først' : 'Lag en kopi som kan brukes som utgangspunkt for nye flyter'}
               className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
             >
               {savingTemplate ? 'Lagrer mal …' : 'Lagre som mal'}
             </button>
           )}
           {isTemplate && (
-            <span className="text-xs text-gray-500">Maler kan ikke aktiveres — bruk «Ny flyt fra mal» i flytlisten</span>
+            <span className="text-xs text-gray-500">Dette er en mal og sender aldri e-post. Bruk «Start fra en mal» i listen over e-postflyter.</span>
           )}
           <button
             onClick={onSave}
             disabled={saving || !dirty || editingDisabled}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
           >
             {saving ? 'Lagrer …' : 'Lagre'}
           </button>
           {status === 'active' && (
-            <span className="text-xs text-gray-500">Sett på pause for å redigere</span>
+            <span className="text-xs text-gray-500">Sett flyten på pause for å endre den</span>
           )}
           {pendingProblems > 0 && activationErrors.length === 0 && (
             <span className="text-xs text-amber-700" role="status">
-              ⚠ {pendingProblems === 1 ? '1 problem' : `${pendingProblems} problemer`} må rettes før aktivering
+              ⚠ {pendingProblems === 1 ? '1 ting' : `${pendingProblems} ting`} må fikses før flyten kan aktiveres
             </span>
           )}
           {status === 'draft' && (
             <button
               onClick={onActivate}
               disabled={activating || dirty}
-              title={dirty ? 'Lagre endringene dine først' : undefined}
-              className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+              title={dirty ? 'Trykk «Lagre» først' : undefined}
+              className="bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-800 disabled:opacity-50"
             >
-              {activating ? 'Aktiverer …' : 'Aktiver'}
+              {activating ? 'Aktiverer …' : 'Aktiver flyten'}
             </button>
           )}
           {status === 'active' && (
@@ -135,17 +135,17 @@ export function FlowToolbar({
               disabled={changingStatus}
               className="border border-gray-300 px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
             >
-              {changingStatus ? 'Venter …' : 'Sett på pause'}
+              {changingStatus ? 'Setter på pause …' : 'Sett på pause'}
             </button>
           )}
           {status === 'paused' && (
             <button
               onClick={onResume}
               disabled={changingStatus || dirty}
-              title={dirty ? 'Lagre endringene dine først' : undefined}
-              className="bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+              title={dirty ? 'Trykk «Lagre» først' : undefined}
+              className="bg-green-700 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-800 disabled:opacity-50"
             >
-              {changingStatus ? 'Venter …' : 'Gjenoppta'}
+              {changingStatus ? 'Starter igjen …' : 'Gjenoppta'}
             </button>
           )}
         </div>
@@ -153,7 +153,7 @@ export function FlowToolbar({
 
       {activationErrors.length > 0 && (
         <div className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-700">
-          <p className="font-medium mb-1">Flyten har valideringsfeil:</p>
+          <p className="font-medium mb-1">Dette må fikses før flyten kan aktiveres (stegene er merket med rødt):</p>
           <ul className="list-disc list-inside space-y-0.5">
             {activationErrors.map((e, i) => (
               <li key={i}>

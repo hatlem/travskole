@@ -66,7 +66,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setSegments([]);
-        toast('Kunne ikke laste segmenter', 'error');
+        toast('Segmentene kunne ikke hentes. Lukk vinduet og prøv igjen.', 'error');
       });
     return () => controller.abort();
   }, [toast]);
@@ -79,7 +79,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
       .catch((err) => {
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setLists([]);
-        toast('Kunne ikke laste lister', 'error');
+        toast('Listene kunne ikke hentes. Lukk vinduet og prøv igjen.', 'error');
       });
     return () => controller.abort();
   }, [toast]);
@@ -150,7 +150,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke melde inn', 'error');
+        toast(data.error || 'Ingen ble lagt til i flyten. Prøv igjen.', 'error');
         return;
       }
       const summary: EnrollResult = {
@@ -162,9 +162,14 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
       };
       setResult(summary);
       onEnrolled(summary);
-      toast(`${summary.enrolled} meldt inn`, 'success');
+      toast(
+        summary.enrolled === 1
+          ? '1 person er lagt til i flyten og får e-postene.'
+          : `${summary.enrolled} personer er lagt til i flyten og får e-postene.`,
+        'success',
+      );
     } catch {
-      toast('Kunne ikke melde inn', 'error');
+      toast('Ingen ble lagt til i flyten. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -183,7 +188,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
       <div className="fixed inset-0 bg-black/50" onClick={onClose} />
       <div role="dialog" aria-modal="true" aria-labelledby="enroll-title" className="relative w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
         <div className="flex items-center justify-between mb-4">
-          <h3 id="enroll-title" className="text-base font-semibold text-gray-900">Meld inn i flyten</h3>
+          <h3 id="enroll-title" className="text-base font-semibold text-gray-900">Legg til personer i flyten</h3>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600" aria-label="Lukk">
             &times;
           </button>
@@ -192,21 +197,21 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
         {result ? (
           <div className="space-y-3 text-sm">
             <ul className="space-y-1">
-              <li><span className="font-medium">{result.enrolled}</span> meldt inn</li>
-              <li><span className="font-medium">{result.skippedActive}</span> hoppet over — allerede aktive i flyten</li>
-              <li><span className="font-medium">{result.skippedSuppressed}</span> hoppet over — avmeldt eller sperret (suppresjonsliste)</li>
+              <li><span className="font-medium">{result.enrolled}</span> lagt til i flyten</li>
+              <li><span className="font-medium">{result.skippedActive}</span> hoppet over — er allerede underveis i flyten</li>
+              <li><span className="font-medium">{result.skippedSuppressed}</span> hoppet over — har meldt seg av eller står på ikke-kontakt-listen</li>
               {result.skippedMissing > 0 && (
-                <li><span className="font-medium">{result.skippedMissing}</span> fant ikke kontakten</li>
+                <li><span className="font-medium">{result.skippedMissing}</span> fant vi ikke (kontakten er slettet)</li>
               )}
               {result.capped > 0 && (
                 <li className="text-amber-700">
-                  {result.capped} treff ble ikke forsøkt — maks {SEGMENT_CAP} per innmelding. Kjør på nytt for resten.
+                  {result.capped} ble ikke tatt med — maks {SEGMENT_CAP} om gangen. Trykk «Legg til flere» og velg det samme igjen for resten.
                 </li>
               )}
             </ul>
             <div className="flex justify-end gap-2">
               <button onClick={() => { setResult(null); setSelected([]); }} className="text-sm text-gray-700 px-3 py-1.5">
-                Meld inn flere
+                Legg til flere
               </button>
               <button onClick={onClose} className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm">
                 Ferdig
@@ -217,8 +222,8 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
           <div className="space-y-4">
             <div className="flex gap-2">
               <button className={tabCls(mode === 'segment')} onClick={() => setMode('segment')}>Segment</button>
-              <button className={tabCls(mode === 'list')} onClick={() => setMode('list')}>CRM-liste</button>
-              <button className={tabCls(mode === 'contacts')} onClick={() => setMode('contacts')}>Enkeltkontakter</button>
+              <button className={tabCls(mode === 'list')} onClick={() => setMode('list')}>Liste</button>
+              <button className={tabCls(mode === 'contacts')} onClick={() => setMode('contacts')}>Velg personer</button>
             </div>
 
             {mode === 'segment' ? (
@@ -239,14 +244,14 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
                 {segmentId !== '' && (
                   <p className="mt-1 text-xs text-gray-600">
                     {previewCount === null
-                      ? 'Teller kontakter …'
-                      : `${previewCount} kontakter matcher segmentet nå${previewCount > SEGMENT_CAP ? ` — de første ${SEGMENT_CAP} meldes inn` : ''}.`}
+                      ? 'Teller …'
+                      : `${previewCount} kontakter passer i segmentet nå${previewCount > SEGMENT_CAP ? ` — de første ${SEGMENT_CAP} legges til` : ''}.`}
                   </p>
                 )}
               </div>
             ) : mode === 'list' ? (
               <div>
-                <label htmlFor="enroll-list" className="block text-xs font-medium text-gray-600 mb-1">Meld inn hel liste</label>
+                <label htmlFor="enroll-list" className="block text-xs font-medium text-gray-600 mb-1">Legg til alle i listen</label>
                 <select
                   id="enroll-list"
                   value={listId}
@@ -262,7 +267,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
                 {selectedList && (
                   <p className="mt-1 text-xs text-gray-600">
                     {selectedList.memberCount} kontakter i listen
-                    {selectedList.memberCount > SEGMENT_CAP ? ` — maks ${SEGMENT_CAP} meldes inn per gang` : ''}.
+                    {selectedList.memberCount > SEGMENT_CAP ? ` — maks ${SEGMENT_CAP} legges til om gangen` : ''}.
                   </p>
                 )}
               </div>
@@ -311,8 +316,9 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
             )}
 
             <div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-xs text-gray-600 space-y-1">
-              <p>Kontakter som allerede er aktive i flyten, eller som står på suppresjonslista, hoppes over.</p>
-              {isMarketing && <p>Markedsføringsflyt: e-poster sendes bare til kontakter med markedsføringssamtykke.</p>}
+              <p>Personer som allerede er underveis i flyten, eller som står på ikke-kontakt-listen, hoppes over.</p>
+              <p>De som legges til, begynner å få e-postene fra flyten med en gang.</p>
+              {isMarketing && <p>Dette er markedsføring: bare de som har sagt ja til markedsføring, får e-postene.</p>}
             </div>
 
             <div className="flex justify-end gap-2">
@@ -323,10 +329,10 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
                 className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50"
               >
                 {submitting
-                  ? 'Melder inn …'
+                  ? 'Legger til …'
                   : mode === 'contacts' && selected.length > 0
-                    ? `Meld inn ${selected.length}`
-                    : 'Meld inn'}
+                    ? `Legg til ${selected.length} i flyten`
+                    : 'Legg til i flyten'}
               </button>
             </div>
           </div>

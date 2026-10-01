@@ -57,10 +57,10 @@ export function AiPersonalizationSection({
         }),
       });
       const data = await res.json();
-      if (!res.ok) { setError(data.error ?? 'Kunne ikke lage forhåndsvisning'); return; }
+      if (!res.ok) { setError(data.error ?? 'Forhåndsvisningen kunne ikke lages. Prøv igjen om litt.'); return; }
       setPreview(data);
     } catch {
-      setError('Kunne ikke lage forhåndsvisning — prøv igjen');
+      setError('Forhåndsvisningen kunne ikke lages. Sjekk nettforbindelsen og prøv igjen.');
     } finally {
       setPreviewing(false);
     }
@@ -70,11 +70,11 @@ export function AiPersonalizationSection({
     <div className="border-t border-gray-200 pt-3 space-y-3">
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={enabled} onChange={(e) => toggle(e.target.checked)} disabled={disabled} />
-        KI-personaliser denne e-posten per mottaker
+        La KI tilpasse teksten til hver mottaker
       </label>
       {enabled && !isMarketing && (
         <p className="text-[11px] text-amber-700">
-          KI-personalisering brukes bare i markedsføringsflyter — i denne flyten sendes originalteksten.
+          KI-tilpasning brukes bare i markedsføringsflyter. I denne flyten sendes teksten slik du har skrevet den.
         </p>
       )}
 
@@ -89,7 +89,7 @@ export function AiPersonalizationSection({
                 Godkjenn hver e-post (anbefalt)
                 <span className="block text-[11px] text-gray-500">
                   Utkastet havner under <Link href="/admin/crm/godkjenning" className="text-blue-700 hover:underline">CRM → Godkjenning</Link>.
-                  Ubehandlede utkast sendes som original etter fristen i innstillingene.
+                  Hvis ingen ser på utkastet innen fristen (se Innstillinger), sendes teksten slik du skrev den.
                 </span>
               </span>
             </label>
@@ -98,20 +98,20 @@ export function AiPersonalizationSection({
                 onChange={() => onChange({ aiReview: 'auto' })} disabled={disabled} className="mt-1" />
               <span>
                 Send automatisk
-                <span className="block text-[11px] text-gray-500">Går ut uten manuell kontroll hvis sikkerhetskontrollen godtar teksten.</span>
+                <span className="block text-[11px] text-gray-500">Sendes uten at noen leser den først, så lenge den automatiske kontrollen godtar teksten.</span>
               </span>
             </label>
           </div>
           {review === null && (
             <p className="mt-2 text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-2 py-1.5">
-              Denne noden ble satt opp før godkjenning fantes og sender KI-tekst automatisk. Vi anbefaler «Godkjenn hver e-post».
+              Denne e-posten ble satt opp før godkjenning fantes og sender KI-tekst automatisk. Vi anbefaler «Godkjenn hver e-post».
             </p>
           )}
         </div>
       )}
 
       <div>
-        <label className={labelCls}>Forhåndsvis for kontakt</label>
+        <label className={labelCls}>Se hvordan e-posten blir for en kontakt</label>
         <EntityPicker kind="contact" value={contact} onChange={(c) => { onContactChange(c); setPreview(null); }} />
         <p className="mt-1 text-[11px] text-gray-500">
           Kontakten brukes også når du sender test-e-post, så du ser det mottakeren får.
@@ -136,7 +136,7 @@ export function AiPersonalizationSection({
             <SanitizedHtmlPane title="KI-versjon" html={preview.personalizedHtml} tone="ai" />
           )}
           <p className="text-[11px] text-gray-500">
-            Forhåndsvisningen sender ingenting. Kursfelter fylles først ut ved faktisk utsending.
+            Forhåndsvisningen sender ingenting. Kursfelt (barnets navn, kursdato osv.) fylles først inn når e-posten faktisk sendes.
           </p>
         </div>
       )}

@@ -16,12 +16,16 @@ import {
   type ReactFlowInstance,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
+import Link from 'next/link';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { HelpTip } from '@/components/admin/HelpTip';
+import { HINTS } from '@/lib/admin-copy';
 import type { CourseOption, ListOption } from '@/lib/flows/event-labels';
 import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 import { freeNodePosition, validateEditorGraph } from '@/lib/flows/editor';
-import { nodeTypes, NODE_TYPE_ORDER, NODE_LABELS, type FlowRFNode, type FlowNodeType } from './node-types';
+import { nodeTypes, NODE_TYPE_ORDER, NODE_LABELS, NODE_DESCRIPTIONS, type FlowRFNode, type FlowNodeType } from './node-types';
 import { edgeTypes, type FlowRFEdge } from './deletable-edge';
 import {
   NodeConfigPanel,
@@ -73,6 +77,8 @@ interface FlowEditorProps {
 }
 
 const DRAG_MIME = 'application/x-flow-node-type';
+
+type HelperAction = 'trigger' | 'skeleton' | 'email' | 'activate';
 
 function refFor(rfId: string): string | number {
   const realId = Number(rfId);
@@ -128,6 +134,8 @@ export function FlowEditor({
   const [enrollmentsVersion, setEnrollmentsVersion] = useState(0);
   const [hasActiveEnrollments, setHasActiveEnrollments] = useState(initialActiveEnrollments > 0);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [confirmStatus, setConfirmStatus] = useState<'activate' | 'resume' | null>(null);
+  const [helperHidden, setHelperHidden] = useState(false);
   const savingRef = useRef(false);
   const activatingRef = useRef(false);
   const statusChangeRef = useRef(false);
@@ -154,7 +162,7 @@ export function FlowEditor({
   const nodeLabel = useCallback(
     (nodeId: number) => {
       const node = nodes.find((n) => n.id === String(nodeId));
-      return node ? NODE_LABELS[node.type as FlowNodeType] ?? 'Node' : `Node #${nodeId}`;
+      return node ? NODE_LABELS[node.type as FlowNodeType] ?? 'Steg' : `Steg #${nodeId}`;
     },
     [nodes],
   );
@@ -224,6 +232,39 @@ export function FlowEditor({
     clearErrors();
   }
 
+  /** «Kom i gang»: Start → E-post → Slutt, ferdig koblet, med e-posten valgt for utfylling. */
+  function addStarterSkeleton() {
+    if (editingDisabled || nodes.length > 0) return;
+    const ids = ['start', 'email', 'end'].map(() => {
+      tempIdRef.current -= 1;
+      return String(tempIdRef.current);
+    });
+    const [startId, emailId, endId] = ids;
+    const at = (row: number) => ({ x: 0, y: row * 140 });
+    setNodes([
+      { id: startId, type: 'start', position: at(0), data: { config: {}, hasError: false } },
+      { id: emailId, type: 'email', position: at(1), data: { config: {}, hasError: false } },
+      { id: endId, type: 'end', position: at(2), data: { config: {}, hasError: false } },
+    ]);
+    setEdges([
+      { id: `tmp-${startId}-${emailId}`, type: 'deletable', source: startId, target: emailId },
+      { id: `tmp-${emailId}-${endId}`, type: 'deletable', source: emailId, target: endId },
+    ]);
+    setSelectedNodeId(emailId);
+    setDirty(true);
+    clearErrors();
+    setTimeout(() => rfInstanceRef.current?.fitView({ padding: 0.3 }), 50);
+  }
+
+  function runHelperAction(kind: HelperAction) {
+    if (kind === 'skeleton') return addStarterSkeleton();
+    if (kind === 'email') return addNode('email');
+    if (kind === 'activate') return requestStatusChange('activate');
+    const select = document.getElementById('trigger-event');
+    select?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    select?.focus();
+  }
+
   function onPaletteDragStart(event: React.DragEvent, type: FlowNodeType) {
     event.dataTransfer.setData(DRAG_MIME, type);
     event.dataTransfer.effectAllowed = 'move';
@@ -291,7 +332,7 @@ export function FlowEditor({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke lagre flyten', 'error');
+        toast(data.error || 'Flyten ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
 
@@ -312,9 +353,9 @@ export function FlowEditor({
       setSelectedNodeId((cur) => (cur ? idMap.get(cur) ?? cur : cur));
       setDirty(false);
       clearErrors();
-      toast('Flyt lagret', 'success');
+      toast('Endringene er lagret.', 'success');
     } catch {
-      toast('Kunne ikke lagre flyten', 'error');
+      toast('Flyten ble ikke lagret. Sjekk nettforbindelsen og prøv igjen — endringene dine er fortsatt her.', 'error');
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -328,11 +369,27 @@ export function FlowEditor({
     );
   }
 
+  /** Sjekker grafen først; er den gyldig, spørres brukeren før e-postene begynner å gå. */
+  function requestStatusChange(kind: 'activate' | 'resume') {
+    if (dirty) return;
+    if (liveErrors.length > 0) {
+      applyValidationErrors(liveErrors);
+      toast(
+        kind === 'activate'
+          ? 'Flyten kan ikke aktiveres ennå. Se listen over hva som må fikses.'
+          : 'Flyten kan ikke gjenopptas ennå. Se listen over hva som må fikses.',
+        'error',
+      );
+      return;
+    }
+    setConfirmStatus(kind);
+  }
+
   async function handleActivate() {
     if (activatingRef.current || dirty) return;
     if (liveErrors.length > 0) {
       applyValidationErrors(liveErrors);
-      toast('Flyten kan ikke aktiveres — se feilene under', 'error');
+      toast('Flyten kan ikke aktiveres ennå. Se listen over hva som må fikses.', 'error');
       return;
     }
     activatingRef.current = true;
@@ -343,17 +400,17 @@ export function FlowEditor({
       if (!res.ok) {
         if (Array.isArray(data.errors)) {
           applyValidationErrors(data.errors);
-          toast('Flyten kan ikke aktiveres — se feilene under', 'error');
+          toast('Flyten kan ikke aktiveres ennå. Se listen over hva som må fikses.', 'error');
         } else {
-          toast(data.error || 'Kunne ikke aktivere flyten', 'error');
+          toast(data.error || 'Flyten ble ikke aktivert. Prøv igjen.', 'error');
         }
         return;
       }
       setFlow((f) => ({ ...f, status: data.flow.status }));
       clearErrors();
-      toast('Flyt aktivert', 'success');
+      toast('Flyten er aktiv. E-postene går nå ut til de som kvalifiserer.', 'success');
     } catch {
-      toast('Kunne ikke aktivere flyten', 'error');
+      toast('Flyten ble ikke aktivert. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       activatingRef.current = false;
       setActivating(false);
@@ -365,7 +422,7 @@ export function FlowEditor({
     if (nextStatus === 'active' && dirty) return;
     if (nextStatus === 'active' && liveErrors.length > 0) {
       applyValidationErrors(liveErrors);
-      toast('Kan ikke gjenoppta — se feilene under', 'error');
+      toast('Flyten kan ikke gjenopptas ennå. Se listen over hva som må fikses.', 'error');
       return;
     }
     statusChangeRef.current = true;
@@ -380,17 +437,22 @@ export function FlowEditor({
       if (!res.ok) {
         if (Array.isArray(data.errors)) {
           applyValidationErrors(data.errors);
-          toast('Kan ikke gjenoppta — se feilene under', 'error');
+          toast('Flyten kan ikke gjenopptas ennå. Se listen over hva som må fikses.', 'error');
         } else {
-          toast(data.error || 'Kunne ikke endre status', 'error');
+          toast(data.error || 'Statusen ble ikke endret. Prøv igjen.', 'error');
         }
         return;
       }
       setFlow((f) => ({ ...f, status: data.flow.status }));
       clearErrors();
-      toast(nextStatus === 'active' ? 'Flyt gjenopptatt' : 'Flyt satt på pause', 'success');
+      toast(
+        nextStatus === 'active'
+          ? 'Flyten går igjen. E-postene fortsetter der de stoppet.'
+          : 'Flyten står på pause. Ingen e-poster sendes før du gjenopptar.',
+        'success',
+      );
     } catch {
-      toast('Kunne ikke endre status', 'error');
+      toast('Statusen ble ikke endret. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       statusChangeRef.current = false;
       setChangingStatus(false);
@@ -408,16 +470,47 @@ export function FlowEditor({
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke lagre som mal', 'error');
+        toast(data.error || 'Malen ble ikke lagret. Prøv igjen.', 'error');
         return;
       }
-      toast(`Lagret som mal «${data.flow.name}» — finnes under Maler i flytlisten`, 'success');
+      toast(`Lagret som malen «${data.flow.name}». Du finner den under «Maler» i listen over e-postflyter.`, 'success');
     } catch {
-      toast('Kunne ikke lagre som mal', 'error');
+      toast('Malen ble ikke lagret. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
       setSavingTemplate(false);
     }
   }
+
+  const hasEmail = nodes.some((n) => n.type === 'email');
+  const showHelper = flow.status === 'draft' && !helperHidden;
+  const helperSteps: {
+    title: string;
+    text: string;
+    done: boolean;
+    action?: { label: string; kind: HelperAction; disabled?: boolean };
+  }[] = [
+    {
+      title: 'Velg når den starter',
+      text: 'For eksempel «Ny kurspåmelding». Da blir folk med automatisk.',
+      done: triggers.length > 0,
+      action: { label: 'Velg startregel', kind: 'trigger' },
+    },
+    {
+      title: 'Legg til en e-post',
+      text: 'Skriv emne og tekst, og velg hvem den kommer fra. Trykk «Lagre» når du er ferdig.',
+      done: hasEmail,
+      action:
+        nodes.length === 0
+          ? { label: 'Lag start og første e-post', kind: 'skeleton', disabled: editingDisabled }
+          : { label: 'Legg til e-post', kind: 'email', disabled: editingDisabled },
+    },
+    {
+      title: 'Aktiver',
+      text: dirty ? 'Trykk «Lagre» øverst først. ' + HINTS.activateFlow : HINTS.activateFlow,
+      done: false,
+      action: { label: 'Aktiver flyten', kind: 'activate', disabled: dirty || !hasEmail },
+    },
+  ];
 
   useEffect(() => {
     document.title = `${flow.name} – ${isTemplate ? 'Mal' : 'Flyt'}`;
@@ -437,18 +530,79 @@ export function FlowEditor({
         pendingProblems={flow.status === 'draft' || flow.status === 'paused' ? liveErrors.length : 0}
         nodeLabel={nodeLabel}
         onSave={handleSave}
-        onActivate={handleActivate}
+        onActivate={() => requestStatusChange('activate')}
         onPause={() => handleStatusChange('paused')}
-        onResume={() => handleStatusChange('active')}
+        onResume={() => requestStatusChange('resume')}
         onEnroll={flow.anchorMode === 'course' ? undefined : () => setEnrollOpen(true)}
         onSaveAsTemplate={handleSaveAsTemplate}
         savingTemplate={savingTemplate}
         enrollmentCounter={<EnrollmentPanel key={enrollmentsVersion} flowId={flow.id} />}
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[160px_minmax(0,1fr)_320px]">
-        <div className="flex flex-wrap items-center gap-2 lg:block lg:space-y-2">
-          <h3 className="w-full text-xs font-semibold uppercase text-gray-500">Legg til node</h3>
+      {showHelper && (
+        <section
+          aria-labelledby="flow-getting-started"
+          className="mb-4 rounded-lg border border-bjerke-blue/20 bg-blue-50/60 p-4"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <h2 id="flow-getting-started" className="text-sm font-semibold text-gray-900">Kom i gang i tre steg</h2>
+              {nodes.length === 0 && (
+                <p className="mt-0.5 text-sm text-gray-600">
+                  Usikker på hvor du skal begynne?{' '}
+                  <Link href="/admin/crm/flyter?mal=1" className="font-medium text-bjerke-blue hover:underline">
+                    Start fra en ferdig mal
+                  </Link>{' '}
+                  — den er satt opp, og du endrer bare tekstene.
+                </p>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => setHelperHidden(true)}
+              className="text-sm text-gray-500 hover:text-gray-800 hover:underline"
+            >
+              Skjul hjelpen
+            </button>
+          </div>
+          <ol className="mt-3 grid gap-3 md:grid-cols-3">
+            {helperSteps.map((step, i) => (
+              <li
+                key={step.title}
+                className={`rounded-md border bg-white p-3 ${step.done ? 'border-green-300' : 'border-gray-200'}`}
+              >
+                <p className="text-sm font-medium text-gray-900">
+                  <span
+                    aria-hidden="true"
+                    className={`mr-2 inline-flex h-5 w-5 items-center justify-center rounded-full text-xs font-bold ${
+                      step.done ? 'bg-green-600 text-white' : 'bg-bjerke-blue text-white'
+                    }`}
+                  >
+                    {step.done ? '✓' : i + 1}
+                  </span>
+                  {step.title}
+                  <span className="sr-only">{step.done ? ' (gjort)' : ''}</span>
+                </p>
+                <p className="mt-1 text-xs text-gray-600">{step.text}</p>
+                {!step.done && step.action && (
+                  <button
+                    type="button"
+                    onClick={() => runHelperAction(step.action!.kind)}
+                    disabled={step.action.disabled}
+                    className="mt-2 rounded-md border border-bjerke-blue px-3 py-1.5 text-xs font-medium text-bjerke-blue hover:bg-bjerke-blue hover:text-white disabled:opacity-50"
+                  >
+                    {step.action.label}
+                  </button>
+                )}
+              </li>
+            ))}
+          </ol>
+        </section>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:block lg:space-y-2">
+          <h3 className="col-span-full text-xs font-semibold uppercase text-gray-500">Legg til steg</h3>
           {NODE_TYPE_ORDER.map((type) => (
             <button
               key={type}
@@ -456,15 +610,17 @@ export function FlowEditor({
               draggable={!editingDisabled}
               onDragStart={(e) => onPaletteDragStart(e, type)}
               disabled={editingDisabled}
-              title="Klikk for å legge til, eller dra inn på lerretet"
-              className="lg:w-full text-left border border-gray-300 rounded-md px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50 cursor-grab active:cursor-grabbing disabled:cursor-not-allowed"
+              title="Klikk for å legge til, eller dra inn i tegningen"
+              className="lg:w-full text-left border border-gray-300 bg-white rounded-md px-3 py-2 text-sm hover:border-bjerke-blue hover:bg-blue-50/50 disabled:opacity-50 cursor-grab active:cursor-grabbing disabled:cursor-not-allowed"
             >
-              {NODE_LABELS[type]}
+              <span className="block font-medium text-gray-900">{NODE_LABELS[type]}</span>
+              <span className="mt-0.5 block text-[11px] leading-snug text-gray-500">{NODE_DESCRIPTIONS[type]}</span>
             </button>
           ))}
           {!editingDisabled && (
-            <p className="w-full text-[11px] text-gray-500 pt-1">
-              Klikk eller dra en node inn på lerretet. Velg en kobling og trykk Delete/Backspace (eller ×) for å slette den.
+            <p className="col-span-full text-[11px] text-gray-500 pt-1">
+              Klikk på et steg, eller dra det inn i tegningen. Koble stegene ved å dra en pil fra prikken nederst på et
+              steg til det neste. For å fjerne en pil: klikk på den og trykk ×.
             </p>
           )}
         </div>
@@ -509,7 +665,7 @@ export function FlowEditor({
             >
               <span>Innstillinger</span>
               <span className="text-xs font-normal text-gray-500">
-                {flow.isMarketing ? 'Markedsføring' : 'Transaksjonell'} · {flow.anchorMode === 'course' ? 'Kurs' : 'Kontakt'}
+                {flow.isMarketing ? 'Markedsføring' : 'Viktig informasjon'} · {flow.anchorMode === 'course' ? 'Gjelder et kurs' : 'Gjelder en person'}
                 {settingsOpen ? ' ▲' : ' ▼'}
               </span>
             </button>
@@ -527,7 +683,7 @@ export function FlowEditor({
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">Node-konfigurasjon</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">Valgt steg</h3>
             <NodeConfigPanel
               node={selectedNode}
               flowId={flow.id}
@@ -543,9 +699,12 @@ export function FlowEditor({
           </div>
 
           <div className="rounded-lg border border-gray-200 bg-white p-4">
-            <h3 className="text-sm font-semibold text-gray-800 mb-3">Utløsere</h3>
+            <h3 className="text-sm font-semibold text-gray-800 mb-3">
+              Når skal flyten starte?
+              <HelpTip term="trigger" align="right" />
+            </h3>
             {isTemplate && (
-              <p className="mb-2 text-xs text-gray-500">Utløsere i en mal kopieres til nye flyter, men utløser aldri noe selv.</p>
+              <p className="mb-2 text-xs text-gray-500">Startreglene i en mal kopieres til nye flyter, men starter aldri noe selv.</p>
             )}
             <TriggerPanel
               flowId={flow.id}
@@ -558,6 +717,31 @@ export function FlowEditor({
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmStatus !== null}
+        title={confirmStatus === 'resume' ? 'Gjenoppta flyten?' : 'Aktivere flyten?'}
+        message={
+          confirmStatus === 'resume'
+            ? HINTS.resumeFlow
+            : `${HINTS.activateFlow}${
+                triggers.length === 0
+                  ? ' Flyten har ingen startregel ennå, så ingen blir med automatisk — du må legge til personer selv.'
+                  : ''
+              }${flow.isMarketing ? ' Bare de som har sagt ja til markedsføring, får e-postene.' : ''}`
+        }
+        confirmLabel={confirmStatus === 'resume' ? 'Ja, gjenoppta' : 'Ja, aktiver'}
+        cancelLabel="Ikke nå"
+        variant="info"
+        loading={activating || changingStatus}
+        onConfirm={async () => {
+          const kind = confirmStatus;
+          if (kind === 'activate') await handleActivate();
+          else if (kind === 'resume') await handleStatusChange('active');
+          setConfirmStatus(null);
+        }}
+        onCancel={() => setConfirmStatus(null)}
+      />
 
       {enrollOpen && (
         <EnrollModal
