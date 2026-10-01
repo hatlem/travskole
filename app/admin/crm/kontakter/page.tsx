@@ -10,6 +10,8 @@ import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
 import { HelpTip } from '@/components/admin/HelpTip';
 import { Pagination } from '@/components/admin/Pagination';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
+import { formatPhone } from '@/lib/format-phone';
+import { formatDateNo } from '@/lib/crm/format-date';
 
 interface ContactRow {
   id: number;
@@ -213,7 +215,7 @@ export default function KontakterPage({
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
           type="search"
-          placeholder="Søk navn, e-post, telefon …"
+          placeholder="Søk navn, e-post, telefon"
           aria-label="Søk i kontakter"
           value={q}
           onChange={(e) => { setPage(1); setQ(e.target.value); }}
@@ -362,12 +364,43 @@ export default function KontakterPage({
           secondaryAction={{ label: 'Importer fra Excel', href: '/admin/crm/import' }}
         />
       ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+        <>
+        <ul className="space-y-2 md:hidden" aria-label="Kontakter">
+          {contacts.map((c) => (
+            <li key={c.id} className="relative rounded-lg border border-gray-200 bg-white p-3 text-sm active:bg-gray-50">
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  href={`/admin/crm/kontakter/${c.id}`}
+                  className="font-medium text-blue-700 after:absolute after:inset-0 after:content-['']"
+                >
+                  {c.name}
+                </Link>
+                <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                  {STAGE_LABELS[c.stage] ?? c.stage}
+                </span>
+              </div>
+              {(c.email || c.phone) && (
+                <p className="mt-1 break-words text-gray-600">
+                  {c.email}
+                  {c.email && c.phone && ' · '}
+                  {c.phone && <span className="tabular-nums whitespace-nowrap">{formatPhone(c.phone)}</span>}
+                </p>
+              )}
+              {c.organization && <p className="mt-0.5 text-gray-600">{c.organization.name}</p>}
+              <p className="mt-1 text-xs text-gray-500">
+                {c.owner ? `Ansvarlig: ${c.owner.email}` : 'Uten ansvarlig'}
+                {c.dealCount > 0 && ` · ${c.dealCount === 1 ? '1 avtale' : `${c.dealCount} avtaler`}`}
+                {c.lastActivityAt && ` · sist aktiv ${formatDateNo(c.lastActivityAt)}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto border border-gray-200 rounded-lg md:block">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
                 <th className="px-4 py-3 font-medium">Navn</th>
-                <th className="px-4 py-3 font-medium">E-post</th>
+                <th className="px-4 py-3 font-medium">E-post og telefon</th>
                 <th className="px-4 py-3 font-medium">Bedrift</th>
                 <th className="px-4 py-3 font-medium">Kundestatus</th>
                 <th className="px-4 py-3 font-medium">Segmenter</th>
@@ -400,7 +433,10 @@ export default function KontakterPage({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{c.email ?? '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">
+                    {c.email ?? '—'}
+                    {c.phone && <span className="block text-xs text-gray-500 tabular-nums whitespace-nowrap">{formatPhone(c.phone)}</span>}
+                  </td>
                   <td className="px-4 py-3 text-gray-600">
                     {c.organization ? (
                       <Link href={`/admin/crm/bedrifter/${c.organization.id}`} className="hover:underline">
@@ -418,13 +454,14 @@ export default function KontakterPage({
                   <td className="px-4 py-3 text-gray-600">{c.owner?.email ?? '—'}</td>
                   <td className="px-4 py-3">{c.dealCount}</td>
                   <td className="px-4 py-3 text-gray-500">
-                    {c.lastActivityAt ? new Date(c.lastActivityAt).toLocaleDateString('nb-NO') : '—'}
+                    {formatDateNo(c.lastActivityAt)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {!loading && !loadError && contacts.length > 0 && (

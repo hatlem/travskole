@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { formatPhone } from '@/lib/format-phone';
+import { formatDateNo } from '@/lib/crm/format-date';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
@@ -128,14 +130,14 @@ export default function BedrifterPage() {
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <input
           type="search"
-          placeholder="Søk på navn, nettadresse eller org.nr …"
+          placeholder="Søk navn, nettadresse, org.nr."
           aria-label="Søk i bedrifter"
           value={q}
           onChange={(e) => {
             setPage(1);
             setQ(e.target.value);
           }}
-          className="border border-gray-300 rounded-md px-3 py-2 text-sm w-64"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm w-full sm:w-64"
         />
         <span className="text-sm text-gray-500">{total === 1 ? '1 bedrift' : `${total} bedrifter`}</span>
       </div>
@@ -202,11 +204,41 @@ export default function BedrifterPage() {
         <EmptyState
           icon="users"
           title="Ingen bedrifter ennå"
-          description="Bedrifter dukker opp av seg selv når noen sender forespørsel med firma-e-post. Du kan også legge dem inn selv."
+          description="Legg inn bedriftene dere jobber med, eller koble en kontakt til en bedrift fra kontaktsiden. Excel-import lager bedrifter når fila har en Bedrift-kolonne."
           action={{ label: 'Legg til bedrift', onClick: () => setShowNew(true) }}
         />
       ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+        <>
+        <ul className="space-y-2 md:hidden" aria-label="Bedrifter">
+          {orgs.map((o) => (
+            <li key={o.id} className="relative rounded-lg border border-gray-200 bg-white p-3 text-sm active:bg-gray-50">
+              <div className="flex items-start justify-between gap-2">
+                <Link
+                  href={`/admin/crm/bedrifter/${o.id}`}
+                  className="font-medium text-blue-700 after:absolute after:inset-0 after:content-['']"
+                >
+                  {o.name}
+                </Link>
+                <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                  {STAGE_LABELS[o.stage] ?? o.stage}
+                </span>
+              </div>
+              {(o.domain || o.phone) && (
+                <p className="mt-1 text-gray-600">
+                  {o.domain}
+                  {o.domain && o.phone && ' · '}
+                  {o.phone && <span className="tabular-nums whitespace-nowrap">{formatPhone(o.phone)}</span>}
+                </p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                {o.contactCount === 1 ? '1 kontakt' : `${o.contactCount} kontakter`}
+                {` · ${o.dealCount === 1 ? '1 avtale' : `${o.dealCount} avtaler`}`}
+                {o.lastActivityAt && ` · sist aktiv ${formatDateNo(o.lastActivityAt)}`}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto border border-gray-200 rounded-lg md:block">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
@@ -231,13 +263,14 @@ export default function BedrifterPage() {
                   <td className="px-4 py-3">{o.contactCount}</td>
                   <td className="px-4 py-3">{o.dealCount}</td>
                   <td className="px-4 py-3 text-gray-500">
-                    {o.lastActivityAt ? new Date(o.lastActivityAt).toLocaleDateString('nb-NO') : '—'}
+                    {formatDateNo(o.lastActivityAt)}
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       {!loading && !loadError && orgs.length > 0 && (

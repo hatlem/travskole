@@ -685,7 +685,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Notater</h2>
             <div className="flex gap-2 mb-2">
-              <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat …"
+              <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat"
                 rows={2} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1" />
               <button onClick={addNote} disabled={!noteText.trim()}
                 className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre notat</button>

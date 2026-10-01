@@ -2,6 +2,8 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { formatPhone } from '@/lib/format-phone';
+import { formatDateNo } from '@/lib/crm/format-date';
 import { useRouter } from 'next/navigation';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
@@ -69,7 +71,7 @@ const blankToNull = (v: string) => (v.trim() === '' ? null : v.trim());
 const inputCls = 'border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white';
 
 function fmtDate(d: string | null): string {
-  return d ? new Date(d).toLocaleDateString('nb-NO') : '—';
+  return formatDateNo(d);
 }
 
 export default function BedriftDetaljPage({ params }: { params: Promise<{ id: string }> }) {
@@ -260,7 +262,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
         <div>
           <h1 className="text-2xl font-bold">{org.name}</h1>
           <p className="text-gray-600 text-sm mt-1">
-            {org.domain ?? 'Ingen nettadresse'} · {org.phone ?? 'Ingen telefon'}
+            {org.domain ?? 'Ingen nettadresse'} · {org.phone ? <span className="tabular-nums">{formatPhone(org.phone)}</span> : 'Ingen telefon'}
             {org.orgNumber && <> · Org.nr {org.orgNumber}</>}
           </p>
           <p className="text-gray-700 text-sm mt-2 font-medium">
@@ -328,7 +330,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                     </Link>
                     {c.roleTitle && <span className="text-gray-500 ml-2">{c.roleTitle}</span>}
                     <p className="text-gray-600 mt-0.5">
-                      {c.email ?? '—'} · {c.phone ?? '—'}
+                      {c.email ?? '—'} · {c.phone ? <span className="tabular-nums">{formatPhone(c.phone)}</span> : '—'}
                     </p>
                   </li>
                 ))}
@@ -381,7 +383,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
               <textarea
                 value={noteText}
                 onChange={(e) => setNoteText(e.target.value)}
-                placeholder="Skriv et notat …"
+                placeholder="Skriv et notat"
                 rows={2}
                 className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1"
               />
