@@ -25,7 +25,7 @@ export function FactList({ factLines }: { factLines: string[] }) {
   if (factLines.length === 0) return null;
   return (
     <div>
-      <p className="text-xs font-medium text-gray-600 mb-1">Opplysninger KI fikk om mottakeren</p>
+      <p className="text-xs font-medium text-gray-600 mb-1">Dette visste KI om mottakeren</p>
       <ul className="text-xs text-gray-700 bg-gray-50 border border-gray-200 rounded-md px-3 py-2 space-y-0.5">
         {factLines.map((line, i) => <li key={i} className="whitespace-pre-wrap">{line}</li>)}
       </ul>
@@ -36,11 +36,11 @@ export function FactList({ factLines }: { factLines: string[] }) {
 export function VerdictBadge({ verdict }: { verdict: { ok: true } | { ok: false; reason: string } }) {
   return verdict.ok ? (
     <span className="inline-flex items-center rounded-full bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 text-xs font-medium">
-      Godkjent av sikkerhetskontrollen
+      Sjekket: KI-versjonen endrer ingen fakta
     </span>
   ) : (
     <span className="inline-flex items-center rounded-full bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 text-xs font-medium">
-      Avvist ({verdict.reason}) — originalen sendes
+      Stoppet av kontrollen ({verdict.reason.replace('merge-tag', 'flettefelt')}) — originalteksten sendes i stedet
     </span>
   );
 }
