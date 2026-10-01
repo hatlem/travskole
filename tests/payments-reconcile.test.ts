@@ -48,7 +48,7 @@ vi.mock('@/lib/payments/vipps', () => ({
   isVippsConfigured: () => true,
 }));
 
-import { resolveThankYouStatus } from '@/lib/payments/reconcile';
+import { findPaymentSubject, resolveThankYouStatus } from '@/lib/payments/reconcile';
 import { applyPaymentEvent } from '@/lib/payments/apply';
 import { mapStripeEvent, mapVippsEvent } from '@/lib/payments/mapping';
 
@@ -148,5 +148,16 @@ describe('resolveThankYouStatus — Vipps', () => {
     await applyPaymentEvent(mapVippsEvent({ reference: 'reg-5-abcd1234', name: 'CAPTURED' })!);
     const keys = emitEvent.mock.calls.map((c) => (c as unknown as [{ dedupeKey: string }])[0].dedupeKey);
     expect(new Set(keys).size).toBe(1);
+  });
+});
+
+describe('findPaymentSubject', () => {
+  it('returns kind and id so the pages can match the stored receipt', async () => {
+    prisma.registration.findUnique.mockResolvedValueOnce({ id: 5, status: 'pending' } as never);
+    await expect(findPaymentSubject('cs_test_abc')).resolves.toEqual({ kind: 'registration', id: 5, status: 'pending' });
+    prisma.registration.findUnique.mockResolvedValueOnce(null);
+    prisma.bookingRequest.findUnique.mockResolvedValueOnce({ id: 8, status: 'confirmed' } as never);
+    await expect(findPaymentSubject('book-8-x')).resolves.toEqual({ kind: 'booking', id: 8, status: 'confirmed' });
+    await expect(findPaymentSubject(undefined)).resolves.toBeNull();
   });
 });

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 import { parsePaymentMethods } from '@/lib/payments';
+import { parseReceiptSubject } from '@/lib/receipt';
 import { PaymentExitActions } from '../payment-exit-actions';
 
 export const dynamic = 'force-dynamic';
@@ -19,13 +20,13 @@ async function courseOffersInvoice(rawCourseId: string | undefined): Promise<boo
   return !!course && parsePaymentMethods(course.paymentMethods).includes('faktura');
 }
 
-/** Stripe sin cancel_url. Faktura nevnes bare når kurset faktisk tilbyr det (?kurs=). */
+/** Stripe sin cancel_url. Faktura nevnes bare når kurset faktisk tilbyr det (?kurs=); ?kind=&id= matcher kvitteringen. */
 export default async function AvbruttPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kurs?: string }>;
+  searchParams: Promise<{ kurs?: string; kind?: string; id?: string }>;
 }) {
-  const { kurs } = await searchParams;
+  const { kurs, kind, id } = await searchParams;
   const offersInvoice = await courseOffersInvoice(kurs);
 
   return (
@@ -47,7 +48,7 @@ export default async function AvbruttPage({
               {offersInvoice && ' Du kan også betale med faktura – ta kontakt med oss, så ordner vi det.'}
             </p>
           </div>
-          <PaymentExitActions offerRetry />
+          <PaymentExitActions offerRetry subject={parseReceiptSubject(kind, id)} />
         </div>
       </section>
     </main>

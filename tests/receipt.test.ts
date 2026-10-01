@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { nextSteps, parseReceipt, paymentStatusText, RECEIPT_MAX_AGE_MS, type Receipt } from '@/lib/receipt';
+import {
+  nextSteps, parseReceipt, parseReceiptSubject, paymentStatusText, receiptForSubject, receiptSubjectQuery, RECEIPT_MAX_AGE_MS, type Receipt,
+} from '@/lib/receipt';
 
 const base: Receipt = {
   kind: 'registration',
@@ -58,5 +60,26 @@ describe('nextSteps', () => {
     expect(nextSteps({ ...base, kind: 'booking' }, 'Vi svarer vanligvis innen 2 virkedager.')[0]).toContain(
       'innen 2 virkedager'
     );
+  });
+});
+
+describe('receiptForSubject', () => {
+  it('shows the stored receipt only for the payment it belongs to', () => {
+    expect(receiptForSubject(base, { kind: 'registration', id: 12 })).toBe(base);
+    expect(receiptForSubject(base, { kind: 'registration', id: 13 })).toBeNull();
+    expect(receiptForSubject(base, { kind: 'booking', id: 12 })).toBeNull();
+    expect(receiptForSubject(base, null)).toBeNull();
+    expect(receiptForSubject(null, { kind: 'registration', id: 12 })).toBeNull();
+  });
+});
+
+describe('parseReceiptSubject / receiptSubjectQuery', () => {
+  it('round-trips and rejects junk', () => {
+    expect(receiptSubjectQuery({ kind: 'booking', id: 7 })).toBe('kind=booking&id=7');
+    expect(parseReceiptSubject('booking', '7')).toEqual({ kind: 'booking', id: 7 });
+    expect(parseReceiptSubject('registration', '12')).toEqual({ kind: 'registration', id: 12 });
+    for (const [kind, id] of [['user', '1'], ['booking', '0'], ['booking', '-1'], ['booking', '1e3'], ['booking', undefined], [undefined, '1']]) {
+      expect(parseReceiptSubject(kind, id)).toBeNull();
+    }
   });
 });

@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { findPaymentSubject, resolveThankYouStatus } from '@/lib/payments/reconcile';
 import { paidThankYouMessage } from '@/lib/payments/thank-you';
+import { parseReceiptSubject, type ReceiptSubject } from '@/lib/receipt';
 import { PaymentExitActions } from '../payment-exit-actions';
 
 export const dynamic = 'force-dynamic';
@@ -16,9 +17,10 @@ interface StatusBoxProps {
   color: 'green' | 'blue' | 'orange' | 'gray';
   paid?: boolean;
   offerRetry?: boolean;
+  subject: ReceiptSubject | null;
 }
 
-function StatusBox({ title, message, color, paid = false, offerRetry = false }: StatusBoxProps) {
+function StatusBox({ title, message, color, paid = false, offerRetry = false, subject }: StatusBoxProps) {
   const colors = {
     green: {
       border: 'border-green-200',
@@ -58,7 +60,7 @@ function StatusBox({ title, message, color, paid = false, offerRetry = false }: 
           {message}
         </p>
       </div>
-      <PaymentExitActions paid={paid} offerRetry={offerRetry} />
+      <PaymentExitActions paid={paid} offerRetry={offerRetry} subject={subject} />
     </div>
   );
 }
@@ -71,11 +73,13 @@ function StatusBox({ title, message, color, paid = false, offerRetry = false }: 
 export default async function TakkPage({
   searchParams,
 }: {
-  searchParams: Promise<{ ref?: string }>;
+  searchParams: Promise<{ ref?: string; kind?: string; id?: string }>;
 }) {
-  const { ref } = await searchParams;
+  const { ref, kind, id } = await searchParams;
   const status = await resolveThankYouStatus(ref);
-  const subject = status === 'paid' ? await findPaymentSubject(ref).catch(() => null) : null;
+  const subject = await findPaymentSubject(ref).catch(() => null);
+  // Refen er fasit; kind/id i URL-en dekker en ref som er overskrevet av et nyere betalingsforsøk.
+  const receiptSubject: ReceiptSubject | null = subject ? { kind: subject.kind, id: subject.id } : parseReceiptSubject(kind, id);
 
   return (
     <main className="bg-gray-50">
@@ -93,6 +97,7 @@ export default async function TakkPage({
               message={paidThankYouMessage(subject)}
               color="green"
               paid
+              subject={receiptSubject}
             />
           )}
 
@@ -101,6 +106,7 @@ export default async function TakkPage({
               title="Betalingen behandles"
               message="Oppdater siden om et øyeblikk. Betalingen kan ta en liten stund å behandle."
               color="blue"
+              subject={receiptSubject}
             />
           )}
 
@@ -110,6 +116,7 @@ export default async function TakkPage({
               message="Ingenting er trukket. Påmeldingen din er likevel registrert – du kan prøve igjen nå eller betale senere fra Min side."
               color="gray"
               offerRetry
+              subject={receiptSubject}
             />
           )}
 
@@ -118,6 +125,7 @@ export default async function TakkPage({
               title="Betalingen er refundert"
               message="Betalingen er refundert. Kontakt oss hvis du har spørsmål."
               color="orange"
+              subject={receiptSubject}
             />
           )}
 
@@ -127,6 +135,7 @@ export default async function TakkPage({
               message="Betalingen ble ikke fullført i tide. Påmeldingen er likevel registrert – prøv igjen, eller betal senere fra Min side."
               color="gray"
               offerRetry
+              subject={receiptSubject}
             />
           )}
 
@@ -136,6 +145,7 @@ export default async function TakkPage({
               message="Noe gikk galt med betalingen, og ingenting er trukket. Prøv igjen, eller kontakt oss hvis problemet vedvarer."
               color="orange"
               offerRetry
+              subject={receiptSubject}
             />
           )}
 
@@ -144,6 +154,7 @@ export default async function TakkPage({
               title="Delvis refundert"
               message="Deler av betalingen er refundert. Kontakt oss hvis du har spørsmål."
               color="orange"
+              subject={receiptSubject}
             />
           )}
 
@@ -152,6 +163,7 @@ export default async function TakkPage({
               title="Vi fant ikke betalingsstatusen"
               message="Vi kunne ikke finne informasjon om betalingen. Du ser statusen på påmeldingen din på Min side."
               color="gray"
+              subject={receiptSubject}
             />
           )}
         </div>

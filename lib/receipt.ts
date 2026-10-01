@@ -68,6 +68,33 @@ export function loadReceipt(): Receipt | null {
   }
 }
 
+/** Hvilken påmelding/booking en betalingsside gjelder (fra betalingsrefen eller URL-en). */
+export interface ReceiptSubject {
+  kind: Receipt['kind'];
+  id: number;
+}
+
+/** Query-parametre betalingsleverandøren sender kunden tilbake med, så sidene kan matche kvitteringen. */
+export function receiptSubjectQuery(subject: ReceiptSubject): string {
+  return `kind=${subject.kind}&id=${subject.id}`;
+}
+
+export function parseReceiptSubject(kind: string | undefined, id: string | undefined): ReceiptSubject | null {
+  if (kind !== 'registration' && kind !== 'booking') return null;
+  if (!id || !/^\d+$/.test(id)) return null;
+  const numericId = Number(id);
+  return Number.isSafeInteger(numericId) && numericId > 0 ? { kind, id: numericId } : null;
+}
+
+/**
+ * Kvitteringen i økten vises bare når den gjelder akkurat denne betalingen —
+ * ellers kunne en eldre kvittering vist feil kurs som betalt.
+ */
+export function receiptForSubject(receipt: Receipt | null, subject: ReceiptSubject | null): Receipt | null {
+  if (!receipt || !subject) return null;
+  return receipt.kind === subject.kind && receipt.id === subject.id ? receipt : null;
+}
+
 /** Statuslinje for betaling i kvitteringen. */
 export function paymentStatusText(receipt: Pick<Receipt, 'payment' | 'waitlist' | 'kind'>, paid = false): string {
   if (paid) return 'Betalt';

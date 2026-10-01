@@ -28,6 +28,7 @@ import { createStripeCheckout } from '@/lib/payments/stripe';
 import { isVippsConfigured, createVippsPayment } from '@/lib/payments/vipps';
 import { verifyCheckoutToken } from '@/lib/payments/checkout-token';
 import { SETTLED_PAYMENT_STATUSES, isSettledPaymentStatus } from '@/lib/payments/transitions';
+import { receiptSubjectQuery } from '@/lib/receipt';
 
 const ALREADY_PAID = 'Allerede betalt';
 
@@ -168,6 +169,8 @@ export async function POST(request: NextRequest) {
   // som ville gitt Stripe/Vipps ubrukelige success-/cancel-URL-er.
   const origin = getBaseUrl();
   const testMode = isTestMode(await getSetting('payment_test_mode'));
+  // Lar betalingssidene vise kvitteringen bare når den gjelder akkurat denne raden.
+  const subjectQuery = receiptSubjectQuery({ kind: target.entity, id: target.id });
 
   let providerResult: { url: string; ref: string } | null;
   if (provider === 'stripe') {
@@ -181,8 +184,8 @@ export async function POST(request: NextRequest) {
       amountKr,
       // Stripe erstatter {CHECKOUT_SESSION_ID} med den faktiske sesjons-IDen ved
       // redirect — som også er `ref` vi lagrer som paymentRef under.
-      successUrl: `${origin}/betaling/takk?ref={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${origin}/betaling/avbrutt?kurs=${target.courseId}`,
+      successUrl: `${origin}/betaling/takk?ref={CHECKOUT_SESSION_ID}&${subjectQuery}`,
+      cancelUrl: `${origin}/betaling/avbrutt?kurs=${target.courseId}&${subjectQuery}`,
       testMode,
       customerEmail: target.ownerEmail,
     });
@@ -196,7 +199,7 @@ export async function POST(request: NextRequest) {
       reference,
       amountKr,
       description: target.title,
-      returnUrl: `${origin}/betaling/takk?ref=${reference}`,
+      returnUrl: `${origin}/betaling/takk?ref=${reference}&${subjectQuery}`,
       testMode,
     });
   }

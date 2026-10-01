@@ -25,6 +25,7 @@ vi.mock('@/lib/payments', async (importOriginal) => ({
 
 import { POST } from '@/app/api/payments/checkout/route';
 import { isSettledPaymentStatus } from '@/lib/payments/transitions';
+import { createVippsPayment, isVippsConfigured } from '@/lib/payments/vipps';
 
 type Req = Parameters<typeof POST>[0];
 const req = (body: unknown) =>
@@ -83,6 +84,25 @@ describe('POST /api/payments/checkout', () => {
       where: { id: 5, paymentStatus: { notIn: ['paid', 'partially_refunded', 'refunded'] } },
       data: { paymentRef: 'cs_test_1', paymentProvider: 'stripe', paymentStatus: 'pending' },
     });
+  });
+
+  it('sender kind og id med tilbake-lenkene, så betalingssidene kan matche kvitteringen', async () => {
+    prisma.registration.findUnique.mockResolvedValue(registration('none'));
+    await POST(req({ registrationId: 5, provider: 'stripe' }));
+    expect(createStripeCheckout).toHaveBeenCalledWith(expect.objectContaining({
+      successUrl: 'https://registrering.bjerke.no/betaling/takk?ref={CHECKOUT_SESSION_ID}&kind=registration&id=5',
+      cancelUrl: 'https://registrering.bjerke.no/betaling/avbrutt?kurs=9&kind=registration&id=5',
+    }));
+  });
+
+  it('Vipps: returnUrl har også kind og id', async () => {
+    vi.mocked(isVippsConfigured).mockReturnValueOnce(true);
+    vi.mocked(createVippsPayment).mockResolvedValueOnce({ url: 'https://vipps.test', ref: 'reg-5-x' });
+    prisma.registration.findUnique.mockResolvedValue({ ...registration('none'), course: { ...registration('none').course, paymentMethods: 'vipps' } });
+    await POST(req({ registrationId: 5, provider: 'vipps' }));
+    expect(vi.mocked(createVippsPayment).mock.calls[0][0].returnUrl).toMatch(
+      /^https:\/\/registrering\.bjerke\.no\/betaling\/takk\?ref=reg-5-[0-9a-f]{8}&kind=registration&id=5$/,
+    );
   });
 
   it('gir 409 når raden ble betalt mellom sjekk og skriving', async () => {
