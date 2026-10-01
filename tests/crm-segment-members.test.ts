@@ -59,7 +59,7 @@ beforeEach(() => {
 describe('segmentsForContactId', () => {
   it('gir segmentene med regler i klartekst', async () => {
     expect(await segmentsForContactId(1)).toEqual([
-      { id: 10, name: 'Julebord før 2026', reasons: ['Deal: type = julebord, dato før 01.01.2026'] },
+      { id: 10, name: 'Julebord før 2026', reasons: ['Har en avtale der type er julebord og dato er før 01.01.2026'] },
     ]);
   });
 

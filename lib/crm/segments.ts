@@ -127,19 +127,28 @@ export function segmentsForContact<S extends StoredSegment>(contact: SegmentCont
 }
 
 const FIELD_LABELS: Record<string, string> = {
-  stage: 'Stadium',
+  stage: 'Kundestatus',
   source: 'Kilde',
   email: 'E-post',
   organizationId: 'Bedrift',
   lastActivityAt: 'Sist aktiv',
-  tags: 'Tagg',
+  tags: 'Stikkord',
   'deal.eventType': 'type',
   'deal.eventDate': 'dato',
   'deal.status': 'status',
 };
 
-const VALUE_LABELS: Record<string, Record<string, string>> = {
+/** Verdiene brukeren kan velge for felt med faste koder (stage, kilde, avtalestatus). */
+export const SEGMENT_VALUE_LABELS: Record<string, Record<string, string>> = {
   stage: { lead: 'Interessent', active: 'Aktiv', customer: 'Kunde', dormant: 'Sovende', lost: 'Tapt' },
+  source: {
+    manual: 'Lagt inn for hånd',
+    import: 'Import',
+    booking: 'Forespørsel',
+    registration: 'Påmelding',
+    signup: 'Registrering på nettsiden',
+    system: 'Automatisk',
+  },
   'deal.status': { open: 'åpen', won: 'vunnet', lost: 'tapt' },
 };
 
@@ -149,35 +158,45 @@ function formatValue(field: string, value: unknown): string {
     return `${d}.${m}.${y}`;
   }
   const text = String(value ?? '');
-  return VALUE_LABELS[field]?.[text] ?? text;
+  return SEGMENT_VALUE_LABELS[field]?.[text] ?? text;
 }
 
-function describeOp(rule: SegmentRule): string {
+/** «er Kunde», «inneholder «@firma.no»», «er før 01.01.2026» … */
+function describeOp(rule: SegmentRule, subordinate = false): string {
   const value = formatValue(rule.field, rule.value);
   const isDate = rule.field === 'deal.eventDate' || rule.field === 'lastActivityAt';
   switch (rule.op) {
-    case 'eq': return `= ${value}`;
-    case 'neq': return `≠ ${value}`;
-    case 'contains': return rule.field === 'tags' ? `= ${value}` : `inneholder «${value}»`;
-    case 'lt': return isDate ? `før ${value}` : `< ${value}`;
-    case 'gt': return isDate ? `etter ${value}` : `> ${value}`;
+    case 'eq': return `er ${value}`;
+    case 'neq': return subordinate ? `ikke er ${value}` : `er ikke ${value}`;
+    case 'contains': return `inneholder «${value}»`;
+    case 'lt': return isDate ? `er før ${value}` : `er mindre enn ${value}`;
+    case 'gt': return isDate ? `er etter ${value}` : `er større enn ${value}`;
     case 'is_null': return 'mangler';
-    case 'not_null': return 'finnes';
+    case 'not_null': return 'er fylt ut';
   }
 }
 
-export function describeSegmentRule(rule: SegmentRule): string {
-  return `${FIELD_LABELS[rule.field] ?? rule.field} ${describeOp(rule)}`;
+export function describeSegmentRule(rule: SegmentRule, subordinate = false): string {
+  if (rule.field === 'tags') {
+    if (rule.op === 'is_null') return 'Har ingen stikkord';
+    if (rule.op === 'not_null') return 'Har minst ett stikkord';
+    return `Har stikkordet «${formatValue(rule.field, rule.value)}»`;
+  }
+  return `${FIELD_LABELS[rule.field] ?? rule.field} ${describeOp(rule, subordinate)}`;
+}
+
+function joinWithOg(parts: string[]): string {
+  return parts.length <= 1 ? parts.join('') : `${parts.slice(0, -1).join(', ')} og ${parts.at(-1)}`;
 }
 
 /**
- * Reglene i klartekst, én linje per kontaktregel. Deal-regler slås sammen til
- * én linje fordi de må gjelde samme deal: «Deal: type = julebord, dato før 01.01.2026».
+ * Reglene som vanlige setninger, én linje per kontaktregel. Avtaleregler slås sammen til
+ * én setning fordi de må gjelde samme avtale: «Har en avtale der type er julebord og dato er før 01.01.2026».
  */
 export function describeSegmentRules(rules: SegmentRules): string[] {
   if (rules.all.length === 0) return ['Alle kontakter (ingen regler)'];
-  const lines = rules.all.filter((r) => !isDealRule(r)).map(describeSegmentRule);
-  const dealParts = rules.all.filter(isDealRule).map(describeSegmentRule);
-  if (dealParts.length > 0) lines.push(`Deal: ${dealParts.join(', ')}`);
+  const lines = rules.all.filter((r) => !isDealRule(r)).map((r) => describeSegmentRule(r));
+  const dealParts = rules.all.filter(isDealRule).map((r) => describeSegmentRule(r, true));
+  if (dealParts.length > 0) lines.push(`Har en avtale der ${joinWithOg(dealParts)}`);
   return lines;
 }

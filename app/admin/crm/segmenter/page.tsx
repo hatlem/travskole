@@ -6,10 +6,11 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { HelpTip } from '@/components/admin/HelpTip';
 import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { isSuperAdmin } from '@/lib/settings-shared';
-import { describeSegmentRules, parseSegmentRules } from '@/lib/crm/segments';
+import { SEGMENT_VALUE_LABELS, describeSegmentRules, parseSegmentRules } from '@/lib/crm/segments';
 import { ListMembersPanel } from '@/components/admin/crm/ListMembersPanel';
 
 interface Segment { id: number; name: string; rules: string; memberCount: number }
@@ -21,10 +22,14 @@ function countLabel(n: number): string {
   return `${n} kontakt${n === 1 ? '' : 'er'}`;
 }
 
-function SectionHeading({ title, description }: { title: string; description: string }) {
+const SUPPRESSION_REASONS: Record<string, string> = {
+  unsubscribe: 'meldte seg av', bounce: 'e-posten kom i retur', complaint: 'klaget', manual: 'lagt til for hånd',
+};
+
+function SectionHeading({ title, description, help }: { title: string; description: string; help?: React.ReactNode }) {
   return (
     <div className="mb-4">
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <h2 className="text-lg font-semibold">{title}{help}</h2>
       <p className="text-sm text-gray-600">{description}</p>
     </div>
   );
@@ -35,29 +40,39 @@ const FIELDS: Array<{
   label: string;
   allowedOps: Array<'eq' | 'neq' | 'contains' | 'lt' | 'gt' | 'is_null' | 'not_null'>;
 }> = [
-  { value: 'stage', label: 'Stadium', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'stage', label: 'Kundestatus', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
   { value: 'source', label: 'Kilde', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
   { value: 'email', label: 'E-post', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
-  { value: 'tags', label: 'Tagg', allowedOps: ['contains', 'is_null', 'not_null'] },
-  { value: 'deal.eventType', label: 'Deal: arrangementstype', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
-  { value: 'deal.eventDate', label: 'Deal: dato', allowedOps: ['lt', 'gt', 'is_null', 'not_null'] },
-  { value: 'deal.status', label: 'Deal: status', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'tags', label: 'Stikkord', allowedOps: ['contains', 'is_null', 'not_null'] },
+  { value: 'deal.eventType', label: 'Avtale: type arrangement', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
+  { value: 'deal.eventDate', label: 'Avtale: dato', allowedOps: ['lt', 'gt', 'is_null', 'not_null'] },
+  { value: 'deal.status', label: 'Avtale: status', allowedOps: ['eq', 'neq', 'contains', 'is_null', 'not_null'] },
 ];
 
 const ALL_OPS = [
   { value: 'eq', label: 'er' },
   { value: 'neq', label: 'er ikke' },
   { value: 'contains', label: 'inneholder' },
-  { value: 'lt', label: 'før/mindre enn' },
-  { value: 'gt', label: 'etter/større enn' },
+  { value: 'lt', label: 'er mindre enn' },
+  { value: 'gt', label: 'er større enn' },
   { value: 'is_null', label: 'mangler' },
-  { value: 'not_null', label: 'finnes' },
+  { value: 'not_null', label: 'er fylt ut' },
 ];
 
+const DATE_FIELDS = new Set(['deal.eventDate']);
+
+/** Operatorene i ord som passer feltet, f.eks. «er før» for datoer og «har» for stikkord. */
 function getAllowedOpsForField(fieldValue: string): typeof ALL_OPS {
   const field = FIELDS.find((f) => f.value === fieldValue);
-  if (!field) return ALL_OPS;
-  return ALL_OPS.filter((op) => field.allowedOps.includes(op.value as never));
+  const ops = field ? ALL_OPS.filter((op) => field.allowedOps.includes(op.value as never)) : ALL_OPS;
+  return ops.map((op) => {
+    if (DATE_FIELDS.has(fieldValue) && op.value === 'lt') return { ...op, label: 'er før' };
+    if (DATE_FIELDS.has(fieldValue) && op.value === 'gt') return { ...op, label: 'er etter' };
+    if (fieldValue === 'tags' && op.value === 'contains') return { ...op, label: 'har stikkordet' };
+    if (fieldValue === 'tags' && op.value === 'is_null') return { ...op, label: 'har ingen' };
+    if (fieldValue === 'tags' && op.value === 'not_null') return { ...op, label: 'har minst ett' };
+    return op;
+  });
 }
 
 const emptyRule = (): Rule => {
@@ -116,7 +131,7 @@ export default function SegmenterPage() {
         fetch('/api/admin/crm/suppressions', { signal: controller.signal }),
       ]);
       if (!segRes.ok || !listRes.ok || !supRes.ok) {
-        throw new Error('Kunne ikke laste segmenter, lister og suppresjoner');
+        throw new Error('Kunne ikke hente segmenter og lister. Prøv igjen.');
       }
       const [segData, listData, supData] = await Promise.all([
         segRes.json(), listRes.json(), supRes.json(),
@@ -128,7 +143,7 @@ export default function SegmenterPage() {
     } catch (err) {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste data', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente segmenter og lister. Prøv igjen.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -149,15 +164,16 @@ export default function SegmenterPage() {
     (r) => r.field && r.op && (r.op === 'is_null' || r.op === 'not_null' || r.value.trim() !== ''),
   );
 
+  const cleaned = rules
+    .filter((r) => r.field && r.op)
+    .map((r) => ({
+      field: r.field,
+      op: r.op,
+      ...(r.op === 'is_null' || r.op === 'not_null' ? {} : { value: r.value.trim() }),
+    }));
+
   async function createSegment() {
     if (!segName.trim() || !rulesValid || segmentBusy) return;
-    const cleaned = rules
-      .filter((r) => r.field && r.op)
-      .map((r) => ({
-        field: r.field,
-        op: r.op,
-        ...(r.op === 'is_null' || r.op === 'not_null' ? {} : { value: r.value.trim() }),
-      }));
 
     setSegmentBusy(true);
     try {
@@ -168,15 +184,15 @@ export default function SegmenterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke opprette segment', 'error');
+        toast(data.error || 'Kunne ikke lagre segmentet. Sjekk reglene og prøv igjen.', 'error');
         return;
       }
-      toast('Segment opprettet', 'success');
+      toast(`Segmentet «${segName.trim()}» er lagret — det oppdaterer seg selv fra nå av`, 'success');
       setSegName('');
       setRules([emptyRule()]);
       await load();
     } catch {
-      toast('Kunne ikke opprette segment', 'error');
+      toast('Kunne ikke lagre segmentet. Prøv igjen.', 'error');
     } finally {
       setSegmentBusy(false);
     }
@@ -190,13 +206,13 @@ export default function SegmenterPage() {
       const res = await fetch(`/api/admin/crm/segments/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke slette segment', 'error');
+        toast(data.error || 'Kunne ikke slette segmentet. Prøv igjen.', 'error');
         return;
       }
-      toast('Segment slettet', 'success');
+      toast('Segmentet er slettet — kontaktene er urørt', 'success');
       await load();
     } catch {
-      toast('Kunne ikke slette segment', 'error');
+      toast('Kunne ikke slette segmentet. Prøv igjen.', 'error');
     } finally {
       setDeletingSegmentId(null);
     }
@@ -213,14 +229,14 @@ export default function SegmenterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke opprette liste', 'error');
+        toast(data.error || 'Kunne ikke lage listen. Prøv et annet navn, eller prøv igjen.', 'error');
         return;
       }
-      toast('Liste opprettet', 'success');
+      toast(`Listen «${listName.trim()}» er laget — legg til kontakter med «Legg til kontakter»`, 'success');
       setListName('');
       await load();
     } catch {
-      toast('Kunne ikke opprette liste', 'error');
+      toast('Kunne ikke lage listen. Prøv igjen.', 'error');
     } finally {
       setListBusy(false);
     }
@@ -234,14 +250,14 @@ export default function SegmenterPage() {
       const res = await fetch(`/api/admin/crm/lists/${id}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke slette liste', 'error');
+        toast(data.error || 'Kunne ikke slette listen. Prøv igjen.', 'error');
         return;
       }
-      toast('Liste slettet', 'success');
+      toast('Listen er slettet — kontaktene er urørt', 'success');
       if (memberListId === id) setMemberListId(null);
       await load();
     } catch {
-      toast('Kunne ikke slette liste', 'error');
+      toast('Kunne ikke slette listen. Prøv igjen.', 'error');
     } finally {
       setDeletingListId(null);
     }
@@ -258,14 +274,14 @@ export default function SegmenterPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke endre navnet', 'error');
+        toast(data.error || 'Kunne ikke endre navnet. Prøv igjen.', 'error');
         return;
       }
       toast('Navnet er endret', 'success');
       setRenaming(null);
       await load();
     } catch {
-      toast('Kunne ikke endre navnet', 'error');
+      toast('Kunne ikke endre navnet. Prøv igjen.', 'error');
     } finally {
       setRenameBusy(false);
     }
@@ -282,7 +298,7 @@ export default function SegmenterPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast(data.error || 'Kunne ikke lage liste av segmentet', 'error');
+        toast(data.error || 'Kunne ikke lage liste av segmentet. Prøv igjen.', 'error');
         return;
       }
       toast(`Listen «${data.list.name}» er laget med ${countLabel(data.added)}`, 'success');
@@ -292,7 +308,7 @@ export default function SegmenterPage() {
         document.getElementById(`liste-${data.list.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
     } catch {
-      toast('Kunne ikke lage liste av segmentet', 'error');
+      toast('Kunne ikke lage liste av segmentet. Prøv igjen.', 'error');
     } finally {
       setConverting(false);
       setPendingConvert(null);
@@ -310,14 +326,14 @@ export default function SegmenterPage() {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast(data.error || 'Ugyldig e-post', 'error');
+        toast(data.error || 'Sjekk e-postadressen — den ser ikke riktig ut (f.eks. navn@firma.no).', 'error');
         return;
       }
-      toast('Lagt til i ikke-kontakt-listen', 'success');
+      toast(`${suppressEmail.trim()} får ingen flere e-poster fra flytene`, 'success');
       setSuppressEmail('');
       await load();
     } catch {
-      toast('Kunne ikke legge til i ikke-kontakt-listen', 'error');
+      toast('Kunne ikke legge adressen på ikke-kontakt-listen. Prøv igjen.', 'error');
     } finally {
       setSuppressBusy(false);
     }
@@ -330,13 +346,13 @@ export default function SegmenterPage() {
       const res = await fetch(`/api/admin/crm/suppressions?email=${encodeURIComponent(email)}`, { method: 'DELETE' });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        toast(data.error || 'Kunne ikke fjerne fra ikke-kontakt-listen', 'error');
+        toast(data.error || 'Kunne ikke fjerne adressen fra ikke-kontakt-listen. Prøv igjen.', 'error');
         return;
       }
-      toast('Fjernet fra ikke-kontakt-listen', 'success');
+      toast(`${email} er fjernet fra ikke-kontakt-listen og kan igjen få e-post`, 'success');
       await load();
     } catch {
-      toast('Kunne ikke fjerne fra ikke-kontakt-listen', 'error');
+      toast('Kunne ikke fjerne adressen fra ikke-kontakt-listen. Prøv igjen.', 'error');
     } finally {
       setRemovingEmail(null);
     }
@@ -356,17 +372,43 @@ export default function SegmenterPage() {
       <div>
         <CrmTabs />
         <EmptyState
-          title="Kunne ikke laste data"
-          description="Noe gikk galt under henting av segmenter, lister og suppresjoner. Prøv igjen."
+          title="Kunne ikke hente segmenter og lister"
+          description="Det kan skyldes nettforbindelsen. Prøv igjen om litt."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       </div>
     );
   }
 
+  const focusNew = (ref: React.RefObject<HTMLInputElement | null>) => {
+    ref.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    ref.current?.focus({ preventScroll: true });
+  };
+
+  const rulePreview = rulesValid ? describeSegmentRules(parseSegmentRules(JSON.stringify({ all: cleaned }))) : [];
+
   return (
     <div>
-      <CrmTabs />
+      <CrmTabs
+        actions={
+          <>
+            <button
+              type="button"
+              onClick={() => focusNew(listNameRef)}
+              className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
+            >
+              Ny liste
+            </button>
+            <button
+              type="button"
+              onClick={() => focusNew(segNameRef)}
+              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
+            >
+              Nytt segment
+            </button>
+          </>
+        }
+      />
       <div className="max-w-4xl space-y-10">
         <aside className="rounded-lg border border-blue-100 bg-blue-50/60 px-4 py-3 text-sm text-gray-800">
           <p className="font-semibold mb-1">Hva er forskjellen?</p>
@@ -381,6 +423,7 @@ export default function SegmenterPage() {
             <SectionHeading
               title="Segmenter — automatiske grupper basert på regler"
               description="Du lager reglene én gang, så finner systemet hvem som passer. Kontakter kommer og går av seg selv."
+              help={<HelpTip term="segment" />}
             />
           </div>
 
@@ -407,7 +450,7 @@ export default function SegmenterPage() {
                     <span className="text-gray-500 text-xs shrink-0">{countLabel(s.memberCount)} nå</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    Regler: {describeSegmentRules(parseSegmentRules(s.rules)).join(' · ')}
+                    Tar med kontakter der: {describeSegmentRules(parseSegmentRules(s.rules)).join(' · ')}
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
                     <Link href={`/admin/crm/kontakter?segmentId=${s.id}`} className="text-blue-700 font-medium hover:underline">
@@ -417,13 +460,13 @@ export default function SegmenterPage() {
                       type="button"
                       onClick={() => setPendingConvert(s)}
                       disabled={s.memberCount === 0}
-                      title={s.memberCount === 0 ? 'Segmentet er tomt' : undefined}
+                      title={s.memberCount === 0 ? 'Segmentet er tomt – ingen å legge i en liste' : 'Lagre hvem som er med akkurat nå, som en fast liste'}
                       className="text-blue-700 hover:underline disabled:text-gray-400 disabled:no-underline"
                     >
                       Gjør om til liste
                     </button>
                     <a href={`/api/admin/crm/segments/${s.id}/export`} download className="text-blue-700 hover:underline">
-                      Last ned som CSV
+                      Last ned (Excel/CSV)
                     </a>
                     <button
                       type="button"
@@ -442,8 +485,8 @@ export default function SegmenterPage() {
           <div className="border border-gray-200 rounded-lg p-4 space-y-3">
             <h3 className="text-sm font-semibold">Lag nytt segment</h3>
             <p className="text-xs text-gray-500">
-              Alle reglene må stemme. Regler om deal gjelder samme deal: «arrangementstype er julebord» + «dato
-              før 2026-01-01» gir bare kontakter som hadde et julebord før 2026.
+              Kontakten må passe med alle reglene. Regler om avtaler gjelder samme avtale: «type arrangement er
+              julebord» + «dato er før 01.01.2026» gir bare kontakter som hadde et julebord før 2026.
             </p>
             <input
               ref={segNameRef}
@@ -466,8 +509,11 @@ export default function SegmenterPage() {
                       const newField = e.target.value;
                       const newAllowedOps = getAllowedOpsForField(newField);
                       const newOp = newAllowedOps[0]?.value || 'eq';
-                      setRules(rules.map((r, j) => (j === i ? { ...r, field: newField, op: newOp } : r)));
+                      setRules(rules.map((r, j) => (j === i
+                        ? { ...r, field: newField, op: newOp, value: SEGMENT_VALUE_LABELS[newField] || DATE_FIELDS.has(newField) ? '' : r.value }
+                        : r)));
                     }}
+                    aria-label={`Regel ${i + 1}: felt`}
                     className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
                   >
                     {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
@@ -475,23 +521,40 @@ export default function SegmenterPage() {
                   <select
                     value={effectiveOp}
                     onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, op: e.target.value } : r)))}
+                    aria-label={`Regel ${i + 1}: sammenligning`}
                     className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
                   >
                     {allowedOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                   </select>
                   {effectiveOp !== 'is_null' && effectiveOp !== 'not_null' && (
-                    <input
-                      value={rule.value}
-                      onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
-                      placeholder="verdi"
-                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
-                    />
+                    SEGMENT_VALUE_LABELS[rule.field] && (effectiveOp === 'eq' || effectiveOp === 'neq') ? (
+                      <select
+                        value={rule.value}
+                        onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                        aria-label={`Regel ${i + 1}: verdi`}
+                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
+                      >
+                        <option value="">Velg …</option>
+                        {Object.entries(SEGMENT_VALUE_LABELS[rule.field]).map(([value, label]) => (
+                          <option key={value} value={value}>{label}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={DATE_FIELDS.has(rule.field) ? 'date' : 'text'}
+                        value={rule.value}
+                        onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                        placeholder={rule.field === 'tags' ? 'f.eks. ponni' : rule.field === 'deal.eventType' ? 'f.eks. julebord' : 'skriv verdi'}
+                        aria-label={`Regel ${i + 1}: verdi`}
+                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
+                      />
+                    )
                   )}
                   {rules.length > 1 && (
                     <button
                       onClick={() => setRules(rules.filter((_, j) => j !== i))}
                       className="text-gray-400 hover:text-red-600 text-sm"
-                      aria-label="Fjern regel"
+                      aria-label={`Fjern regel ${i + 1}`}
                     >
                       ✕
                     </button>
@@ -499,6 +562,11 @@ export default function SegmenterPage() {
                 </div>
               );
             })}
+            {rulePreview.length > 0 && (
+              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700" aria-live="polite">
+                <span className="font-medium">Segmentet tar med kontakter der:</span> {rulePreview.join(' · ')}
+              </p>
+            )}
             <div className="flex gap-2">
               <button
                 onClick={() => setRules([...rules, emptyRule()])}
@@ -522,6 +590,7 @@ export default function SegmenterPage() {
             <SectionHeading
               title="Lister — manuelle grupper du legger kontakter i"
               description="Du bestemmer selv hvem som er med. Ingen kommer inn eller ut av seg selv."
+              help={<HelpTip term="list" />}
             />
           </div>
 
@@ -642,6 +711,7 @@ export default function SegmenterPage() {
             <SectionHeading
               title="Ikke-kontakt-liste"
               description="E-postadresser her får aldri e-post fra oss – uansett segment, liste eller flyt."
+              help={<HelpTip term="suppression" />}
             />
           </div>
           <div className="flex gap-2 mb-3">
@@ -658,16 +728,16 @@ export default function SegmenterPage() {
               disabled={!suppressEmail.trim() || suppressBusy}
               className="bg-gray-800 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
             >
-              {suppressBusy ? 'Legger til …' : 'Legg til'}
+              {suppressBusy ? 'Legger til …' : 'Legg på listen'}
             </button>
           </div>
           {suppressions.length === 0 ? (
-            <p className="text-sm text-gray-400">Ingen e-postadresser her ennå.</p>
+            <p className="text-sm text-gray-500">Ingen e-postadresser her ennå. Adresser som melder seg av, havner her automatisk.</p>
           ) : (
             <ul className="space-y-1">
               {suppressions.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-3 text-sm py-1 border-b border-gray-100">
-                  <span className="min-w-0 break-all">{s.email} <span className="text-gray-400 text-xs">({s.reason})</span></span>
+                  <span className="min-w-0 break-all">{s.email} <span className="text-gray-500 text-xs">({SUPPRESSION_REASONS[s.reason] ?? s.reason})</span></span>
                   {canRemoveSuppression && (
                     <button
                       onClick={() => setPendingUnsuppress(s)}
@@ -686,7 +756,7 @@ export default function SegmenterPage() {
       <ConfirmModal
         open={pendingConvert !== null}
         title="Gjøre segmentet om til en liste?"
-        message={`Vi lager en ny liste med de ${countLabel(pendingConvert?.memberCount ?? 0)} som er i «${pendingConvert?.name ?? ''}» akkurat nå. Listen oppdateres ikke av seg selv etterpå, og segmentet blir som før. Flyter som starter når noen blir «Lagt til i CRM-liste», kan starte for disse kontaktene.`}
+        message={`Vi lager en ny liste med de ${countLabel(pendingConvert?.memberCount ?? 0)} som er i «${pendingConvert?.name ?? ''}» akkurat nå. Listen oppdateres ikke av seg selv etterpå, og segmentet blir som før. E-postflyter som starter «når noen legges i en liste», kan starte for disse kontaktene.`}
         confirmLabel="Lag liste"
         variant="warning"
         loading={converting}
@@ -695,13 +765,13 @@ export default function SegmenterPage() {
       />
       <ConfirmModal
         open={pendingDelete !== null}
-        title={pendingDelete?.kind === 'list' ? 'Slett liste' : 'Slett segment'}
+        title={pendingDelete?.kind === 'list' ? 'Slette listen?' : 'Slette segmentet?'}
         message={
           pendingDelete?.kind === 'list'
-            ? `Slette listen «${pendingDelete.name}»? Kontaktene slettes ikke – bare selve listen.`
-            : `Slette segmentet «${pendingDelete?.name ?? ''}»? Kontaktene slettes ikke, men flyter som bruker segmentet, finner ingen lenger.`
+            ? `Listen «${pendingDelete.name}» slettes. Kontaktene slettes ikke – bare selve listen.`
+            : `Segmentet «${pendingDelete?.name ?? ''}» slettes. Kontaktene slettes ikke, men e-postflyter som bruker segmentet, finner ingen kontakter i det lenger.`
         }
-        confirmLabel="Slett"
+        confirmLabel={pendingDelete?.kind === 'list' ? 'Slett listen' : 'Slett segmentet'}
         loading={deletingSegmentId !== null || deletingListId !== null}
         onConfirm={async () => {
           if (!pendingDelete) return;
@@ -715,7 +785,7 @@ export default function SegmenterPage() {
         open={pendingUnsuppress !== null}
         title="Fjerne fra ikke-kontakt-listen?"
         message={`${pendingUnsuppress?.email ?? ''} kan da igjen motta e-post fra flyter og utsendelser. Gjør dette bare hvis personen selv har bedt om det${pendingUnsuppress?.reason === 'unsubscribe' ? ' — adressen meldte seg av selv' : ''}.`}
-        confirmLabel="Fjern"
+        confirmLabel="Fjern fra listen"
         variant="warning"
         loading={removingEmail !== null}
         onConfirm={async () => {

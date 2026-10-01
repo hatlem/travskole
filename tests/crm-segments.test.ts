@@ -178,13 +178,13 @@ describe('segmentsForContact — enkeltkontakt-evaluering', () => {
 });
 
 describe('describeSegmentRules', () => {
-  it('slår deal-regler sammen til én linje', () => {
+  it('slår avtaleregler sammen til én setning', () => {
     expect(describeSegmentRules({
       all: [
         { field: 'deal.eventType', op: 'eq', value: 'julebord' },
         { field: 'deal.eventDate', op: 'lt', value: '2026-01-01' },
       ],
-    })).toEqual(['Deal: type = julebord, dato før 01.01.2026']);
+    })).toEqual(['Har en avtale der type er julebord og dato er før 01.01.2026']);
   });
 
   it('beskriver kontaktregler med norske etiketter', () => {
@@ -197,11 +197,11 @@ describe('describeSegmentRules', () => {
         { field: 'deal.status', op: 'neq', value: 'lost' },
       ],
     })).toEqual([
-      'Stadium = Kunde',
-      'Tagg = vip',
+      'Kundestatus er Kunde',
+      'Har stikkordet «vip»',
       'E-post inneholder «@acme.no»',
       'Bedrift mangler',
-      'Deal: status ≠ tapt',
+      'Har en avtale der status ikke er tapt',
     ]);
   });
 

@@ -42,7 +42,7 @@ beforeEach(() => {
 
 describe('GET /api/admin/crm/contacts/[id]/segments', () => {
   it('gir kontaktens segmenter med begrunnelse', async () => {
-    const segments = [{ id: 1, name: 'VIP', reasons: ['Tagg = vip'] }];
+    const segments = [{ id: 1, name: 'VIP', reasons: ['Har stikkordet «vip»'] }];
     vi.mocked(segmentsForContactId).mockResolvedValue(segments);
     const res = await getContactSegments(req('/api/admin/crm/contacts/5/segments'), params('5'));
     expect(res.status).toBe(200);
