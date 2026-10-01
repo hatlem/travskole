@@ -13,6 +13,8 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { HelpTip } from '@/components/admin/HelpTip';
 import { HINTS } from '@/lib/admin-copy';
 import { FLOW_STATUS_LABELS, canDeleteStatus, isTemplateStatus } from '@/lib/flows/status';
+import { deleteFlowMessage, formatNorwegianDate, groupFlows } from '@/lib/crm/flow-list';
+import { RowMenu } from '@/components/admin/crm/RowMenu';
 import type { InstallResult, LegacyImportResult } from '@/lib/flows/templates/install';
 import { DEFAULT_FLOW_SETTINGS, FlowSettingsFields, type FlowSettingsValues } from './flow-settings-fields';
 
@@ -104,6 +106,92 @@ function enrollmentText(n: number): string {
   return n === 1 ? '1 person er underveis' : `${n} personer er underveis`;
 }
 
+const typeLabel = (flow: FlowRow) => (flow.isMarketing ? 'Markedsføring' : 'Viktig info');
+const anchorLabel = (flow: FlowRow) => ANCHOR_LABELS[flow.anchorMode] ?? flow.anchorMode;
+
+/** Tabell på store skjermer, kort under md. */
+function FlowList({
+  flows,
+  renderActions,
+  muted = false,
+}: {
+  flows: FlowRow[];
+  renderActions: (flow: FlowRow) => React.ReactNode;
+  muted?: boolean;
+}) {
+  return (
+    <>
+      <ul className={`divide-y divide-gray-100 rounded-lg border border-gray-200 md:hidden ${muted ? 'bg-gray-50/60' : 'bg-white'}`}>
+        {flows.map((flow) => (
+          <li key={flow.id} className="px-4 py-3 text-sm">
+            <div className="flex items-start justify-between gap-3">
+              <Link href={`/admin/crm/flyter/${flow.id}`} className="min-w-0 font-medium text-gray-900 break-words hover:underline">
+                {flow.name}
+              </Link>
+              <StatusBadge status={flow.status} />
+            </div>
+            <p className="mt-1 text-xs text-gray-500">
+              {typeLabel(flow)} · Gjelder {anchorLabel(flow).toLowerCase()} · Endret {formatNorwegianDate(flow.updatedAt)}
+            </p>
+            {flow.activeEnrollments > 0 && (
+              <p className="mt-0.5 text-xs text-gray-700 tabular-nums">{enrollmentText(flow.activeEnrollments)}</p>
+            )}
+            <div className="mt-2 flex flex-wrap items-center gap-2">{renderActions(flow)}</div>
+          </li>
+        ))}
+      </ul>
+      <div className={`hidden overflow-x-auto rounded-lg border border-gray-200 md:block ${muted ? 'bg-gray-50/60' : ''}`}>
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-left text-gray-600">
+            <tr>
+              <th className="px-4 py-3 font-medium">Navn</th>
+              <th className="px-4 py-3 font-medium">Status</th>
+              <th className="px-4 py-3 font-medium">
+                Underveis
+                <HelpTip term="recipients" />
+              </th>
+              <th className="px-4 py-3 font-medium">
+                Type
+                <HelpTip label="Markedsføring eller viktig informasjon?">
+                  Markedsføring (f.eks. «Nye kurs i høst!») går bare til de som har sagt ja. Viktig informasjon
+                  (f.eks. «Praktisk info før kursstart») går til alle det gjelder.
+                </HelpTip>
+              </th>
+              <th className="px-4 py-3 font-medium">
+                Gjelder
+                <HelpTip term="anchor" />
+              </th>
+              <th className="px-4 py-3 font-medium">Sist endret</th>
+              <th className="px-4 py-3 font-medium"><span className="sr-only">Handlinger</span></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {flows.map((flow) => (
+              <tr key={flow.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3">
+                  <Link href={`/admin/crm/flyter/${flow.id}`} className="font-medium text-blue-700 hover:underline">
+                    {flow.name}
+                  </Link>
+                </td>
+                <td className="px-4 py-3">
+                  <StatusBadge status={flow.status} />
+                </td>
+                <td className="px-4 py-3 tabular-nums">{flow.activeEnrollments}</td>
+                <td className="px-4 py-3 text-gray-600">{typeLabel(flow)}</td>
+                <td className="px-4 py-3 text-gray-600">{anchorLabel(flow)}</td>
+                <td className="px-4 py-3 whitespace-nowrap text-gray-500">{formatNorwegianDate(flow.updatedAt)}</td>
+                <td className="px-4 py-3">
+                  <div className="flex items-center justify-end gap-2">{renderActions(flow)}</div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function FlyterPage() {
   const [flows, setFlows] = useState<FlowRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -128,6 +216,7 @@ export default function FlyterPage() {
   const [templateSenderId, setTemplateSenderId] = useState<number | ''>('');
   const [templateBusy, setTemplateBusy] = useState(false);
   const [templateReport, setTemplateReport] = useState<TemplateReport | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
   const { data: session } = useSession();
   const isSuperAdmin = session?.user.role === 'superadmin';
   const { toast } = useToast();
@@ -448,8 +537,41 @@ export default function FlyterPage() {
     }
   }
 
-  const regularFlows = flows.filter((f) => !isTemplateStatus(f.status));
-  const templates = flows.filter((f) => isTemplateStatus(f.status));
+  const { current: regularFlows, archived: archivedFlows, templates } = groupFlows(flows);
+
+  function renderFlowActions(flow: FlowRow) {
+    const isPending = pendingIds.has(flow.id);
+    const canDelete = canDeleteStatus(flow.status);
+    if (flow.status === 'archived') {
+      return canDelete ? (
+        <button
+          onClick={() => setConfirmAction({ type: 'delete', flow })}
+          disabled={isPending}
+          className="inline-flex h-9 items-center rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-red-600 hover:border-red-300 hover:bg-red-50 disabled:opacity-50"
+        >
+          Slett
+        </button>
+      ) : null;
+    }
+    const menuItems = [
+      { label: 'Arkiver', onSelect: () => setConfirmAction({ type: 'archive', flow }) },
+      ...(canDelete ? [{ label: 'Slett', danger: true, onSelect: () => setConfirmAction({ type: 'delete', flow }) }] : []),
+    ];
+    return (
+      <>
+        {(flow.status === 'active' || flow.status === 'paused') && (
+          <button
+            onClick={() => (flow.status === 'active' ? toggleStatus(flow) : setConfirmAction({ type: 'resume', flow }))}
+            disabled={isPending}
+            className="inline-flex h-9 items-center whitespace-nowrap rounded-md border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2 disabled:opacity-50"
+          >
+            {flow.status === 'active' ? 'Sett på pause' : 'Gjenoppta'}
+          </button>
+        )}
+        <RowMenu label={`Flere valg for ${flow.name}`} disabled={isPending} items={menuItems} />
+      </>
+    );
+  }
 
   return (
     <div>
@@ -638,100 +760,35 @@ export default function FlyterPage() {
               secondaryAction={{ label: 'Lag fra bunnen', onClick: openNewFlow }}
             />
           ) : (
-            <div className="overflow-x-auto border border-gray-200 rounded-lg">
-              <table className="min-w-full text-sm">
-                <thead className="bg-gray-50 text-left text-gray-600">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Navn</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">
-                      Underveis
-                      <HelpTip term="recipients" />
-                    </th>
-                    <th className="px-4 py-3 font-medium">
-                      Type
-                      <HelpTip label="Markedsføring eller viktig informasjon?">
-                        Markedsføring (f.eks. «Nye kurs i høst!») går bare til de som har sagt ja. Viktig informasjon
-                        (f.eks. «Praktisk info før kursstart») går til alle det gjelder.
-                      </HelpTip>
-                    </th>
-                    <th className="px-4 py-3 font-medium">
-                      Gjelder
-                      <HelpTip term="anchor" />
-                    </th>
-                    <th className="px-4 py-3 font-medium">Sist endret</th>
-                    <th className="px-4 py-3 font-medium">Handlinger</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {regularFlows.map((flow) => {
-                    const isPending = pendingIds.has(flow.id);
-                    const canToggle = flow.status === 'active' || flow.status === 'paused';
-                    const canDelete = canDeleteStatus(flow.status);
-                    return (
-                      <tr key={flow.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/admin/crm/flyter/${flow.id}`}
-                            className="font-medium text-blue-700 hover:underline"
-                          >
-                            {flow.name}
-                          </Link>
-                        </td>
-                        <td className="px-4 py-3">
-                          <StatusBadge status={flow.status} />
-                        </td>
-                        <td className="px-4 py-3">{flow.activeEnrollments}</td>
-                        <td className="px-4 py-3 text-gray-600">{flow.isMarketing ? 'Markedsføring' : 'Viktig info'}</td>
-                        <td className="px-4 py-3 text-gray-600">{ANCHOR_LABELS[flow.anchorMode] ?? flow.anchorMode}</td>
-                        <td className="px-4 py-3 text-gray-500">
-                          {new Date(flow.updatedAt).toLocaleDateString('nb-NO')}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-3">
-                            <Link
-                              href={`/admin/crm/flyter/${flow.id}`}
-                              className="text-blue-700 hover:underline"
-                            >
-                              Åpne
-                            </Link>
-                            {canToggle && (
-                              <button
-                                onClick={() =>
-                                  flow.status === 'active' ? toggleStatus(flow) : setConfirmAction({ type: 'resume', flow })
-                                }
-                                disabled={isPending}
-                                className="text-gray-700 hover:underline disabled:opacity-50"
-                              >
-                                {flow.status === 'active' ? 'Sett på pause' : 'Gjenoppta'}
-                              </button>
-                            )}
-                            {flow.status !== 'archived' && (
-                              <button
-                                onClick={() => setConfirmAction({ type: 'archive', flow })}
-                                disabled={isPending}
-                                className="text-gray-700 hover:underline disabled:opacity-50"
-                              >
-                                Arkiver
-                              </button>
-                            )}
-                            {canDelete && (
-                              <button
-                                onClick={() => setConfirmAction({ type: 'delete', flow })}
-                                disabled={isPending}
-                                className="text-red-600 hover:underline disabled:opacity-50"
-                              >
-                                Slett
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FlowList flows={regularFlows} renderActions={renderFlowActions} />
+          )}
+
+          {archivedFlows.length > 0 && (
+            <section className="mt-6" aria-labelledby="arkivert-heading">
+              <h2 id="arkivert-heading" className="text-sm font-semibold text-gray-800">
+                <button
+                  type="button"
+                  onClick={() => setShowArchived((v) => !v)}
+                  aria-expanded={showArchived}
+                  aria-controls="arkivert-liste"
+                  className="inline-flex min-h-9 items-center gap-2 rounded-md px-1 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
+                >
+                  <span aria-hidden="true" className={`inline-block text-xs text-gray-500 transition-transform duration-150 ${showArchived ? 'rotate-90' : ''}`}>▶</span>
+                  Arkivert
+                  <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 tabular-nums">
+                    {archivedFlows.length}
+                  </span>
+                </button>
+              </h2>
+              {showArchived && (
+                <div id="arkivert-liste" className="mt-2">
+                  <p className="mb-2 text-xs text-gray-500">
+                    Arkiverte flyter sender ingenting og kan ikke startes igjen. Du kan åpne dem for å se oppsettet, eller slette dem.
+                  </p>
+                  <FlowList flows={archivedFlows} renderActions={renderFlowActions} muted />
+                </div>
+              )}
+            </section>
           )}
 
           <section className="mt-8">
@@ -870,107 +927,81 @@ export default function FlyterPage() {
                 )}
               </div>
             ) : (
-              <div className="overflow-x-auto border border-gray-200 rounded-lg">
-                <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50 text-left text-gray-600">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Navn</th>
-                      <th className="px-4 py-3 font-medium">Type</th>
-                      <th className="px-4 py-3 font-medium">Gjelder</th>
-                      <th className="px-4 py-3 font-medium">Sist endret</th>
-                      <th className="px-4 py-3 font-medium">Handlinger</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {templates.map((template) => {
-                      const isPending = pendingIds.has(template.id);
-                      const isRenaming = renaming?.id === template.id;
-                      return (
-                        <tr key={template.id} className="hover:bg-gray-50">
-                          <td className="px-4 py-3">
-                            {isRenaming ? (
-                              <div className="flex items-center gap-2">
-                                <input
-                                  autoFocus
-                                  aria-label="Nytt navn"
-                                  value={renaming.name}
-                                  maxLength={200}
-                                  onChange={(e) => setRenaming({ id: template.id, name: e.target.value })}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') saveRename();
-                                    if (e.key === 'Escape') setRenaming(null);
-                                  }}
-                                  className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-                                />
-                                <button
-                                  onClick={saveRename}
-                                  disabled={isPending || !renaming.name.trim()}
-                                  className="text-blue-700 hover:underline disabled:opacity-50"
-                                >
-                                  Lagre
-                                </button>
-                                <button onClick={() => setRenaming(null)} className="text-gray-600 hover:underline">
-                                  Avbryt
-                                </button>
-                              </div>
-                            ) : (
-                              <>
-                                <Link
-                                  href={`/admin/crm/flyter/${template.id}`}
-                                  className="font-medium text-blue-700 hover:underline"
-                                >
-                                  {template.name}
-                                </Link>
-                                {template.description && (
-                                  <span className="block text-xs text-gray-500">{template.description}</span>
-                                )}
-                              </>
+              <ul className="divide-y divide-gray-100 rounded-lg border border-gray-200">
+                {templates.map((template) => {
+                  const isPending = pendingIds.has(template.id);
+                  const isRenaming = renaming?.id === template.id;
+                  return (
+                    <li key={template.id} className="flex flex-col gap-3 px-4 py-3 text-sm sm:flex-row sm:items-center">
+                      <div className="min-w-0 flex-1">
+                        {isRenaming ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <input
+                              autoFocus
+                              aria-label="Nytt navn på malen"
+                              value={renaming.name}
+                              maxLength={200}
+                              onChange={(e) => setRenaming({ id: template.id, name: e.target.value })}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveRename();
+                                if (e.key === 'Escape') setRenaming(null);
+                              }}
+                              className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm sm:max-w-sm"
+                            />
+                            <button
+                              onClick={saveRename}
+                              disabled={isPending || !renaming.name.trim()}
+                              className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+                            >
+                              {isPending ? 'Lagrer …' : 'Lagre'}
+                            </button>
+                            <button onClick={() => setRenaming(null)} className="px-2 py-1.5 text-sm text-gray-600 hover:underline">
+                              Avbryt
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <Link
+                              href={`/admin/crm/flyter/${template.id}`}
+                              className="font-medium text-gray-900 hover:text-bjerke-blue hover:underline"
+                            >
+                              {template.name}
+                            </Link>
+                            {template.description && (
+                              <p className="mt-0.5 text-xs text-gray-500 text-pretty">{template.description}</p>
                             )}
-                          </td>
-                          <td className="px-4 py-3 text-gray-600">{template.isMarketing ? 'Markedsføring' : 'Viktig info'}</td>
-                          <td className="px-4 py-3 text-gray-600">
-                            {ANCHOR_LABELS[template.anchorMode] ?? template.anchorMode}
-                          </td>
-                          <td className="px-4 py-3 text-gray-500">
-                            {new Date(template.updatedAt).toLocaleDateString('nb-NO')}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-3">
-                              <button
-                                onClick={() => createFromTemplate(template)}
-                                disabled={isPending}
-                                className="text-blue-700 hover:underline disabled:opacity-50"
-                              >
-                                Bruk mal
-                              </button>
-                              <Link
-                                href={`/admin/crm/flyter/${template.id}`}
-                                className="text-gray-700 hover:underline"
-                              >
-                                Rediger
-                              </Link>
-                              <button
-                                onClick={() => setRenaming({ id: template.id, name: template.name })}
-                                disabled={isPending}
-                                className="text-gray-700 hover:underline disabled:opacity-50"
-                              >
-                                Gi nytt navn
-                              </button>
-                              <button
-                                onClick={() => setConfirmAction({ type: 'delete', flow: template })}
-                                disabled={isPending}
-                                className="text-red-600 hover:underline disabled:opacity-50"
-                              >
-                                Slett
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {template.isMarketing ? 'Markedsføring' : 'Viktig info'} · Gjelder{' '}
+                              {(ANCHOR_LABELS[template.anchorMode] ?? template.anchorMode).toLowerCase()} · Endret{' '}
+                              {formatNorwegianDate(template.updatedAt)}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                      {!isRenaming && (
+                        <div className="flex shrink-0 items-center gap-2">
+                          <button
+                            onClick={() => createFromTemplate(template)}
+                            disabled={isPending}
+                            className="inline-flex h-9 items-center rounded-md bg-bjerke-blue px-3 text-sm font-medium text-white hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2 disabled:opacity-50"
+                          >
+                            {isPending ? 'Lager flyt …' : 'Bruk mal'}
+                          </button>
+                          <RowMenu
+                            label={`Flere valg for malen ${template.name}`}
+                            disabled={isPending}
+                            items={[
+                              { label: 'Rediger mal', href: `/admin/crm/flyter/${template.id}` },
+                              { label: 'Gi nytt navn', onSelect: () => setRenaming({ id: template.id, name: template.name }) },
+                              { label: 'Slett mal', danger: true, onSelect: () => setConfirmAction({ type: 'delete', flow: template }) },
+                            ]}
+                          />
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
             )}
           </section>
         </>
@@ -989,7 +1020,7 @@ export default function FlyterPage() {
           !confirmAction
             ? ''
             : confirmAction.type === 'delete'
-              ? `«${confirmAction.flow.name}» slettes for godt, med alle stegene og startreglene. Dette kan ikke angres.`
+              ? deleteFlowMessage(confirmAction.flow)
               : confirmAction.type === 'resume'
                 ? `${HINTS.resumeFlow}${confirmAction.flow.activeEnrollments > 0 ? ` (${enrollmentText(confirmAction.flow.activeEnrollments)}.)` : ''}`
                 : `«${confirmAction.flow.name}» stopper for godt og sender ingen flere e-poster.${
