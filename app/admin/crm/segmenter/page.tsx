@@ -96,6 +96,7 @@ export default function SegmenterPage() {
   const [segName, setSegName] = useState('');
   const [rules, setRules] = useState<Rule[]>([emptyRule()]);
   const [segmentBusy, setSegmentBusy] = useState(false);
+  const [showSegmentForm, setShowSegmentForm] = useState(false);
   const [deletingSegmentId, setDeletingSegmentId] = useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = useState<{ kind: 'segment' | 'list'; id: number; name: string } | null>(null);
 
@@ -190,6 +191,7 @@ export default function SegmenterPage() {
       toast(`Segmentet «${segName.trim()}» er lagret — det oppdaterer seg selv fra nå av`, 'success');
       setSegName('');
       setRules([emptyRule()]);
+      setShowSegmentForm(false);
       await load();
     } catch {
       toast('Kunne ikke lagre segmentet. Prøv igjen.', 'error');
@@ -385,6 +387,17 @@ export default function SegmenterPage() {
     ref.current?.focus({ preventScroll: true });
   };
 
+  const openSegmentForm = () => {
+    setShowSegmentForm(true);
+    requestAnimationFrame(() => focusNew(segNameRef));
+  };
+
+  const closeSegmentForm = () => {
+    setShowSegmentForm(false);
+    setSegName('');
+    setRules([emptyRule()]);
+  };
+
   const rulePreview = rulesValid ? describeSegmentRules(parseSegmentRules(JSON.stringify({ all: cleaned }))) : [];
 
   return (
@@ -401,7 +414,9 @@ export default function SegmenterPage() {
             </button>
             <button
               type="button"
-              onClick={() => focusNew(segNameRef)}
+              onClick={openSegmentForm}
+              aria-expanded={showSegmentForm}
+              aria-controls="nytt-segment"
               className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
             >
               Nytt segment
@@ -427,7 +442,123 @@ export default function SegmenterPage() {
             />
           </div>
 
-          {segments.length === 0 ? (
+          {showSegmentForm && (
+            <div id="nytt-segment" className="border border-bjerke-blue/30 rounded-lg p-4 space-y-3 bg-white shadow-sm mb-6">
+              <h3 className="text-sm font-semibold">Lag nytt segment</h3>
+              <p className="text-xs text-gray-500">
+                Kontakten må passe med alle reglene. Regler om avtaler gjelder samme avtale: «type arrangement er
+                julebord» + «dato er før 01.01.2026» gir bare kontakter som hadde et julebord før 2026.
+              </p>
+              <label className="block text-xs font-medium text-gray-600">
+                Navn på segmentet
+                <input
+                  ref={segNameRef}
+                  value={segName}
+                  onChange={(e) => setSegName(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Escape' && closeSegmentForm()}
+                  placeholder="F.eks. Julebord 2025"
+                  maxLength={200}
+                  className="mt-1 border border-gray-300 rounded-md px-3 py-2 text-sm w-full text-gray-900"
+                />
+              </label>
+              {rules.map((rule, i) => {
+                const allowedOps = getAllowedOpsForField(rule.field);
+                const opIsAllowed = allowedOps.some((o) => o.value === rule.op);
+                const effectiveOp = opIsAllowed ? rule.op : allowedOps[0]?.value || 'eq';
+
+                return (
+                  <div key={i} className="flex flex-wrap gap-2 items-center">
+                    <select
+                      value={rule.field}
+                      onChange={(e) => {
+                        const newField = e.target.value;
+                        const newAllowedOps = getAllowedOpsForField(newField);
+                        const newOp = newAllowedOps[0]?.value || 'eq';
+                        setRules(rules.map((r, j) => (j === i
+                          ? { ...r, field: newField, op: newOp, value: SEGMENT_VALUE_LABELS[newField] || DATE_FIELDS.has(newField) ? '' : r.value }
+                          : r)));
+                      }}
+                      aria-label={`Regel ${i + 1}: felt`}
+                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
+                    >
+                      {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
+                    </select>
+                    <select
+                      value={effectiveOp}
+                      onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, op: e.target.value } : r)))}
+                      aria-label={`Regel ${i + 1}: sammenligning`}
+                      className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
+                    >
+                      {allowedOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                    {effectiveOp !== 'is_null' && effectiveOp !== 'not_null' && (
+                      SEGMENT_VALUE_LABELS[rule.field] && (effectiveOp === 'eq' || effectiveOp === 'neq') ? (
+                        <select
+                          value={rule.value}
+                          onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                          aria-label={`Regel ${i + 1}: verdi`}
+                          className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
+                        >
+                          <option value="">Velg …</option>
+                          {Object.entries(SEGMENT_VALUE_LABELS[rule.field]).map(([value, label]) => (
+                            <option key={value} value={value}>{label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <input
+                          type={DATE_FIELDS.has(rule.field) ? 'date' : 'text'}
+                          value={rule.value}
+                          onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
+                          placeholder={rule.field === 'tags' ? 'f.eks. ponni' : rule.field === 'deal.eventType' ? 'f.eks. julebord' : 'Skriv verdi'}
+                          aria-label={`Regel ${i + 1}: verdi`}
+                          className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-40"
+                        />
+                      )
+                    )}
+                    {rules.length > 1 && (
+                      <button
+                        onClick={() => setRules(rules.filter((_, j) => j !== i))}
+                        className="text-gray-400 hover:text-red-600 text-sm"
+                        aria-label={`Fjern regel ${i + 1}`}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {rulePreview.length > 0 && (
+                <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700" aria-live="polite">
+                  <span className="font-medium">Segmentet tar med kontakter der:</span> {rulePreview.join(' · ')}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setRules([...rules, emptyRule()])}
+                  className="text-sm text-blue-700 hover:underline"
+                >
+                  + Legg til regel
+                </button>
+                <button
+                  type="button"
+                  onClick={closeSegmentForm}
+                  disabled={segmentBusy}
+                  className="ml-auto border border-gray-300 bg-white text-gray-700 px-4 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
+                >
+                  Avbryt
+                </button>
+                <button
+                  onClick={createSegment}
+                  disabled={!segName.trim() || !rulesValid || segmentBusy}
+                  className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
+                >
+                  {segmentBusy ? 'Lagrer …' : 'Lagre segment'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {segments.length === 0 && !showSegmentForm ? (
             <div className="rounded-lg border border-dashed border-gray-300 p-6 text-center mb-6">
               <p className="font-medium">Ingen segmenter ennå</p>
               <p className="text-sm text-gray-500 mt-1 mb-3">
@@ -435,13 +566,13 @@ export default function SegmenterPage() {
               </p>
               <button
                 type="button"
-                onClick={() => segNameRef.current?.focus()}
+                onClick={openSegmentForm}
                 className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
               >
                 Lag ditt første segment
               </button>
             </div>
-          ) : (
+          ) : segments.length === 0 ? null : (
             <ul className="space-y-2 mb-6">
               {segments.map((s) => (
                 <li key={s.id} className="border border-gray-200 rounded-lg p-3 text-sm">
@@ -482,107 +613,6 @@ export default function SegmenterPage() {
             </ul>
           )}
 
-          <div className="border border-gray-200 rounded-lg p-4 space-y-3">
-            <h3 className="text-sm font-semibold">Lag nytt segment</h3>
-            <p className="text-xs text-gray-500">
-              Kontakten må passe med alle reglene. Regler om avtaler gjelder samme avtale: «type arrangement er
-              julebord» + «dato er før 01.01.2026» gir bare kontakter som hadde et julebord før 2026.
-            </p>
-            <input
-              ref={segNameRef}
-              value={segName}
-              onChange={(e) => setSegName(e.target.value)}
-              placeholder="Navn, f.eks. Julebord 2025"
-              aria-label="Navn på segmentet"
-              className="border border-gray-300 rounded-md px-3 py-2 text-sm w-full"
-            />
-            {rules.map((rule, i) => {
-              const allowedOps = getAllowedOpsForField(rule.field);
-              const opIsAllowed = allowedOps.some((o) => o.value === rule.op);
-              const effectiveOp = opIsAllowed ? rule.op : allowedOps[0]?.value || 'eq';
-
-              return (
-                <div key={i} className="flex flex-wrap gap-2 items-center">
-                  <select
-                    value={rule.field}
-                    onChange={(e) => {
-                      const newField = e.target.value;
-                      const newAllowedOps = getAllowedOpsForField(newField);
-                      const newOp = newAllowedOps[0]?.value || 'eq';
-                      setRules(rules.map((r, j) => (j === i
-                        ? { ...r, field: newField, op: newOp, value: SEGMENT_VALUE_LABELS[newField] || DATE_FIELDS.has(newField) ? '' : r.value }
-                        : r)));
-                    }}
-                    aria-label={`Regel ${i + 1}: felt`}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
-                  >
-                    {FIELDS.map((f) => <option key={f.value} value={f.value}>{f.label}</option>)}
-                  </select>
-                  <select
-                    value={effectiveOp}
-                    onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, op: e.target.value } : r)))}
-                    aria-label={`Regel ${i + 1}: sammenligning`}
-                    className="border border-gray-300 rounded-md px-2 py-1.5 text-sm max-w-full"
-                  >
-                    {allowedOps.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                  {effectiveOp !== 'is_null' && effectiveOp !== 'not_null' && (
-                    SEGMENT_VALUE_LABELS[rule.field] && (effectiveOp === 'eq' || effectiveOp === 'neq') ? (
-                      <select
-                        value={rule.value}
-                        onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
-                        aria-label={`Regel ${i + 1}: verdi`}
-                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
-                      >
-                        <option value="">Velg …</option>
-                        {Object.entries(SEGMENT_VALUE_LABELS[rule.field]).map(([value, label]) => (
-                          <option key={value} value={value}>{label}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type={DATE_FIELDS.has(rule.field) ? 'date' : 'text'}
-                        value={rule.value}
-                        onChange={(e) => setRules(rules.map((r, j) => (j === i ? { ...r, value: e.target.value } : r)))}
-                        placeholder={rule.field === 'tags' ? 'f.eks. ponni' : rule.field === 'deal.eventType' ? 'f.eks. julebord' : 'skriv verdi'}
-                        aria-label={`Regel ${i + 1}: verdi`}
-                        className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-32"
-                      />
-                    )
-                  )}
-                  {rules.length > 1 && (
-                    <button
-                      onClick={() => setRules(rules.filter((_, j) => j !== i))}
-                      className="text-gray-400 hover:text-red-600 text-sm"
-                      aria-label={`Fjern regel ${i + 1}`}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-            {rulePreview.length > 0 && (
-              <p className="rounded-md bg-gray-50 px-3 py-2 text-xs text-gray-700" aria-live="polite">
-                <span className="font-medium">Segmentet tar med kontakter der:</span> {rulePreview.join(' · ')}
-              </p>
-            )}
-            <div className="flex gap-2">
-              <button
-                onClick={() => setRules([...rules, emptyRule()])}
-                className="text-sm text-blue-700 hover:underline"
-              >
-                + Legg til regel
-              </button>
-              <button
-                onClick={createSegment}
-                disabled={!segName.trim() || !rulesValid || segmentBusy}
-                className="ml-auto bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
-              >
-                {segmentBusy ? 'Lagrer …' : 'Lagre segment'}
-              </button>
-            </div>
-          </div>
         </section>
 
         <section aria-labelledby="lister-heading">
