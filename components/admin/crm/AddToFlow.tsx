@@ -10,6 +10,8 @@ interface AddToFlowProps {
   contactId: number;
   /** Viser advarsel når en markedsføringsflyt velges for en kontakt uten samtykke. */
   hasMarketingConsent?: boolean;
+  /** Flyter kontakten allerede er med i — vises ikke i velgeren. */
+  excludeFlowIds?: number[];
   onEnrolled?: () => void;
 }
 
@@ -24,7 +26,7 @@ async function postEnrollment(flowId: number, body: Record<string, unknown>) {
 }
 
 /** Meld en kontakt manuelt inn i en aktiv flyt. */
-export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }: AddToFlowProps) {
+export function AddToFlow({ contactId, hasMarketingConsent = true, excludeFlowIds = [], onEnrolled }: AddToFlowProps) {
   const { toast } = useToast();
   const [flows, setFlows] = useState<FlowOption[] | null>(null);
   const [flowId, setFlowId] = useState('');
@@ -42,7 +44,9 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }:
     return () => controller.abort();
   }, []);
 
-  const selected = flows?.find((f) => String(f.id) === flowId) ?? null;
+  const excluded = new Set(excludeFlowIds);
+  const choices = flows?.filter((f) => !excluded.has(f.id)) ?? null;
+  const selected = choices?.find((f) => String(f.id) === flowId) ?? null;
 
   async function enroll() {
     if (!selected || busy) return;
@@ -54,7 +58,9 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }:
         return;
       }
       const enrolled = typeof data.enrolled === 'number' ? data.enrolled : 0;
-      if (enrolled > 0) toast(`Lagt til i «${selected.name}» — første e-post går ut etter oppsettet i flyten`, 'success');
+      if (enrolled > 0 && selected.isMarketing && !hasMarketingConsent) {
+        toast(`Lagt til i «${selected.name}», men kontakten har ikke samtykket til markedsføring og får ingen e-post fra flyten`, 'info');
+      } else if (enrolled > 0) toast(`Lagt til i «${selected.name}» — første e-post går ut etter oppsettet i flyten`, 'success');
       else if (data.skippedSuppressed > 0) toast('Kontakten står på ikke-kontakt-listen og kan ikke få e-post fra flytene', 'error');
       else toast(`Kontakten er allerede med i «${selected.name}»`, 'info');
       setFlowId('');
@@ -66,31 +72,33 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, onEnrolled }:
     }
   }
 
-  if (flows === null) return <p className="text-sm text-gray-400">Laster flyter …</p>;
-  if (flows.length === 0) return (
+  if (choices === null) return <p className="text-sm text-gray-400">Laster flyter …</p>;
+  if (choices.length === 0) return (
     <p className="text-sm text-gray-500">
-      Ingen e-postflyter er slått på ennå.{' '}
-      <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">Gå til E-postflyter</Link>
+      {flows && flows.length > 0
+        ? 'Kontakten er allerede med i alle aktive e-postflyter.'
+        : 'Ingen e-postflyter er aktive nå, så det er ingen å legge kontakten i.'}{' '}
+      <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">Se e-postflytene</Link>
     </p>
   );
 
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <select
           aria-label="Velg e-postflyt"
           value={flowId}
           onChange={(e) => setFlowId(e.target.value)}
-          className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1"
+          className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-[12rem]"
         >
-          <option value="">Velg e-postflyt …</option>
-          {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          <option value="">Velg e-postflyt</option>
+          {choices.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
         <button
           type="button"
           onClick={enroll}
           disabled={!selected || busy}
-          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50"
+          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
         >
           {busy ? 'Legger til …' : 'Legg til'}
         </button>

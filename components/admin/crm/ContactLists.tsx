@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { formatDateNo } from '@/lib/crm/format-date';
+import { usePopoverDismiss } from './usePopover';
 
 export interface ContactListMembershipRow {
   id: number;
@@ -20,9 +22,10 @@ interface ContactListsProps {
   contactName: string;
   lists: ContactListMembershipRow[];
   onChanged: () => void;
+  /** Styrt utenfra så f.eks. segment-hjelpeteksten kan åpne listevelgeren. */
+  pickerOpen: boolean;
+  onPickerOpenChange: (open: boolean) => void;
 }
-
-const NEW_LIST = 'new';
 
 async function requestJson(url: string, method: string, body: unknown) {
   const res = await fetch(url, {
@@ -34,15 +37,27 @@ async function requestJson(url: string, method: string, body: unknown) {
   return { res, data };
 }
 
-/** Kontaktens CRM-lister: vis, legg til (ev. i ny liste) og fjern. */
-export function ContactLists({ contactId, contactName, lists, onChanged }: ContactListsProps) {
+const SEARCH_THRESHOLD = 6;
+
+/** Kontaktens CRM-lister: vis, legg i liste via en velger (ev. en ny liste) og fjern. */
+export function ContactLists({ contactId, contactName, lists, onChanged, pickerOpen, onPickerOpenChange }: ContactListsProps) {
   const { toast } = useToast();
   const [allLists, setAllLists] = useState<ListOption[] | null>(null);
-  const [choice, setChoice] = useState('');
+  const [query, setQuery] = useState('');
+  const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [busy, setBusy] = useState(false);
   const [pendingRemove, setPendingRemove] = useState<ContactListMembershipRow | null>(null);
   const [removing, setRemoving] = useState(false);
+  const popoverId = useId();
+
+  const close = useCallback(() => {
+    onPickerOpenChange(false);
+    setCreating(false);
+    setNewName('');
+    setQuery('');
+  }, [onPickerOpenChange]);
+  const { containerRef, triggerRef } = usePopoverDismiss<HTMLDivElement>(pickerOpen, close);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -58,36 +73,47 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
 
   const memberOf = new Set(lists.map((l) => l.id));
   const available = (allLists ?? []).filter((l) => !memberOf.has(l.id));
-  const creating = choice === NEW_LIST;
-  const canAdd = !busy && (creating ? newName.trim() !== '' : choice !== '');
+  const q = query.trim().toLowerCase();
+  const shown = q ? available.filter((l) => l.name.toLowerCase().includes(q)) : available;
 
-  async function add() {
-    if (!canAdd) return;
+  async function addTo(target: ListOption) {
+    const { res, data } = await requestJson(`/api/admin/crm/lists/${target.id}`, 'POST', { contactIds: [contactId] });
+    if (!res.ok) {
+      toast(data.error || 'Kunne ikke legge kontakten i listen. Prøv igjen.', 'error');
+      return false;
+    }
+    toast(data.added > 0 ? `Lagt i listen «${target.name}»` : `Kontakten er allerede i «${target.name}»`, data.added > 0 ? 'success' : 'info');
+    onChanged();
+    return true;
+  }
+
+  async function pick(target: ListOption) {
+    if (busy) return;
     setBusy(true);
     try {
-      let target: ListOption | null = available.find((l) => String(l.id) === choice) ?? null;
-      if (creating) {
-        const { res, data } = await requestJson('/api/admin/crm/lists', 'POST', { name: newName.trim() });
-        if (!res.ok) {
-          toast(data.error || 'Kunne ikke lage listen. Prøv et annet navn, eller prøv igjen.', 'error');
-          return;
-        }
-        target = { id: data.list.id, name: data.list.name };
-        setAllLists((prev) => [...(prev ?? []), target as ListOption].sort((a, b) => a.name.localeCompare(b.name, 'nb')));
-      }
-      if (!target) return;
-
-      const { res, data } = await requestJson(`/api/admin/crm/lists/${target.id}`, 'POST', { contactIds: [contactId] });
-      if (!res.ok) {
-        toast(data.error || 'Kunne ikke legge kontakten i listen. Prøv igjen.', 'error');
-        return;
-      }
-      toast(data.added > 0 ? `Lagt i listen «${target.name}»` : `Kontakten er allerede i «${target.name}»`, data.added > 0 ? 'success' : 'info');
-      setChoice('');
-      setNewName('');
-      onChanged();
+      if (await addTo(target)) close();
     } catch {
       toast('Kunne ikke legge kontakten i listen. Prøv igjen.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createAndAdd() {
+    const name = newName.trim();
+    if (busy || !name) return;
+    setBusy(true);
+    try {
+      const { res, data } = await requestJson('/api/admin/crm/lists', 'POST', { name });
+      if (!res.ok) {
+        toast(data.error || 'Kunne ikke lage listen. Prøv et annet navn, eller prøv igjen.', 'error');
+        return;
+      }
+      const target: ListOption = { id: data.list.id, name: data.list.name };
+      setAllLists((prev) => [...(prev ?? []), target].sort((a, b) => a.name.localeCompare(b.name, 'nb')));
+      if (await addTo(target)) close();
+    } catch {
+      toast('Kunne ikke lage listen. Prøv igjen.', 'error');
     } finally {
       setBusy(false);
     }
@@ -117,21 +143,21 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
   return (
     <div className="space-y-3">
       {lists.length === 0 ? (
-        <p className="text-sm text-gray-500">Ikke med i noen lister ennå. Velg en liste under, eller lag en ny.</p>
+        <p className="text-sm text-gray-500">Ikke med i noen lister ennå.</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {lists.map((l) => (
             <li
               key={l.id}
-              className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs text-blue-800"
-              title={`Lagt til ${new Date(l.addedAt).toLocaleDateString('nb-NO')}`}
+              className="inline-flex items-center gap-1 rounded-full bg-blue-50 py-0.5 pl-2.5 pr-1 text-xs text-blue-800"
+              title={`Lagt til ${formatDateNo(l.addedAt)}`}
             >
               {l.name}
               <button
                 type="button"
                 onClick={() => setPendingRemove(l)}
                 aria-label={`Fjern fra ${l.name}`}
-                className="text-blue-500 hover:text-red-600"
+                className="inline-flex h-6 w-6 items-center justify-center rounded-full text-blue-500 hover:bg-blue-100 hover:text-red-600"
               >
                 &times;
               </button>
@@ -140,43 +166,107 @@ export function ContactLists({ contactId, contactName, lists, onChanged }: Conta
         </ul>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <select
-          aria-label="Velg liste"
-          value={choice}
-          onChange={(e) => setChoice(e.target.value)}
-          disabled={allLists === null}
-          className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-[10rem]"
-        >
-          <option value="">{allLists === null ? 'Laster lister …' : 'Velg liste …'}</option>
-          {available.map((l) => (
-            <option key={l.id} value={l.id}>{l.name}</option>
-          ))}
-          <option value={NEW_LIST}>+ Ny liste …</option>
-        </select>
-        {creating && (
-          <input
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && add()}
-            placeholder="Navn på ny liste"
-            aria-label="Navn på ny liste"
-            maxLength={200}
-            className="border border-gray-300 rounded-md px-2 py-1.5 text-sm flex-1 min-w-[10rem]"
-          />
-        )}
+      <div className="relative">
         <button
+          ref={triggerRef}
           type="button"
-          onClick={add}
-          disabled={!canAdd}
-          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
+          onClick={() => (pickerOpen ? close() : onPickerOpenChange(true))}
+          aria-expanded={pickerOpen}
+          aria-controls={popoverId}
+          aria-haspopup="dialog"
+          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
-          {busy ? 'Legger til …' : 'Legg i liste'}
+          Legg i liste
         </button>
+
+        {pickerOpen && (
+          <div
+            ref={containerRef}
+            id={popoverId}
+            role="dialog"
+            aria-label="Velg liste"
+            className="absolute left-0 z-20 mt-1 w-72 max-w-[calc(100vw-2rem)] rounded-lg border border-gray-200 bg-white p-2 shadow-lg"
+          >
+            {allLists === null ? (
+              <p className="px-2 py-2 text-sm text-gray-400">Laster lister …</p>
+            ) : (
+              <>
+                {available.length > SEARCH_THRESHOLD && (
+                  <input
+                    type="search"
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="Søk i listene"
+                    aria-label="Søk i listene"
+                    autoFocus
+                    className="mb-2 w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                  />
+                )}
+                {shown.length > 0 ? (
+                  <ul className="max-h-56 overflow-y-auto">
+                    {shown.map((l, i) => (
+                      <li key={l.id}>
+                        <button
+                          type="button"
+                          onClick={() => pick(l)}
+                          disabled={busy}
+                          autoFocus={i === 0 && available.length <= SEARCH_THRESHOLD}
+                          className="w-full rounded-md px-2 py-2 text-left text-sm text-gray-800 hover:bg-gray-50 focus:bg-gray-50 disabled:opacity-50"
+                        >
+                          {l.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="px-2 py-2 text-sm text-gray-500">
+                    {available.length === 0
+                      ? (allLists.length === 0 ? 'Du har ingen lister ennå.' : 'Kontakten er med i alle listene.')
+                      : 'Ingen lister passer søket.'}
+                  </p>
+                )}
+
+                <div className="mt-1 border-t border-gray-100 pt-2">
+                  {creating ? (
+                    <form
+                      className="flex gap-2"
+                      onSubmit={(e) => { e.preventDefault(); createAndAdd(); }}
+                    >
+                      <input
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="Navn på listen"
+                        aria-label="Navn på ny liste"
+                        maxLength={200}
+                        autoFocus
+                        className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
+                      />
+                      <button
+                        type="submit"
+                        disabled={busy || !newName.trim()}
+                        className="whitespace-nowrap rounded-md bg-bjerke-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+                      >
+                        {busy ? 'Lager …' : 'Lag og legg til'}
+                      </button>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setCreating(true)}
+                      className="w-full rounded-md px-2 py-2 text-left text-sm text-bjerke-blue hover:bg-gray-50"
+                    >
+                      + Lag en ny liste
+                    </button>
+                  )}
+                </div>
+                <p className="mt-2 px-2 text-[11px] text-gray-500">
+                  Aktive flyter med startregelen «Lagt til i CRM-liste» starter når kontakten legges i listen.
+                </p>
+              </>
+            )}
+          </div>
+        )}
       </div>
-      <p className="text-[11px] text-gray-500">
-        Aktive flyter med utløseren «Lagt til i CRM-liste» starter når kontakten legges i listen.
-      </p>
 
       <ConfirmModal
         open={pendingRemove !== null}
