@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
+import { Button } from '@/components/admin/Button';
+import { parseLinkInput } from '@/lib/rich-text-link';
 
 interface RichTextEditorProps {
   /** Start-HTML (settes én gang ved montering) */
@@ -50,42 +52,94 @@ function ToolbarButton({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
-  function setLink() {
-    const previous = editor.getAttributes('link').href as string | undefined;
-    const url = window.prompt('Lim inn nettadressen lenken skal gå til. La feltet stå tomt for å fjerne lenken.', previous ?? 'https://');
-    if (url === null) return; // avbrutt
-    if (url.trim() === '') {
-      editor.chain().focus().extendMarkRange('link').unsetLink().run();
+/** Lenkefelt under verktøylinja (i stedet for nettleserens prompt()). */
+function LinkBar({ editor, onClose }: { editor: Editor; onClose: () => void }) {
+  const previous = editor.getAttributes('link').href as string | undefined;
+  const [value, setValue] = useState(previous ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
+  const errorId = useId();
+
+  useEffect(() => {
+    inputRef.current?.focus();
+  }, []);
+
+  function apply() {
+    const parsed = parseLinkInput(value);
+    if (!parsed.ok) {
+      setError(parsed.error);
+      inputRef.current?.focus();
       return;
     }
-    editor.chain().focus().extendMarkRange('link').setLink({ href: url.trim() }).run();
+    editor.chain().focus().extendMarkRange('link').setLink({ href: parsed.href }).run();
+    onClose();
+  }
+
+  function remove() {
+    editor.chain().focus().extendMarkRange('link').unsetLink().run();
+    onClose();
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 bg-gray-50 p-2">
-      <ToolbarButton title="Overskrift 2" active={editor.isActive('heading', { level: 2 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</ToolbarButton>
-      <ToolbarButton title="Overskrift 3" active={editor.isActive('heading', { level: 3 })}
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</ToolbarButton>
-      <span className="mx-1 w-px h-5 bg-gray-300" />
-      <ToolbarButton title="Fet" active={editor.isActive('bold')}
-        onClick={() => editor.chain().focus().toggleBold().run()}><strong>B</strong></ToolbarButton>
-      <ToolbarButton title="Kursiv" active={editor.isActive('italic')}
-        onClick={() => editor.chain().focus().toggleItalic().run()}><em>I</em></ToolbarButton>
-      <span className="mx-1 w-px h-5 bg-gray-300" />
-      <ToolbarButton title="Punktliste" active={editor.isActive('bulletList')}
-        onClick={() => editor.chain().focus().toggleBulletList().run()}>• Liste</ToolbarButton>
-      <ToolbarButton title="Nummerert liste" active={editor.isActive('orderedList')}
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. Liste</ToolbarButton>
-      <span className="mx-1 w-px h-5 bg-gray-300" />
-      <ToolbarButton title="Lenke" active={editor.isActive('link')} onClick={setLink}>Lenke</ToolbarButton>
-      <span className="mx-1 w-px h-5 bg-gray-300" />
-      <ToolbarButton title="Angre" disabled={!editor.can().undo()}
-        onClick={() => editor.chain().focus().undo().run()}>↶</ToolbarButton>
-      <ToolbarButton title="Gjør om" disabled={!editor.can().redo()}
-        onClick={() => editor.chain().focus().redo().run()}>↷</ToolbarButton>
+    <div className="flex flex-wrap items-start gap-2 border-b border-gray-200 bg-white p-2">
+      <div className="min-w-0 flex-1">
+        <label htmlFor={inputId} className="sr-only">Nettadresse for lenken</label>
+        <input
+          ref={inputRef}
+          id={inputId}
+          type="url"
+          inputMode="url"
+          value={value}
+          placeholder="https://bjerke.no/…"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          onChange={(e) => { setValue(e.target.value); setError(null); }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); apply(); }
+            if (e.key === 'Escape') { e.preventDefault(); onClose(); editor.commands.focus(); }
+          }}
+          className="min-h-8 w-full rounded-md border border-gray-300 px-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-bjerke-blue"
+        />
+        {error && <p id={errorId} className="mt-1 text-sm text-red-700">{error}</p>}
+      </div>
+      <Button size="sm" onClick={apply}>Bruk lenke</Button>
+      {previous && <Button size="sm" variant="secondary" onClick={remove}>Fjern lenke</Button>}
+      <Button size="sm" variant="link" onClick={() => { onClose(); editor.commands.focus(); }}>Avbryt</Button>
     </div>
+  );
+}
+
+function Toolbar({ editor }: { editor: Editor }) {
+  const [linkOpen, setLinkOpen] = useState(false);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 bg-gray-50 p-2">
+        <ToolbarButton title="Overskrift 2" active={editor.isActive('heading', { level: 2 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</ToolbarButton>
+        <ToolbarButton title="Overskrift 3" active={editor.isActive('heading', { level: 3 })}
+          onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</ToolbarButton>
+        <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
+        <ToolbarButton title="Fet" active={editor.isActive('bold')}
+          onClick={() => editor.chain().focus().toggleBold().run()}><strong>B</strong></ToolbarButton>
+        <ToolbarButton title="Kursiv" active={editor.isActive('italic')}
+          onClick={() => editor.chain().focus().toggleItalic().run()}><em>I</em></ToolbarButton>
+        <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
+        <ToolbarButton title="Punktliste" active={editor.isActive('bulletList')}
+          onClick={() => editor.chain().focus().toggleBulletList().run()}>• Liste</ToolbarButton>
+        <ToolbarButton title="Nummerert liste" active={editor.isActive('orderedList')}
+          onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. Liste</ToolbarButton>
+        <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
+        <ToolbarButton title="Lenke" active={editor.isActive('link') || linkOpen} onClick={() => setLinkOpen((o) => !o)}>Lenke</ToolbarButton>
+        <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
+        <ToolbarButton title="Angre" disabled={!editor.can().undo()}
+          onClick={() => editor.chain().focus().undo().run()}>↶</ToolbarButton>
+        <ToolbarButton title="Gjør om" disabled={!editor.can().redo()}
+          onClick={() => editor.chain().focus().redo().run()}>↷</ToolbarButton>
+      </div>
+      {linkOpen && <LinkBar editor={editor} onClose={() => setLinkOpen(false)} />}
+    </>
   );
 }
 
