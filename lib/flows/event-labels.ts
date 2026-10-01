@@ -20,6 +20,8 @@ export const EVENT_LABELS: Record<EventType, string> = {
   'email.clicked': 'Lenke i e-post klikket',
   'email.replied': 'Svar på e-post mottatt',
   'email.bounced': 'E-post kom i retur',
+  'list.member_added': 'Lagt til i CRM-liste',
+  'list.member_removed': 'Fjernet fra CRM-liste',
   'page.viewed': 'Side besøkt',
   'course.viewed': 'Kursside besøkt',
   'signup.started': 'Påmeldingsskjema påbegynt',
@@ -31,7 +33,7 @@ export const EVENT_LABELS: Record<EventType, string> = {
   'payment.partially_refunded': 'Betaling delvis refundert',
 };
 
-export type EventGroup = 'Kurs' | 'Arrangement' | 'Bruker' | 'Betaling' | 'E-post' | 'Nettsted';
+export type EventGroup = 'Kurs' | 'Arrangement' | 'Bruker' | 'CRM' | 'Betaling' | 'E-post' | 'Nettsted';
 
 export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'user.registered': 'Bruker',
@@ -48,6 +50,8 @@ export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'email.clicked': 'E-post',
   'email.replied': 'E-post',
   'email.bounced': 'E-post',
+  'list.member_added': 'CRM',
+  'list.member_removed': 'CRM',
   'page.viewed': 'Nettsted',
   'cta.clicked': 'Nettsted',
   'payment.succeeded': 'Betaling',
@@ -57,7 +61,7 @@ export const EVENT_GROUPS: Record<EventType, EventGroup> = {
   'payment.partially_refunded': 'Betaling',
 };
 
-const GROUP_ORDER: EventGroup[] = ['Kurs', 'Arrangement', 'Bruker', 'Betaling', 'E-post', 'Nettsted'];
+const GROUP_ORDER: EventGroup[] = ['Kurs', 'Arrangement', 'Bruker', 'CRM', 'Betaling', 'E-post', 'Nettsted'];
 
 /** Hendelsestyper gruppert for <optgroup> i fast rekkefølge. */
 export function groupedEventTypes(): { group: EventGroup; types: EventType[] }[] {
@@ -132,17 +136,55 @@ export function buildTriggerFilter(
   return { ...rest, [key]: course };
 }
 
-/** Lesbar beskrivelse av et lagret filter, f.eks. «Kurs: Ponniskole høst». */
+const LIST_EVENT_TYPES: readonly string[] = ['list.member_added', 'list.member_removed'] satisfies EventType[];
+
+/** Listehendelser filtreres på `listId` (tall) i hendelsens meta. */
+export function isListEvent(type: string): boolean {
+  return LIST_EVENT_TYPES.includes(type);
+}
+
+export interface ListOption {
+  id: number;
+  name: string;
+}
+
+/** Splitter et filter i listevalget (kun for listehendelser) og resten. */
+export function splitListFilter(
+  type: string,
+  filter: Record<string, unknown>,
+): { listId: number | null; rest: Record<string, unknown> } {
+  if (!isListEvent(type) || typeof filter.listId !== 'number') return { listId: null, rest: { ...filter } };
+  const { listId, ...rest } = filter;
+  return { listId: listId as number, rest };
+}
+
+/** Legger listevalget inn i filteret som lagres — no-op for andre hendelser eller «Alle lister». */
+export function withListFilter(
+  type: string,
+  listId: number | null,
+  filter: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!isListEvent(type) || listId === null) return { ...filter };
+  return { ...filter, listId };
+}
+
+/** Lesbar beskrivelse av et lagret filter, f.eks. «Kurs: Ponniskole høst» eller «Liste: Nyhetsbrev». */
 export function describeTriggerFilter(
   type: string,
   filter: Record<string, unknown>,
   courses: CourseOption[],
+  lists: ListOption[] = [],
 ): string[] {
-  const { course, rest } = splitTriggerFilter(type, filter);
+  const { course, rest: afterCourse } = splitTriggerFilter(type, filter);
+  const { listId, rest } = splitListFilter(type, afterCourse);
   const parts: string[] = [];
   if (course !== null) {
     const match = courses.find((c) => (typeof course === 'number' ? c.id === course : c.slug === course));
     parts.push(`Kurs: ${match ? match.name : String(course)}`);
+  }
+  if (listId !== null) {
+    const match = lists.find((l) => l.id === listId);
+    parts.push(`Liste: ${match ? match.name : `#${listId} (finnes ikke lenger)`}`);
   }
   for (const [key, value] of Object.entries(rest)) {
     parts.push(`${key} = ${JSON.stringify(value)}`);

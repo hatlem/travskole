@@ -14,6 +14,8 @@ export const SERVER_EVENT_TYPES = [
   'email.clicked',
   'email.replied',
   'email.bounced',
+  'list.member_added',
+  'list.member_removed',
 ] as const;
 
 export const CLIENT_EVENT_TYPES = [
@@ -104,6 +106,10 @@ export function timelineTitle(type: EventType, meta: Record<string, unknown>): s
       return 'Svarte på e-post';
     case 'email.bounced':
       return 'E-post kom i retur';
+    case 'list.member_added':
+    case 'list.member_removed':
+      // lib/crm/list-membership.ts skriver innslaget selv, med ansvarlig admin.
+      return null;
     default:
       return null;
   }

@@ -6,6 +6,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { parseCsv } from '@/lib/crm/csv';
 import { planImport, type ImportRow } from '@/lib/crm/import';
+import { addContactsToList } from '@/lib/crm/list-membership';
 
 const importSchema = z.object({
   csv: z.string().min(1, 'CSV-innhold mangler').max(5_000_000),
@@ -109,10 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (listId && touchedIds.length > 0) {
-      await prisma.contactListMembership.createMany({
-        data: touchedIds.map((contactId) => ({ listId, contactId })),
-        skipDuplicates: true,
-      });
+      await addContactsToList(listId, touchedIds, { source: 'import', actorEmail: session.user.email });
     }
   } catch (error) {
     if (

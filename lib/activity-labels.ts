@@ -12,6 +12,7 @@ export const ACTIVITY_ACTION_LABELS: Record<string, string> = {
   deactivate: 'Deaktivert',
   anonymize: 'Anonymisert',
   add_members: 'Medlemmer lagt til',
+  remove_members: 'Medlemmer fjernet',
   backfill: 'Historikk importert',
   checkout_started: 'Betaling startet',
   reorder: 'Rekkefølge endret',

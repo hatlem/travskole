@@ -8,8 +8,12 @@ import {
   eventLabel,
   eventSourceLabel,
   groupedEventTypes,
+  isListEvent,
+  splitListFilter,
   splitTriggerFilter,
+  withListFilter,
   type CourseOption,
+  type ListOption,
 } from '@/lib/flows/event-labels';
 
 const courses: CourseOption[] = [
@@ -62,6 +66,43 @@ describe('trigger-filter', () => {
     expect(describeTriggerFilter('course.viewed', { courseSlug: 'ponniskole-host' }, courses)).toEqual(['Kurs: Ponniskole høst']);
     expect(describeTriggerFilter('registration.created', { courseId: 99, x: true }, courses)).toEqual(['Kurs: 99', 'x = true']);
     expect(describeTriggerFilter('payment.succeeded', {}, courses)).toEqual([]);
+  });
+});
+
+const lists: ListOption[] = [{ id: 5, name: 'Nyhetsbrev' }];
+
+describe('listefilter', () => {
+  it('listehendelsene har norske etiketter i CRM-gruppen', () => {
+    expect(eventLabel('list.member_added')).toBe('Lagt til i CRM-liste');
+    expect(eventLabel('list.member_removed')).toBe('Fjernet fra CRM-liste');
+    const crm = groupedEventTypes().find((g) => g.group === 'CRM');
+    expect(crm?.types).toEqual(['list.member_added', 'list.member_removed']);
+  });
+
+  it('kjenner listehendelsene', () => {
+    expect(isListEvent('list.member_added')).toBe(true);
+    expect(isListEvent('list.member_removed')).toBe(true);
+    expect(isListEvent('registration.created')).toBe(false);
+  });
+
+  it('legger listId inn som tall kun for listehendelser', () => {
+    expect(withListFilter('list.member_added', 5, { source: 'import' })).toEqual({ source: 'import', listId: 5 });
+    expect(withListFilter('list.member_added', null, {})).toEqual({});
+    expect(withListFilter('registration.created', 5, {})).toEqual({});
+  });
+
+  it('splitter ut listId og beholder feil type i resten', () => {
+    expect(splitListFilter('list.member_added', { listId: 5, a: 1 })).toEqual({ listId: 5, rest: { a: 1 } });
+    expect(splitListFilter('list.member_added', { listId: '5' })).toEqual({ listId: null, rest: { listId: '5' } });
+    expect(splitListFilter('payment.succeeded', { listId: 5 })).toEqual({ listId: null, rest: { listId: 5 } });
+  });
+
+  it('beskriver listevalget lesbart, også for slettede lister', () => {
+    expect(describeTriggerFilter('list.member_added', { listId: 5 }, courses, lists)).toEqual(['Liste: Nyhetsbrev']);
+    expect(describeTriggerFilter('list.member_removed', { listId: 9 }, courses, lists)).toEqual([
+      'Liste: #9 (finnes ikke lenger)',
+    ]);
+    expect(describeTriggerFilter('list.member_added', {}, courses, lists)).toEqual([]);
   });
 });
 
