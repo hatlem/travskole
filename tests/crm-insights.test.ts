@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   computeRates, isoWeekStart, weekStarts, bucketCountsByWeek,
   monthKey, monthKeys, bucketSumByMonth, wonChartMessage,
+  aggregateFlowSends, dayMonthShort, dayMonthLong, monthLabel, type FlowSendRow,
 } from '@/lib/crm/insights';
 
 const NOW = new Date('2026-07-18T12:00:00Z'); // lørdag; ISO-uke starter mandag 2026-07-13
@@ -93,5 +94,39 @@ describe('wonChartMessage', () => {
   });
   it('returns null so the chart is shown when there is won value', () => {
     expect(wonChartMessage([{ value: 1234, count: 1 }], 1)).toBeNull();
+  });
+});
+
+const send = (enrollmentId: number | null, status = 'sent', opened = false): FlowSendRow => ({
+  enrollmentId, status,
+  openedAt: opened ? new Date() : null, firstClickedAt: null, repliedAt: null, bouncedAt: null,
+});
+
+describe('aggregateFlowSends', () => {
+  it('teller alle sendte flyt-e-poster, også fra slettede flyter, men ikke tester', () => {
+    const map = new Map([[1, 10], [2, 10], [3, 20]]);
+    const { perFlow, totals } = aggregateFlowSends([
+      send(1, 'sent', true), send(2), send(3), send(99), // 99: løp i slettet flyt
+      send(null, 'test'), send(1, 'skipped_no_consent'), send(2, 'skipped_suppressed'), send(3, 'failed'),
+    ], map);
+    expect(perFlow.get(10)).toEqual({ sent: 2, opened: 1, clicked: 0, replied: 0, bounced: 0 });
+    expect(perFlow.get(20)?.sent).toBe(1);
+    expect(totals.sent).toBe(4);
+    expect(totals.opened).toBe(1);
+    expect(totals.deletedFlows.sent).toBe(1);
+    expect(totals.skippedNoConsent).toBe(1);
+    expect(totals.skippedSuppressed).toBe(1);
+  });
+});
+
+describe('norske datoetiketter', () => {
+  it('dd.mm og «13. juli»', () => {
+    expect(dayMonthShort('2026-07-13')).toBe('13.07');
+    expect(dayMonthLong('2026-07-03')).toBe('3. juli');
+  });
+  it('måneder', () => {
+    expect(monthLabel('2026-08')).toBe('august 2026');
+    expect(monthLabel('2026-08', true)).toBe('aug. 26');
+    expect(monthLabel('rart')).toBe('rart');
   });
 });
