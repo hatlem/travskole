@@ -59,6 +59,18 @@ describe('PATCH flow status → archived', () => {
     expect((await res.json()).exitedEnrollments).toBe(2);
   });
 
+  it('archiving a draft exits the people parked while waiting for activation', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ status: 'draft', anchorMode: 'contact' });
+    prisma.flow.update.mockResolvedValue({ id: 1, status: 'archived' });
+    const res = await PATCH(patch({ status: 'archived' }), params);
+    expect(res.status).toBe(200);
+    // Parkerte løp har status 'active' (bare nextRunAt langt frem), så de fanges av samme avslutning.
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { flowId: 1, status: 'active' },
+      data: { status: 'exited', finishedAt: expect.any(Date) },
+    });
+  });
+
   it('leaves enrollments alone on pause', async () => {
     prisma.flow.findUnique.mockResolvedValue({ status: 'active', anchorMode: 'contact' });
     prisma.flow.update.mockResolvedValue({ id: 1, status: 'paused' });

@@ -5,13 +5,23 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const { prisma } = vi.hoisted(() => ({
-  prisma: {
-    flow: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(async () => ({})) },
+const { prisma } = vi.hoisted(() => {
+  const prisma = {
+    flow: {
+      findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      delete: vi.fn(async () => ({})),
+    },
     flowEnrollment: { count: vi.fn(), updateMany: vi.fn(async () => ({ count: 0 })) },
     segment: { findUnique: vi.fn() },
-  },
-}));
+    $queryRaw: vi.fn(async () => [{ status: 'draft' }]),
+    $transaction: vi.fn(),
+  };
+  prisma.$transaction.mockImplementation(async (fn: (tx: typeof prisma) => unknown) => fn(prisma));
+  return { prisma };
+});
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email: 'admin@x.no' } })) }));
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => {}) }));
@@ -98,15 +108,35 @@ describe('aktivering av utkast', () => {
       ],
       edges: [{ id: 1, fromNodeId: 10, toNodeId: 11, branch: null }],
     });
-    prisma.flow.update.mockResolvedValue({ id: 1, status: 'active' });
+    prisma.flow.findUniqueOrThrow.mockResolvedValue({ id: 1, status: 'active' });
     prisma.flowEnrollment.updateMany.mockResolvedValueOnce({ count: 4 });
     const res = await activate(req('POST'), params);
     expect(res.status).toBe(200);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    expect(prisma.flow.updateMany).toHaveBeenCalledWith({ where: { id: 1, status: 'draft' }, data: { status: 'active' } });
     expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
       where: { flowId: 1, status: 'active', currentNodeId: null, nextRunAt: { gte: AWAITING_ACTIVATION_RUN_AT } },
       data: { nextRunAt: expect.any(Date) },
     });
-    expect((await res.json()).startedEnrollments).toBe(4);
+    const body = await res.json();
+    expect(body.startedEnrollments).toBe(4);
+    expect(body.flow.status).toBe('active');
+  });
+
+  it('starter ingen løp hvis flyten ikke lenger er et utkast når transaksjonen kjører', async () => {
+    prisma.flow.findUnique.mockResolvedValue({
+      id: 1,
+      status: 'draft',
+      nodes: [
+        { id: 10, type: 'start', config: '{}' },
+        { id: 11, type: 'end', config: '{}' },
+      ],
+      edges: [{ id: 1, fromNodeId: 10, toNodeId: 11, branch: null }],
+    });
+    prisma.flow.updateMany.mockResolvedValueOnce({ count: 0 });
+    const res = await activate(req('POST'), params);
+    expect(res.status).toBe(409);
+    expect(prisma.flowEnrollment.updateMany).not.toHaveBeenCalled();
   });
 });
 
@@ -128,6 +158,42 @@ describe('innmelding', () => {
     expect(res.status).toBe(200);
     expect(enrollContacts).toHaveBeenCalledWith(1, [1], expect.objectContaining({ startAt: AWAITING_ACTIVATION_RUN_AT }));
     expect(await res.json()).toEqual({ ...summary, awaitingActivation: true });
+    expect(prisma.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(prisma.flowEnrollment.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('starter de nye løpene hvis flyten ble aktivert mens de ble lagt til', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 1, status: 'draft' });
+    prisma.$queryRaw.mockResolvedValueOnce([{ status: 'active' }]);
+    prisma.flowEnrollment.updateMany.mockResolvedValueOnce({ count: 1 });
+    const summary = { enrolled: 1, skippedActive: 0, skippedSuppressed: 0, skippedMissing: 0, capped: 0 };
+    enrollContacts.mockResolvedValue(summary);
+    const res = await enroll(req('POST', { contactIds: [1] }), params);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(summary);
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { flowId: 1, status: 'active', currentNodeId: null, nextRunAt: { gte: AWAITING_ACTIVATION_RUN_AT } },
+      data: { nextRunAt: expect.any(Date) },
+    });
+  });
+
+  it('avslutter de nye løpene hvis flyten ble arkivert mens de ble lagt til', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 1, status: 'draft' });
+    prisma.$queryRaw.mockResolvedValueOnce([{ status: 'archived' }]);
+    enrollContacts.mockResolvedValue({ enrolled: 1, skippedActive: 0, skippedSuppressed: 0, skippedMissing: 0, capped: 0 });
+    const res = await enroll(req('POST', { contactIds: [1] }), params);
+    expect(res.status).toBe(409);
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { flowId: 1, status: 'active', currentNodeId: null, nextRunAt: { gte: AWAITING_ACTIVATION_RUN_AT } },
+      data: { status: 'exited', finishedAt: expect.any(Date) },
+    });
+  });
+
+  it('sjekker ikke flytstatus på nytt for aktive flyter', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 1, status: 'active' });
+    enrollContacts.mockResolvedValue({ enrolled: 1, skippedActive: 0, skippedSuppressed: 0, skippedMissing: 0, capped: 0 });
+    await enroll(req('POST', { contactIds: [1] }), params);
+    expect(prisma.$queryRaw).not.toHaveBeenCalled();
   });
 
   it('godtar contactIds i aktiv flyt og returnerer oppsummeringen', async () => {

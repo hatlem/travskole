@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
-import { AWAITING_ACTIVATION_RUN_AT } from '@/lib/flows/awaiting-activation';
+import { activateDraftFlow } from '@/lib/flows/activation';
 import { logActivity } from '@/lib/activity';
 import { isTemplateStatus } from '@/lib/flows/status';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
@@ -64,22 +64,22 @@ export async function POST(
   // rows is still legal — it can only be entered via manual enrollment, and
   // that is a valid use case (e.g. an ad-hoc nurture sequence a CRM user
   // enrolls contacts into by hand rather than one driven by an event).
-  const updated = await prisma.flow.update({
-    where: { id: flowId },
-    data: { status: 'active' },
-  });
-  // Personer lagt til mens flyten var et utkast, starter nå.
-  const started = await prisma.flowEnrollment.updateMany({
-    where: { flowId, status: 'active', currentNodeId: null, nextRunAt: { gte: AWAITING_ACTIVATION_RUN_AT } },
-    data: { nextRunAt: new Date() },
-  });
+  // Personer lagt til mens flyten var et utkast, starter i samme transaksjon.
+  const activated = await activateDraftFlow(flowId);
+  if (!activated) {
+    return NextResponse.json(
+      { error: 'Flyten er ikke lenger en kladd — last siden på nytt.' },
+      { status: 409 },
+    );
+  }
+  const { flow: updated, startedEnrollments } = activated;
 
   logActivity({
     action: 'activate',
     entity: 'flow',
     entityId: flowId,
     userEmail: session.user.email,
-    ...(started.count > 0 && { details: JSON.stringify({ startedEnrollments: started.count }) }),
+    ...(startedEnrollments > 0 && { details: JSON.stringify({ startedEnrollments }) }),
   }).catch(() => {});
-  return NextResponse.json({ flow: updated, startedEnrollments: started.count });
+  return NextResponse.json({ flow: updated, startedEnrollments });
 }

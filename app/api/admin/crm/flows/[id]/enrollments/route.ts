@@ -5,6 +5,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { enrollContacts, enrollList, enrollSegment, type EnrollOptions, type EnrollSummary } from '@/lib/flows/enroll';
 import { AWAITING_ACTIVATION_RUN_AT, isAwaitingActivation } from '@/lib/flows/awaiting-activation';
+import { settleParkedEnrollments } from '@/lib/flows/activation';
 import { marketingReach } from '@/lib/flows/enroll-reach';
 import { canEnrollIntoStatus, isTemplateStatus } from '@/lib/flows/status';
 import { isWaitingForSendWindow } from '@/lib/flows/send-window';
@@ -162,6 +163,16 @@ export async function POST(
     }
   }
 
+  // Flyten kan ha blitt aktivert eller arkivert mens personene ble lagt til.
+  const parked = awaitingActivation ? await settleParkedEnrollments(flowId) : null;
+  if (parked?.kind === 'exited' || parked?.kind === 'gone') {
+    return NextResponse.json(
+      { error: 'Flyten ble arkivert eller slettet mens personene ble lagt til — ingen ble meldt inn.' },
+      { status: 409 },
+    );
+  }
+  const stillWaiting = parked?.kind === 'waiting';
+
   logActivity({
     action: data.segmentId !== undefined ? 'enroll_segment' : data.listId !== undefined ? 'enroll_list' : 'enroll',
     entity: 'flow',
@@ -173,7 +184,7 @@ export async function POST(
   const reach = flow.isMarketing === true ? await marketingReach(enrolledIds) : undefined;
   return NextResponse.json({
     ...summary,
-    ...(awaitingActivation && { awaitingActivation }),
+    ...(stillWaiting && { awaitingActivation: true }),
     ...(reach && { reach }),
   });
 }
