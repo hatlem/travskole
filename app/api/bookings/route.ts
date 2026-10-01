@@ -141,7 +141,12 @@ export async function POST(request: NextRequest) {
       sendBookingAdminNotification(emailData),
     ]).catch((err) => logger.error('Booking email error (booking saved)', { error: err }));
 
-    return NextResponse.json({ booking }, { status: 201 });
+    // Kvitteringen tilbyr bare innloggingslenke når e-posten faktisk har en konto.
+    const hasAccount = userId !== null || (await prisma.user
+      .findUnique({ where: { email: data.email.toLowerCase().trim() }, select: { id: true } })
+      .then((user) => user !== null, () => true));
+
+    return NextResponse.json({ booking, hasAccount }, { status: 201 });
   } catch (error) {
     logger.error('Booking error', { error });
     return NextResponse.json({ error: 'Noe gikk galt' }, { status: 500 });

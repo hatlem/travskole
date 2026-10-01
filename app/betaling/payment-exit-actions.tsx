@@ -22,7 +22,7 @@ export function PaymentExitActions({ paid = false, offerRetry = false, subject }
     <div className="mt-6 space-y-6">
       {receipt && <ReceiptSummaryCard receipt={paid ? { ...receipt, payment: 'online' } : receipt} paid={paid} />}
       {offerRetry && receipt && !paid && <PayNowButtons receipt={receipt} />}
-      <BuyerNextActions email={receipt?.email} kind={receipt?.kind} />
+      <BuyerNextActions email={receipt?.email} kind={receipt?.kind} hasAccount={receipt?.hasAccount} />
     </div>
   );
 }

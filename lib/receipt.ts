@@ -27,6 +27,8 @@ const receiptSchema = z.object({
   /** Kortlevd checkout-token, så anonyme kan prøve betalingen på nytt. */
   checkoutToken: z.string().max(1000).nullable(),
   providers: z.array(z.enum(['stripe', 'vipps'])),
+  /** Fra /api/bookings: har e-posten en konto (ellers kommer det aldri en innloggingslenke). */
+  hasAccount: z.boolean().optional(),
   createdAt: z.number().int(),
 });
 
@@ -94,6 +96,13 @@ export function receiptForSubject(receipt: Receipt | null, subject: ReceiptSubje
   if (!receipt || !subject) return null;
   return receipt.kind === subject.kind && receipt.id === subject.id ? receipt : null;
 }
+
+/** Innloggingslenke tilbys ikke når vi vet at forespørselen ble sendt uten konto — den ville aldri kommet. */
+export function offersLoginLink(kind: Receipt['kind'], hasAccount: boolean | undefined): boolean {
+  return !(kind === 'booking' && hasAccount === false);
+}
+
+export const BOOKING_NO_ACCOUNT_TEXT = 'Du får svar på e-post, med lenke for betaling hvis det trengs.';
 
 /** Statuslinje for betaling i kvitteringen. */
 export function paymentStatusText(receipt: Pick<Receipt, 'payment' | 'waitlist' | 'kind'>, paid = false): string {

@@ -10,7 +10,7 @@ import { formatKr, participantsLabel } from '@/lib/buyer-display';
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'Betal booking', description: 'Fullfør betaling for din booking' };
 
-function Box({ title, message, tone }: { title: string; message: string; tone: 'green' | 'gray' }) {
+function Box({ title, message, tone, hasAccount }: { title: string; message: string; tone: 'green' | 'gray'; hasAccount?: boolean }) {
   const c = tone === 'green' ? 'border-green-200 bg-green-50 text-green-900' : 'border-gray-200 bg-gray-50 text-gray-800';
   return (
     <div>
@@ -18,9 +18,17 @@ function Box({ title, message, tone }: { title: string; message: string; tone: '
         <h2 className="text-xl font-bold mb-2">{title}</h2>
         <p className="text-pretty">{message}</p>
       </div>
-      <div className="mt-6"><BuyerNextActions kind="booking" /></div>
+      <div className="mt-6"><BuyerNextActions kind="booking" hasAccount={hasAccount} /></div>
     </div>
   );
+}
+
+/** Uten konto kommer det aldri en innloggingslenke — da tilbyr vi den ikke. */
+async function bookingHasAccount(booking: { userId: number | null; email: string }): Promise<boolean> {
+  if (booking.userId !== null) return true;
+  return prisma.user
+    .findUnique({ where: { email: booking.email.toLowerCase().trim() }, select: { id: true } })
+    .then((user) => user !== null, () => true);
 }
 
 export default async function BookingBetalPage({ searchParams }: { searchParams: Promise<{ token?: string }> }) {
@@ -35,12 +43,13 @@ export default async function BookingBetalPage({ searchParams }: { searchParams:
       where: { id: payload.id },
       include: { course: { select: { name: true, price: true, paymentMethods: true } } },
     });
+    const hasAccount = booking ? await bookingHasAccount(booking) : undefined;
     if (!booking || !booking.course) {
       content = <Box tone="gray" title="Fant ikke bookingen" message="Vi fant ikke bookingen. Kontakt oss hvis dette er feil." />;
     } else if (booking.paymentStatus === 'paid') {
-      content = <Box tone="green" title="Betalingen er allerede mottatt — takk!" message={`Bookingen din er betalt. ${subjectStatusText({ kind: 'booking', status: booking.status })}`} />;
+      content = <Box tone="green" hasAccount={hasAccount} title="Betalingen er allerede mottatt — takk!" message={`Bookingen din er betalt. ${subjectStatusText({ kind: 'booking', status: booking.status })}`} />;
     } else if (booking.status === 'cancelled') {
-      content = <Box tone="gray" title="Forespørselen er avlyst" message="Denne forespørselen er avlyst eller trukket, og kan ikke betales." />;
+      content = <Box tone="gray" hasAccount={hasAccount} title="Forespørselen er avlyst" message="Denne forespørselen er avlyst eller trukket, og kan ikke betales." />;
     } else {
       const amountKr = booking.course.price != null ? booking.course.price * booking.participants : null;
       const providers = parsePaymentMethods(booking.course.paymentMethods).filter((m): m is 'stripe' | 'vipps' => m === 'stripe' || m === 'vipps');

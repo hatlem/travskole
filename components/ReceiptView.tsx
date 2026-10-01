@@ -6,7 +6,7 @@ import { useSession } from 'next-auth/react';
 import { LoginLinkOffer } from '@/components/LoginLinkOffer';
 import { useStrings } from '@/components/SettingsProvider';
 import { participantsLabel, payButtonLabel, type PayProvider } from '@/lib/buyer-display';
-import { loadReceipt, nextSteps, paymentStatusText, type Receipt } from '@/lib/receipt';
+import { BOOKING_NO_ACCOUNT_TEXT, loadReceipt, nextSteps, offersLoginLink, paymentStatusText, type Receipt } from '@/lib/receipt';
 
 /** Leser kvitteringen etter mount (sessionStorage finnes ikke på serveren). */
 export function useStoredReceipt(): { receipt: Receipt | null; ready: boolean } {
@@ -109,8 +109,19 @@ export function PayNowButtons({ receipt }: { receipt: Receipt }) {
   );
 }
 
-/** Videre-handlinger: innlogget → Min side; anonym → innloggingslenke (aldri en innloggingsmur). */
-export function BuyerNextActions({ email, kind = 'registration' }: { email?: string; kind?: Receipt['kind'] }) {
+/**
+ * Videre-handlinger: innlogget → Min side; anonym → innloggingslenke (aldri en innloggingsmur).
+ * Forespørsler uten konto får ingen innloggingslenke — svaret kommer på e-post.
+ */
+export function BuyerNextActions({
+  email,
+  kind = 'registration',
+  hasAccount,
+}: {
+  email?: string;
+  kind?: Receipt['kind'];
+  hasAccount?: boolean;
+}) {
   const t = useStrings();
   const { status } = useSession();
   const loggedIn = status === 'authenticated';
@@ -118,10 +129,16 @@ export function BuyerNextActions({ email, kind = 'registration' }: { email?: str
     <div className="space-y-6">
       {!loggedIn && status !== 'loading' && (
         <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 sm:p-5">
-          <h2 className="text-base font-semibold text-gray-900">Se påmeldingene dine senere</h2>
-          <div className="mt-2">
-            <LoginLinkOffer key={email ?? ''} email={email} hint={t('receipt.login_hint')} label={t('receipt.send_login_link')} />
-          </div>
+          {offersLoginLink(kind, hasAccount) ? (
+            <>
+              <h2 className="text-base font-semibold text-gray-900">Se påmeldingene dine senere</h2>
+              <div className="mt-2">
+                <LoginLinkOffer key={email ?? ''} email={email} hint={t('receipt.login_hint')} label={t('receipt.send_login_link')} />
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-gray-700 text-pretty">{BOOKING_NO_ACCOUNT_TEXT}</p>
+          )}
         </div>
       )}
       <div className="flex flex-col gap-3 sm:flex-row">

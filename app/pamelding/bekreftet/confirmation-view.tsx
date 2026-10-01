@@ -84,7 +84,7 @@ export function ConfirmationView() {
 
         <NextStepsList receipt={receipt} />
 
-        <BuyerNextActions email={receipt.email} kind={receipt.kind} />
+        <BuyerNextActions email={receipt.email} kind={receipt.kind} hasAccount={receipt.hasAccount} />
 
         {receipt.courseHref && (
           <p className="text-sm text-gray-600">
