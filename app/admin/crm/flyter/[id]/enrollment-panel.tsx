@@ -5,7 +5,7 @@ import { useToast } from '@/components/admin/Toast';
 import { CardSkeleton } from '@/components/admin/Skeleton';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { formatSendTime } from '@/lib/flows/send-window';
-import { formatDayMonthNo } from '@/lib/crm/format-date';
+import { formatDayMonthNo } from '@/lib/admin-format';
 
 interface EnrollmentRow {
   id: number;

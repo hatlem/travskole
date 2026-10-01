@@ -5,7 +5,7 @@ import { getSettings, parseCourseTypes, courseTypeLabel } from '@/lib/settings';
 import { ageFromBirthdate } from '@/lib/dates';
 import { occupiesPlace } from '@/lib/registration-rules';
 import { courseDisplayStatus, coursePublicPath, COURSE_DISPLAY_STATUS } from '@/lib/course-status';
-import { formatCapacity, formatPhone, formatPrice } from '@/lib/admin-format';
+import { formatCapacity, formatDateLong, formatPhone, formatPrice } from '@/lib/admin-format';
 import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { CourseStatusBadge } from '@/components/admin/StatusBadge';
 import { buttonClass } from '@/components/admin/Button';
@@ -20,11 +20,6 @@ const TABS = [
   { id: 'eksport', label: 'Eksport' },
 ] as const;
 type TabId = (typeof TABS)[number]['id'];
-
-function formatDate(date: Date | string | null) {
-  if (!date) return '-';
-  return new Date(date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
-}
 
 export default async function CourseDetailPage({
   params,
@@ -107,8 +102,8 @@ export default async function CourseDetailPage({
             <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
               <span>{courseTypeLabel(parseCourseTypes(settings.course_types), course.type)}</span>
               <span>
-                {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
-                {course.endDate ? ` – ${formatDate(course.endDate)}` : ''}
+                {course.startDate ? formatDateLong(course.startDate) : 'Avtal tid'}
+                {course.endDate ? ` – ${formatDateLong(course.endDate)}` : ''}
               </span>
               <span>{formatPrice(course.price)}</span>
               {(course.ageMin != null || course.ageMax != null) && (
@@ -278,8 +273,8 @@ export default async function CourseDetailPage({
         />
         <h1 className="mb-1 text-xl font-bold">{course.name}</h1>
         <p className="mb-4 text-sm text-gray-600">
-          {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
-          {course.endDate ? ` – ${formatDate(course.endDate)}` : ''}
+          {course.startDate ? formatDateLong(course.startDate) : 'Avtal tid'}
+          {course.endDate ? ` – ${formatDateLong(course.endDate)}` : ''}
         </p>
         <table className="w-full border-collapse text-sm">
           <thead>

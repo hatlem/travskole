@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateNo, formatDateTimeNo, formatDayMonthNo } from '@/lib/crm/format-date';
+import { formatDateLong, formatDateNo, formatDateShort, formatDateTimeNo, formatDayMonthNo } from '@/lib/admin-format';
 
 describe('formatDateNo', () => {
   it('formats as dd.mm.yyyy in Norwegian time', () => {
@@ -25,5 +25,17 @@ describe('formatDayMonthNo', () => {
 describe('formatDateTimeNo', () => {
   it('adds the clock time', () => {
     expect(formatDateTimeNo('2026-07-13T12:05:00Z')).toBe('13.07.2026 kl. 14:05');
+  });
+});
+
+describe('formatDateLong / formatDateShort', () => {
+  it('formats course dates in Norwegian, Oslo time', () => {
+    expect(formatDateLong('2026-11-14T00:00:00Z')).toBe('14. november 2026');
+    expect(formatDateShort('2026-11-14T00:00:00Z')).toBe('14. nov. 2026');
+  });
+
+  it('uses the empty fallback for missing dates', () => {
+    expect(formatDateLong(null)).toBe('—');
+    expect(formatDateShort(undefined, '')).toBe('');
   });
 });

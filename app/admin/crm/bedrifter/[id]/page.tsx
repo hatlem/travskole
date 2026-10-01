@@ -2,8 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { formatPhone } from '@/lib/format-phone';
-import { formatDateNo } from '@/lib/crm/format-date';
+import { formatPhone, formatDateNo } from '@/lib/admin-format';
 import { useRouter } from 'next/navigation';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
@@ -69,10 +68,6 @@ interface OrgEditValues {
 
 const blankToNull = (v: string) => (v.trim() === '' ? null : v.trim());
 const inputCls = 'border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white';
-
-function fmtDate(d: string | null): string {
-  return formatDateNo(d);
-}
 
 export default function BedriftDetaljPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -363,7 +358,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                             {d.eventType}
                           </span>
                         )}
-                        {d.eventDate && <span className="text-gray-500 ml-2">{fmtDate(d.eventDate)}</span>}
+                        {d.eventDate && <span className="text-gray-500 ml-2">{formatDateNo(d.eventDate)}</span>}
                       </div>
                       <span className="text-gray-700">
                         {d.value !== null ? `${d.value.toLocaleString('nb-NO')} kr` : ''}
@@ -407,7 +402,7 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                   <li key={a.id} className="border border-gray-200 rounded-lg p-3 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{a.title}</span>
-                      <span className="text-gray-500 text-xs">{fmtDate(a.occurredAt)}</span>
+                      <span className="text-gray-500 text-xs">{formatDateNo(a.occurredAt)}</span>
                     </div>
                     {a.body && <p className="text-gray-600 mt-1 whitespace-pre-wrap">{a.body}</p>}
                   </li>

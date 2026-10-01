@@ -21,8 +21,7 @@ import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
 import { OrganizationLinker } from '@/components/admin/crm/OrganizationLinker';
 import { isSuperAdmin } from '@/lib/settings-shared';
 import { dateInputToIso } from '@/lib/crm/form-utils';
-import { formatDateNo, formatDayMonthNo } from '@/lib/crm/format-date';
-import { formatPhone, phoneHref } from '@/lib/format-phone';
+import { formatDateNo, formatDayMonthNo, formatPhone, phoneHref } from '@/lib/admin-format';
 import type { OrganizationSuggestion } from '@/lib/crm/org-suggestion';
 
 interface ContactDetail {
@@ -74,7 +73,6 @@ const ACTIVITY_ICONS: Record<string, string> = {
   deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄', list: '📋',
 };
 
-const fmtDate = (d: string | null) => formatDateNo(d);
 
 const secondaryBtn =
   'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50';
@@ -501,7 +499,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
               </div>
               {contact.consent && (
                 <p className="text-xs text-gray-400 mt-2">
-                  {contact.consent.consentAt ? `Registrert ${fmtDate(contact.consent.consentAt)}` : 'Har ikke sagt ja'}
+                  {contact.consent.consentAt ? `Registrert ${formatDateNo(contact.consent.consentAt)}` : 'Har ikke sagt ja'}
                   {contact.consent.source && <> · fra {CONSENT_SOURCES[contact.consent.source] ?? contact.consent.source}</>}
                 </p>
               )}
@@ -514,7 +512,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
               ) : contact.suppression ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-xs font-medium">
-                    Står på listen – {SUPPRESSION_REASONS[contact.suppression.reason] ?? contact.suppression.reason} {fmtDate(contact.suppression.createdAt)}
+                    Står på listen – {SUPPRESSION_REASONS[contact.suppression.reason] ?? contact.suppression.reason} {formatDateNo(contact.suppression.createdAt)}
                   </span>
                   {canUnsuppress ? (
                     <button
@@ -596,7 +594,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                   <li key={a.id} className="border border-gray-200 rounded-lg p-3 text-sm">
                     <div className="flex items-center justify-between">
                       <span className="font-medium">{ACTIVITY_ICONS[a.type] ?? '·'} {a.title}</span>
-                      <span className="text-gray-500 text-xs">{fmtDate(a.occurredAt)}</span>
+                      <span className="text-gray-500 text-xs">{formatDateNo(a.occurredAt)}</span>
                     </div>
                     {a.body && <p className="text-gray-600 mt-1 whitespace-pre-wrap">{a.body}</p>}
                     {a.actorEmail && <p className="text-gray-400 text-xs mt-1">{a.actorEmail}</p>}
@@ -633,7 +631,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                         <span className="font-medium">{d.title}</span>
                         <span className="text-gray-500 ml-2">{d.stage.name}</span>
                         {d.eventType && <span className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded ml-2">{d.eventType}</span>}
-                        {d.eventDate && <span className="text-gray-500 ml-2">{fmtDate(d.eventDate)}</span>}
+                        {d.eventDate && <span className="text-gray-500 ml-2">{formatDateNo(d.eventDate)}</span>}
                       </div>
                       <span className="text-gray-700">{d.value !== null ? `${d.value.toLocaleString('nb-NO')} kr` : ''}</span>
                     </button>
@@ -669,7 +667,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                   />
                   <span className={t.status === 'done' ? 'line-through text-gray-400' : ''}>{t.title}</span>
                   <span className="ml-auto flex items-center gap-2">
-                    {t.dueAt && <span className="text-gray-500 text-xs">{fmtDate(t.dueAt)}</span>}
+                    {t.dueAt && <span className="text-gray-500 text-xs">{formatDateNo(t.dueAt)}</span>}
                     <AssigneeSelect
                       value={t.assigneeId}
                       onChange={(assigneeId) => patchTask(t.id, { assigneeId }, 'Ansvarlig er oppdatert')}
@@ -694,7 +692,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
               {contact.notes.map((n) => (
                 <li key={n.id} className="border border-gray-200 rounded-lg p-3 text-sm">
                   <p className="whitespace-pre-wrap">{n.body}</p>
-                  <p className="text-gray-400 text-xs mt-1">{n.authorEmail} · {fmtDate(n.createdAt)}</p>
+                  <p className="text-gray-400 text-xs mt-1">{n.authorEmail} · {formatDateNo(n.createdAt)}</p>
                 </li>
               ))}
             </ul>

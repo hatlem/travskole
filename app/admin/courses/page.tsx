@@ -13,7 +13,7 @@ import { CourseStatusBadge } from '@/components/admin/StatusBadge';
 import { LinkPending } from '@/components/admin/LinkPending';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
-import { formatPrice } from '@/lib/admin-format';
+import { formatDateShort, formatPrice } from '@/lib/admin-format';
 import {
   COURSE_LIST_FILTERS,
   courseDisplayStatus,
@@ -50,15 +50,10 @@ type CourseRow = Course & { display: CourseDisplayStatus };
 const DESCRIPTION =
   'Alle kurs og arrangementer. Trykk på et kurs for å se deltakerne, sende e-post eller laste ned deltakerlisten.';
 
-function formatDate(date: string | null) {
-  if (!date) return null;
-  return new Date(date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
 function dateRange(c: Course) {
-  const start = formatDate(c.startDate);
+  const start = formatDateShort(c.startDate, '');
   if (!start) return 'Avtal tid';
-  const end = formatDate(c.endDate);
+  const end = formatDateShort(c.endDate, '');
   return end && end !== start ? `${start} – ${end}` : start;
 }
 

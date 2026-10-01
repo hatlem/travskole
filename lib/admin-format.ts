@@ -1,4 +1,6 @@
-/** Visningsformat for admin: beløp, telefonnummer og kapasitet — én kilde, så alle sider sier det samme. */
+/** Visningsformat for admin: beløp, telefonnummer, datoer og kapasitet — én kilde, så alle sider sier det samme. */
+
+import { normalizePhone } from '@/lib/crm/normalize';
 
 const NOK = new Intl.NumberFormat('nb-NO', { maximumFractionDigits: 2 });
 
@@ -35,7 +37,62 @@ export function formatPhoneForExport(raw: string | null | undefined): string {
   return formatted.startsWith('+47 ') ? formatted.slice(4) : formatted;
 }
 
+/** tel:-lenke (uten mellomrom) for et nummer, eller null hvis det ikke ser ut som et telefonnummer. */
+export function phoneHref(raw: string | null | undefined): string | null {
+  const normalized = normalizePhone(raw);
+  return normalized ? `tel:${normalized}` : null;
+}
+
 /** «3 / 12», eller «3 / Ubegrenset» når kurset ikke har maks. */
 export function formatCapacity(count: number, max: number | null | undefined): string {
   return max == null ? `${count} / Ubegrenset` : `${count} / ${max}`;
+}
+
+// --- Datoer: norske (aldri ISO), alltid norsk tid -------------------------
+
+const TZ = 'Europe/Oslo';
+
+function toDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** «13.07.2026», eller «—» når datoen mangler. */
+export function formatDateNo(value: Date | string | null | undefined, empty = '—'): string {
+  const date = toDate(value);
+  return date ? date.toLocaleDateString('nb-NO', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: TZ }) : empty;
+}
+
+/** «13. juli 2026» — kursdatoer i overskrifter og lister. */
+export function formatDateLong(value: Date | string | null | undefined, empty = '—'): string {
+  const date = toDate(value);
+  return date ? date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: TZ }) : empty;
+}
+
+/** «13. jul. 2026» — der plassen er trang, f.eks. i tabeller. */
+export function formatDateShort(value: Date | string | null | undefined, empty = '—'): string {
+  const date = toDate(value);
+  return date ? date.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric', timeZone: TZ }) : empty;
+}
+
+/** «13. juli» (med år bare når det ikke er inneværende år: «13. juli 2025»). */
+export function formatDayMonthNo(value: Date | string | null | undefined, now: Date = new Date(), empty = '—'): string {
+  const date = toDate(value);
+  if (!date) return empty;
+  const year = (d: Date) => d.toLocaleDateString('nb-NO', { year: 'numeric', timeZone: TZ });
+  return date.toLocaleDateString('nb-NO', {
+    day: 'numeric',
+    month: 'long',
+    ...(year(date) !== year(now) && { year: 'numeric' }),
+    timeZone: TZ,
+  });
+}
+
+/** «13.07.2026 kl. 14:05». */
+export function formatDateTimeNo(value: Date | string | null | undefined, empty = '—'): string {
+  const date = toDate(value);
+  if (!date) return empty;
+  const time = date.toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', timeZone: TZ });
+  return `${formatDateNo(date)} kl. ${time}`;
 }

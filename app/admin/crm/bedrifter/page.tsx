@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { formatPhone } from '@/lib/format-phone';
-import { formatDateNo } from '@/lib/crm/format-date';
+import { formatPhone, formatDateNo } from '@/lib/admin-format';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';

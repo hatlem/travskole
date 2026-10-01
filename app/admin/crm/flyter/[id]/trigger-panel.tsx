@@ -13,7 +13,7 @@ import {
   type CourseOption,
   type ListOption,
 } from '@/lib/flows/event-labels';
-import { formatDateNo } from '@/lib/crm/format-date';
+import { formatDateNo } from '@/lib/admin-format';
 
 export interface TriggerRow {
   id: number;

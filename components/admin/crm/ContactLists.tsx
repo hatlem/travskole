@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { formatDateNo } from '@/lib/crm/format-date';
+import { formatDateNo } from '@/lib/admin-format';
 import { usePopoverDismiss } from './usePopover';
 
 export interface ContactListMembershipRow {

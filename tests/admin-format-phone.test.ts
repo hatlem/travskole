@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatPhone, phoneHref } from '@/lib/format-phone';
+import { formatPhone, phoneHref } from '@/lib/admin-format';
 
 describe('formatPhone', () => {
   it('groups Norwegian numbers as +47 XXX XX XXX regardless of input format', () => {

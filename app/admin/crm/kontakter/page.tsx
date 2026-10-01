@@ -10,8 +10,7 @@ import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
 import { HelpTip } from '@/components/admin/HelpTip';
 import { Pagination } from '@/components/admin/Pagination';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
-import { formatPhone } from '@/lib/format-phone';
-import { formatDateNo } from '@/lib/crm/format-date';
+import { formatPhone, formatDateNo } from '@/lib/admin-format';
 
 interface ContactRow {
   id: number;
