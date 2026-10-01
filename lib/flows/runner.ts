@@ -11,6 +11,7 @@
 
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
+import { notifyTaskAssignee } from '@/lib/crm/task-notify';
 import { getSetting } from '@/lib/settings';
 import { sendAdminEmail } from '@/lib/mail';
 import { parseJsonArray } from '@/lib/crm/normalize';
@@ -238,7 +239,7 @@ async function createFlowTask(task: TaskActionPayload, contactId: number, now: D
       (await activeAdminId(owners?.ownerId)) ?? (await activeAdminId(owners?.organization?.ownerId));
   }
   assigneeId ??= await activeAdminId(task.assigneeUserId);
-  await prisma.task.create({
+  const created = await prisma.task.create({
     data: {
       title: task.title,
       contactId,
@@ -246,6 +247,10 @@ async function createFlowTask(task: TaskActionPayload, contactId: number, now: D
       dueAt: task.dueDays !== null ? new Date(now.getTime() + task.dueDays * DAY_MS) : null,
     },
   });
+  // Samme varsel som når en kollega tildeler oppgaven; kaster aldri.
+  if (created?.id && assigneeId !== null) {
+    await notifyTaskAssignee({ taskId: created.id, actorUserId: null, actorEmail: 'E-postflyt' });
+  }
 }
 
 async function failEnrollment(enrollmentId: number, reason: string, now: Date, nodeId?: number): Promise<void> {

@@ -230,8 +230,13 @@ function flowRule(row: ActivityLike, d: Details): Rule | null {
     }
     case 'delete':
       return { summary: 'Slettet e-postflyt' };
-    case 'activate':
-      return { summary: 'Aktiverte e-postflyten' };
+    case 'activate': {
+      const started = num(d.startedEnrollments) ?? 0;
+      return {
+        summary: started > 0 ? `Aktiverte e-postflyten (${people(started)} som ventet, startet)` : 'Aktiverte e-postflyten',
+        used: ['startedEnrollments'],
+      };
+    }
     case 'enroll':
       return enrollSummary('La til personer i e-postflyt', d);
     case 'enroll_list':

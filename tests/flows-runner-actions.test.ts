@@ -29,6 +29,8 @@ vi.mock('@/lib/flows/send', () => ({ sendFlowEmail: vi.fn(async () => 'sent') })
 vi.mock('@/lib/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/mail', () => ({ sendAdminEmail: vi.fn() }));
 vi.mock('@/lib/settings', () => ({ getSetting: vi.fn() }));
+const { notifyTaskAssignee } = vi.hoisted(() => ({ notifyTaskAssignee: vi.fn(async () => {}) }));
+vi.mock('@/lib/crm/task-notify', () => ({ notifyTaskAssignee }));
 
 import { runFlowBatch } from '@/lib/flows/runner';
 
@@ -75,8 +77,9 @@ describe('runFlowBatch: create_task', () => {
     );
   });
 
-  it('oppretter oppgave på kontakten med ansvarlig og frist', async () => {
+  it('oppretter oppgave på kontakten med ansvarlig og frist, og varsler den ansvarlige', async () => {
     prisma.user.findFirst.mockResolvedValue({ id: 4 });
+    prisma.task.create.mockResolvedValueOnce({ id: 77 });
     await runFlowBatch(NOW);
     expect(prisma.task.create).toHaveBeenCalledWith({
       data: {
@@ -86,6 +89,7 @@ describe('runFlowBatch: create_task', () => {
         dueAt: new Date('2026-05-03T08:00:00Z'),
       },
     });
+    expect(notifyTaskAssignee).toHaveBeenCalledWith({ taskId: 77, actorUserId: null, actorEmail: 'E-postflyt' });
     expect(prisma.flowEnrollment.update).toHaveBeenCalledWith(
       expect.objectContaining({ data: expect.objectContaining({ status: 'completed' }) }),
     );

@@ -63,3 +63,11 @@ describe('formatActivity', () => {
     expect(r.details).toBe('foo: bar');
   });
 });
+
+describe('aktivering med personer i kø', () => {
+  it('nevner hvor mange som startet', () => {
+    expect(
+      formatActivity({ action: 'activate', entity: 'flow', details: JSON.stringify({ startedEnrollments: 4 }) }),
+    ).toEqual({ summary: 'Aktiverte e-postflyten (4 personer som ventet, startet)', details: '' });
+  });
+});
