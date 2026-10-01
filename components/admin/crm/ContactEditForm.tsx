@@ -2,19 +2,14 @@
 
 import { useState } from 'react';
 import { Field } from './CrmDialog';
-import { EntityPicker, type EntityRef } from './EntityPicker';
 import { TagInput } from './TagInput';
-import { AssigneeSelect } from './AssigneeSelect';
 
 export interface ContactEditValues {
   name: string;
   email: string | null;
   phone: string | null;
   roleTitle: string | null;
-  stage: string;
   tags: string[];
-  ownerId: number | null;
-  organization: EntityRef | null;
 }
 
 interface ContactEditFormProps {
@@ -26,12 +21,6 @@ interface ContactEditFormProps {
   tagSuggestions?: string[];
 }
 
-const STAGES = [
-  { value: 'lead', label: 'Interessent' }, { value: 'active', label: 'Aktiv' },
-  { value: 'customer', label: 'Kunde' }, { value: 'dormant', label: 'Sovende' },
-  { value: 'lost', label: 'Tapt' },
-];
-
 const blankToNull = (v: string) => (v.trim() === '' ? null : v.trim());
 
 export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggestions }: ContactEditFormProps) {
@@ -39,10 +28,7 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
   const [email, setEmail] = useState(contact.email ?? '');
   const [phone, setPhone] = useState(contact.phone ?? '');
   const [roleTitle, setRoleTitle] = useState(contact.roleTitle ?? '');
-  const [stage, setStage] = useState(contact.stage);
   const [tags, setTags] = useState(contact.tags);
-  const [ownerId, setOwnerId] = useState(contact.ownerId);
-  const [organization, setOrganization] = useState(contact.organization);
 
   const emailValue = blankToNull(email)?.toLowerCase() ?? null;
   const emailInvalid = emailValue !== null && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
@@ -55,16 +41,14 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
     if (emailValue !== contact.email) changed.email = emailValue;
     if (blankToNull(phone) !== contact.phone) changed.phone = blankToNull(phone);
     if (blankToNull(roleTitle) !== contact.roleTitle) changed.roleTitle = blankToNull(roleTitle);
-    if (stage !== contact.stage) changed.stage = stage;
     if (JSON.stringify(tags) !== JSON.stringify(contact.tags)) changed.tags = tags;
-    if (ownerId !== contact.ownerId) changed.ownerId = ownerId;
-    if ((organization?.id ?? null) !== (contact.organization?.id ?? null)) changed.organizationId = organization?.id ?? null;
     onSave(changed);
   }
 
   return (
     <form
-      className="border border-gray-200 rounded-lg p-4 mb-6 bg-gray-50"
+      className="border border-gray-200 rounded-lg p-4 bg-gray-50"
+      aria-label="Rediger kontaktinformasjon"
       onSubmit={(e) => { e.preventDefault(); submit(); }}
     >
       <div className="grid md:grid-cols-2 gap-3">
@@ -77,29 +61,14 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
             className={`border rounded-md px-3 py-1.5 text-sm w-full bg-white ${emailInvalid ? 'border-red-400' : 'border-gray-300'}`} />
         </Field>
         <Field label="Telefon (valgfri)" htmlFor="contact-phone">
-          <input id="contact-phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20}
+          <input id="contact-phone" type="tel" inputMode="tel" placeholder="F.eks. 900 00 001" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white" />
         </Field>
         <Field label="Rolle eller tittel (valgfri)" htmlFor="contact-role">
           <input id="contact-role" value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} maxLength={100}
-            placeholder="f.eks. Arrangementsansvarlig"
+            placeholder="F.eks. daglig leder"
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full bg-white" />
         </Field>
-        <Field label="Bedrift (valgfri)">
-          <EntityPicker kind="organization" value={organization} onChange={setOrganization} />
-        </Field>
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Kundestatus" htmlFor="contact-stage">
-            <select id="contact-stage" value={stage} onChange={(e) => setStage(e.target.value)}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full bg-white">
-              {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </Field>
-          <Field label="Ansvarlig" htmlFor="contact-owner">
-            <AssigneeSelect id="contact-owner" value={ownerId} onChange={setOwnerId}
-              className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full bg-white" />
-          </Field>
-        </div>
         <div className="md:col-span-2">
           <Field label="Stikkord" htmlFor="contact-tags" hint="Skriv et ord og trykk Enter, f.eks. «ponni» eller «julebord-2025». Brukes til å finne og gruppere kontakter.">
             <div className="bg-white rounded-md">

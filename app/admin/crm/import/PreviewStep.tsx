@@ -258,6 +258,11 @@ function PreviewRow({ row, policy, decision, onDecision }: PreviewRowProps) {
             {row.organization.name}
             {row.organization.kind === 'new' && <span className="ml-1 rounded bg-green-50 px-1 text-xs text-green-700">ny</span>}
           </>
+        ) : row.suggestedOrganization ? (
+          <span className="block text-xs text-gray-500" title={`E-posten er fra ${row.suggestedOrganization.domain}`}>
+            — <span className="block">Forslag: {row.suggestedOrganization.name}</span>
+            <span className="block">Kobles ikke automatisk. Koble til på kontaktsiden etterpå.</span>
+          </span>
         ) : '—'}
       </td>
       <td className="px-3 py-2 text-gray-700 min-w-[14rem]">

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
+import { AWAITING_ACTIVATION_RUN_AT } from '@/lib/flows/awaiting-activation';
 import { logActivity } from '@/lib/activity';
 import { isTemplateStatus } from '@/lib/flows/status';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
@@ -67,12 +68,18 @@ export async function POST(
     where: { id: flowId },
     data: { status: 'active' },
   });
+  // Personer lagt til mens flyten var et utkast, starter nå.
+  const started = await prisma.flowEnrollment.updateMany({
+    where: { flowId, status: 'active', currentNodeId: null, nextRunAt: { gte: AWAITING_ACTIVATION_RUN_AT } },
+    data: { nextRunAt: new Date() },
+  });
 
   logActivity({
     action: 'activate',
     entity: 'flow',
     entityId: flowId,
     userEmail: session.user.email,
+    ...(started.count > 0 && { details: JSON.stringify({ startedEnrollments: started.count }) }),
   }).catch(() => {});
-  return NextResponse.json({ flow: updated });
+  return NextResponse.json({ flow: updated, startedEnrollments: started.count });
 }

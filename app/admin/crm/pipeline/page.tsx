@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { formatDateNo } from '@/lib/crm/format-date';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { Skeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
@@ -261,13 +262,21 @@ export default function PipelinePage() {
         />
       )}
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      {pipeline.stages.length > 1 && (
+        <p className="mb-2 text-xs text-gray-500 md:hidden" aria-hidden="true">
+          Sveip for flere steg →<br />Trykk på en avtale for å flytte den til et annet steg.
+        </p>
+      )}
+      <div
+        className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-4 md:snap-none md:gap-4"
+        aria-label="Steg i salgstavlen"
+      >
         {pipeline.stages.map((stage) => {
           const sum = stage.deals.reduce((acc, d) => acc + (d.value ?? 0), 0);
           return (
             <div
               key={stage.id}
-              className="flex-shrink-0 w-72 bg-gray-50 rounded-lg border border-gray-200"
+              className="w-[85vw] max-w-[20rem] flex-shrink-0 snap-start bg-gray-50 rounded-lg border border-gray-200 md:w-72"
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => { if (dragId !== null) { moveDeal(dragId, stage.id); setDragId(null); } }}
             >
@@ -313,7 +322,7 @@ export default function PipelinePage() {
                           <span className={`font-semibold rounded-full px-2 py-0.5 ${b.className}`}>{b.label}</span>
                         ) : null; })()}
                         {deal.eventType && <span className="bg-gray-100 px-1.5 py-0.5 rounded">{deal.eventType}</span>}
-                        {deal.eventDate && <span>{new Date(deal.eventDate).toLocaleDateString('nb-NO')}</span>}
+                        {deal.eventDate && <span>{formatDateNo(deal.eventDate)}</span>}
                         {deal.value !== null && <span>{deal.value.toLocaleString('nb-NO')} kr</span>}
                       </div>
                       {(deal.organization || deal.contact) && (

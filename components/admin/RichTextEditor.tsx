@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 
@@ -8,6 +9,13 @@ interface RichTextEditorProps {
   initialContent: string;
   /** Kalles med oppdatert HTML ved hver endring */
   onChange: (html: string) => void;
+  /** Gir tilgang til editoren, f.eks. for å sette inn flettefelt ved markøren. */
+  onReady?: (editor: Editor) => void;
+  editable?: boolean;
+  /** Tailwind-klasse for minimumshøyde (standard: min-h-[20rem]). */
+  minHeightClass?: string;
+  /** Tilgjengelig navn på skriveområdet. */
+  ariaLabel?: string;
 }
 
 function ToolbarButton({
@@ -81,8 +89,16 @@ function Toolbar({ editor }: { editor: Editor }) {
   );
 }
 
-export default function RichTextEditor({ initialContent, onChange }: RichTextEditorProps) {
+export default function RichTextEditor({
+  initialContent,
+  onChange,
+  onReady,
+  editable = true,
+  minHeightClass = 'min-h-[20rem]',
+  ariaLabel,
+}: RichTextEditorProps) {
   const editor = useEditor({
+    editable,
     immediatelyRender: false, // unngå SSR-hydreringsfeil i Next
     extensions: [
       StarterKit.configure({
@@ -97,16 +113,25 @@ export default function RichTextEditor({ initialContent, onChange }: RichTextEdi
     editorProps: {
       attributes: {
         class:
-          'prose prose-slate max-w-none min-h-[20rem] px-4 py-3 focus:outline-none ' +
+          `prose prose-slate max-w-none ${minHeightClass} px-4 py-3 focus:outline-none ` +
           'prose-headings:text-bjerke-blue prose-a:text-bjerke-blue-light',
+        ...(ariaLabel ? { 'aria-label': ariaLabel, role: 'textbox', 'aria-multiline': 'true' } : {}),
       },
     },
     onUpdate: ({ editor }) => onChange(editor.getHTML()),
   });
 
+  useEffect(() => {
+    if (editor) onReady?.(editor);
+  }, [editor, onReady]);
+
+  useEffect(() => {
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable);
+  }, [editor, editable]);
+
   if (!editor) {
     return (
-      <div className="border border-gray-300 rounded-lg p-4 text-sm text-gray-400 min-h-[20rem]">
+      <div className={`border border-gray-300 rounded-lg p-4 text-sm text-gray-400 ${minHeightClass}`}>
         Laster editor…
       </div>
     );
@@ -114,7 +139,7 @@ export default function RichTextEditor({ initialContent, onChange }: RichTextEdi
 
   return (
     <div className="border border-gray-300 rounded-lg overflow-hidden focus-within:ring-2 focus-within:ring-bjerke-blue">
-      <Toolbar editor={editor} />
+      {editable && <Toolbar editor={editor} />}
       <EditorContent editor={editor} />
     </div>
   );

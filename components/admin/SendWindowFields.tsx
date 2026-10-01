@@ -37,26 +37,30 @@ export function SendWindowFields({ idPrefix, value, onChange, disabled = false, 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2 text-sm text-gray-700">
-        <label htmlFor={`${idPrefix}-start`}>Fra kl.</label>
-        <input
-          id={`${idPrefix}-start`}
-          type="time"
-          step={60}
-          value={value.start}
-          onChange={(e) => onChange({ ...value, start: e.target.value })}
-          disabled={disabled}
-          className={timeCls}
-        />
-        <label htmlFor={`${idPrefix}-end`}>til kl.</label>
-        <input
-          id={`${idPrefix}-end`}
-          type="time"
-          step={60}
-          value={value.end}
-          onChange={(e) => onChange({ ...value, end: e.target.value })}
-          disabled={disabled}
-          className={timeCls}
-        />
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          <label htmlFor={`${idPrefix}-start`}>Fra kl.</label>
+          <input
+            id={`${idPrefix}-start`}
+            type="time"
+            step={60}
+            value={value.start}
+            onChange={(e) => onChange({ ...value, start: e.target.value })}
+            disabled={disabled}
+            className={timeCls}
+          />
+        </span>
+        <span className="inline-flex items-center gap-2 whitespace-nowrap">
+          <label htmlFor={`${idPrefix}-end`}>til kl.</label>
+          <input
+            id={`${idPrefix}-end`}
+            type="time"
+            step={60}
+            value={value.end}
+            onChange={(e) => onChange({ ...value, end: e.target.value })}
+            disabled={disabled}
+            className={timeCls}
+          />
+        </span>
       </div>
 
       <fieldset>

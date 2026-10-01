@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { formatDateNo } from '@/lib/crm/format-date';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { TableSkeleton } from '@/components/admin/Skeleton';
@@ -249,7 +250,7 @@ export default function OppgaverPage() {
           aria-label="Vis oppgaver for bestemt person"
           className="border border-gray-300 rounded-md px-3 py-2 text-sm"
         >
-          <option value="">Bestemt person …</option>
+          <option value="">Bestemt person</option>
           {assignees.map((a) => <option key={a.id} value={String(a.id)}>{assigneeLabel(a)}</option>)}
         </select>
         <select
@@ -319,7 +320,93 @@ export default function OppgaverPage() {
           action={{ label: 'Lag en oppgave', onClick: () => titleInputRef.current?.focus() }}
         />
       ) : (
-        <div className="overflow-x-auto border border-gray-200 rounded-lg">
+        <>
+        <ul className="space-y-2 md:hidden" aria-label="Oppgaver">
+          {tasks.map((t) => {
+            const isEditing = editing?.id === t.id;
+            return (
+              <li key={t.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
+                {isEditing ? (
+                  <div className="space-y-2">
+                    <label className="block">
+                      <span className="mb-1 block text-xs text-gray-600">Oppgave</span>
+                      <input
+                        value={editing.title}
+                        onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+                        maxLength={300}
+                        autoFocus
+                        className="w-full rounded-md border border-gray-300 px-2 py-2 text-base"
+                      />
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="mb-1 block text-xs text-gray-600">Frist</span>
+                        <input
+                          type="date"
+                          value={editing.dueAt}
+                          onChange={(e) => setEditing({ ...editing, dueAt: e.target.value })}
+                          className="w-full rounded-md border border-gray-300 px-2 py-2 text-base"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs text-gray-600">Ansvarlig</span>
+                        <AssigneeSelect
+                          value={editing.assigneeId}
+                          onChange={(assigneeId) => setEditing({ ...editing, assigneeId })}
+                          className="w-full rounded-md border border-gray-300 px-2 py-2 text-base"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setEditing(null)} disabled={savingEdit} className="px-3 py-2 text-gray-600">Avbryt</button>
+                      <button
+                        onClick={() => saveEdit(t)}
+                        disabled={savingEdit || !editing.title.trim()}
+                        className="rounded-md bg-bjerke-blue px-4 py-2 font-medium text-white disabled:opacity-50"
+                      >
+                        {savingEdit ? 'Lagrer …' : 'Lagre'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={t.status === 'done'}
+                      onChange={() => toggle(t)}
+                      disabled={updatingIds.has(t.id)}
+                      aria-label={t.status === 'done' ? `Marker «${t.title}» som ikke gjort` : `Marker «${t.title}» som gjort`}
+                      className="mt-0.5 h-5 w-5 shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className={t.status === 'done' ? 'line-through text-gray-400' : 'font-medium text-gray-900'}>{t.title}</p>
+                      {(t.contact || t.organization || t.deal) && (
+                        <p className="mt-0.5 space-x-2 text-xs">
+                          {t.contact && <Link href={`/admin/crm/kontakter/${t.contact.id}`} className="text-blue-700 hover:underline">{t.contact.name}</Link>}
+                          {t.organization && <Link href={`/admin/crm/bedrifter/${t.organization.id}`} className="text-blue-700 hover:underline">{t.organization.name}</Link>}
+                          {t.deal && <span className="text-gray-500">{t.deal.title}</span>}
+                        </p>
+                      )}
+                      <p className="mt-1 text-xs text-gray-500">
+                        {t.assignee ? `${t.assignee.email}${t.assignee.id === currentUserId ? ' (meg)' : ''}` : 'Uten ansvarlig'}
+                        {t.dueAt && (
+                          <span className={overdue(t) ? 'font-semibold text-red-600' : ''}>
+                            {' · frist '}{formatDateNo(t.dueAt)}{overdue(t) && ' (forfalt)'}
+                          </span>
+                        )}
+                      </p>
+                      <div className="mt-2 flex gap-1 text-xs">
+                        <button onClick={() => startEdit(t)} className="rounded-md px-2 py-1.5 text-blue-700 hover:bg-blue-50">Rediger</button>
+                        <button onClick={() => setDeleteTarget(t)} className="rounded-md px-2 py-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600">Slett</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <div className="hidden overflow-x-auto border border-gray-200 rounded-lg md:block">
           <table className="min-w-full text-sm">
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
@@ -397,7 +484,7 @@ export default function OppgaverPage() {
                         />
                       ) : (
                         <span className={`text-xs ${overdue(t) ? 'text-red-600 font-semibold' : 'text-gray-500'}`}>
-                          {t.dueAt ? new Date(t.dueAt).toLocaleDateString('nb-NO') : '—'}
+                          {formatDateNo(t.dueAt)}
                           {overdue(t) && ' (forfalt)'}
                         </span>
                       )}
@@ -427,6 +514,7 @@ export default function OppgaverPage() {
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <ConfirmModal

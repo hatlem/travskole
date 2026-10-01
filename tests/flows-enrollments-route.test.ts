@@ -45,7 +45,7 @@ describe('POST /api/admin/crm/flows/[id]/enrollments med listId', () => {
     const res = await call({ listId: 3 });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(SUMMARY);
-    expect(enrollList).toHaveBeenCalledWith(5, 3);
+    expect(enrollList).toHaveBeenCalledWith(5, 3, expect.objectContaining({ collect: [] }));
     expect(enrollContacts).not.toHaveBeenCalled();
     expect(enrollSegment).not.toHaveBeenCalled();
     expect(vi.mocked(logActivity).mock.calls[0][0]).toMatchObject({ action: 'enroll_list', entityId: 5 });

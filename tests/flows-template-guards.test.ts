@@ -8,7 +8,7 @@ import { NextRequest } from 'next/server';
 const { prisma } = vi.hoisted(() => ({
   prisma: {
     flow: { findUnique: vi.fn(), update: vi.fn(), delete: vi.fn(async () => ({})) },
-    flowEnrollment: { count: vi.fn() },
+    flowEnrollment: { count: vi.fn(), updateMany: vi.fn(async () => ({ count: 0 })) },
     segment: { findUnique: vi.fn() },
   },
 }));
@@ -26,6 +26,7 @@ import { POST as activate } from '@/app/api/admin/crm/flows/[id]/activate/route'
 import { POST as enroll } from '@/app/api/admin/crm/flows/[id]/enrollments/route';
 import { PATCH, DELETE } from '@/app/api/admin/crm/flows/[id]/route';
 import { isFlowEditable, canEnrollIntoStatus, canDeleteStatus } from '@/lib/flows/status';
+import { AWAITING_ACTIVATION_RUN_AT } from '@/lib/flows/awaiting-activation';
 
 const params = { params: Promise.resolve({ id: '1' }) };
 const req = (method: string, body?: unknown) =>
@@ -37,12 +38,14 @@ const req = (method: string, body?: unknown) =>
 beforeEach(() => vi.clearAllMocks());
 
 describe('status-regler', () => {
-  it('maler kan redigeres og slettes, men ikke meldes inn i', () => {
+  it('maler kan redigeres og slettes, men ikke meldes inn i; utkast tar imot personer i kø', () => {
     expect(isFlowEditable('template')).toBe(true);
     expect(canDeleteStatus('template')).toBe(true);
     expect(canEnrollIntoStatus('template')).toBe(false);
     expect(isFlowEditable('active')).toBe(false);
-    expect(canEnrollIntoStatus('draft')).toBe(false);
+    expect(canEnrollIntoStatus('draft')).toBe(true);
+    expect(canDeleteStatus('paused')).toBe(true);
+    expect(canDeleteStatus('active')).toBe(false);
     expect(canEnrollIntoStatus('active')).toBe(true);
   });
 });
@@ -84,11 +87,47 @@ describe('maler', () => {
   });
 });
 
+describe('aktivering av utkast', () => {
+  it('starter personer som ventet i kø', async () => {
+    prisma.flow.findUnique.mockResolvedValue({
+      id: 1,
+      status: 'draft',
+      nodes: [
+        { id: 10, type: 'start', config: '{}' },
+        { id: 11, type: 'end', config: '{}' },
+      ],
+      edges: [{ id: 1, fromNodeId: 10, toNodeId: 11, branch: null }],
+    });
+    prisma.flow.update.mockResolvedValue({ id: 1, status: 'active' });
+    prisma.flowEnrollment.updateMany.mockResolvedValueOnce({ count: 4 });
+    const res = await activate(req('POST'), params);
+    expect(res.status).toBe(200);
+    expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith({
+      where: { flowId: 1, status: 'active', currentNodeId: null, nextRunAt: { gte: AWAITING_ACTIVATION_RUN_AT } },
+      data: { nextRunAt: expect.any(Date) },
+    });
+    expect((await res.json()).startedEnrollments).toBe(4);
+  });
+});
+
+describe('slett', () => {
+  it('pausede flyter kan slettes, aktive ikke', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ status: 'paused' });
+    expect((await DELETE(req('DELETE'), params)).status).toBe(200);
+    prisma.flow.findUnique.mockResolvedValue({ status: 'active' });
+    expect((await DELETE(req('DELETE'), params)).status).toBe(409);
+  });
+});
+
 describe('innmelding', () => {
-  it('avviser utkast', async () => {
+  it('legger personer i et utkast i kø til aktivering', async () => {
     prisma.flow.findUnique.mockResolvedValue({ id: 1, status: 'draft' });
+    const summary = { enrolled: 1, skippedActive: 0, skippedSuppressed: 0, skippedMissing: 0, capped: 0 };
+    enrollContacts.mockResolvedValue(summary);
     const res = await enroll(req('POST', { contactIds: [1] }), params);
-    expect(res.status).toBe(409);
+    expect(res.status).toBe(200);
+    expect(enrollContacts).toHaveBeenCalledWith(1, [1], expect.objectContaining({ startAt: AWAITING_ACTIVATION_RUN_AT }));
+    expect(await res.json()).toEqual({ ...summary, awaitingActivation: true });
   });
 
   it('godtar contactIds i aktiv flyt og returnerer oppsummeringen', async () => {
@@ -98,7 +137,7 @@ describe('innmelding', () => {
     const res = await enroll(req('POST', { contactIds: [1, 2] }), params);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual(summary);
-    expect(enrollContacts).toHaveBeenCalledWith(1, [1, 2]);
+    expect(enrollContacts).toHaveBeenCalledWith(1, [1, 2], { collect: [] });
   });
 
   it('avviser manuell innmelding i kurs-forankrede flyter', async () => {

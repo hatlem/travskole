@@ -8,6 +8,7 @@ import { logCrmChanges } from '@/lib/crm/change-log';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 import { purgeReviewDraftsForContact } from '@/lib/ai/review';
+import { suggestOrganization, suggestionDomain } from '@/lib/crm/org-suggestion';
 
 export async function GET(
   request: NextRequest,
@@ -40,6 +41,11 @@ export async function GET(
         orderBy: { addedAt: 'desc' },
         select: { addedAt: true, list: { select: { id: true, name: true } } },
       },
+      flowEnrollments: {
+        where: { status: 'active' },
+        orderBy: { enteredAt: 'desc' },
+        select: { id: true, enteredAt: true, flow: { select: { id: true, name: true, status: true } } },
+      },
     },
   });
   if (!contact) {
@@ -54,9 +60,20 @@ export async function GET(
       })
     : null;
 
-  const { memberships, ...rest } = contact;
+  const domain = suggestionDomain(contact.email, contact.organizationId !== null);
+  const orgWithDomain = domain
+    ? await prisma.organization.findFirst({ where: { domain }, select: { id: true, name: true } })
+    : null;
+  const organizationSuggestion = suggestOrganization(contact.email, contact.organizationId !== null, orgWithDomain);
+
+  const { memberships, flowEnrollments, ...rest } = contact;
   const lists = memberships.map((m) => ({ id: m.list.id, name: m.list.name, addedAt: m.addedAt }));
-  return NextResponse.json({ contact: { ...rest, tags: parseJsonArray(contact.tags), suppression, lists } });
+  const flows = flowEnrollments.map((e) => ({
+    enrollmentId: e.id, flowId: e.flow.id, name: e.flow.name, flowStatus: e.flow.status, enteredAt: e.enteredAt,
+  }));
+  return NextResponse.json({
+    contact: { ...rest, tags: parseJsonArray(contact.tags), suppression, lists, flows, organizationSuggestion },
+  });
 }
 
 const patchSchema = z.object({

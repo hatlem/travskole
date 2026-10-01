@@ -28,8 +28,13 @@ export const isTemplateStatus = (status: string): boolean => status === 'templat
 export const isFlowEditable = (status: string): boolean =>
   status === 'draft' || status === 'paused' || status === 'template';
 
-/** Manuell innmelding er bare meningsfull i flyter runneren faktisk kjører (eller vil kjøre etter pause). */
-export const canEnrollIntoStatus = (status: string): boolean => status === 'active' || status === 'paused';
+/**
+ * Manuell innmelding: aktive og pausede flyter, og utkast — der venter løpene
+ * på aktivering og ingen e-post sendes før flyten er aktivert.
+ */
+export const canEnrollIntoStatus = (status: string): boolean =>
+  status === 'active' || status === 'paused' || status === 'draft';
 
+/** Aktive flyter må settes på pause først, så sletting aldri skjer midt i en utsending. */
 export const canDeleteStatus = (status: string): boolean =>
-  status === 'draft' || status === 'archived' || status === 'template';
+  status === 'draft' || status === 'paused' || status === 'archived' || status === 'template';

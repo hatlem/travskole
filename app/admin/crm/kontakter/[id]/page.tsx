@@ -18,8 +18,12 @@ import { AddToFlow } from '@/components/admin/crm/AddToFlow';
 import { ContactLists, type ContactListMembershipRow } from '@/components/admin/crm/ContactLists';
 import { ContactSegments } from '@/components/admin/crm/ContactSegments';
 import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
+import { OrganizationLinker } from '@/components/admin/crm/OrganizationLinker';
 import { isSuperAdmin } from '@/lib/settings-shared';
 import { dateInputToIso } from '@/lib/crm/form-utils';
+import { formatDateNo, formatDayMonthNo } from '@/lib/crm/format-date';
+import { formatPhone, phoneHref } from '@/lib/format-phone';
+import type { OrganizationSuggestion } from '@/lib/crm/org-suggestion';
 
 interface ContactDetail {
   id: number;
@@ -40,6 +44,8 @@ interface ContactDetail {
   notes: { id: number; body: string; authorEmail: string; createdAt: string }[];
   activities: { id: number; type: string; title: string; body: string | null; actorEmail: string | null; occurredAt: string }[];
   lists: ContactListMembershipRow[];
+  flows: { enrollmentId: number; flowId: number; name: string; flowStatus: string; enteredAt: string }[];
+  organizationSuggestion: OrganizationSuggestion | null;
 }
 
 const STAGES = [
@@ -68,9 +74,11 @@ const ACTIVITY_ICONS: Record<string, string> = {
   deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄', list: '📋',
 };
 
-function fmtDate(d: string | null): string {
-  return d ? new Date(d).toLocaleDateString('nb-NO') : '—';
-}
+const fmtDate = (d: string | null) => formatDateNo(d);
+
+const secondaryBtn =
+  'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50';
+const inlineSelect = 'w-full max-w-[16rem] border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white';
 
 export default function KontaktDetaljPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -97,6 +105,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const [confirmSuppress, setConfirmSuppress] = useState(false);
   const [consentBusy, setConsentBusy] = useState(false);
   const [dealDialog, setDealDialog] = useState<{ dealId: number | null } | null>(null);
+  const [listPickerOpen, setListPickerOpen] = useState(false);
   const { toast } = useToast();
   const abortRef = useRef<AbortController | null>(null);
 
@@ -145,9 +154,8 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
   const effectiveTaskAssignee = taskAssigneeTouched ? taskAssignee : defaultTaskAssignee;
 
   function focusLists() {
-    const section = document.getElementById('kontakt-lister');
-    section?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    section?.querySelector<HTMLSelectElement>('select')?.focus({ preventScroll: true });
+    document.getElementById('kontakt-lister')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setListPickerOpen(true);
   }
 
   async function patch(body: Record<string, unknown>, okMsg: string): Promise<boolean> {
@@ -358,74 +366,108 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
     <div>
       <CrmTabs />
 
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">{contact.name}</h1>
-          <p className="text-gray-600 text-sm mt-1">
-            {contact.roleTitle && <>{contact.roleTitle} · </>}
-            {contact.email ?? 'Ingen e-post'} · {contact.phone ?? 'Ingen telefon'}
-            {contact.organization && (
-              <> · <Link href={`/admin/crm/bedrifter/${contact.organization.id}`} className="text-blue-700 hover:underline">{contact.organization.name}</Link></>
-            )}
-          </p>
-          {contact.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {contact.tags.map((t) => (
-                <span key={t} className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded">{t}</span>
-              ))}
-            </div>
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-bold text-balance">{contact.name}</h1>
+          {(contact.roleTitle || contact.organization) && (
+            <p className="mt-1 text-sm text-gray-600">
+              {contact.roleTitle}
+              {contact.roleTitle && contact.organization && ' · '}
+              {contact.organization && (
+                <Link href={`/admin/crm/bedrifter/${contact.organization.id}`} className="text-bjerke-blue hover:underline">
+                  {contact.organization.name}
+                </Link>
+              )}
+            </p>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="text-sm text-gray-600">
-            Kundestatus:{' '}
-            <select
-              value={contact.stage}
-              onChange={(e) => patch({ stage: e.target.value }, 'Kundestatus er oppdatert')}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-            >
-              {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
-            </select>
-          </label>
-          <label className="text-sm text-gray-600">
-            Ansvarlig:{' '}
-            <AssigneeSelect
-              value={contact.ownerId}
-              onChange={(ownerId) => patch({ ownerId }, 'Ansvarlig er oppdatert')}
-              className="border border-gray-300 rounded-md px-2 py-1 text-sm"
-            />
-          </label>
-          <HelpTip term="owner" align="right" />
-          {!editing && (
-            <button
-              onClick={() => setEditing(true)}
-              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-            >
-              Rediger kontakt
-            </button>
-          )}
-          <button
-            onClick={() => setConfirmDelete(true)}
-            className="text-sm text-gray-500 hover:text-red-600 px-2 py-1.5"
-          >
-            Slett
-          </button>
-        </div>
+        <button
+          onClick={() => setConfirmDelete(true)}
+          className="rounded-md px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
+        >
+          Slett kontakt
+        </button>
       </div>
-
-      {editing && (
-        <ContactEditForm
-          contact={contact}
-          saving={saving}
-          onCancel={() => setEditing(false)}
-          onSave={saveEdit}
-        />
-      )}
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Venstre: samtykke + tidslinje */}
         <div className="space-y-6">
+          <section aria-labelledby="kontakt-detaljer" className="border border-gray-200 rounded-lg p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 id="kontakt-detaljer" className="font-semibold">Detaljer</h2>
+              {!editing && (
+                <button onClick={() => setEditing(true)} className={secondaryBtn}>
+                  Rediger
+                </button>
+              )}
+            </div>
+            {editing ? (
+              <ContactEditForm contact={contact} saving={saving} onCancel={() => setEditing(false)} onSave={saveEdit} />
+            ) : (
+              <dl className="grid grid-cols-[7.5rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
+                <dt className="text-gray-500">E-post</dt>
+                <dd className="min-w-0 break-words">
+                  {contact.email
+                    ? <a href={`mailto:${contact.email}`} className="text-bjerke-blue hover:underline">{contact.email}</a>
+                    : <span className="text-gray-400">Ingen e-post</span>}
+                </dd>
+                <dt className="text-gray-500">Telefon</dt>
+                <dd className="tabular-nums">
+                  {contact.phone ? (
+                    phoneHref(contact.phone)
+                      ? <a href={phoneHref(contact.phone) ?? undefined} className="text-bjerke-blue hover:underline">{formatPhone(contact.phone)}</a>
+                      : formatPhone(contact.phone)
+                  ) : <span className="text-gray-400">Ingen telefon</span>}
+                </dd>
+                <dt className="text-gray-500">Rolle</dt>
+                <dd>{contact.roleTitle ?? <span className="text-gray-400">Ikke oppgitt</span>}</dd>
+                <dt className="text-gray-500">Stikkord</dt>
+                <dd>
+                  {contact.tags.length > 0 ? (
+                    <span className="flex flex-wrap gap-1">
+                      {contact.tags.map((t) => (
+                        <span key={t} className="bg-gray-100 text-gray-600 text-xs px-1.5 py-0.5 rounded">{t}</span>
+                      ))}
+                    </span>
+                  ) : <span className="text-gray-400">Ingen</span>}
+                </dd>
+              </dl>
+            )}
+            <dl className="mt-3 grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-3 border-t border-gray-100 pt-3 text-sm">
+              <dt className="text-gray-500">Bedrift</dt>
+              <dd className="min-w-0">
+                <OrganizationLinker
+                  organization={contact.organization}
+                  suggestion={contact.organizationSuggestion}
+                  onLink={(organizationId, msg) => patch({ organizationId }, msg)}
+                />
+              </dd>
+              <dt><label htmlFor="kontakt-status" className="text-gray-500">Kundestatus</label></dt>
+              <dd>
+                <select
+                  id="kontakt-status"
+                  value={contact.stage}
+                  onChange={(e) => patch({ stage: e.target.value }, 'Kundestatus er oppdatert')}
+                  className={inlineSelect}
+                >
+                  {STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+                </select>
+              </dd>
+              <dt className="text-gray-500">
+                <label htmlFor="kontakt-ansvarlig">Ansvarlig</label>
+                <HelpTip term="owner" />
+              </dt>
+              <dd>
+                <AssigneeSelect
+                  id="kontakt-ansvarlig"
+                  value={contact.ownerId}
+                  onChange={(ownerId) => patch({ ownerId }, 'Ansvarlig er oppdatert')}
+                  className={inlineSelect}
+                />
+              </dd>
+            </dl>
+          </section>
+
           <section className="border border-gray-200 rounded-lg p-4 space-y-4">
             <div>
               <h2 className="font-semibold mb-2">Samtykke til markedsføring</h2>
@@ -509,12 +551,38 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             <div id="kontakt-lister" className="border-t border-gray-100 pt-3 scroll-mt-4">
               <h3 className="text-sm font-medium mb-1">Lister <HelpTip term="list" /></h3>
               <p className="text-xs text-gray-500 mb-2">Grupper du legger kontakten i selv.</p>
-              <ContactLists contactId={contactId} contactName={contact.name} lists={contact.lists} onChanged={load} />
+              <ContactLists
+                contactId={contactId}
+                contactName={contact.name}
+                lists={contact.lists}
+                onChanged={load}
+                pickerOpen={listPickerOpen}
+                onPickerOpenChange={setListPickerOpen}
+              />
             </div>
 
             <div className="border-t border-gray-100 pt-3">
-              <h3 className="text-sm font-medium mb-2">Legg til i en e-postflyt</h3>
-              <AddToFlow contactId={contactId} hasMarketingConsent={marketing} onEnrolled={load} />
+              <h3 className="text-sm font-medium mb-1">E-postflyter</h3>
+              {contact.flows.length === 0 ? (
+                <p className="text-sm text-gray-500 mb-2">Ikke med i noen e-postflyt nå.</p>
+              ) : (
+                <ul className="mb-2 space-y-1 text-sm">
+                  {contact.flows.map((f) => (
+                    <li key={f.enrollmentId} className="flex flex-wrap items-baseline gap-x-2">
+                      <Link href={`/admin/crm/flyter/${f.flowId}`} className="text-bjerke-blue hover:underline">{f.name}</Link>
+                      <span className="text-xs text-gray-500">
+                        med siden {formatDayMonthNo(f.enteredAt)}{f.flowStatus === 'paused' ? ' · flyten står på pause' : ''}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <AddToFlow
+                contactId={contactId}
+                hasMarketingConsent={marketing}
+                excludeFlowIds={contact.flows.map((f) => f.flowId)}
+                onEnrolled={load}
+              />
             </div>
           </section>
 
@@ -578,7 +646,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Oppgaver</h2>
             <div className="flex flex-wrap gap-2 mb-2">
-              <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Hva skal gjøres? F.eks. Ring tilbake"
+              <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Ny oppgave, f.eks. Ring tilbake" aria-label="Ny oppgave"
                 onKeyDown={(e) => e.key === 'Enter' && addTask()}
                 className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1 min-w-[10rem]" />
               <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)} aria-label="Frist"
@@ -617,7 +685,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <h2 className="font-semibold mb-3">Notater</h2>
             <div className="flex gap-2 mb-2">
-              <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat …"
+              <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat"
                 rows={2} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1" />
               <button onClick={addNote} disabled={!noteText.trim()}
                 className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre notat</button>

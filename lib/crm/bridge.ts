@@ -3,7 +3,6 @@
 // Idempotent: Deal.bookingRequestId/registrationId er @unique, kontakter
 // upsertes på normalisert e-post, organisasjoner på domene.
 
-import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { bookingToCrm, registrationToCrm, computeDealUpdate, type CrmSyncInput } from '@/lib/crm/bridge-mapping';
@@ -20,30 +19,14 @@ async function applySync(input: CrmSyncInput, options: CrmSyncOptions = {}): Pro
   const stage = resolveStageForStatus(pipeline.stages, input.deal.status);
   if (!stage) throw new Error(`Pipeline ${pipeline.id} har ingen stadier`);
 
-  // 1) Organisasjon (kun bedriftsdomener)
+  // 1) Organisasjon: bare kobling til en bedrift som finnes med samme domene — aldri opprettelse.
   let organizationId: number | null = null;
   if (input.organization) {
     const existingOrg = await prisma.organization.findFirst({
       where: { domain: input.organization.domain },
+      select: { id: true },
     });
-    let org = existingOrg;
-    if (!org) {
-      try {
-        org = await prisma.organization.create({
-          data: { name: input.organization.name, domain: input.organization.domain, stage: 'lead' },
-        });
-      } catch (error) {
-        // Race: en samtidig sync opprettet samme domene mellom findFirst og create.
-        // domain er @unique — fall tilbake til vinnerens rad.
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          org = await prisma.organization.findFirst({
-            where: { domain: input.organization.domain },
-          });
-        }
-        if (!org) throw error;
-      }
-    }
-    organizationId = org.id;
+    organizationId = existingOrg?.id ?? null;
   }
 
   // 2) Kontakt — upsert på normalisert e-post

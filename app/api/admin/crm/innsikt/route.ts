@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import logger from '@/lib/logger';
-import { computeRates, bucketCountsByWeek, bucketSumByMonth } from '@/lib/crm/insights';
+import { computeRates, bucketCountsByWeek, bucketSumByMonth, aggregateFlowSends } from '@/lib/crm/insights';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,12 +17,17 @@ async function flowsSection(now: Date) {
   const [flows, enrollments, sends30, sends12w, activeCounts, statusCounts] = await Promise.all([
     prisma.flow.findMany({ where: NOT_TEMPLATE, select: { id: true, name: true, status: true } }),
     prisma.flowEnrollment.findMany({ where: { flow: NOT_TEMPLATE }, select: { id: true, flowId: true } }),
+    // Alle e-poster fra e-postflyter (har et løp). Tester har ikke løp; kurs-e-poster logges ikke her.
     prisma.messageSend.findMany({
-      where: { dedupeKey: { not: null }, sentAt: { gte: thirtyDaysAgo } },
-      select: { enrollmentId: true, openedAt: true, firstClickedAt: true, repliedAt: true, bouncedAt: true },
+      where: {
+        enrollmentId: { not: null },
+        status: { in: ['sent', 'skipped_no_consent', 'skipped_suppressed'] },
+        sentAt: { gte: thirtyDaysAgo },
+      },
+      select: { enrollmentId: true, status: true, openedAt: true, firstClickedAt: true, repliedAt: true, bouncedAt: true },
     }),
     prisma.messageSend.findMany({
-      where: { dedupeKey: { not: null }, sentAt: { gte: twelveWeeksAgo } },
+      where: { enrollmentId: { not: null }, status: 'sent', sentAt: { gte: twelveWeeksAgo } },
       select: { sentAt: true, openedAt: true },
     }),
     prisma.flowEnrollment.groupBy({ by: ['flowId'], where: { status: 'active', flow: NOT_TEMPLATE }, _count: { _all: true } }),
@@ -32,19 +37,7 @@ async function flowsSection(now: Date) {
   const flowIdByEnrollment = new Map(enrollments.map((e) => [e.id, e.flowId]));
   const activeByFlow = new Map(activeCounts.map((r) => [r.flowId, r._count._all]));
 
-  const perFlowAgg = new Map<number, { sent: number; opened: number; clicked: number; replied: number; bounced: number }>();
-  for (const send of sends30) {
-    if (send.enrollmentId === null) continue;
-    const flowId = flowIdByEnrollment.get(send.enrollmentId);
-    if (flowId === undefined) continue;
-    const agg = perFlowAgg.get(flowId) ?? { sent: 0, opened: 0, clicked: 0, replied: 0, bounced: 0 };
-    agg.sent++;
-    if (send.openedAt) agg.opened++;
-    if (send.firstClickedAt) agg.clicked++;
-    if (send.repliedAt) agg.replied++;
-    if (send.bouncedAt) agg.bounced++;
-    perFlowAgg.set(flowId, agg);
-  }
+  const { perFlow: perFlowAgg, totals } = aggregateFlowSends(sends30, flowIdByEnrollment);
 
   const perFlow = flows.map((flow) => {
     const agg = perFlowAgg.get(flow.id) ?? { sent: 0, opened: 0, clicked: 0, replied: 0, bounced: 0 };
@@ -65,7 +58,7 @@ async function flowsSection(now: Date) {
   }));
 
   const enrollmentStatus = statusCounts.map((r) => ({ status: r.status, count: r._count._all }));
-  return { perFlow, weekly, enrollmentStatus };
+  return { perFlow, weekly, enrollmentStatus, totals: { ...totals, ...computeRates(totals.sent, totals.opened, totals.clicked) } };
 }
 
 async function pipelineSection(now: Date) {

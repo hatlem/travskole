@@ -24,7 +24,7 @@ import { HelpTip } from '@/components/admin/HelpTip';
 import { HINTS } from '@/lib/admin-copy';
 import type { CourseOption, ListOption } from '@/lib/flows/event-labels';
 import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
-import { freeNodePosition, validateEditorGraph } from '@/lib/flows/editor';
+import { freeNodePosition, initialViewport, validateEditorGraph } from '@/lib/flows/editor';
 import { nodeTypes, NODE_TYPE_ORDER, NODE_LABELS, NODE_DESCRIPTIONS, type FlowRFNode, type FlowNodeType } from './node-types';
 import { edgeTypes, type FlowRFEdge } from './deletable-edge';
 import {
@@ -40,6 +40,17 @@ import { FlowSettingsPanel } from './flow-settings-panel';
 import { FlowToolbar, type ValidationError } from './flow-toolbar';
 import type { FlowSendWindowValue } from './flow-send-window-section';
 import { activatedFlowNote, describeSendWindow, resolveEffectiveSendWindow } from '@/lib/flows/send-window';
+import {
+  isSendWindowDirty,
+  isSettingsDirty,
+  planFlowSave,
+  sendWindowStateFrom,
+  settingsDraftFrom,
+  type FlowSettingsDraft,
+  type SendWindowState,
+} from '@/lib/flows/editor-save';
+import { useUnsavedChangesGuard } from '@/components/admin/useUnsavedChangesGuard';
+import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 
 interface InitialNode {
   id: number;
@@ -126,6 +137,7 @@ export function FlowEditor({
   );
 
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  /** Kun tegningen (steg og piler); innstillinger og sendetider har egne utkast under. */
   const [dirty, setDirty] = useState(false);
   const [errorNodeIds, setErrorNodeIds] = useState<Set<string>>(new Set());
   const [activationErrors, setActivationErrors] = useState<ValidationError[]>([]);
@@ -141,15 +153,24 @@ export function FlowEditor({
   const [confirmStatus, setConfirmStatus] = useState<'activate' | 'resume' | null>(null);
   const [helperHidden, setHelperHidden] = useState(false);
   const [sendWindow, setSendWindow] = useState<FlowSendWindowValue>(initialSendWindow);
+  const [settingsDraft, setSettingsDraft] = useState<FlowSettingsDraft>(() => settingsDraftFrom(initialFlow));
+  const [sendWindowDraft, setSendWindowDraft] = useState<SendWindowState>(() =>
+    sendWindowStateFrom(initialSendWindow.global, initialSendWindow.override),
+  );
   const sendWindowLabel = describeSendWindow(resolveEffectiveSendWindow(sendWindow.global, sendWindow.override));
   const savingRef = useRef(false);
   const activatingRef = useRef(false);
   const statusChangeRef = useRef(false);
   const tempIdRef = useRef(0);
   const rfInstanceRef = useRef<ReactFlowInstance<FlowRFNode, FlowRFEdge> | null>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const editingDisabled = !isFlowEditable(flow.status);
   const isTemplate = isTemplateStatus(flow.status);
+  const settingsDirty = !editingDisabled && isSettingsDirty(flow, settingsDraft);
+  const sendWindowDirty = isSendWindowDirty(sendWindow.override, sendWindowDraft);
+  const anyDirty = (dirty && !editingDisabled) || settingsDirty || sendWindowDirty;
+  const guard = useUnsavedChangesGuard(anyDirty && !saving);
   const selectedNode = useMemo(
     () => nodes.find((n) => n.id === selectedNodeId) ?? null,
     [nodes, selectedNodeId],
@@ -259,13 +280,33 @@ export function FlowEditor({
     setSelectedNodeId(emailId);
     setDirty(true);
     clearErrors();
-    setTimeout(() => rfInstanceRef.current?.fitView({ padding: 0.3 }), 50);
+    setTimeout(fitCanvas, 50);
+  }
+
+  /** Lesbar zoom og Start-steget synlig — React Flows egen fitView sentrerer og kan klippe toppen. */
+  function fitCanvas() {
+    const instance = rfInstanceRef.current;
+    const el = canvasRef.current;
+    if (!instance || !el) return;
+    const current = instance.getNodes();
+    if (current.length === 0) return;
+    const xs = current.map((n) => n.position.x);
+    const ys = current.map((n) => n.position.y);
+    const right = current.map((n) => n.position.x + (n.measured?.width ?? 200));
+    const bottom = current.map((n) => n.position.y + (n.measured?.height ?? 72));
+    const bounds = {
+      x: Math.min(...xs),
+      y: Math.min(...ys),
+      width: Math.max(...right) - Math.min(...xs),
+      height: Math.max(...bottom) - Math.min(...ys),
+    };
+    void instance.setViewport(initialViewport(bounds, { width: el.clientWidth, height: el.clientHeight }));
   }
 
   function runHelperAction(kind: HelperAction) {
     if (kind === 'skeleton') return addStarterSkeleton();
     if (kind === 'email') return addNode('email');
-    if (kind === 'activate') return requestStatusChange('activate');
+    if (kind === 'activate') return void requestStatusChange('activate');
     const select = document.getElementById('trigger-event');
     select?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     select?.focus();
@@ -306,62 +347,108 @@ export function FlowEditor({
     clearErrors();
   }
 
-  async function handleSave() {
-    if (savingRef.current) return;
+  /** Lagrer tegningen (replace-all). Returnerer false ved feil — endringene blir liggende i editoren. */
+  async function saveGraph(): Promise<boolean> {
+    const currentNodes = nodes;
+    const payloadNodes = currentNodes.map((n) => {
+      const realId = Number(n.id);
+      const base = {
+        type: n.type as FlowNodeType,
+        config: n.data.config,
+        posX: n.position.x,
+        posY: n.position.y,
+      };
+      return Number.isInteger(realId) && realId > 0 ? { ...base, id: realId } : { ...base, tempId: n.id };
+    });
+    const payloadEdges = edges.map((e) => ({
+      fromRef: refFor(e.source),
+      toRef: refFor(e.target),
+      branch: e.sourceHandle === 'ja' || e.sourceHandle === 'nei' ? e.sourceHandle : null,
+    }));
+
+    const res = await fetch(`/api/admin/crm/flows/${flow.id}/graph`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ nodes: payloadNodes, edges: payloadEdges }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      toast(data.error || 'Stegene ble ikke lagret. Prøv igjen — endringene dine er fortsatt her.', 'error');
+      return false;
+    }
+
+    const idMap = new Map<string, string>();
+    currentNodes.forEach((n, i) => {
+      const real = data.graph?.nodes?.[i]?.id;
+      if (typeof real === 'number') idMap.set(n.id, String(real));
+    });
+    setNodes((nds) => nds.map((n) => (idMap.has(n.id) ? { ...n, id: idMap.get(n.id)! } : n)));
+    setEdges((eds) =>
+      eds.map((e) => ({
+        ...e,
+        source: idMap.get(e.source) ?? e.source,
+        target: idMap.get(e.target) ?? e.target,
+      })),
+    );
+    setSelectedNodeId((cur) => (cur ? idMap.get(cur) ?? cur : cur));
+    setDirty(false);
+    return true;
+  }
+
+  /** Én lagring for alt som er endret: innstillinger og sendetider (én PATCH), deretter stegene. */
+  async function handleSave(): Promise<boolean> {
+    if (savingRef.current) return false;
+    const plan = planFlowSave({
+      editable: !editingDisabled,
+      graphDirty: dirty,
+      savedSettings: flow,
+      settings: settingsDraft,
+      savedSendWindow: sendWindow.override,
+      sendWindow: sendWindowDraft,
+    });
+    if (plan.errors.length > 0) {
+      setSettingsOpen(true);
+      toast(`Ikke lagret: ${plan.errors.join(' ')}`, 'error');
+      return false;
+    }
+    if (!plan.patch && !plan.saveGraph) return true;
+
     savingRef.current = true;
     setSaving(true);
     try {
-      const currentNodes = nodes;
-      const currentEdges = edges;
-      const payloadNodes = currentNodes.map((n) => {
-        const realId = Number(n.id);
-        const base = {
-          type: n.type as FlowNodeType,
-          config: n.data.config,
-          posX: n.position.x,
-          posY: n.position.y,
+      if (plan.patch) {
+        const res = await fetch(`/api/admin/crm/flows/${flow.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(plan.patch),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setSettingsOpen(true);
+          toast(data.error || 'Innstillingene ble ikke lagret. Prøv igjen.', 'error');
+          return false;
+        }
+        const saved = {
+          name: data.flow.name as string,
+          description: data.flow.description as string | null,
+          isMarketing: data.flow.isMarketing as boolean,
+          anchorMode: data.flow.anchorMode as string,
         };
-        return Number.isInteger(realId) && realId > 0
-          ? { ...base, id: realId }
-          : { ...base, tempId: n.id };
-      });
-      const payloadEdges = currentEdges.map((e) => ({
-        fromRef: refFor(e.source),
-        toRef: refFor(e.target),
-        branch: e.sourceHandle === 'ja' || e.sourceHandle === 'nei' ? e.sourceHandle : null,
-      }));
-
-      const res = await fetch(`/api/admin/crm/flows/${flow.id}/graph`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodes: payloadNodes, edges: payloadEdges }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast(data.error || 'Flyten ble ikke lagret. Prøv igjen.', 'error');
-        return;
+        setFlow((f) => ({ ...f, ...saved }));
+        setSettingsDraft(settingsDraftFrom(saved));
+        const override = plan.sendWindowOverride;
+        if (override) {
+          setSendWindow((prev) => ({ ...prev, override }));
+          setSendWindowDraft(sendWindowStateFrom(sendWindow.global, override));
+        }
       }
-
-      const idMap = new Map<string, string>();
-      currentNodes.forEach((n, i) => {
-        const real = data.graph?.nodes?.[i]?.id;
-        if (typeof real === 'number') idMap.set(n.id, String(real));
-      });
-
-      setNodes((nds) => nds.map((n) => (idMap.has(n.id) ? { ...n, id: idMap.get(n.id)! } : n)));
-      setEdges((eds) =>
-        eds.map((e) => ({
-          ...e,
-          source: idMap.get(e.source) ?? e.source,
-          target: idMap.get(e.target) ?? e.target,
-        })),
-      );
-      setSelectedNodeId((cur) => (cur ? idMap.get(cur) ?? cur : cur));
-      setDirty(false);
+      if (plan.saveGraph && !(await saveGraph())) return false;
       clearErrors();
       toast('Endringene er lagret.', 'success');
+      return true;
     } catch {
-      toast('Flyten ble ikke lagret. Sjekk nettforbindelsen og prøv igjen — endringene dine er fortsatt her.', 'error');
+      toast('Endringene ble ikke lagret. Sjekk nettforbindelsen og prøv igjen — de er fortsatt her.', 'error');
+      return false;
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -376,8 +463,8 @@ export function FlowEditor({
   }
 
   /** Sjekker grafen først; er den gyldig, spørres brukeren før e-postene begynner å gå. */
-  function requestStatusChange(kind: 'activate' | 'resume') {
-    if (dirty) return;
+  async function requestStatusChange(kind: 'activate' | 'resume') {
+    if (anyDirty && !(await handleSave())) return;
     if (liveErrors.length > 0) {
       applyValidationErrors(liveErrors);
       toast(
@@ -392,7 +479,7 @@ export function FlowEditor({
   }
 
   async function handleActivate() {
-    if (activatingRef.current || dirty) return;
+    if (activatingRef.current || anyDirty) return;
     if (liveErrors.length > 0) {
       applyValidationErrors(liveErrors);
       toast('Flyten kan ikke aktiveres ennå. Se listen over hva som må fikses.', 'error');
@@ -414,7 +501,14 @@ export function FlowEditor({
       }
       setFlow((f) => ({ ...f, status: data.flow.status }));
       clearErrors();
-      toast(activatedFlowNote(sendWindowLabel), 'success');
+      const started = Number(data.startedEnrollments) || 0;
+      toast(
+        started > 0
+          ? `${activatedFlowNote(sendWindowLabel)} ${started === 1 ? '1 person' : `${started} personer`} som ventet, starter nå.`
+          : activatedFlowNote(sendWindowLabel),
+        'success',
+      );
+      if (started > 0) setEnrollmentsVersion((v) => v + 1);
     } catch {
       toast('Flyten ble ikke aktivert. Sjekk nettforbindelsen og prøv igjen.', 'error');
     } finally {
@@ -425,7 +519,7 @@ export function FlowEditor({
 
   async function handleStatusChange(nextStatus: 'active' | 'paused') {
     if (statusChangeRef.current) return;
-    if (nextStatus === 'active' && dirty) return;
+    if (nextStatus === 'active' && anyDirty) return;
     if (nextStatus === 'active' && liveErrors.length > 0) {
       applyValidationErrors(liveErrors);
       toast('Flyten kan ikke gjenopptas ennå. Se listen over hva som må fikses.', 'error');
@@ -466,7 +560,8 @@ export function FlowEditor({
   }
 
   async function handleSaveAsTemplate() {
-    if (savingTemplate || dirty) return;
+    if (savingTemplate) return;
+    if (anyDirty && !(await handleSave())) return;
     setSavingTemplate(true);
     try {
       const res = await fetch(`/api/admin/crm/flows/${flow.id}/clone`, {
@@ -512,9 +607,9 @@ export function FlowEditor({
     },
     {
       title: 'Aktiver',
-      text: dirty ? 'Trykk «Lagre» øverst først. ' + HINTS.activateFlow : HINTS.activateFlow,
+      text: HINTS.activateFlow,
       done: false,
-      action: { label: 'Aktiver flyten', kind: 'activate', disabled: dirty || !hasEmail },
+      action: { label: 'Aktiver flyten', kind: 'activate', disabled: saving || !hasEmail },
     },
   ];
 
@@ -524,23 +619,26 @@ export function FlowEditor({
 
   return (
     <div>
+      <BreadcrumbLabel label={flow.name} />
       <CrmTabs />
       <FlowToolbar
         name={flow.name}
         status={flow.status}
-        dirty={dirty}
+        dirty={anyDirty}
         saving={saving}
         activating={activating}
         changingStatus={changingStatus}
         activationErrors={activationErrors}
         pendingProblems={flow.status === 'draft' || flow.status === 'paused' ? liveErrors.length : 0}
         nodeLabel={nodeLabel}
-        onSave={handleSave}
-        onActivate={() => requestStatusChange('activate')}
+        onSave={() => void handleSave()}
+        onActivate={() => void requestStatusChange('activate')}
         onPause={() => handleStatusChange('paused')}
-        onResume={() => requestStatusChange('resume')}
-        onEnroll={flow.anchorMode === 'course' ? undefined : () => setEnrollOpen(true)}
-        onSaveAsTemplate={handleSaveAsTemplate}
+        onResume={() => void requestStatusChange('resume')}
+        onEnroll={
+          flow.anchorMode === 'course' || isTemplate || flow.status === 'archived' ? undefined : () => setEnrollOpen(true)
+        }
+        onSaveAsTemplate={() => void handleSaveAsTemplate()}
         savingTemplate={savingTemplate}
         enrollmentCounter={<EnrollmentPanel key={enrollmentsVersion} flowId={flow.id} />}
         sendWindowLabel={sendWindowLabel}
@@ -608,8 +706,8 @@ export function FlowEditor({
         </section>
       )}
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[200px_minmax(0,1fr)_320px]">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:block lg:space-y-2">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[184px_minmax(0,1fr)_360px] lg:items-start">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:sticky lg:top-4 lg:block lg:max-h-[calc(100vh-2rem)] lg:space-y-2 lg:overflow-y-auto">
           <h3 className="col-span-full text-xs font-semibold uppercase text-gray-500">Legg til steg</h3>
           {NODE_TYPE_ORDER.map((type) => (
             <button
@@ -634,7 +732,8 @@ export function FlowEditor({
         </div>
 
         <div
-          className="h-[420px] lg:h-[600px] min-w-0 rounded-lg border border-gray-200 bg-gray-50"
+          ref={canvasRef}
+          className="h-[420px] min-w-0 rounded-lg border border-gray-200 bg-gray-50 lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:max-h-[860px] lg:min-h-[480px]"
           onDragOver={onCanvasDragOver}
           onDrop={onCanvasDrop}
         >
@@ -645,6 +744,7 @@ export function FlowEditor({
             edgeTypes={edgeTypes}
             onInit={(instance) => {
               rfInstanceRef.current = instance;
+              requestAnimationFrame(fitCanvas);
             }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -656,7 +756,8 @@ export function FlowEditor({
             nodesConnectable={!editingDisabled}
             edgesFocusable={!editingDisabled}
             deleteKeyCode={editingDisabled ? null : ['Delete', 'Backspace']}
-            fitView
+            fitViewOptions={{ padding: 0.15, maxZoom: 1 }}
+            minZoom={0.3}
           >
             <Background />
             <Controls />
@@ -664,29 +765,37 @@ export function FlowEditor({
           </ReactFlow>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:overscroll-contain lg:pr-1">
           <div className="rounded-lg border border-gray-200 bg-white p-4">
             <button
+              type="button"
               onClick={() => setSettingsOpen((v) => !v)}
               aria-expanded={settingsOpen}
-              className="flex w-full items-center justify-between text-sm font-semibold text-gray-800"
+              className="flex w-full items-start justify-between gap-3 text-left text-sm font-semibold text-gray-800"
             >
-              <span>Innstillinger</span>
-              <span className="text-xs font-normal text-gray-500">
+              <span className="inline-flex items-center gap-1.5">
+                Innstillinger
+                {(settingsDirty || sendWindowDirty) && (
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" aria-label="ikke lagret" />
+                )}
+              </span>
+              <span className="text-right text-xs font-normal text-gray-500">
                 {flow.isMarketing ? 'Markedsføring' : 'Viktig informasjon'} · {flow.anchorMode === 'course' ? 'Gjelder et kurs' : 'Gjelder en person'} · Sendes {sendWindowLabel}
-                {settingsOpen ? ' ▲' : ' ▼'}
+                <span aria-hidden="true">{settingsOpen ? ' ▲' : ' ▼'}</span>
               </span>
             </button>
             {settingsOpen && (
               <div className="mt-3">
                 <FlowSettingsPanel
-                  key={flow.status}
-                  flow={flow}
+                  flowId={flow.id}
                   disabled={editingDisabled}
                   hasActiveEnrollments={hasActiveEnrollments}
-                  onSaved={(patch) => setFlow((f) => ({ ...f, ...patch }))}
-                  sendWindow={sendWindow}
-                  onSendWindowSaved={(override) => setSendWindow((prev) => ({ ...prev, override }))}
+                  values={settingsDraft}
+                  onChange={(patch) => setSettingsDraft((prev) => ({ ...prev, ...patch }))}
+                  isMarketing={settingsDraft.isMarketing}
+                  globalSendWindow={sendWindow.global}
+                  sendWindow={sendWindowDraft}
+                  onSendWindowChange={setSendWindowDraft}
                 />
               </div>
             )}
@@ -729,6 +838,17 @@ export function FlowEditor({
       </div>
 
       <ConfirmModal
+        open={guard.pendingHref !== null}
+        title="Forlate siden?"
+        message="Du har endringer i flyten som ikke er lagret. Forlater du siden, går de tapt."
+        confirmLabel="Forlat uten å lagre"
+        cancelLabel="Bli på siden"
+        variant="warning"
+        onConfirm={guard.leave}
+        onCancel={guard.stay}
+      />
+
+      <ConfirmModal
         open={confirmStatus !== null}
         title={confirmStatus === 'resume' ? 'Gjenoppta flyten?' : 'Aktivere flyten?'}
         message={
@@ -757,6 +877,8 @@ export function FlowEditor({
         <EnrollModal
           flowId={flow.id}
           isMarketing={flow.isMarketing}
+          isDraft={flow.status === 'draft'}
+          onActivate={() => void requestStatusChange('activate')}
           sendWindowLabel={sendWindowLabel}
           onClose={() => setEnrollOpen(false)}
           onEnrolled={(result) => {

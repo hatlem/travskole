@@ -114,12 +114,12 @@ function Card({
 }) {
   return (
     <div className={cardClasses(nodeType, selected, hasError)}>
-      <div className="flex items-center gap-2 text-sm font-medium text-gray-800">
+      <div className="flex items-center gap-2 text-[15px] font-medium text-gray-800">
         <span>{NODE_ICONS[nodeType]}</span>
         <span>{NODE_LABELS[nodeType]}</span>
       </div>
       {subtitle !== undefined && (
-        <div className="mt-1 truncate text-xs text-gray-500" title={subtitle}>
+        <div className="mt-1 truncate text-sm text-gray-500" title={subtitle}>
           {subtitle}
         </div>
       )}
@@ -186,7 +186,7 @@ export function ConditionNode({ data, selected }: NodeProps<FlowRFNode>) {
         id="nei"
         style={{ left: '75%', background: '#ef4444' }}
       />
-      <div className="mt-1 flex justify-between text-[10px] font-semibold">
+      <div className="mt-1 flex justify-between text-sm font-semibold">
         <span className="text-green-600">ja</span>
         <span className="text-red-600">nei</span>
       </div>

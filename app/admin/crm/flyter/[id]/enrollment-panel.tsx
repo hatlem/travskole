@@ -5,6 +5,7 @@ import { useToast } from '@/components/admin/Toast';
 import { CardSkeleton } from '@/components/admin/Skeleton';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { formatSendTime } from '@/lib/flows/send-window';
+import { formatDayMonthNo } from '@/lib/crm/format-date';
 
 interface EnrollmentRow {
   id: number;
@@ -13,6 +14,7 @@ interface EnrollmentRow {
   finishedAt: string | null;
   nextRunAt: string;
   waitingForSendWindow?: boolean;
+  awaitingActivation?: boolean;
   contact: { id: number; name: string };
 }
 
@@ -23,11 +25,8 @@ const STATUS_LABELS_NO: Record<string, string> = {
   failed: 'Stoppet (feil)',
 };
 
-function fmtDate(d: string | null): string {
-  return d ? new Date(d).toLocaleDateString('nb-NO') : '—';
-}
-
 function statusLabel(e: EnrollmentRow): string {
+  if (e.awaitingActivation) return 'Venter på aktivering';
   if (e.waitingForSendWindow) return `Venter på sendetid (${formatSendTime(new Date(e.nextRunAt), new Date())})`;
   return STATUS_LABELS_NO[e.status] ?? e.status;
 }
@@ -128,7 +127,7 @@ export function EnrollmentPanel({ flowId }: { flowId: number }) {
                     >
                       <span className="text-gray-800">{e.contact.name}</span>
                       <span className="text-gray-500">
-                        {statusLabel(e)} · {fmtDate(e.enteredAt)}
+                        {statusLabel(e)} · lagt til {formatDayMonthNo(e.enteredAt)}
                       </span>
                     </li>
                   ))}

@@ -1,7 +1,7 @@
 // Ren mapping fra eksisterende BookingRequest/Registration til CRM-input.
 // Ingen DB her — lib/crm/bridge.ts gjør selve upsertene.
 
-import { normalizeEmail, emailDomain, isCompanyDomain, orgNameFromDomain } from '@/lib/crm/normalize';
+import { normalizeEmail, emailDomain, isCompanyDomain } from '@/lib/crm/normalize';
 
 export type DealStatus = 'open' | 'won' | 'lost';
 
@@ -32,7 +32,12 @@ export interface RegistrationForCrm {
 }
 
 export interface CrmSyncInput {
-  organization: { name: string; domain: string } | null;
+  /**
+   * Bedriftsdomene fra e-posten. Brukes bare til å koble kontakten til en
+   * bedrift som allerede finnes — kildene har ikke bedriftsnavn, så broen
+   * oppretter aldri bedrifter selv (kontaktsiden foreslår «Koble til bedrift?»).
+   */
+  organization: { domain: string } | null;
   contact: {
     email: string | null;
     name: string;
@@ -68,9 +73,7 @@ function statusToDeal(status: string): { status: DealStatus } {
 export function bookingToCrm(booking: BookingForCrm, course: CourseForCrm): CrmSyncInput {
   const email = normalizeEmail(booking.email);
   const domain = emailDomain(email);
-  const organization = isCompanyDomain(domain)
-    ? { name: orgNameFromDomain(domain!), domain: domain! }
-    : null;
+  const organization = domain && isCompanyDomain(domain) ? { domain } : null;
 
   return {
     organization,

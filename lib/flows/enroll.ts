@@ -24,6 +24,13 @@ import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
 
 export const SEGMENT_ENROLL_CAP = 500;
 
+export interface EnrollOptions {
+  /** Når løpet skal starte (standard: nå). */
+  startAt?: Date;
+  /** Fylles med id-ene til kontaktene som faktisk ble lagt til. */
+  collect?: number[];
+}
+
 function isDuplicateEnrollment(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 }
@@ -47,7 +54,7 @@ async function hasActiveEnrollment(flowId: number, contactId: number): Promise<b
  * same (flowId, contactId) pair already exists. Returns whether a new
  * enrollment was created.
  */
-export async function enrollContact(flowId: number, contactId: number): Promise<boolean> {
+export async function enrollContact(flowId: number, contactId: number, startAt: Date = new Date()): Promise<boolean> {
   if (await hasActiveEnrollment(flowId, contactId)) return false;
   try {
     await prisma.flowEnrollment.create({
@@ -56,7 +63,7 @@ export async function enrollContact(flowId: number, contactId: number): Promise<
         contactId,
         currentNodeId: null,
         status: 'active',
-        nextRunAt: new Date(),
+        nextRunAt: startAt,
       },
     });
     return true;
@@ -121,7 +128,11 @@ const emptySummary = (): EnrollSummary => ({
  * finnes, som står på suppresjonslista (avmeldt/bounce/klage — sendelaget ville
  * uansett hoppet over dem), og som allerede er aktive i flyten.
  */
-export async function enrollContacts(flowId: number, contactIds: number[]): Promise<EnrollSummary> {
+export async function enrollContacts(
+  flowId: number,
+  contactIds: number[],
+  options: EnrollOptions = {},
+): Promise<EnrollSummary> {
   const summary = emptySummary();
   const uniqueIds = [...new Set(contactIds)];
   if (uniqueIds.length === 0) return summary;
@@ -149,8 +160,10 @@ export async function enrollContacts(flowId: number, contactIds: number[]): Prom
       summary.skippedSuppressed++;
       continue;
     }
-    if (await enrollContact(flowId, contact.id)) summary.enrolled++;
-    else summary.skippedActive++;
+    if (await enrollContact(flowId, contact.id, options.startAt)) {
+      summary.enrolled++;
+      options.collect?.push(contact.id);
+    } else summary.skippedActive++;
   }
   return summary;
 }
@@ -189,10 +202,14 @@ export async function segmentContactIds(segmentId: number): Promise<number[] | n
  * (same guards as `enrollContacts`). Capped at 500 contacts per call — the
  * overflow is reported as `capped`.
  */
-export async function enrollSegment(flowId: number, segmentId: number): Promise<EnrollSummary> {
+export async function enrollSegment(
+  flowId: number,
+  segmentId: number,
+  options: EnrollOptions = {},
+): Promise<EnrollSummary> {
   const ids = await segmentContactIds(segmentId);
   if (!ids) return emptySummary();
-  const summary = await enrollContacts(flowId, ids.slice(0, SEGMENT_ENROLL_CAP));
+  const summary = await enrollContacts(flowId, ids.slice(0, SEGMENT_ENROLL_CAP), options);
   summary.capped = Math.max(0, ids.length - SEGMENT_ENROLL_CAP);
   return summary;
 }
@@ -202,7 +219,11 @@ export async function enrollSegment(flowId: number, segmentId: number): Promise<
  * Allerede aktive tas ut før taket, så en ny kjøring når resten av listen.
  * null når listen ikke finnes.
  */
-export async function enrollList(flowId: number, listId: number): Promise<EnrollSummary | null> {
+export async function enrollList(
+  flowId: number,
+  listId: number,
+  options: EnrollOptions = {},
+): Promise<EnrollSummary | null> {
   const list = await prisma.contactList.findUnique({ where: { id: listId }, select: { id: true } });
   if (!list) return null;
 
@@ -224,7 +245,7 @@ export async function enrollList(flowId: number, listId: number): Promise<Enroll
   );
   const pending = ids.filter((id) => !active.has(id));
 
-  const summary = await enrollContacts(flowId, pending.slice(0, SEGMENT_ENROLL_CAP));
+  const summary = await enrollContacts(flowId, pending.slice(0, SEGMENT_ENROLL_CAP), options);
   summary.skippedActive += ids.length - pending.length;
   summary.capped = Math.max(0, pending.length - SEGMENT_ENROLL_CAP);
   return summary;
