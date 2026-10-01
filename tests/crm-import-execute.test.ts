@@ -137,6 +137,14 @@ describe('executeImport', () => {
     expect(emitEvent).not.toHaveBeenCalled();
   });
 
+  it('creating a possible duplicate grants consent as for a brand-new contact', async () => {
+    const candidate = existing({ id: 5, name: 'Kari', organizationId: 10, consentWithdrawn: true });
+    const orgs = [{ id: 10, name: 'Acme AS', orgNumber: null, domain: null }];
+    await run([['Kari', 'kari@ny.no', '', 'Acme', '', '', 'ja']], { contacts: [candidate], organizations: orgs }, CONFIRMED, [{ row: 2, action: 'create' }]);
+    expect(prisma.contact.create).toHaveBeenCalled();
+    expect(prisma.consent.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { contactId: 100 } }));
+  });
+
   it('reports skipped rows as problems with reasons', async () => {
     const result = await run([['Kari', 'feil', '', '', '', '', ''], ['Ola', 'ola@x.no', '', '', '', '', '']], {}, DEFAULT_APPLY_OPTIONS, [{ row: 3, action: 'skip' }]);
     expect(result.problems).toEqual([

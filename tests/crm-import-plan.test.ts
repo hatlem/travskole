@@ -168,6 +168,24 @@ describe('planImport – consent', () => {
     expect(p.rows.map((x) => [x.consent, x.values?.consent, x.warnings])).toEqual([[null, null, []], [null, null, []]]);
     expect(plan([r('A', 'a@x.no', '', '', '', '', '', 'ja')]).consentIgnored).toBe(false);
   });
+
+  it('«create» on a possible duplicate recomputes consent as for a brand-new contact', () => {
+    const withdrawn = contact({ id: 5, name: 'Kari', organizationId: 10, consentWithdrawn: true });
+    const p = plan([r('Kari', 'kari@ny.no', '', 'Acme', '', '', '', 'ja')], ctx({ contacts: [withdrawn], organizations: [ACME] }));
+    expect(resolveActions(p, [{ row: 2, action: 'create' }])[0]).toMatchObject({ kind: 'create', planned: { consent: 'grant' } });
+    expect(resolveActions(p, [{ row: 2, action: 'merge', contactId: 5 }])[0]).toMatchObject({ kind: 'update', planned: { consent: 'blocked' } });
+
+    const consented = contact({ id: 5, name: 'Kari', organizationId: 10, marketingConsent: true });
+    const q = plan([r('Kari', 'kari@ny.no', '', 'Acme', '', '', '', 'ja')], ctx({ contacts: [consented], organizations: [ACME] }));
+    expect(q.rows[0].consent).toBeNull();
+    expect(resolveActions(q, [{ row: 2, action: 'create' }])[0]).toMatchObject({ kind: 'create', planned: { consent: 'grant' } });
+
+    const suppressed = plan(
+      [r('Kari', 'kari@ny.no', '', 'Acme', '', '', '', 'ja')],
+      ctx({ contacts: [consented], organizations: [ACME], suppressedEmails: new Set(['kari@ny.no']) }),
+    );
+    expect(resolveActions(suppressed, [{ row: 2, action: 'create' }])[0]).toMatchObject({ planned: { consent: 'blocked' } });
+  });
 });
 
 describe('planImport – organizations', () => {

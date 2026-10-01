@@ -217,6 +217,7 @@ export function planImport(input: PlanInput, context: PlanContext): ImportPlan {
         planned.match = toMatch(candidate, orgs.names);
         planned.changes = buildContactUpdate(candidate, values, orgTarget(organization), input.options).changes;
         planned.consent = consentOutcome(values, isSuppressed(values, context), candidate);
+        planned.consentAsNew = consentOutcome(values, isSuppressed(values, context), null);
       }
     }
 
@@ -394,7 +395,9 @@ export function resolveActions(plan: ImportPlan, decisions: RowDecision[]): RowA
           ? skip('Valgt bort før import')
           : { row, kind: 'update', contactId: planned.match!.contactId, planned };
       case 'possible_duplicate': {
-        if (decision?.action === 'create') return { row, kind: 'create', planned };
+        if (decision?.action === 'create') {
+          return { row, kind: 'create', planned: { ...planned, consent: planned.consentAsNew ?? null } };
+        }
         if (decision?.action !== 'merge') return skip('Mulig duplikat – hoppet over');
         const contactId = planned.match!.contactId;
         if (decision.contactId !== contactId) return skip('Kontakten er endret siden forhåndsvisningen – hoppet over');

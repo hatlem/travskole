@@ -123,6 +123,8 @@ export interface PlannedRow {
   match: MatchedContact | null;
   suppressed: boolean;
   consent: ConsentOutcome;
+  /** Mulig duplikat: samtykke regnet som for en helt ny kontakt (brukes når admin velger «Legg til som ny»). */
+  consentAsNew?: ConsentOutcome;
   changes: string[];
 }
 
