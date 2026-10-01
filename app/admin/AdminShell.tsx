@@ -40,6 +40,12 @@ export function AdminShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [breadcrumbOverrides, setBreadcrumbLabel] = useBreadcrumbOverrides();
+
+  // Lar global CSS plassere tredjeparts-widgets (cookie-merket) annerledes i admin.
+  useEffect(() => {
+    document.documentElement.classList.add('admin-area');
+    return () => document.documentElement.classList.remove('admin-area');
+  }, []);
   const breadcrumbs = buildBreadcrumbs(pathname, breadcrumbOverrides);
   const isSuperAdmin = role === 'superadmin';
   const siteName = settings.site_name || 'Bjerke Registrering';
