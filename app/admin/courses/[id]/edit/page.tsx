@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, use, useCallback } from 'react';
-import { COURSE_DISPLAY_STATUS, isCourseStatus } from '@/lib/course-status';
+import { COURSE_DISPLAY_STATUS, isCourseStatus, PREVIEW_PARAM } from '@/lib/course-status';
+import { PageHeader } from '@/components/admin/PageHeader';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -239,7 +240,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   if (loading) {
     return (
       <div className="max-w-6xl">
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Rediger kurs</h1>
+        <PageHeader title="Rediger kurs" />
         <TableSkeleton rows={6} cols={2} />
       </div>
     );
@@ -260,27 +261,28 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
   return (
     <div className="max-w-6xl">
-      <div className="mb-8 flex items-start justify-between">
-        <div>
-          <Link href={`/admin/courses/${id}`} className="text-sm text-bjerke-blue hover:underline font-medium">
-            &larr; Tilbake til kurset
-          </Link>
-          <h1 className="text-3xl font-bold text-gray-900 mt-2">Rediger kurs</h1>
-          <p className="mt-1 text-sm text-gray-600">Endringene vises på nettsiden så snart du trykker «Lagre endringer».</p>
-        </div>
-        <a
-          href={publicUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className={buttonClass('secondary', 'md', 'mt-2')}
-        >
-          Se på nettsiden
-          <span className="sr-only">(åpnes i ny fane)</span>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-          </svg>
-        </a>
-      </div>
+      <Link href={`/admin/courses/${id}`} className="text-sm text-bjerke-blue hover:underline font-medium">
+        &larr; Tilbake til kurset
+      </Link>
+      <PageHeader
+        className="mt-2 mb-8"
+        title="Rediger kurs"
+        description="Endringene vises på nettsiden så snart du trykker «Lagre endringer»."
+        actions={
+          <a
+            href={course.status === 'draft' ? `${publicUrl}?${PREVIEW_PARAM}=1` : publicUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass('secondary')}
+          >
+            {course.status === 'draft' ? 'Forhåndsvis' : 'Se på nettsiden'}
+            <span className="sr-only">(åpnes i ny fane)</span>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        }
+      />
 
       {error && (
         <div role="alert" className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
@@ -680,7 +682,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         <div className="mt-8 bg-red-50 rounded-xl border border-red-200 p-6">
           <h2 className="text-lg font-semibold text-red-800 mb-2">Faresone</h2>
           <p className="text-sm text-red-600 mb-4">
-            Sletting av kurset sletter også alle påmeldingene og kortene deres på salgstavla. Dette kan ikke angres.
+            Sletting av kurset sletter også alle påmeldingene og kortene deres på salgstavlen. Dette kan ikke angres.
             Kurs med betalte påmeldinger kan ikke slettes — sett status til «Stengt» i stedet.
           </p>
           {deleteError && (
@@ -700,7 +702,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         title="Slette kurset?"
         message={`«${course.name}» slettes for godt${
           course._count?.registrations
-            ? `, sammen med ${course._count.registrations} påmelding${course._count.registrations === 1 ? '' : 'er'} og kortene på salgstavla`
+            ? `, sammen med ${course._count.registrations} påmelding${course._count.registrations === 1 ? '' : 'er'} og kortene på salgstavlen`
             : ''
         }. Dette kan ikke angres. Vil du bare stoppe nye påmeldinger, sett status til «Stengt» i stedet.`}
         confirmLabel="Ja, slett kurset"

@@ -164,7 +164,7 @@ function DrawerBody({
             </div>
           </div>
           <p className="text-sm text-gray-600">
-            Står i e-posten og som notat på avtalen i salgstavla. Ønsket dato fra kunden endres ikke.
+            Står i e-posten og som notat på avtalen i salgstavlen. Ønsket dato fra kunden endres ikke.
           </p>
         </fieldset>
 

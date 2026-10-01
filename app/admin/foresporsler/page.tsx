@@ -175,7 +175,7 @@ export default function AdminForesporslerPage() {
         return next;
       });
       toast(
-        body?.dealsRemoved ? 'Forespørselen og kortet i salgstavla er slettet.' : 'Forespørselen er slettet.',
+        body?.dealsRemoved ? 'Forespørselen og kortet i salgstavlen er slettet.' : 'Forespørselen er slettet.',
         'success',
       );
       setDeleteTarget(null);
@@ -443,7 +443,7 @@ export default function AdminForesporslerPage() {
         title="Slette forespørselen?"
         message={
           deleteTarget
-            ? `Forespørselen fra ${deleteTarget.name}${deleteTarget.course ? ` (${deleteTarget.course.name})` : ''} slettes for godt, sammen med kortet i salgstavla. Dette kan ikke angres.`
+            ? `Forespørselen fra ${deleteTarget.name}${deleteTarget.course ? ` (${deleteTarget.course.name})` : ''} slettes for godt, sammen med kortet i salgstavlen. Dette kan ikke angres.`
             : ''
         }
         confirmLabel="Ja, slett"

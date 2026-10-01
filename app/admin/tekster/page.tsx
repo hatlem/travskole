@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
+import { PageHeader } from '@/components/admin/PageHeader';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { STRINGS, STRING_SECTIONS, STRING_PREFIX } from '@/lib/strings';
@@ -129,18 +130,20 @@ export default function AdminTeksterPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Tekster</h1>
-          <p className="text-gray-600 mt-1">
+      <PageHeader
+        title="Tekster"
+        description={
+          <>
             Endre tekstene besøkende ser på nettsiden. Tomt felt betyr at standardteksten (i grått) brukes.
             Ord i doble krøllparenteser, som {'{{kurs_navn}}'}, byttes ut automatisk — la dem stå.
-          </p>
-        </div>
-        <Button onClick={handleSave} loading={saving} loadingLabel="Lagrer …" disabled={dirtyCount === 0} className="whitespace-nowrap">
-          {dirtyCount === 1 ? 'Lagre 1 endring' : dirtyCount > 1 ? `Lagre ${dirtyCount} endringer` : 'Lagre'}
-        </Button>
-      </div>
+          </>
+        }
+        actions={
+          <Button onClick={handleSave} loading={saving} loadingLabel="Lagrer …" disabled={dirtyCount === 0} className="whitespace-nowrap">
+            {dirtyCount === 1 ? 'Lagre 1 endring' : dirtyCount > 1 ? `Lagre ${dirtyCount} endringer` : 'Lagre'}
+          </Button>
+        }
+      />
 
       <input
         type="search"

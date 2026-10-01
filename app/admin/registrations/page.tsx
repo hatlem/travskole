@@ -1051,7 +1051,7 @@ export default function AdminRegistrationsPage({
       <ConfirmModal
         open={showDeleteModal}
         title="Slette påmeldingen?"
-        message="Påmeldingen og kortet i salgstavla fjernes for godt. Vil du bare melde av deltakeren, sett status til «Avlyst» i stedet – da får neste på ventelisten plassen. Betalte påmeldinger kan ikke slettes."
+        message="Påmeldingen og kortet i salgstavlen fjernes for godt. Vil du bare melde av deltakeren, sett status til «Avlyst» i stedet – da får neste på ventelisten plassen. Betalte påmeldinger kan ikke slettes."
         confirmLabel="Ja, slett"
         variant="danger"
         loading={deletingReg}

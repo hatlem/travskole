@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { COURSE_DISPLAY_STATUS, isCourseStatus } from '@/lib/course-status';
+import { PageHeader } from '@/components/admin/PageHeader';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { validateCourseForm } from '@/lib/course-form';
@@ -144,15 +145,14 @@ export default function NewCoursePage() {
 
   return (
     <div className="max-w-6xl">
-      <div className="mb-8">
-        <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
-          &larr; Tilbake til kurs
-        </Link>
-        <h1 className="text-3xl font-bold text-gray-900 mt-2">Nytt kurs</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Fyll inn det viktigste og lagre. Kurset blir et utkast som ikke er åpent for påmelding før du trykker «Publiser».
-        </p>
-      </div>
+      <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
+        &larr; Tilbake til kurs
+      </Link>
+      <PageHeader
+        className="mt-2 mb-8"
+        title="Nytt kurs"
+        description="Fyll inn det viktigste og lagre. Kurset blir et utkast som ikke vises på nettsiden før du trykker «Publiser»."
+      />
 
       {error && (
         <div role="alert" className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
