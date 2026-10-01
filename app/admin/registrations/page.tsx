@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { PageHeader } from '@/components/admin/PageHeader';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
@@ -53,6 +54,9 @@ const emptyAddOptions = {
   overrideCapacity: false,
   sendEmails: true,
 };
+
+const DESCRIPTION =
+  'Alle som har meldt seg på kurs. Bekreft, flytt fra venteliste, eller legg inn en påmelding selv.';
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
@@ -114,11 +118,11 @@ export default function AdminRegistrationsPage() {
   const fetchRegistrations = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/registrations');
-      if (!res.ok) throw new Error('Kunne ikke hente påmeldinger');
+      if (!res.ok) throw new Error('Kunne ikke hente påmeldingene. Last siden på nytt.');
       const data = await res.json();
       setRegistrations(data.registrations);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setLoading(false);
     }
@@ -182,7 +186,7 @@ export default function AdminRegistrationsPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || 'Kunne ikke opprette påmelding');
+        throw new Error(data.error || 'Påmeldingen ble ikke lagret. Sjekk feltene og prøv igjen.');
       }
       const data = await res.json();
       // API returns either { registration } or { registrations }
@@ -191,11 +195,13 @@ export default function AdminRegistrationsPage() {
       setShowAddForm(false);
       const waitlisted = newRegs.filter((r: Registration) => r.status === 'waitlist').length;
       toast(
-        waitlisted > 0 ? `Påmelding opprettet — ${waitlisted} satt på venteliste` : 'Påmelding opprettet',
+        waitlisted > 0
+          ? `Påmeldingen er lagt inn — ${waitlisted} er satt på venteliste fordi kurset er fullt`
+          : 'Påmeldingen er lagt inn',
         'success'
       );
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -209,13 +215,13 @@ export default function AdminRegistrationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error('Kunne ikke oppdatere status');
+      if (!res.ok) throw new Error('Statusen ble ikke endret. Prøv igjen.');
       setRegistrations((prev) =>
         prev.map((r) => (r.id === id ? { ...r, status } : r))
       );
-      toast('Status oppdatert', 'success');
+      toast('Statusen er endret', 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setUpdatingId(null);
     }
@@ -231,16 +237,16 @@ export default function AdminRegistrationsPage() {
     setDeletingReg(true);
     try {
       const res = await fetch(`/api/admin/registrations/${deleteTargetId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Kunne ikke slette påmelding');
+      if (!res.ok) throw new Error('Påmeldingen ble ikke slettet. Prøv igjen.');
       setRegistrations((prev) => prev.filter((r) => r.id !== deleteTargetId));
       setSelectedIds((prev) => {
         const next = new Set(prev);
         next.delete(deleteTargetId);
         return next;
       });
-      toast('Påmelding slettet', 'success');
+      toast('Påmeldingen er slettet', 'success');
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setDeletingReg(false);
       setShowDeleteModal(false);
@@ -273,9 +279,12 @@ export default function AdminRegistrationsPage() {
         prev.map((r) => (selectedIds.has(r.id) ? { ...r, status } : r))
       );
       setSelectedIds(new Set());
-      toast(`${selectedIds.size} påmelding(er) oppdatert`, 'success');
+      toast(
+        selectedIds.size === 1 ? '1 påmelding er oppdatert' : `${selectedIds.size} påmeldinger er oppdatert`,
+        'success',
+      );
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt ved masseoppdatering', 'error');
+      toast(err instanceof Error ? err.message : 'Noen påmeldinger ble kanskje ikke oppdatert. Last siden på nytt og sjekk statusene.', 'error');
     } finally {
       setBulkUpdating(false);
     }
@@ -388,7 +397,7 @@ export default function AdminRegistrationsPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Påmeldinger</h1>
+        <PageHeader title="Påmeldinger" description={DESCRIPTION} />
         <TableSkeleton rows={8} cols={11} />
       </div>
     );
@@ -402,23 +411,27 @@ export default function AdminRegistrationsPage() {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Påmeldinger</h1>
-        <div className="flex gap-3">
-          <button
-            onClick={showAddForm ? () => setShowAddForm(false) : openAddForm}
-            className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {showAddForm ? 'Lukk skjema' : '+ Legg til deltaker'}
-          </button>
-          <button
-            onClick={() => window.open('/api/admin/registrations/export')}
-            className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            Eksporter CSV
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Påmeldinger"
+        description={DESCRIPTION}
+        actions={
+          <>
+            <button
+              onClick={showAddForm ? () => setShowAddForm(false) : openAddForm}
+              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              {showAddForm ? 'Lukk skjema' : '+ Legg til deltaker'}
+            </button>
+            <button
+              onClick={() => window.open('/api/admin/registrations/export')}
+              title="Laster ned alle påmeldingene som en fil du kan åpne i Excel"
+              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Last ned til Excel
+            </button>
+          </>
+        }
+      />
 
       {/* Inline add form */}
       {showAddForm && (
@@ -668,7 +681,7 @@ export default function AdminRegistrationsPage() {
                       className="mt-0.5 rounded border-gray-300"
                     />
                     <span>
-                      Overstyr kapasitet og aldersgrense
+                      Meld på selv om kurset er fullt eller deltakeren har feil alder
                       <span className="block text-xs text-gray-500">
                         {isAdultCourse
                           ? 'Bekrefter deltakeren selv om kurset er fullt eller stengt.'
@@ -691,8 +704,8 @@ export default function AdminRegistrationsPage() {
                     className="mt-0.5 rounded border-gray-300"
                   />
                   <span>
-                    Send automatiske e-poster til {personLabel.toLowerCase()}
-                    <span className="block text-xs text-gray-500">Starter de automatiske flytene for ny påmelding, som ved påmelding på nettsiden.</span>
+                    Send de vanlige e-postene til {personLabel.toLowerCase()}
+                    <span className="block text-xs text-gray-500">Samme e-poster som når noen melder seg på via nettsiden (f.eks. bekreftelse og påminnelse). Slå av hvis du bare fører inn en gammel påmelding.</span>
                   </span>
                 </label>
               </fieldset>
@@ -709,7 +722,7 @@ export default function AdminRegistrationsPage() {
                 }`}
               >
                 {submitting
-                  ? 'Legger til...'
+                  ? 'Legger til …'
                   : !isAdultCourse && children.length > 1
                   ? `Legg til ${children.filter((c) => c.firstName.trim()).length} deltakere`
                   : 'Legg til deltaker'}
@@ -789,14 +802,14 @@ export default function AdminRegistrationsPage() {
               disabled={bulkUpdating}
               className="bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
             >
-              {bulkUpdating ? 'Oppdaterer...' : 'Bekreft alle'}
+              {bulkUpdating ? 'Oppdaterer …' : 'Bekreft valgte'}
             </button>
             <button
               onClick={() => bulkUpdateStatus('cancelled')}
               disabled={bulkUpdating}
               className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-1.5 rounded-md text-sm font-medium transition-colors"
             >
-              {bulkUpdating ? 'Oppdaterer...' : 'Avvis alle'}
+              {bulkUpdating ? 'Oppdaterer …' : 'Avlys valgte'}
             </button>
             <button
               onClick={() => setSelectedIds(new Set())}
@@ -811,7 +824,10 @@ export default function AdminRegistrationsPage() {
       {/* Table */}
       {registrations.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-          <p className="text-gray-500 mb-4">Ingen påmeldinger ennå.</p>
+          <p className="text-gray-900 font-medium">Ingen påmeldinger ennå</p>
+          <p className="text-gray-500 mt-1 mb-4">
+            Når noen melder seg på via nettsiden, dukker de opp her. Du kan også legge inn en påmelding selv.
+          </p>
           <button
             onClick={openAddForm}
             className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
@@ -938,9 +954,9 @@ export default function AdminRegistrationsPage() {
       {/* Delete confirmation modal */}
       <ConfirmModal
         open={showDeleteModal}
-        title="Slett påmelding"
-        message="Er du sikker på at du vil slette denne påmeldingen?"
-        confirmLabel="Slett"
+        title="Slette påmeldingen?"
+        message="Påmeldingen fjernes for godt og kan ikke hentes tilbake. Vil du bare melde av deltakeren, sett status til «Avlyst» i stedet – da får neste på ventelisten plassen."
+        confirmLabel="Ja, slett"
         variant="danger"
         loading={deletingReg}
         onConfirm={confirmDeleteRegistration}
@@ -950,9 +966,13 @@ export default function AdminRegistrationsPage() {
       {/* Bulk update confirmation modal */}
       <ConfirmModal
         open={showBulkModal}
-        title={bulkTargetStatus === 'confirmed' ? 'Bekreft påmeldinger' : 'Avvis påmeldinger'}
-        message={`Er du sikker på at du vil ${bulkTargetStatus === 'confirmed' ? 'bekrefte' : 'avvise'} ${selectedIds.size} påmelding(er)?`}
-        confirmLabel={bulkTargetStatus === 'confirmed' ? 'Bekreft alle' : 'Avvis alle'}
+        title={bulkTargetStatus === 'confirmed' ? 'Bekrefte påmeldingene?' : 'Avlyse påmeldingene?'}
+        message={
+          bulkTargetStatus === 'confirmed'
+            ? `${selectedIds.size === 1 ? '1 påmelding' : `${selectedIds.size} påmeldinger`} får status «Bekreftet». Har dere en aktiv e-postflyt for bekreftede påmeldinger, får de det gjelder e-post.`
+            : `${selectedIds.size === 1 ? '1 påmelding' : `${selectedIds.size} påmeldinger`} får status «Avlyst». Ledige plasser går automatisk til de som står på venteliste.`
+        }
+        confirmLabel={bulkTargetStatus === 'confirmed' ? 'Ja, bekreft' : 'Ja, avlys'}
         variant={bulkTargetStatus === 'confirmed' ? 'info' : 'danger'}
         loading={bulkUpdating}
         onConfirm={confirmBulkUpdate}

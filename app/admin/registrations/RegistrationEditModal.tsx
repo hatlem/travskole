@@ -65,7 +65,7 @@ export function RegistrationEditModal({ registration, onClose, onSaved }: Regist
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setError(data.error || 'Kunne ikke lagre endringene');
+        setError(data.error || 'Endringene ble ikke lagret. Sjekk feltene og prøv igjen.');
         setSaving(false);
         return;
       }
