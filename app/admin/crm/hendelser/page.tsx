@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
-import { EVENT_LABELS, eventLabel, eventSourceLabel, groupedEventTypes } from '@/lib/flows/event-labels';
+import { EVENT_LABELS, eventLabel, groupedEventTypes } from '@/lib/flows/event-labels';
 
 interface EventRow {
   id: number;
@@ -22,7 +22,17 @@ interface EventRow {
 
 const SOURCES = ['server', 'web', 'client', 'webhook'] as const;
 
-function EventDetails({ meta }: { meta: string }) {
+/** Hvor hendelsen kom fra, i vanlige ord (kodeverdien vises under «Teknisk»). */
+const SOURCE_LABELS: Record<string, string> = {
+  server: 'Påmeldingssystemet',
+  web: 'Nettsiden',
+  client: 'Besøkendes nettleser',
+  webhook: 'Annen tjeneste (f.eks. betaling)',
+};
+
+const sourceLabel = (source: string): string => SOURCE_LABELS[source] ?? source;
+
+function EventDetails({ meta, type, source }: { meta: string; type: string; source: string }) {
   let formatted = meta;
   try {
     formatted = JSON.stringify(JSON.parse(meta), null, 2);
@@ -31,7 +41,10 @@ function EventDetails({ meta }: { meta: string }) {
   }
   return (
     <details>
-      <summary className="cursor-pointer text-blue-700 hover:underline">Vis detaljer</summary>
+      <summary className="cursor-pointer text-blue-700 hover:underline">Teknisk</summary>
+      <p className="mt-1 text-xs text-gray-500">
+        Kode: <span className="font-mono">{type}</span> · kilde: <span className="font-mono">{source}</span>
+      </p>
       <pre className="mt-1 max-w-md whitespace-pre-wrap break-words text-xs text-gray-600">{formatted}</pre>
     </details>
   );
@@ -68,7 +81,7 @@ function HendelserContent() {
       if (to) params.set('to', to);
       params.set('page', String(page));
       const res = await fetch(`/api/admin/crm/events?${params}`, { signal: controller.signal });
-      if (!res.ok) throw new Error('Kunne ikke laste hendelser');
+      if (!res.ok) throw new Error('Kunne ikke hente loggen. Last siden på nytt om litt.');
       const data = await res.json();
       setEvents(data.events || []);
       setTotal(data.total || 0);
@@ -78,7 +91,7 @@ function HendelserContent() {
       if (err instanceof DOMException && err.name === 'AbortError') return;
       setLoadError(true);
       setEvents([]);
-      toast(err instanceof Error ? err.message : 'Kunne ikke laste hendelser', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke hente loggen. Last siden på nytt om litt.', 'error');
     } finally {
       if (abortRef.current === controller) {
         setLoading(false);
@@ -100,11 +113,12 @@ function HendelserContent() {
       <CrmTabs />
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <select
+          aria-label="Hva skjedde"
           value={type}
           onChange={(e) => { setPage(1); setType(e.target.value); }}
           className="border border-gray-300 rounded-md px-3 py-2 text-sm"
         >
-          <option value="">Alle typer</option>
+          <option value="">Alt som har skjedd</option>
           {groupedEventTypes().map(({ group, types }) => (
             <optgroup key={group} label={group}>
               {types.map((t) => (
@@ -114,13 +128,14 @@ function HendelserContent() {
           ))}
         </select>
         <select
+          aria-label="Hvor det kom fra"
           value={source}
           onChange={(e) => { setPage(1); setSource(e.target.value); }}
           className="border border-gray-300 rounded-md px-3 py-2 text-sm"
         >
-          <option value="">Alle kilder</option>
+          <option value="">Fra alle steder</option>
           {SOURCES.map((s) => (
-            <option key={s} value={s}>{eventSourceLabel(s)}</option>
+            <option key={s} value={s}>{sourceLabel(s)}</option>
           ))}
         </select>
         <label className="text-sm flex items-center gap-1">
@@ -141,14 +156,14 @@ function HendelserContent() {
             className="border border-gray-300 rounded-md px-3 py-2 text-sm"
           />
         </label>
-        <span className="text-sm text-gray-500">{total} hendelser</span>
+        <span className="text-sm text-gray-500">{total} {total === 1 ? 'hendelse' : 'hendelser'}</span>
         {contactId && (
           <span className="ml-auto inline-flex items-center gap-2 rounded-md bg-blue-50 px-3 py-1.5 text-sm text-blue-700">
-            Filtrert på kontakt #{contactId}
+            Viser bare én kontakt
             <button
               type="button"
               onClick={() => { setPage(1); setContactId(''); }}
-              aria-label="Fjern kontaktfilter"
+              aria-label="Vis alle kontakter igjen"
               className="text-blue-500 hover:text-blue-700"
             >
               &times;
@@ -161,14 +176,19 @@ function HendelserContent() {
         <TableSkeleton rows={8} />
       ) : loadError ? (
         <EmptyState
-          title="Kunne ikke laste hendelser"
-          description="Noe gikk galt under henting av hendelser. Prøv igjen."
+          title="Kunne ikke hente loggen"
+          description="Noe gikk galt da hendelsene skulle hentes. Prøv igjen."
           action={{ label: 'Prøv igjen', onClick: () => load() }}
         />
       ) : events.length === 0 ? (
         <EmptyState
-          title="Ingen hendelser"
-          description="Hendelser dukker opp her når besøkende og kunder er aktive."
+          title={type || source || from || to || contactId ? 'Ingenting passer filteret' : 'Ingenting har skjedd ennå'}
+          description={type || source || from || to || contactId
+            ? 'Prøv en annen periode, eller vis alt.'
+            : 'Her dukker det opp en linje hver gang noen melder seg på, åpner en e-post eller besøker nettsiden.'}
+          action={type || source || from || to || contactId
+            ? { label: 'Vis alt', onClick: () => { setPage(1); setType(''); setSource(''); setFrom(''); setTo(''); setContactId(''); } }
+            : undefined}
         />
       ) : (
         <div className="overflow-x-auto border border-gray-200 rounded-lg">
@@ -176,8 +196,8 @@ function HendelserContent() {
             <thead className="bg-gray-50 text-left text-gray-600">
               <tr>
                 <th className="px-4 py-3 font-medium">Tidspunkt</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Kilde</th>
+                <th className="px-4 py-3 font-medium">Hva skjedde</th>
+                <th className="px-4 py-3 font-medium">Hvor</th>
                 <th className="px-4 py-3 font-medium">Kontakt</th>
                 <th className="px-4 py-3 font-medium">Detaljer</th>
               </tr>
@@ -190,9 +210,8 @@ function HendelserContent() {
                   </td>
                   <td className="px-4 py-3">
                     <span className="font-medium">{eventLabel(e.type)}</span>
-                    <span className="block text-xs text-gray-400 font-mono">{e.type}</span>
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{eventSourceLabel(e.source)}</td>
+                  <td className="px-4 py-3 text-gray-600">{sourceLabel(e.source)}</td>
                   <td className="px-4 py-3">
                     {e.contact ? (
                       <Link href={`/admin/crm/kontakter/${e.contact.id}`} className="text-blue-700 hover:underline">
@@ -201,7 +220,7 @@ function HendelserContent() {
                     ) : '—'}
                   </td>
                   <td className="px-4 py-3">
-                    <EventDetails meta={e.meta} />
+                    <EventDetails meta={e.meta} type={e.type} source={e.source} />
                   </td>
                 </tr>
               ))}
