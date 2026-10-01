@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button, ButtonLink } from '@/components/admin/Button';
 import { StatCardsSkeleton } from '@/components/admin/Skeleton';
 import { GjenbookingFane } from './GjenbookingFane';
 import { dayMonthLong, dayMonthShort, monthLabel, wonChartMessage } from '@/lib/crm/insights';
@@ -52,9 +53,6 @@ const weekTooltip = (label: unknown) => (typeof label === 'string' ? `Uka fra ${
 const longDate = (iso: string) =>
   new Date(iso).toLocaleDateString('nb-NO', { timeZone: 'Europe/Oslo', day: 'numeric', month: 'long', year: 'numeric' });
 
-const SECONDARY_BTN =
-  'inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue';
-
 /** Tom graf: samme høyde som grafen, så siden ikke hopper når tallene kommer. */
 function ChartEmpty({ title, text, action }: { title: string; text: string; action?: { label: string; href: string } }) {
   return (
@@ -64,7 +62,7 @@ function ChartEmpty({ title, text, action }: { title: string; text: string; acti
     >
       <p className="font-medium text-gray-800">{title}</p>
       <p className="mt-1 max-w-md text-sm text-gray-600 text-pretty">{text}</p>
-      {action && <Link href={action.href} className={`${SECONDARY_BTN} mt-4`}>{action.label}</Link>}
+      {action && <ButtonLink variant="secondary" size="sm" href={action.href} className="mt-4">{action.label}</ButtonLink>}
     </div>
   );
 }
@@ -458,10 +456,10 @@ function KiFane({ suggestions, patching, onAction }: {
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
-            <button onClick={() => onAction(s.id, 'applied')} disabled={patching !== null}
-              className="bg-green-600 text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50" title="Du har gjort endringen forslaget handler om">Gjort</button>
-            <button onClick={() => onAction(s.id, 'dismissed')} disabled={patching !== null}
-              className="border border-gray-300 px-3 py-1.5 rounded-md text-sm disabled:opacity-50" title="Forslaget fjernes uten at noe endres">Ikke aktuelt</button>
+            <Button size="sm" onClick={() => onAction(s.id, 'applied')} disabled={patching !== null}
+              title="Du har gjort endringen forslaget handler om">Gjort</Button>
+            <Button variant="secondary" size="sm" onClick={() => onAction(s.id, 'dismissed')} disabled={patching !== null}
+              title="Forslaget fjernes uten at noe endres">Ikke aktuelt</Button>
           </div>
         </li>
       ))}

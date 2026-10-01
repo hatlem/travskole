@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { HelpTip } from '@/components/admin/HelpTip';
-import Link from 'next/link';
+import { Button, ButtonLink, buttonClass } from '@/components/admin/Button';
 import { useSession } from 'next-auth/react';
 import { isSuperAdmin } from '@/lib/settings-shared';
 import { SEGMENT_VALUE_LABELS, describeSegmentRules, parseSegmentRules } from '@/lib/crm/segments';
@@ -303,7 +303,9 @@ export default function SegmenterPage() {
         toast(data.error || 'Kunne ikke lage liste av segmentet. Prøv igjen.', 'error');
         return;
       }
-      toast(`Listen «${data.list.name}» er laget med ${countLabel(data.added)}`, 'success');
+      toast(`Listen «${data.list.name}» er laget med ${countLabel(data.added)}`, 'success', {
+        action: { label: 'Vis kontakter', href: `/admin/crm/kontakter?listId=${data.list.id}` },
+      });
       setHighlightListId(data.list.id);
       await load();
       requestAnimationFrame(() => {
@@ -405,22 +407,17 @@ export default function SegmenterPage() {
       <CrmTabs
         actions={
           <>
-            <button
-              type="button"
-              onClick={() => focusNew(listNameRef)}
-              className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
-            >
+            <Button variant="secondary" onClick={() => focusNew(listNameRef)}>
               Ny liste
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant={showSegmentForm ? 'secondary' : 'primary'}
               onClick={openSegmentForm}
               aria-expanded={showSegmentForm}
               aria-controls="nytt-segment"
-              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
             >
               Nytt segment
-            </button>
+            </Button>
           </>
         }
       />
@@ -517,6 +514,7 @@ export default function SegmenterPage() {
                     )}
                     {rules.length > 1 && (
                       <button
+                        type="button"
                         onClick={() => setRules(rules.filter((_, j) => j !== i))}
                         className="text-gray-400 hover:text-red-600 text-sm"
                         aria-label={`Fjern regel ${i + 1}`}
@@ -533,27 +531,21 @@ export default function SegmenterPage() {
                 </p>
               )}
               <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={() => setRules([...rules, emptyRule()])}
-                  className="text-sm text-blue-700 hover:underline"
-                >
+                <Button variant="link" size="sm" onClick={() => setRules([...rules, emptyRule()])}>
                   + Legg til regel
-                </button>
-                <button
-                  type="button"
-                  onClick={closeSegmentForm}
-                  disabled={segmentBusy}
-                  className="ml-auto border border-gray-300 bg-white text-gray-700 px-4 py-1.5 rounded-md text-sm font-medium hover:bg-gray-50"
-                >
+                </Button>
+                <Button variant="secondary" size="sm" onClick={closeSegmentForm} disabled={segmentBusy} className="ml-auto">
                   Avbryt
-                </button>
-                <button
+                </Button>
+                <Button
+                  size="sm"
                   onClick={createSegment}
-                  disabled={!segName.trim() || !rulesValid || segmentBusy}
-                  className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
+                  disabled={!segName.trim() || !rulesValid}
+                  loading={segmentBusy}
+                  loadingLabel="Lagrer …"
                 >
-                  {segmentBusy ? 'Lagrer …' : 'Lagre segment'}
-                </button>
+                  Lagre segment
+                </Button>
               </div>
             </div>
           )}
@@ -564,13 +556,9 @@ export default function SegmenterPage() {
               <p className="text-sm text-gray-500 mt-1 mb-3">
                 Et segment kan for eksempel være «alle som hadde julebord før 2026».
               </p>
-              <button
-                type="button"
-                onClick={openSegmentForm}
-                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-              >
+              <Button variant="secondary" onClick={openSegmentForm}>
                 Lag ditt første segment
-              </button>
+              </Button>
             </div>
           ) : segments.length === 0 ? null : (
             <ul className="space-y-2 mb-6">
@@ -584,29 +572,30 @@ export default function SegmenterPage() {
                     Tar med kontakter der: {describeSegmentRules(parseSegmentRules(s.rules)).join(' · ')}
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
-                    <Link href={`/admin/crm/kontakter?segmentId=${s.id}`} className="text-blue-700 font-medium hover:underline">
+                    <ButtonLink variant="link" size="sm" href={`/admin/crm/kontakter?segmentId=${s.id}`}>
                       Vis kontakter
-                    </Link>
-                    <button
-                      type="button"
+                    </ButtonLink>
+                    <Button
+                      variant="link"
+                      size="sm"
                       onClick={() => setPendingConvert(s)}
                       disabled={s.memberCount === 0}
                       title={s.memberCount === 0 ? 'Segmentet er tomt – ingen å legge i en liste' : 'Lagre hvem som er med akkurat nå, som en fast liste'}
-                      className="text-blue-700 hover:underline disabled:text-gray-400 disabled:no-underline"
                     >
                       Gjør om til liste
-                    </button>
-                    <a href={`/api/admin/crm/segments/${s.id}/export`} download className="text-blue-700 hover:underline">
+                    </Button>
+                    <a href={`/api/admin/crm/segments/${s.id}/export`} download className={buttonClass('link', 'sm')}>
                       Last ned (Excel/CSV)
                     </a>
-                    <button
-                      type="button"
+                    <Button
+                      variant="dangerText"
+                      size="sm"
                       onClick={() => setPendingDelete({ kind: 'segment', id: s.id, name: s.name })}
                       disabled={deletingSegmentId === s.id}
-                      className="ml-auto text-gray-400 hover:text-red-600 disabled:opacity-50"
+                      className="ml-auto"
                     >
                       {deletingSegmentId === s.id ? 'Sletter …' : 'Slett'}
-                    </button>
+                    </Button>
                   </div>
                 </li>
               ))}
@@ -635,13 +624,15 @@ export default function SegmenterPage() {
               maxLength={200}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1 min-w-0"
             />
-            <button
+            <Button
+              variant="secondary"
               onClick={createList}
-              disabled={!listName.trim() || listBusy}
-              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50"
+              disabled={!listName.trim()}
+              loading={listBusy}
+              loadingLabel="Lager …"
             >
-              {listBusy ? 'Lager …' : 'Lag liste'}
-            </button>
+              Lag liste
+            </Button>
           </div>
 
           {lists.length === 0 ? (
@@ -650,13 +641,9 @@ export default function SegmenterPage() {
               <p className="text-sm text-gray-500 mt-1 mb-3">
                 Lag en liste og legg inn kontaktene du vil samle, f.eks. de du vil invitere til et arrangement.
               </p>
-              <button
-                type="button"
-                onClick={() => listNameRef.current?.focus()}
-                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-              >
+              <Button variant="secondary" onClick={() => listNameRef.current?.focus()}>
                 Lag din første liste
-              </button>
+              </Button>
             </div>
           ) : (
             <ul className="space-y-2">
@@ -680,17 +667,18 @@ export default function SegmenterPage() {
                         maxLength={200}
                         className="border border-gray-300 rounded-md px-2 py-1 text-sm flex-1 min-w-0"
                       />
-                      <button
-                        type="button"
+                      <Button
+                        size="sm"
                         onClick={renameList}
-                        disabled={!renaming.name.trim() || renameBusy}
-                        className="bg-bjerke-blue text-white px-3 py-1 rounded-md text-xs disabled:opacity-50"
+                        disabled={!renaming.name.trim()}
+                        loading={renameBusy}
+                        loadingLabel="Lagrer …"
                       >
-                        {renameBusy ? 'Lagrer …' : 'Lagre'}
-                      </button>
-                      <button type="button" onClick={() => setRenaming(null)} className="text-xs text-gray-600 px-1">
+                        Lagre
+                      </Button>
+                      <Button variant="link" size="sm" onClick={() => setRenaming(null)}>
                         Avbryt
-                      </button>
+                      </Button>
                     </div>
                   ) : (
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -699,32 +687,29 @@ export default function SegmenterPage() {
                     </div>
                   )}
                   <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs">
-                    <button
-                      type="button"
+                    <Button
+                      variant="link"
+                      size="sm"
                       onClick={() => setMemberListId(memberListId === l.id ? null : l.id)}
                       aria-expanded={memberListId === l.id}
-                      className="text-blue-700 font-medium hover:underline"
                     >
                       {memberListId === l.id ? 'Lukk' : 'Legg til kontakter'}
-                    </button>
-                    <Link href={`/admin/crm/kontakter?listId=${l.id}`} className="text-blue-700 hover:underline">
+                    </Button>
+                    <ButtonLink variant="link" size="sm" href={`/admin/crm/kontakter?listId=${l.id}`}>
                       Vis kontakter
-                    </Link>
-                    <button
-                      type="button"
-                      onClick={() => setRenaming({ id: l.id, name: l.name })}
-                      className="text-blue-700 hover:underline"
-                    >
+                    </ButtonLink>
+                    <Button variant="link" size="sm" onClick={() => setRenaming({ id: l.id, name: l.name })}>
                       Endre navn
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="dangerText"
+                      size="sm"
                       onClick={() => setPendingDelete({ kind: 'list', id: l.id, name: l.name })}
                       disabled={deletingListId === l.id}
-                      className="ml-auto text-gray-400 hover:text-red-600 disabled:opacity-50"
+                      className="ml-auto"
                     >
                       {deletingListId === l.id ? 'Sletter …' : 'Slett'}
-                    </button>
+                    </Button>
                   </div>
 
                   {memberListId === l.id && (
@@ -753,13 +738,15 @@ export default function SegmenterPage() {
               aria-label="E-postadresse som ikke skal kontaktes"
               className="border border-gray-300 rounded-md px-3 py-2 text-sm flex-1 min-w-0"
             />
-            <button
+            <Button
+              variant="secondary"
               onClick={addSuppression}
-              disabled={!suppressEmail.trim() || suppressBusy}
-              className="bg-gray-800 text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+              disabled={!suppressEmail.trim()}
+              loading={suppressBusy}
+              loadingLabel="Legger til …"
             >
-              {suppressBusy ? 'Legger til …' : 'Legg på listen'}
-            </button>
+              Legg på listen
+            </Button>
           </div>
           {suppressions.length === 0 ? (
             <p className="text-sm text-gray-500">Ingen e-postadresser her ennå. Adresser som melder seg av, havner her automatisk.</p>
@@ -769,13 +756,14 @@ export default function SegmenterPage() {
                 <li key={s.id} className="flex items-center justify-between gap-3 text-sm py-1 border-b border-gray-100">
                   <span className="min-w-0 break-all">{s.email} <span className="text-gray-500 text-xs">({SUPPRESSION_REASONS[s.reason] ?? s.reason})</span></span>
                   {canRemoveSuppression && (
-                    <button
+                    <Button
+                      variant="dangerText"
+                      size="sm"
                       onClick={() => setPendingUnsuppress(s)}
                       disabled={removingEmail === s.email}
-                      className="text-gray-400 hover:text-red-600 text-xs disabled:opacity-50"
                     >
                       {removingEmail === s.email ? 'Fjerner …' : 'Fjern'}
-                    </button>
+                    </Button>
                   )}
                 </li>
               ))}

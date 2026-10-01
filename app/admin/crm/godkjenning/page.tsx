@@ -7,6 +7,7 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
 import { FactList, SanitizedHtmlPane } from '@/components/admin/crm/AiEmailCompare';
 
 type View = 'pending' | 'handled';
@@ -128,7 +129,7 @@ export default function GodkjenningPage() {
 
       <div className="flex gap-1 border-b border-gray-200 mb-6" role="group" aria-label="Vis">
         {([['pending', 'Venter på deg'], ['handled', 'Ferdig behandlet']] as const).map(([key, label]) => (
-          <button key={key} onClick={() => setView(key)} aria-pressed={view === key}
+          <button key={key} type="button" onClick={() => setView(key)} aria-pressed={view === key}
             className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px ${
               view === key ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-600 hover:bg-gray-50'
             }`}>
@@ -237,22 +238,20 @@ function ReviewCard({ review, busy, disabled, onApprove, onSendOriginal, onSkip 
 
       {pending && (
         <footer className="flex flex-wrap items-center gap-2 pt-1">
-          <button onClick={() => onApprove(edited ? draft : undefined)} disabled={disabled || draft.trim() === ''}
-            className="bg-green-600 text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50">
-            {busy ? 'Sender …' : edited ? 'Send min redigerte KI-tekst' : 'Send KI-teksten'}
-          </button>
-          <button onClick={onSendOriginal} disabled={disabled}
-            className="border border-gray-300 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50 disabled:opacity-50">
+          <Button size="sm" onClick={() => onApprove(edited ? draft : undefined)} disabled={disabled || draft.trim() === ''}
+            loading={busy} loadingLabel="Sender …">
+            {edited ? 'Send min redigerte KI-tekst' : 'Send KI-teksten'}
+          </Button>
+          <Button variant="secondary" size="sm" onClick={onSendOriginal} disabled={disabled}>
             Send originalteksten
-          </button>
-          <button onClick={onSkip} disabled={disabled}
-            className="border border-gray-300 px-3 py-1.5 rounded-md text-sm text-red-700 hover:bg-red-50 disabled:opacity-50">
+          </Button>
+          <Button variant="dangerText" size="sm" onClick={onSkip} disabled={disabled}>
             Hopp over
-          </button>
-          <button onClick={() => { setEditing((v) => !v); setDraft(review.aiBody); }} disabled={disabled}
-            className="ml-auto text-sm text-purple-700 hover:underline disabled:opacity-50">
+          </Button>
+          <Button variant="link" size="sm" onClick={() => { setEditing((v) => !v); setDraft(review.aiBody); }} disabled={disabled}
+            className="ml-auto">
             {editing ? 'Avbryt redigering' : 'Rett i KI-teksten'}
-          </button>
+          </Button>
         </footer>
       )}
     </article>

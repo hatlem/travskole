@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
-import Link from 'next/link';
+import { ButtonLink } from '@/components/admin/Button';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { guessColumns } from '@/lib/crm/import/columns';
@@ -122,12 +122,9 @@ export default function ImportPage() {
   return (
     <div>
       <CrmTabs />
-      <Link
-        href="/admin/crm/kontakter"
-        className="inline-block mb-4 text-sm text-blue-700 hover:underline rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-      >
+      <ButtonLink variant="link" size="sm" href="/admin/crm/kontakter" className="mb-4">
         ← Tilbake til kontakter
-      </Link>
+      </ButtonLink>
       <div className="max-w-5xl space-y-10">
         <section>
           <div className="mb-4">

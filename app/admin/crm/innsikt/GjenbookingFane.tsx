@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { Button } from '@/components/admin/Button';
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
@@ -101,8 +102,8 @@ export function GjenbookingFane() {
                   bedrifter: report.organizations[i]?.rebookingRate ?? null,
                 }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-                  <YAxis unit=" %" domain={[0, 100]} tick={{ fontSize: 11 }} />
+                  <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                  <YAxis unit=" %" domain={[0, 100]} tick={{ fontSize: 12 }} />
                   <Tooltip formatter={(v) => (typeof v === 'number' ? `${v.toLocaleString('nb-NO')} %` : '–')} />
                   <Legend />
                   <Bar dataKey="kontakter" name="Kontakter" fill="#2563eb" radius={[4, 4, 0, 0]} />
@@ -115,8 +116,8 @@ export function GjenbookingFane() {
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={report.contacts.map((c) => ({ year: String(c.year), gjengangere: c.returningValue, nye: c.newValue }))}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="year" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => v.toLocaleString('nb-NO')} />
+                  <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={(v: number) => v.toLocaleString('nb-NO')} />
                   <Tooltip formatter={(v) => (typeof v === 'number' ? kr(v) : v)} />
                   <Legend />
                   <Bar dataKey="gjengangere" name="Gjengangere" stackId="v" fill="#16a34a" />
@@ -145,7 +146,7 @@ export function GjenbookingFane() {
               {report.byEventType.map((t) => (
                 <tr key={t.eventType} className="border-b last:border-0">
                   <td className="p-3">
-                    <button onClick={() => setEventType(t.eventType)} className="text-blue-700 hover:underline">{typeLabel(t.eventType)}</button>
+                    <Button variant="link" size="sm" onClick={() => setEventType(t.eventType)}>{typeLabel(t.eventType)}</Button>
                   </td>
                   <td className="p-3 tabular-nums">{t.contacts.previousYearCustomers}</td>
                   <td className="p-3 tabular-nums">{t.contacts.returning}</td>

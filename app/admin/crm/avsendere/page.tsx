@@ -6,6 +6,7 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { EmptyState } from '@/components/admin/EmptyState';
 import { useToast } from '@/components/admin/Toast';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
 
 interface SenderIdentity {
   id: number;
@@ -204,21 +205,18 @@ export default function AvsenderePage() {
             aria-label="Navn mottakeren ser"
             className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm text-gray-900 sm:w-56 sm:flex-none"
           />
-          <button
-            onClick={() => saveName(identity)}
-            disabled={!editName.trim() || busy}
-            className="rounded-md bg-bjerke-blue px-3 py-1.5 text-xs font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
-          >
-            {busy ? 'Lagrer …' : 'Lagre'}
-          </button>
-          <button onClick={() => setEditingId(null)} className="px-1 text-xs text-gray-600 hover:underline">
+          <Button size="sm" onClick={() => saveName(identity)} disabled={!editName.trim()} loading={busy} loadingLabel="Lagrer …">
+            Lagre
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setEditingId(null)}>
             Avbryt
-          </button>
+          </Button>
         </div>
       );
     }
     return (
       <button
+        type="button"
         onClick={() => startEdit(identity)}
         className="text-left hover:underline"
         title="Endre navnet mottakeren ser"
@@ -231,6 +229,7 @@ export default function AvsenderePage() {
   function renderToggle(identity: SenderIdentity) {
     return (
       <button
+        type="button"
         onClick={() => toggleActive(identity)}
         disabled={busyId !== null}
         role="switch"
@@ -255,33 +254,30 @@ export default function AvsenderePage() {
       return (
         <span className="inline-flex flex-wrap items-center gap-2 text-xs">
           <span className="text-gray-600">Slette {identity.email} for godt?</span>
-          <button
-            onClick={() => remove(identity.id)}
-            disabled={busy}
-            className="rounded-md bg-red-600 px-2.5 py-1 font-medium text-white hover:bg-red-700 disabled:opacity-50"
-          >
-            {busy ? 'Sletter …' : 'Ja, slett'}
-          </button>
-          <button onClick={() => setConfirmDeleteId(null)} disabled={busy} className="text-gray-600 hover:underline">
+          <Button variant="danger" size="sm" onClick={() => remove(identity.id)} loading={busy} loadingLabel="Sletter …">
+            Ja, slett
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => setConfirmDeleteId(null)} disabled={busy}>
             Avbryt
-          </button>
+          </Button>
         </span>
       );
     }
     return (
-      <button
+      <Button
+        variant="dangerText"
+        size="sm"
         onClick={() => {
           setEditingId(null);
           setConfirmDeleteId(identity.id);
         }}
         disabled={busyId !== null}
-        className="text-xs text-gray-500 hover:text-red-600 disabled:opacity-50"
         title={
           identity.sendCount > 0 ? 'Avsendere som har sendt e-post, kan ikke slettes — slå den av i stedet' : undefined
         }
       >
         Slett
-      </button>
+      </Button>
     );
   }
 
@@ -301,18 +297,17 @@ export default function AvsenderePage() {
       <CrmTabs
         actions={
           canManage && !loading && !loadError ? (
-            <button
-              type="button"
+            <Button
+              variant={showAdd ? 'secondary' : 'primary'}
               onClick={() => (showAdd ? closeAddForm() : openAddForm())}
               aria-expanded={showAdd}
               aria-controls="ny-avsender"
-              className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
               </svg>
               Legg til avsender
-            </button>
+            </Button>
           ) : undefined
         }
       />
@@ -372,21 +367,17 @@ export default function AvsenderePage() {
                 />
               </label>
               <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={closeAddForm}
-                  disabled={creating}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-                >
+                <Button variant="secondary" onClick={closeAddForm} disabled={creating}>
                   Avbryt
-                </button>
-                <button
+                </Button>
+                <Button
                   type="submit"
-                  disabled={!newEmail.trim() || !newName.trim() || creating}
-                  className="rounded-md bg-bjerke-blue px-4 py-2 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+                  disabled={!newEmail.trim() || !newName.trim()}
+                  loading={creating}
+                  loadingLabel="Legger til …"
                 >
-                  {creating ? 'Legger til …' : 'Legg til avsender'}
-                </button>
+                  Legg til avsender
+                </Button>
               </div>
               {domainHint && <p className="w-full text-xs text-gray-500">Adressen må slutte på: {domainHint}</p>}
             </form>

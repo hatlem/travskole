@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { TagInput } from '@/components/admin/crm/TagInput';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
 import { assignColumn, columnProblems, columnSamples, consentConfirmationText, headerLabel } from '@/lib/crm/import/columns';
 import { CONTACT_STAGE_LABELS, CONTACT_STAGES, FIELD_LABELS, IMPORT_FIELDS, type ColumnTarget, type ContactStage } from '@/lib/crm/import/types';
 import type { ImportSource } from '@/lib/crm/import/source';
@@ -217,17 +218,17 @@ export function ColumnsStep({
       </section>
 
       <div className="flex items-center justify-between gap-3">
-        <button type="button" onClick={onBack} disabled={busy} className="px-4 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+        <Button variant="secondary" onClick={onBack} disabled={busy}>
           Tilbake
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
           onClick={onNext}
-          disabled={busy || problems.length > 0 || listInvalid}
-          className="bg-bjerke-blue text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
+          disabled={problems.length > 0 || listInvalid}
+          loading={busy}
+          loadingLabel="Sjekker mot kontaktene dine …"
         >
-          {busy ? 'Sjekker mot kontaktene dine …' : 'Neste: se over'}
-        </button>
+          Neste: se over
+        </Button>
       </div>
     </div>
   );

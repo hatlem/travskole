@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
+import { Button } from '@/components/admin/Button';
 import type { BackfillCursor } from '@/lib/crm/backfill';
 
 interface Missing { bookings: number; registrations: number }
@@ -134,13 +135,9 @@ export function HistoryBackfillCard() {
         </div>
       )}
 
-      <button
-        onClick={run}
-        disabled={running || !remaining}
-        className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
-      >
-        {running ? 'Henter inn …' : 'Hent inn historikk'}
-      </button>
+      <Button variant="secondary" onClick={run} disabled={!remaining} loading={running} loadingLabel="Henter inn …">
+        Hent inn historikk
+      </Button>
 
       {summary && (
         <div className="mt-4 border border-green-200 bg-green-50 rounded-lg p-3 text-sm">

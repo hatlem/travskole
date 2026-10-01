@@ -9,6 +9,7 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useToast } from '@/components/admin/Toast';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
 import { dateInputToIso, isoToDateInput } from '@/lib/crm/form-utils';
@@ -214,16 +215,12 @@ export default function OppgaverPage() {
     <div>
       <CrmTabs
         actions={
-          <button
-            type="button"
-            onClick={() => titleInputRef.current?.focus()}
-            className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
-          >
+          <Button onClick={() => titleInputRef.current?.focus()}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Ny oppgave
-          </button>
+          </Button>
         }
       />
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -296,13 +293,15 @@ export default function OppgaverPage() {
           onChange={(v) => { setNewAssignee(v); setNewAssigneeTouched(true); }}
           className="border border-gray-300 rounded-md px-2 py-2 text-sm bg-white"
         />
-        <button
+        <Button
           type="submit"
-          disabled={!title.trim() || creating}
-          className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+          variant="secondary"
+          disabled={!title.trim()}
+          loading={creating}
+          loadingLabel="Legger til …"
         >
-          {creating ? 'Legger til …' : 'Legg til oppgave'}
-        </button>
+          Legg til oppgave
+        </Button>
       </form>
 
       {loading ? (
@@ -358,14 +357,15 @@ export default function OppgaverPage() {
                       </label>
                     </div>
                     <div className="flex justify-end gap-2">
-                      <button onClick={() => setEditing(null)} disabled={savingEdit} className="px-3 py-2 text-gray-600">Avbryt</button>
-                      <button
+                      <Button variant="secondary" onClick={() => setEditing(null)} disabled={savingEdit}>Avbryt</Button>
+                      <Button
                         onClick={() => saveEdit(t)}
-                        disabled={savingEdit || !editing.title.trim()}
-                        className="rounded-md bg-bjerke-blue px-4 py-2 font-medium text-white disabled:opacity-50"
+                        disabled={!editing.title.trim()}
+                        loading={savingEdit}
+                        loadingLabel="Lagrer …"
                       >
-                        {savingEdit ? 'Lagrer …' : 'Lagre'}
-                      </button>
+                        Lagre
+                      </Button>
                     </div>
                   </div>
                 ) : (
@@ -395,9 +395,9 @@ export default function OppgaverPage() {
                           </span>
                         )}
                       </p>
-                      <div className="mt-2 flex gap-1 text-xs">
-                        <button onClick={() => startEdit(t)} className="rounded-md px-2 py-1.5 text-blue-700 hover:bg-blue-50">Rediger</button>
-                        <button onClick={() => setDeleteTarget(t)} className="rounded-md px-2 py-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600">Slett</button>
+                      <div className="mt-2 flex gap-4">
+                        <Button variant="link" size="sm" onClick={() => startEdit(t)}>Rediger</Button>
+                        <Button variant="dangerText" size="sm" onClick={() => setDeleteTarget(t)}>Slett</Button>
                       </div>
                     </div>
                   </div>
@@ -492,19 +492,25 @@ export default function OppgaverPage() {
                     <td className="px-4 py-3 text-right whitespace-nowrap text-xs">
                       {isEditing ? (
                         <>
-                          <button onClick={() => setEditing(null)} disabled={savingEdit} className="text-gray-500 px-2">Avbryt</button>
-                          <button
-                            onClick={() => saveEdit(t)}
-                            disabled={savingEdit || !editing.title.trim()}
-                            className="bg-bjerke-blue text-white px-3 py-1 rounded-md disabled:opacity-50"
-                          >
-                            {savingEdit ? 'Lagrer …' : 'Lagre'}
-                          </button>
+                          <span className="inline-flex items-center gap-2">
+                            <Button variant="secondary" size="sm" onClick={() => setEditing(null)} disabled={savingEdit}>Avbryt</Button>
+                            <Button
+                              size="sm"
+                              onClick={() => saveEdit(t)}
+                              disabled={!editing.title.trim()}
+                              loading={savingEdit}
+                              loadingLabel="Lagrer …"
+                            >
+                              Lagre
+                            </Button>
+                          </span>
                         </>
                       ) : (
                         <>
-                          <button onClick={() => startEdit(t)} className="text-blue-700 hover:underline px-2">Rediger</button>
-                          <button onClick={() => setDeleteTarget(t)} className="text-gray-400 hover:text-red-600 px-2">Slett</button>
+                          <span className="inline-flex items-center gap-4">
+                            <Button variant="link" size="sm" onClick={() => startEdit(t)}>Rediger</Button>
+                            <Button variant="dangerText" size="sm" onClick={() => setDeleteTarget(t)}>Slett</Button>
+                          </span>
                         </>
                       )}
                     </td>

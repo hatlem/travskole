@@ -1,6 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
+import { Button } from '@/components/admin/Button';
 import { buildTemplateCsv } from '@/lib/crm/import/report';
 import { readImportBytes, readImportText, rejectFile, type ImportSource } from '@/lib/crm/import/source';
 import { downloadCsv } from './download';
@@ -120,14 +121,9 @@ export function UploadStep({ onLoaded }: UploadStepProps) {
                 placeholder={'Navn\tE-post\tMobil\nKari Nordmann\tkari@eksempel.no\t912 34 567'}
                 className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-xs"
               />
-              <button
-                type="button"
-                onClick={submitPasted}
-                disabled={!pasted.trim()}
-                className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
-              >
+              <Button onClick={submitPasted} disabled={!pasted.trim()}>
                 Bruk det jeg limte inn
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -148,13 +144,9 @@ export function UploadStep({ onLoaded }: UploadStepProps) {
           </table>
         </div>
         <p className="text-gray-600">Hver kontakt trenger e-post eller mobilnummer. Resten er valgfritt.</p>
-        <button
-          type="button"
-          onClick={() => downloadCsv('kontakter-mal.csv', buildTemplateCsv())}
-          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 font-medium text-gray-800 hover:bg-gray-100"
-        >
+        <Button variant="secondary" onClick={() => downloadCsv('kontakter-mal.csv', buildTemplateCsv())} className="w-full">
           Last ned mal
-        </button>
+        </Button>
         <p className="text-xs text-gray-500">Maks 5 000 kontakter per fil.</p>
       </aside>
     </div>

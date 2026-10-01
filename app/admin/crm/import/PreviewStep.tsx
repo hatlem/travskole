@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react';
 import { Pagination } from '@/components/admin/Pagination';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { Button } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 import { resolveActions } from '@/lib/crm/import/plan';
 import { toDecisionList } from './settings';
 import {
@@ -135,12 +137,12 @@ export function PreviewStep({ plan, policy, decisions, onDecisionsChange, busy, 
           {filter === 'all' ? `Viser alle ${plan.rows.length.toLocaleString('nb-NO')} rader` : `Viser ${filtered.length.toLocaleString('nb-NO')} rader`}
         </span>
         {filter !== 'all' && (
-          <button type="button" onClick={() => chooseFilter('all')} className="text-blue-700 hover:underline">Vis alle</button>
+          <Button variant="link" size="sm" onClick={() => chooseFilter('all')}>Vis alle</Button>
         )}
         {counts.new > 0 && (
           <span className="ml-auto flex gap-3">
-            <button type="button" onClick={() => setNewRows(true)} className="text-blue-700 hover:underline">Velg alle nye</button>
-            <button type="button" onClick={() => setNewRows(false)} className="text-blue-700 hover:underline">Velg bort alle nye</button>
+            <Button variant="link" size="sm" onClick={() => setNewRows(true)}>Velg alle nye</Button>
+            <Button variant="link" size="sm" onClick={() => setNewRows(false)}>Velg bort alle nye</Button>
           </span>
         )}
       </div>
@@ -170,19 +172,19 @@ export function PreviewStep({ plan, policy, decisions, onDecisionsChange, busy, 
       <Pagination total={filtered.length} page={page} perPage={PAGE_SIZE} onChange={setPage} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <button type="button" onClick={onBack} disabled={busy} className="px-4 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+        <Button variant="secondary" onClick={onBack} disabled={busy}>
           Tilbake
-        </button>
+        </Button>
         <div className="flex items-center gap-3">
           {toSkip > 0 && <span className="text-sm text-gray-500">{toSkip} rader hoppes over</span>}
-          <button
-            type="button"
+          <Button
             onClick={() => setConfirmOpen(true)}
-            disabled={busy || total === 0}
-            className="bg-green-600 text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-green-700 disabled:opacity-50"
+            disabled={total === 0}
+            loading={busy}
+            loadingLabel="Importerer …"
           >
-            {busy ? 'Importerer …' : `Importer ${total.toLocaleString('nb-NO')} ${total === 1 ? 'kontakt' : 'kontakter'}`}
-          </button>
+            {`Importer ${total.toLocaleString('nb-NO')} ${total === 1 ? 'kontakt' : 'kontakter'}`}
+          </Button>
         </div>
       </div>
 
@@ -231,14 +233,14 @@ function PreviewRow({ row, policy, decision, onDecision }: PreviewRowProps) {
       </td>
       <td className="px-3 py-2 tabular-nums text-gray-500">{row.row}</td>
       <td className="px-3 py-2">
-        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap ${style.badge}`} title={STATUS_HELP[row.status]}>
+        <Badge className={`gap-1 ${style.badge}`} title={STATUS_HELP[row.status]}>
           <span aria-hidden className="font-bold">{style.icon}</span>
           {SHORT_LABEL[row.status]}
-        </span>
+        </Badge>
         {row.suppressed && (
-          <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800 whitespace-nowrap" title="Står på ikke-kontakt-listen">
+          <Badge className="mt-1 gap-1 bg-purple-100 text-purple-800" title="Står på ikke-kontakt-listen">
             <span aria-hidden>⊘</span> Meldt av e-post
-          </span>
+          </Badge>
         )}
       </td>
       <td className="px-3 py-2">

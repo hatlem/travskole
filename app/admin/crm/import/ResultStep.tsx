@@ -1,6 +1,6 @@
 'use client';
 
-import Link from 'next/link';
+import { Button, ButtonLink } from '@/components/admin/Button';
 import { buildErrorReport } from '@/lib/crm/import/report';
 import type { ImportResult } from '@/lib/crm/import/types';
 import type { ImportSource } from '@/lib/crm/import/source';
@@ -58,28 +58,24 @@ export function ResultStep({ result, source, list, onRestart }: ResultStepProps)
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
           <p className="font-medium">{result.problems.length} rader ble ikke importert.</p>
           <p className="mt-1">Last ned dem, rett opp i Excel og importer fila på nytt. Kontakter som allerede er importert blir bare gjenkjent.</p>
-          <button
-            type="button"
-            onClick={downloadProblems}
-            className="mt-3 rounded-md border border-amber-300 bg-white px-3 py-1.5 font-medium text-amber-900 hover:bg-amber-100"
-          >
+          <Button variant="secondary" size="sm" onClick={downloadProblems} className="mt-3">
             Last ned rader som ikke ble importert (CSV)
-          </button>
+          </Button>
         </div>
       )}
 
       <div className="flex flex-wrap gap-3">
-        <Link href="/admin/crm/kontakter" className="bg-bjerke-blue text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark">
+        <ButtonLink href="/admin/crm/kontakter">
           Gå til kontaktene
-        </Link>
+        </ButtonLink>
         {list && (
-          <Link href="/admin/crm/segmenter" className="px-5 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+          <ButtonLink variant="secondary" href="/admin/crm/segmenter">
             Se listene
-          </Link>
+          </ButtonLink>
         )}
-        <button type="button" onClick={onRestart} className="px-5 py-2 rounded-md border border-gray-300 bg-white text-sm font-medium text-gray-700 hover:bg-gray-50">
+        <Button variant="secondary" onClick={onRestart}>
           Importer flere
-        </button>
+        </Button>
       </div>
     </div>
   );
