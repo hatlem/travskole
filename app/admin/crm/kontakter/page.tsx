@@ -24,6 +24,7 @@ interface ContactRow {
 }
 
 interface Segment { id: number; name: string }
+interface ContactList { id: number; name: string }
 
 const STAGE_LABELS: Record<string, string> = {
   lead: 'Interessent', active: 'Aktiv', customer: 'Kunde', dormant: 'Sovende', lost: 'Tapt',
@@ -32,6 +33,7 @@ const STAGE_LABELS: Record<string, string> = {
 export default function KontakterPage() {
   const [contacts, setContacts] = useState<ContactRow[]>([]);
   const [segments, setSegments] = useState<Segment[]>([]);
+  const [lists, setLists] = useState<ContactList[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
@@ -40,6 +42,7 @@ export default function KontakterPage() {
   const [q, setQ] = useState('');
   const [stage, setStage] = useState('');
   const [segmentId, setSegmentId] = useState('');
+  const [listId, setListId] = useState('');
   const [tag, setTag] = useState('');
   const [owner, setOwner] = useState('');
   const [availableTags, setAvailableTags] = useState<string[]>([]);
@@ -60,6 +63,7 @@ export default function KontakterPage() {
       if (q) params.set('q', q);
       if (stage) params.set('stage', stage);
       if (segmentId) params.set('segmentId', segmentId);
+      if (listId) params.set('listId', listId);
       if (tag) params.set('tag', tag);
       if (owner) params.set('owner', owner);
       params.set('page', String(page));
@@ -81,7 +85,7 @@ export default function KontakterPage() {
         setLoading(false);
       }
     }
-  }, [q, stage, segmentId, tag, owner, page, toast]);
+  }, [q, stage, segmentId, listId, tag, owner, page, toast]);
 
   useEffect(() => {
     const t = setTimeout(load, q ? 300 : 0);
@@ -96,6 +100,10 @@ export default function KontakterPage() {
     fetch('/api/admin/crm/segments')
       .then((r) => r.json())
       .then((d) => setSegments(d.segments || []));
+    fetch('/api/admin/crm/lists')
+      .then((r) => r.json())
+      .then((d) => setLists(d.lists || []))
+      .catch(() => {});
   }, []);
 
   async function createContact() {
@@ -151,6 +159,17 @@ export default function KontakterPage() {
           <option value="">Alle segmenter</option>
           {segments.map((s) => (
             <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+        <select
+          value={listId}
+          onChange={(e) => { setPage(1); setListId(e.target.value); }}
+          aria-label="Filtrer på liste"
+          className="border border-gray-300 rounded-md px-3 py-2 text-sm max-w-[12rem]"
+        >
+          <option value="">Alle lister</option>
+          {lists.map((l) => (
+            <option key={l.id} value={l.id}>{l.name}</option>
           ))}
         </select>
         <select

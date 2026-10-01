@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
   const stage = sp.get('stage') ?? '';
   const tag = sp.get('tag')?.trim() ?? '';
   const segmentId = Number(sp.get('segmentId')) || null;
+  const listId = Number(sp.get('listId')) || null;
   const ownerFilter = parseOwnerFilter(sp.get('owner'), Number(session.user.id) || null);
   const page = Math.max(1, Number(sp.get('page')) || 1);
 
@@ -34,6 +35,7 @@ export async function GET(request: NextRequest) {
       ],
     }),
     ...(stage && { stage }),
+    ...(listId && { memberships: { some: { listId } } }),
     ...ownerFilterWhere(ownerFilter, 'ownerId'),
   };
 

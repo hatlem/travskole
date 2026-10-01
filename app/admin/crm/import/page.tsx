@@ -189,6 +189,11 @@ export default function ImportPage() {
               ))}
             </div>
             <p className="text-sm text-gray-500 mt-2">Navn eller e-post må være valgt.</p>
+            {listId && (
+              <p className="text-xs text-gray-500 mt-4">
+                Nye medlemmer starter aktive flyter med utløseren «Lagt til i CRM-liste» for denne listen.
+              </p>
+            )}
             <div className="flex items-end gap-3 mt-4">
               <label className="text-sm">
                 <span className="block text-gray-600 mb-1">Legg til i liste (valgfritt)</span>

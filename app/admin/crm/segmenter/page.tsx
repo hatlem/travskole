@@ -306,7 +306,8 @@ export default function SegmenterPage() {
         toast(data.error || 'Kunne ikke legge til medlemmer', 'error');
         return;
       }
-      toast(`${data.added} kontakt${data.added === 1 ? '' : 'er'} lagt til i listen`, 'success');
+      const already = data.alreadyMember > 0 ? ` (${data.alreadyMember} var allerede med)` : '';
+      toast(`${data.added} kontakt${data.added === 1 ? '' : 'er'} lagt til i listen${already}`, 'success');
       setSelectedContactIds([]);
       setMemberQuery('');
       setMemberResults([]);
