@@ -12,7 +12,6 @@ import {
   consentTextOr,
   formatKr,
   formatLongDate,
-  isMeaningfulConsentText,
   participantsLabel,
   type CourseSummary,
 } from '@/lib/buyer-display';
@@ -214,7 +213,6 @@ export default function RequestForm({ courseId, courseType, summary, requireLogi
       optional: true,
     },
   ];
-  const termsText = isMeaningfulConsentText(settings.consent_terms_text) ? settings.consent_terms_text : '';
 
   const summaryRows: SummaryRow[] = [
     { label: 'Tid', value: form.preferredDate ? `Ønsket ${formatLongDate(`${form.preferredDate}T12:00:00`)}` : 'Avtales etter forespørsel' },
@@ -238,7 +236,7 @@ export default function RequestForm({ courseId, courseType, summary, requireLogi
               {t('request.intro')} {t('request.response_time')}
             </p>
             <p className="mt-3 inline-flex rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-bjerke-blue lg:hidden">
-              Pris: {summary.priceKr != null && summary.priceKr > 0 ? `${summary.priceText} per deltaker` : summary.priceText}
+              {summary.priceKr != null && summary.priceKr > 0 ? `Pris: ${summary.priceText} per deltaker` : summary.priceText}
             </p>
 
             {needsLogin && (
@@ -319,15 +317,14 @@ export default function RequestForm({ courseId, courseType, summary, requireLogi
 
                 {consents.terms ? (
                   <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
-                    {termsText && <p id="consentTerms-text" className="mb-1 text-sm leading-relaxed text-gray-800 text-pretty">{termsText}</p>}
-                    <label className="flex min-h-11 cursor-pointer items-start gap-3 pt-2">
+                    <label className="flex min-h-11 cursor-pointer items-start gap-3">
                       <input
                         id="consentTerms"
                         type="checkbox"
                         checked={form.consentTerms}
                         onChange={(e) => set('consentTerms', e.target.checked)}
                         className={checkboxClass}
-                        {...a11y('consentTerms', termsText ? 'consentTerms-text' : undefined)}
+                        {...a11y('consentTerms')}
                       />
                       <span className="text-sm font-medium text-gray-900">
                         Jeg har lest og godtar{' '}

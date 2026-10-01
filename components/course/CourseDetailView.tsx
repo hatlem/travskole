@@ -46,7 +46,7 @@ export function CourseDetailView({ course, settings, occupied }: CourseDetailVie
 
   const learningPoints = lines(isAdult ? settings.course_learning_points_adult : settings.course_learning_points);
   const packingList = lines(isAdult ? settings.course_packing_list_adult : settings.course_packing_list);
-  const cancellation = cancellationExcerpt(settings.consent_terms_text);
+  const cancellation = isRequest ? null : cancellationExcerpt(settings.consent_terms_text);
   const left = occupied === null ? null : spotsLeft(course.maxParticipants, occupied);
   const priceText = priceLabel(course);
 
@@ -63,7 +63,8 @@ export function CourseDetailView({ course, settings, occupied }: CourseDetailVie
   ];
   if (settings.contact_address) facts.push({ label: t('course.place'), value: settings.contact_address });
   facts.push({ label: 'For', value: audienceLabel(course) });
-  facts.push({ label: t('course.registration_label'), value: isAdult ? t('course.registration_adult') : t('course.registration_child') });
+  if (isRequest) facts.push({ label: 'Slik gjør du', value: 'Send en forespørsel, så avtaler vi tid' });
+  else facts.push({ label: t('course.registration_label'), value: isAdult ? t('course.registration_adult') : t('course.registration_child') });
 
   return (
     <main className={`min-h-screen bg-gray-50 ${cta ? 'pb-28 md:pb-0' : ''}`}>
@@ -93,7 +94,7 @@ export function CourseDetailView({ course, settings, occupied }: CourseDetailVie
               <p className="text-3xl font-bold text-bjerke-blue tabular-nums md:text-4xl">{priceText}</p>
               {course.status === 'open' && (
                 <p className="mt-1 font-medium text-green-800">
-                  {left !== null ? spotsLeftLabel(left) : t('course.status_open')}
+                  {isRequest ? 'Åpen for forespørsler' : left !== null ? spotsLeftLabel(left) : t('course.status_open')}
                 </p>
               )}
               {course.status === 'full' && <p className="mt-1 font-medium text-red-700">{t('course.status_full_long')}</p>}
