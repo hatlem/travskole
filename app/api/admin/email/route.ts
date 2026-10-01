@@ -1,8 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { sendAdminEmail } from '@/lib/mail';
+import {
+  COURSE_EMAIL_FILTERS,
+  buildCourseEmailHtml,
+  courseEmailStatusWhere,
+  dedupeRecipients,
+} from '@/lib/course-email';
 import logger from '@/lib/logger';
+
+const schema = z.object({
+  courseId: z.coerce.number().int().positive(),
+  subject: z.string().trim().min(1, 'Skriv et emne').max(200),
+  message: z.string().trim().min(1, 'Skriv en melding').max(20000),
+  recipientFilter: z.enum(COURSE_EMAIL_FILTERS),
+  /** preview: bare mottakertall + HTML. test: kun til innlogget admin. send: alle mottakere. */
+  mode: z.enum(['preview', 'test', 'send']).default('send'),
+});
 
 export async function POST(request: NextRequest) {
   const session = await requireAdmin();
@@ -11,94 +27,58 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const body = await request.json();
-    const { courseId, subject, message, recipientFilter } = body;
-
-    if (!courseId || !subject || !message || !recipientFilter) {
-      return NextResponse.json({ error: 'Manglende påkrevde felter' }, { status: 400 });
+    const parsed = schema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? 'Manglende påkrevde felter' }, { status: 400 });
     }
+    const { courseId, subject, message, recipientFilter, mode } = parsed.data;
 
-    if (!['all', 'confirmed', 'pending', 'waitlist'].includes(recipientFilter)) {
-      return NextResponse.json({ error: 'Ugyldig mottakerfilter' }, { status: 400 });
-    }
-
-    const course = await prisma.course.findUnique({ where: { id: Number(courseId) } });
+    const course = await prisma.course.findUnique({ where: { id: courseId } });
     if (!course) {
       return NextResponse.json({ error: 'Kurset finnes ikke' }, { status: 404 });
     }
 
-    const statusFilter = recipientFilter === 'all'
-      ? { in: ['pending', 'confirmed', 'waitlist'] as string[] }
-      : recipientFilter;
-
     const registrations = await prisma.registration.findMany({
       where: {
-        courseId: Number(courseId),
-        status: statusFilter,
+        courseId,
+        status: courseEmailStatusWhere(recipientFilter),
         parent: { deletedAt: null },
-        OR: [
-          { childId: null },
-          { child: { deletedAt: null } },
-        ],
+        OR: [{ childId: null }, { child: { deletedAt: null } }],
       },
-      include: {
-        parent: {
-          select: {
-            name: true,
-            user: { select: { email: true } },
-          },
-        },
-      },
+      include: { parent: { select: { name: true, user: { select: { email: true } } } } },
     });
+    const recipients = dedupeRecipients(registrations.map((r) => ({ email: r.parent.user.email, name: r.parent.name })));
+    const html = buildCourseEmailHtml({ subject, message, courseName: course.name });
 
-    // Deduplicate by email
-    const seen = new Set<string>();
-    const recipients: { email: string; name: string }[] = [];
-    for (const reg of registrations) {
-      const email = reg.parent.user.email;
-      if (!seen.has(email)) {
-        seen.add(email);
-        recipients.push({ email, name: reg.parent.name });
-      }
+    if (mode === 'preview') {
+      return NextResponse.json({ html, subject, recipientCount: recipients.length });
     }
 
-    // Convert plain text message to HTML (preserve line breaks)
-    const escapedMessage = message
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
+    if (mode === 'test') {
+      await sendAdminEmail(session.user.email, `[Test] ${subject}`, html);
+      return NextResponse.json({ sentTo: session.user.email });
+    }
 
-    const htmlBody = `<div style="font-family:sans-serif;max-width:600px">
-      <h2>${subject.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h2>
-      <p>${escapedMessage}</p>
-      <hr style="border:none;border-top:1px solid #eee;margin:24px 0" />
-      <p style="color:#666;font-size:12px">Denne e-posten ble sendt i forbindelse med kurset "${course.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}".</p>
-    </div>`;
+    if (recipients.length === 0) {
+      return NextResponse.json({ error: 'Ingen mottakere med dette valget.' }, { status: 400 });
+    }
 
-    // Send to all recipients
     let sentCount = 0;
     for (const recipient of recipients) {
       try {
-        await sendAdminEmail(recipient.email, subject, htmlBody);
+        await sendAdminEmail(recipient.email, subject, html);
         sentCount++;
       } catch (err) {
         logger.error(`Failed to send email to ${recipient.email}`, { error: err });
       }
     }
 
-    // Log activity
     await prisma.activityLog.create({
       data: {
         action: 'email',
         entity: 'course',
         entityId: course.id,
-        details: JSON.stringify({
-          subject,
-          recipientFilter,
-          recipientCount: sentCount,
-          courseName: course.name,
-        }),
+        details: JSON.stringify({ subject, recipientFilter, recipientCount: sentCount, courseName: course.name }),
         userEmail: session.user.email,
       },
     });

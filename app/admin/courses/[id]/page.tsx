@@ -3,38 +3,43 @@ import { notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { getSettings, parseCourseTypes, courseTypeLabel } from '@/lib/settings';
 import { ageFromBirthdate } from '@/lib/dates';
-import { CourseActions } from './CourseActions';
+import { occupiesPlace } from '@/lib/registration-rules';
+import { courseDisplayStatus, coursePublicPath, COURSE_DISPLAY_STATUS } from '@/lib/course-status';
+import { formatCapacity, formatPhone, formatPrice } from '@/lib/admin-format';
 import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
+import { CourseStatusBadge } from '@/components/admin/StatusBadge';
+import { buttonClass } from '@/components/admin/Button';
+import { CourseParticipants, type CourseParticipant } from './CourseParticipants';
+import { CourseEmailPanel } from './CourseEmailPanel';
+import { CourseStatusActions, PrintButton } from './CourseStatusActions';
 
-const statusLabels: Record<string, string> = {
-  open: 'Åpen',
-  full: 'Fullt',
-  closed: 'Stengt',
-};
-
-const statusStyles: Record<string, string> = {
-  open: 'bg-green-100 text-green-800',
-  full: 'bg-yellow-100 text-yellow-800',
-  closed: 'bg-red-100 text-red-800',
-};
-
-const typeStyles: Record<string, string> = {
-  leir: 'bg-purple-100 text-purple-800',
-  kurs: 'bg-blue-100 text-blue-800',
-};
-
+const TABS = [
+  { id: 'deltakere', label: 'Deltakere' },
+  { id: 'epost', label: 'E-post' },
+  { id: 'eksport', label: 'Eksport' },
+] as const;
+type TabId = (typeof TABS)[number]['id'];
 
 function formatDate(date: Date | string | null) {
   if (!date) return '-';
-  return new Date(date).toLocaleDateString('nb-NO');
+  return new Date(date).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export default async function CourseDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params;
+export default async function CourseDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ fane?: string }>;
+}) {
+  const [{ id }, { fane }] = await Promise.all([params, searchParams]);
+  const tab: TabId = TABS.some((t) => t.id === fane) ? (fane as TabId) : 'deltakere';
+  const courseId = Number(id);
+  if (!Number.isInteger(courseId)) notFound();
   const settings = await getSettings();
 
   const course = await prisma.course.findUnique({
-    where: { id: Number(id) },
+    where: { id: courseId },
     include: {
       registrations: {
         orderBy: { createdAt: 'desc' },
@@ -46,249 +51,259 @@ export default async function CourseDetailPage({ params }: { params: Promise<{ i
     },
   });
 
-  if (!course) {
-    notFound();
-  }
+  if (!course) notFound();
 
+  const regs = course.registrations;
   const stats = {
-    total: course.registrations.length,
-    confirmed: course.registrations.filter((r) => r.status === 'confirmed').length,
-    pending: course.registrations.filter((r) => r.status === 'pending').length,
-    waitlist: course.registrations.filter((r) => r.status === 'waitlist').length,
-    cancelled: course.registrations.filter((r) => r.status === 'cancelled').length,
+    confirmed: regs.filter((r) => r.status === 'confirmed').length,
+    pending: regs.filter((r) => r.status === 'pending').length,
+    waitlist: regs.filter((r) => r.status === 'waitlist').length,
+    cancelled: regs.filter((r) => r.status === 'cancelled').length,
   };
+  const occupied = regs.filter((r) => occupiesPlace(r.status)).length;
+  const displayStatus = courseDisplayStatus({ ...course, occupiedCount: occupied });
+  const publicPath = coursePublicPath(course);
+  const isAdult = course.audience === 'voksen';
+  const fillPct = course.maxParticipants ? Math.min((occupied / course.maxParticipants) * 100, 100) : null;
 
-  const activeCount = stats.confirmed + stats.pending;
-  const fillPct = course.maxParticipants ? Math.min((activeCount / course.maxParticipants) * 100, 100) : null;
-  const capacityColor = fillPct !== null ? (fillPct > 80 ? 'bg-red-500' : fillPct >= 60 ? 'bg-yellow-500' : 'bg-green-500') : null;
-
-  const registrations = course.registrations.map((r) => ({
+  const participants: CourseParticipant[] = regs.map((r) => ({
     id: r.id,
     status: r.status,
+    paymentStatus: r.paymentStatus,
+    paymentProvider: r.paymentProvider,
     createdAt: r.createdAt.toISOString(),
-    childName: r.child?.name ?? `${r.parent.name} (voksen)`,
-    childBirthdate: r.child?.birthdate?.toISOString() ?? null,
-    childAllergies: r.child?.allergies ?? null,
+    name: r.child?.name ?? r.parent.name,
+    isAdult: !r.child,
+    age: r.child?.birthdate ? ageFromBirthdate(r.child.birthdate) : null,
+    allergies: r.child?.allergies ?? null,
     parentName: r.parent.name,
     parentPhone: r.parent.phone,
     parentEmail: r.parent.user.email,
-    consentActivities: r.consentActivities,
-    consentMedia: r.consentMedia,
-    consentRisk: r.consentRisk,
   }));
 
-  // Allergy data
-  const childrenWithAllergies = course.registrations
-    .filter((r) => r.child?.allergies && r.status !== 'cancelled')
-    .map((r) => ({ name: r.child!.name, allergies: r.child!.allergies! }));
-
-  // Consent stats (exclude cancelled)
-  const activeRegs = course.registrations.filter((r) => r.status !== 'cancelled');
-  const consentStats = {
-    total: activeRegs.length,
-    activities: activeRegs.filter((r) => r.consentActivities).length,
-    media: activeRegs.filter((r) => r.consentMedia).length,
-    risk: activeRegs.filter((r) => r.consentRisk).length,
+  const active = regs.filter((r) => r.status !== 'cancelled');
+  const withAllergies = active.filter((r) => r.child?.allergies);
+  const consent = {
+    total: active.length,
+    activities: active.filter((r) => r.consentActivities).length,
+    media: active.filter((r) => r.consentMedia).length,
+    risk: active.filter((r) => r.consentRisk).length,
   };
+  const exportHref = `/api/admin/registrations/export?courseId=${course.id}`;
 
   return (
     <div>
       <BreadcrumbLabel label={course.name} />
-      {/* Back link */}
-      <Link
-        href="/admin/courses"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-bjerke-blue mb-6 transition-colors"
-      >
-        <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-        </svg>
-        Tilbake til kurs
-      </Link>
 
-      {/* Course header */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-3 mb-2">
-              <h1 className="text-2xl font-bold text-gray-900">{course.name}</h1>
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${typeStyles[course.type] || 'bg-gray-100 text-gray-800'}`}
-              >
-                {courseTypeLabel(parseCourseTypes(settings.course_types), course.type)}
-              </span>
-              <span
-                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusStyles[course.status] || 'bg-gray-100 text-gray-800'}`}
-              >
-                {statusLabels[course.status] || course.status}
-              </span>
+      {/* Kurshode */}
+      <div className="mb-6 print:hidden">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-3xl font-bold text-gray-900 text-balance">{course.name}</h1>
+              <CourseStatusBadge status={displayStatus} />
             </div>
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-sm text-gray-600">
+            <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
+              <span>{courseTypeLabel(parseCourseTypes(settings.course_types), course.type)}</span>
               <span>
                 {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
-                {course.endDate ? ` — ${formatDate(course.endDate)}` : ''}
+                {course.endDate ? ` – ${formatDate(course.endDate)}` : ''}
               </span>
-              <span>{course.price != null ? `${course.price} kr` : 'Gratis'}</span>
+              <span>{formatPrice(course.price)}</span>
               {(course.ageMin != null || course.ageMax != null) && (
-                <span>
-                  Alder: {course.ageMin ?? '?'}–{course.ageMax ?? '?'} år
-                </span>
+                <span>Alder {course.ageMin ?? '?'}–{course.ageMax ?? '?'} år</span>
               )}
-            </div>
+              <span className="tabular-nums">Påmeldte {formatCapacity(occupied, course.maxParticipants)}</span>
+            </p>
           </div>
-          <div className="flex items-center gap-3">
+          <CourseStatusActions courseId={course.id} status={course.status} publicPath={publicPath} />
+        </div>
+        {displayStatus === 'draft' && (
+          <p className="mt-4 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+            <strong className="font-semibold">Utkast.</strong> {COURSE_DISPLAY_STATUS.draft.hint} Når alt stemmer, trykk «Publiser».
+          </p>
+        )}
+      </div>
+
+      {/* Faner — vanlige lenker, så de virker før siden er ferdig lastet */}
+      <nav aria-label="Kursfaner" className="mb-6 border-b border-gray-200 print:hidden">
+        <ul className="-mb-px flex gap-1 overflow-x-auto">
+          {TABS.map((t) => {
+            const current = t.id === tab;
+            return (
+              <li key={t.id}>
+                <Link
+                  href={t.id === 'deltakere' ? `/admin/courses/${course.id}` : `/admin/courses/${course.id}?fane=${t.id}`}
+                  aria-current={current ? 'page' : undefined}
+                  scroll={false}
+                  className={`inline-flex min-h-11 items-center whitespace-nowrap border-b-2 px-4 text-sm font-medium ${
+                    current ? 'border-bjerke-blue text-bjerke-blue' : 'border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900'
+                  }`}
+                >
+                  {t.label}
+                  {t.id === 'deltakere' && <span className="ml-1.5 rounded-full bg-gray-100 px-2 text-xs tabular-nums text-gray-700">{regs.length}</span>}
+                </Link>
+              </li>
+            );
+          })}
+          <li>
             <Link
               href={`/admin/courses/${course.id}/edit`}
-              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+              className="inline-flex min-h-11 items-center whitespace-nowrap border-b-2 border-transparent px-4 text-sm font-medium text-gray-600 hover:border-gray-300 hover:text-gray-900"
             >
               Rediger
             </Link>
-            <a
-              href={`/api/admin/registrations/export?courseId=${course.id}`}
-              className="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              Last ned deltakerliste (Excel)
-            </a>
-          </div>
-        </div>
-      </div>
+          </li>
+        </ul>
+      </nav>
 
-      {/* Stats row */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
-        {[
-          { label: 'Totalt', value: stats.total, color: 'bg-gray-100 text-gray-800' },
-          { label: 'Bekreftet', value: stats.confirmed, color: 'bg-green-100 text-green-800' },
-          { label: 'Venter', value: stats.pending, color: 'bg-yellow-100 text-yellow-800' },
-          { label: 'Venteliste', value: stats.waitlist, color: 'bg-blue-100 text-blue-800' },
-          { label: 'Avlyst', value: stats.cancelled, color: 'bg-red-100 text-red-800' },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 text-center">
-            <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-            <p className={`text-xs font-medium mt-1 inline-flex px-2 py-0.5 rounded-full ${stat.color}`}>
-              {stat.label}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      {/* Capacity bar */}
-      {course.maxParticipants != null && fillPct !== null && capacityColor && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-700">Kapasitet</span>
-            <span className="text-sm text-gray-500">
-              {activeCount} / {course.maxParticipants} ({Math.round(fillPct)}%)
-            </span>
-          </div>
-          <div className="h-3 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all ${capacityColor}`}
-              style={{ width: `${fillPct}%` }}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Allergy overview */}
-      {childrenWithAllergies.length > 0 && (
-        <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 mb-6 print:hidden">
-          <div className="flex items-center gap-2 mb-3">
-            <svg className="h-5 w-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <h3 className="text-sm font-semibold text-amber-800">Allergier og hensyn</h3>
-          </div>
-          <ul className="space-y-1">
-            {childrenWithAllergies.map((c, i) => (
-              <li key={i} className="text-sm text-amber-900">
-                <span className="font-medium">{c.name}</span> &mdash; {c.allergies}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Consent summary */}
-      {consentStats.total > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6 print:hidden">
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">Hva foreldrene har sagt ja til</h3>
-          <div className="space-y-2">
+      {tab === 'deltakere' && (
+        <div className="space-y-6">
+          <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4 print:hidden">
             {[
-              { label: 'Ja til aktiviteter', count: consentStats.activities },
-              { label: 'Ja til bilder og video', count: consentStats.media },
-              { label: 'Godtatt risiko', count: consentStats.risk },
-            ].map((item) => (
-              <div key={item.label} className="flex items-center gap-2 text-sm">
-                {item.count === consentStats.total ? (
-                  <svg className="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
-                ) : (
-                  <svg className="h-4 w-4 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                )}
-                <span className="text-gray-700">
-                  {item.label}: {item.count} av {consentStats.total}
-                </span>
+              { label: 'Bekreftet', value: stats.confirmed },
+              { label: 'Venter på svar', value: stats.pending },
+              { label: 'Venteliste', value: stats.waitlist },
+              { label: 'Avlyst', value: stats.cancelled },
+            ].map((s) => (
+              <div key={s.label} className="rounded-xl border border-gray-200 bg-white p-4">
+                <dt className="text-sm text-gray-600">{s.label}</dt>
+                <dd className="mt-1 text-2xl font-semibold tabular-nums text-gray-900">{s.value}</dd>
               </div>
             ))}
-          </div>
+          </dl>
+
+          {fillPct !== null && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 print:hidden">
+              <div className="mb-2 flex items-center justify-between text-sm">
+                <span className="font-medium text-gray-700">Plasser</span>
+                <span className="tabular-nums text-gray-600">
+                  {occupied} av {course.maxParticipants} ({Math.round(fillPct)} %)
+                </span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-gray-200" aria-hidden="true">
+                <div
+                  className={`h-full rounded-full ${fillPct > 80 ? 'bg-red-500' : fillPct >= 60 ? 'bg-amber-500' : 'bg-green-600'}`}
+                  style={{ width: `${fillPct}%` }}
+                />
+              </div>
+            </div>
+          )}
+
+          {withAllergies.length > 0 && (
+            <section aria-labelledby="allergier" className="rounded-xl border border-amber-300 bg-amber-50 p-4 print:hidden">
+              <h2 id="allergier" className="mb-2 text-sm font-semibold text-amber-900">
+                Allergier og hensyn ({withAllergies.length})
+              </h2>
+              <ul className="space-y-1">
+                {withAllergies.map((r) => (
+                  <li key={r.id} className="text-sm text-amber-950">
+                    <span className="font-medium">{r.child!.name}</span> – {r.child!.allergies}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          {consent.total > 0 && (
+            <section aria-labelledby="samtykker" className="rounded-xl border border-gray-200 bg-white p-4 print:hidden">
+              <h2 id="samtykker" className="mb-3 text-sm font-semibold text-gray-800">
+                Hva {isAdult ? 'deltakerne' : 'foreldrene'} har sagt ja til
+              </h2>
+              <ul className="space-y-1.5 text-sm text-gray-700">
+                {[
+                  ...(isAdult ? [] : [{ label: 'Aktiviteter', count: consent.activities }]),
+                  { label: 'Bilder og video', count: consent.media },
+                  { label: 'Risiko', count: consent.risk },
+                ].map((item) => (
+                  <li key={item.label} className="flex items-center gap-2">
+                    <span aria-hidden="true" className={item.count === consent.total ? 'text-green-700' : 'text-amber-700'}>
+                      {item.count === consent.total ? '✓' : '!'}
+                    </span>
+                    {item.label}: <span className="tabular-nums">{item.count} av {consent.total}</span>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <CourseParticipants registrations={participants} adultCourse={isAdult} />
         </div>
       )}
 
-      {/* Print button - rendered by CourseActions (client component) */}
+      {tab === 'epost' && (
+        <CourseEmailPanel courseId={course.id} courseName={course.name} audience={course.audience} />
+      )}
 
-      {/* Printable participant list (hidden on screen, visible when printing) */}
+      {tab === 'eksport' && (
+        <div className="grid gap-4 md:grid-cols-2">
+          <section className="rounded-xl border border-gray-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-gray-900">Deltakerliste til Excel</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              Alle påmeldinger på kurset med kontaktinfo, allergier, samtykker og betaling (betalt, betalingsmåte og beløp).
+              Filen åpnes direkte i Excel.
+            </p>
+            {regs.length > 0 ? (
+              <a href={exportHref} download className={buttonClass('primary', 'md', 'mt-4')}>
+                Last ned (Excel)
+              </a>
+            ) : (
+              <p className="mt-4">
+                <span aria-disabled="true" title="Ingen påmeldinger å laste ned ennå" className={buttonClass('primary', 'md')}>
+                  Last ned (Excel)
+                </span>
+                <span className="mt-2 block text-sm text-gray-500">Ingen påmeldinger å laste ned ennå.</span>
+              </p>
+            )}
+          </section>
+          <section className="rounded-xl border border-gray-200 bg-white p-6">
+            <h2 className="text-lg font-semibold text-gray-900">Utskrift til oppmøte</h2>
+            <p className="mt-1 text-sm text-gray-600">
+              En enkel liste med navn, alder, allergier og telefon til foresatt — uten avlyste. Fin å ha med på kurset.
+            </p>
+            <PrintButton disabled={active.length === 0} />
+          </section>
+        </div>
+      )}
+
+      {/* Utskriftsliste (bare synlig ved utskrift) */}
       <div className="hidden print:block">
-        <style dangerouslySetInnerHTML={{ __html: `
-          @media print {
-            nav, aside, header, .print\\:hidden, [data-sidebar], [data-breadcrumbs] { display: none !important; }
-            body { background: white !important; }
-            main { padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
-          }
-        `}} />
-        <h1 className="text-xl font-bold mb-1">{course.name}</h1>
-        <p className="text-sm text-gray-600 mb-4">
-          {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}{course.endDate ? ` — ${formatDate(course.endDate)}` : ''}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `@media print { nav, aside, header, .print\\:hidden { display: none !important; } body { background: white !important; } main { padding: 0 !important; } }`,
+          }}
+        />
+        <h1 className="mb-1 text-xl font-bold">{course.name}</h1>
+        <p className="mb-4 text-sm text-gray-600">
+          {course.startDate ? formatDate(course.startDate) : 'Avtal tid'}
+          {course.endDate ? ` – ${formatDate(course.endDate)}` : ''}
         </p>
-        <table className="w-full text-sm border-collapse">
+        <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b-2 border-gray-300">
-              <th className="text-left py-2 pr-3">Barn</th>
-              <th className="text-left py-2 pr-3">Alder</th>
-              <th className="text-left py-2 pr-3">Allergier</th>
-              <th className="text-left py-2 pr-3">Forelder</th>
-              <th className="text-left py-2">Telefon</th>
+              <th className="py-2 pr-3 text-left">{isAdult ? 'Deltaker' : 'Barn'}</th>
+              <th className="py-2 pr-3 text-left">Alder</th>
+              <th className="py-2 pr-3 text-left">Allergier og hensyn</th>
+              <th className="py-2 pr-3 text-left">{isAdult ? 'E-post' : 'Foresatt'}</th>
+              <th className="py-2 text-left">Telefon</th>
             </tr>
           </thead>
           <tbody>
-            {course.registrations
-              .filter((r) => r.status !== 'cancelled')
-              .map((r) => {
-                const age = r.child?.birthdate ? ageFromBirthdate(r.child.birthdate) : null;
-                return (
-                  <tr key={r.id} className="border-b border-gray-200">
-                    <td className="py-1.5 pr-3">{r.child?.name ?? `${r.parent.name} (voksen)`}</td>
-                    <td className="py-1.5 pr-3">{age !== null ? `${age} år` : '-'}</td>
-                    <td className="py-1.5 pr-3">{r.child?.allergies || '-'}</td>
-                    <td className="py-1.5 pr-3">{r.parent.name}</td>
-                    <td className="py-1.5">{r.parent.phone}</td>
-                  </tr>
-                );
-              })}
+            {participants
+              .filter((p) => p.status !== 'cancelled')
+              .map((p) => (
+                <tr key={p.id} className="border-b border-gray-200">
+                  <td className="py-1.5 pr-3">{p.name}</td>
+                  <td className="py-1.5 pr-3">{p.age !== null ? `${p.age} år` : '–'}</td>
+                  <td className="py-1.5 pr-3">{p.allergies || '–'}</td>
+                  <td className="py-1.5 pr-3">{isAdult ? p.parentEmail : p.parentName}</td>
+                  <td className="py-1.5">{formatPhone(p.parentPhone)}</td>
+                </tr>
+              ))}
           </tbody>
         </table>
-        <p className="text-xs text-gray-400 mt-6">
-          Utskrift: {new Date().toLocaleDateString('nb-NO')}
-        </p>
+        <p className="mt-6 text-xs text-gray-500">Skrevet ut {new Date().toLocaleDateString('nb-NO')}</p>
       </div>
-
-      {/* Client component: email form, status dropdowns, registrations table */}
-      <CourseActions
-        courseId={course.id}
-        courseName={course.name}
-        registrations={registrations}
-      />
     </div>
   );
 }

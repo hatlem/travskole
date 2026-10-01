@@ -12,6 +12,9 @@ import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 import { parsePaymentMethods, PAYMENT_METHODS } from '@/lib/payments';
+import { useToast } from '@/components/admin/Toast';
+import { Button, buttonClass } from '@/components/admin/Button';
+import { formatPrice } from '@/lib/admin-format';
 
 function slugify(text: string): string {
   return text
@@ -59,13 +62,13 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const courseTypes = parseCourseTypes(settings.course_types);
   const { id } = use(params);
   const router = useRouter();
+  const { toast } = useToast();
   const [course, setCourse] = useState<CourseData | null>(null);
   useBreadcrumbLabel(course?.name, `/admin/courses/${id}`);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
   const [imageUrl, setImageUrl] = useState<string>('');
 
   // Form state for live preview
@@ -152,7 +155,6 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     }
     setSaving(true);
     setError(null);
-    setSuccess(false);
 
     const data = {
       name: name.trim(),
@@ -186,19 +188,18 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       });
 
       if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || 'Endringene ble ikke lagret. Sjekk feltene og prøv igjen.');
+        const json = await res.json().catch(() => null);
+        throw new Error(json?.error || 'Endringene ble ikke lagret. Sjekk feltene og prøv igjen.');
       }
 
-      setSuccess(true);
-      setTimeout(() => {
-        router.push('/admin/courses');
-        router.refresh();
-      }, 1200);
+      toast(`Endringene i «${name.trim()}» er lagret.`, 'success');
+      // Knappen holdes i «Lagrer …» til kurssiden er lastet.
+      router.push(`/admin/courses/${id}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
-    } finally {
       setSaving(false);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   }
 
@@ -212,10 +213,11 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     setDeleteError(null);
     try {
       const res = await fetch(`/api/admin/courses/${id}`, { method: 'DELETE' });
+      const json = await res.json().catch(() => null);
       if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || 'Kurset ble ikke slettet. Prøv igjen om litt.');
+        throw new Error(json?.error || 'Kurset ble ikke slettet. Prøv igjen om litt.');
       }
+      toast(`«${course?.name ?? 'Kurset'}» er slettet.`, 'success');
       router.push('/admin/courses');
       router.refresh();
     } catch (err) {
@@ -259,8 +261,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
     <div className="max-w-6xl">
       <div className="mb-8 flex items-start justify-between">
         <div>
-          <Link href="/admin/courses" className="text-sm text-bjerke-blue hover:underline font-medium">
-            &larr; Tilbake til kurs
+          <Link href={`/admin/courses/${id}`} className="text-sm text-bjerke-blue hover:underline font-medium">
+            &larr; Tilbake til kurset
           </Link>
           <h1 className="text-3xl font-bold text-gray-900 mt-2">Rediger kurs</h1>
           <p className="mt-1 text-sm text-gray-600">Endringene vises på nettsiden så snart du trykker «Lagre endringer».</p>
@@ -269,30 +271,18 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
           href={publicUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-bjerke-blue hover:text-bjerke-blue-dark font-medium border border-bjerke-blue px-3 py-2 rounded-lg hover:bg-blue-50 transition-colors mt-2"
+          className={buttonClass('secondary', 'md', 'mt-2')}
         >
-          Se kurs
+          Se på nettsiden
+          <span className="sr-only">(åpnes i ny fane)</span>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
           </svg>
         </a>
       </div>
 
-      {success && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6 flex items-center gap-2">
-          <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Endringene er lagret! Du sendes tilbake til kurslisten …
-        </div>
-      )}
-
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
+        <div role="alert" className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg mb-6">
           {error}
         </div>
       )}
@@ -451,9 +441,9 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   onChange={(e) => setStatus(e.target.value)}
                   className={inputClass}
                 >
-                  <option value="open">Åpen</option>
-                  <option value="full">Fullt</option>
-                  <option value="closed">Stengt</option>
+                  <option value="open">Åpen for påmelding</option>
+                  <option value="full">Fullt (nye havner på venteliste)</option>
+                  <option value="closed">Stengt for påmelding</option>
                 </select>
               </div>
 
@@ -613,13 +603,9 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
 
             {/* Actions */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <button
-                type="submit"
-                disabled={saving}
-                className="w-full bg-bjerke-blue text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-bjerke-blue-dark transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Lagrer...' : 'Lagre endringer'}
-              </button>
+              <Button type="submit" loading={saving} loadingLabel="Lagrer …" className="w-full">
+                Lagre endringer
+              </Button>
               {invalidFields.some((f) => touched[f]) && (
                 <ul role="alert" className="mt-3 text-sm text-red-600 list-disc pl-5 space-y-0.5">
                   {invalidFields.map((f) => (
@@ -628,7 +614,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                 </ul>
               )}
               <Link
-                href="/admin/courses"
+                href={`/admin/courses/${id}`}
                 className="block text-center text-gray-600 hover:text-gray-800 px-4 py-2.5 text-sm font-medium mt-2"
               >
                 Avbryt
@@ -663,7 +649,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Fullt</span>
                   )}
                   {status === 'closed' && (
-                    <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Stengt</span>
+                    <span className="text-xs bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">Stengt</span>
                   )}
                 </div>
                 <h3 className="font-semibold text-gray-900">{name}</h3>
@@ -684,7 +670,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                     </span>
                   )}
                   {price && (
-                    <span className="text-sm font-semibold text-bjerke-blue">{Number(price).toLocaleString('nb-NO')} kr</span>
+                    <span className="text-sm font-semibold text-bjerke-blue">{formatPrice(Number(price))}</span>
                   )}
                 </div>
               </div>
@@ -696,7 +682,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         <div className="mt-8 bg-red-50 rounded-xl border border-red-200 p-6">
           <h2 className="text-lg font-semibold text-red-800 mb-2">Faresone</h2>
           <p className="text-sm text-red-600 mb-4">
-            Sletting av kurset vil også slette alle påmeldinger knyttet til det. Denne handlingen kan ikke angres.
+            Sletting av kurset sletter også alle påmeldingene og kortene deres på salgstavla. Dette kan ikke angres.
             Kurs med betalte påmeldinger kan ikke slettes — sett status til «Stengt» i stedet.
           </p>
           {deleteError && (
@@ -704,14 +690,9 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
               {deleteError}
             </p>
           )}
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={deleting}
-            className="bg-red-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors disabled:opacity-50"
-          >
-            {deleting ? 'Sletter...' : 'Slett kurs permanent'}
-          </button>
+          <Button variant="secondary" onClick={handleDelete} loading={deleting} loadingLabel="Sletter …" className="text-red-700 hover:text-red-800">
+            Slett kurset …
+          </Button>
         </div>
       </form>
 
@@ -721,7 +702,7 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         title="Slette kurset?"
         message={`«${course.name}» slettes for godt${
           course._count?.registrations
-            ? `, sammen med ${course._count.registrations} påmelding${course._count.registrations === 1 ? '' : 'er'}`
+            ? `, sammen med ${course._count.registrations} påmelding${course._count.registrations === 1 ? '' : 'er'} og kortene på salgstavla`
             : ''
         }. Dette kan ikke angres. Vil du bare stoppe nye påmeldinger, sett status til «Stengt» i stedet.`}
         confirmLabel="Ja, slett kurset"
