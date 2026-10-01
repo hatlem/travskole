@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
-import { csvFilename, csvResponse, toCsv } from '@/lib/crm/csv-export';
+import { EXCEL_CSV, csvFilename, csvResponse, excelNumber, toCsv } from '@/lib/crm/csv-export';
 import { COURSE_STATUS_LABELS, formatOsloDate, label } from '@/lib/export-labels';
 import logger from '@/lib/logger';
 import { courseTypeLabel, getSetting, parseCourseTypes } from '@/lib/settings';
@@ -36,7 +36,7 @@ export async function GET() {
       'Startdato',
       'Sluttdato',
       'Alder (min–maks)',
-      'Pris',
+      'Pris (kr)',
       'Maks deltakere',
       'Påmeldinger (aktive)',
       'Opprettet',
@@ -50,8 +50,8 @@ export async function GET() {
       formatOsloDate(course.startDate),
       formatOsloDate(course.endDate),
       ageRange(course.ageMin, course.ageMax),
-      course.price ?? 0,
-      course.maxParticipants,
+      excelNumber(course.price ?? 0),
+      course.maxParticipants ?? 'Ubegrenset',
       course._count.registrations,
       formatOsloDate(course.createdAt),
     ]);
@@ -63,7 +63,7 @@ export async function GET() {
       userEmail: session.user.email,
     }).catch(() => {});
 
-    return csvResponse(toCsv(headers, rows), csvFilename('kurs'));
+    return csvResponse(toCsv(headers, rows, EXCEL_CSV), csvFilename('kurs'));
   } catch (error) {
     logger.error('Error exporting courses', { error });
     return NextResponse.json({ error: 'Kunne ikke eksportere kurs' }, { status: 500 });

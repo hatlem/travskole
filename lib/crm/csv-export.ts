@@ -1,17 +1,46 @@
-// CSV-eksport (BOM + komma, som øvrige admin-eksporter) med vern mot
-// formelinjeksjon i Excel/Sheets.
+// CSV-eksport (UTF-8 med BOM) med vern mot formelinjeksjon i Excel/Sheets.
+// Filer ansatte åpner i Excel bruker semikolon (EXCEL_CSV): norsk Excel deler
+// kolonner på semikolon, så filen åpnes riktig med dobbeltklikk.
 
-export function escapeCsvField(value: string | number | null | undefined): string {
+function escapeWith(value: string | number | null | undefined, needsQuotes: RegExp): string {
   if (value === null || value === undefined) return '';
   let v = String(value);
   if (/^[=+\-@\t\r]/.test(v)) v = `'${v}`;
-  if (/[",\n\r;]/.test(v)) return `"${v.replace(/"/g, '""')}"`;
+  if (needsQuotes.test(v)) return `"${v.replace(/"/g, '""')}"`;
   return v;
 }
 
-export function toCsv(headers: string[], rows: Array<Array<string | number | null | undefined>>): string {
-  const lines = [headers, ...rows].map((row) => row.map(escapeCsvField).join(','));
-  return '﻿' + lines.join('\n');
+export function escapeCsvField(value: string | number | null | undefined): string {
+  return escapeWith(value, /[",\n\r;]/);
+}
+
+/** For semikolonfiler: desimalkomma («2490,5») står uten anførselstegn, så Excel leser det som tall. */
+export function escapeExcelField(value: string | number | null | undefined): string {
+  return escapeWith(value, /[";\n\r]/);
+}
+
+export interface CsvOptions {
+  /** Standard «,». Bruk «;» (EXCEL_CSV) for filer som skal åpnes i norsk Excel. */
+  delimiter?: ',' | ';';
+}
+
+/** For admin-nedlastinger merket «Excel». */
+export const EXCEL_CSV: CsvOptions = { delimiter: ';' };
+
+export function toCsv(
+  headers: string[],
+  rows: Array<Array<string | number | null | undefined>>,
+  options: CsvOptions = {},
+): string {
+  const delimiter = options.delimiter ?? ',';
+  const lines = [headers, ...rows].map((row) => row.map(delimiter === ';' ? escapeExcelField : escapeCsvField).join(delimiter));
+  return '\ufeff' + lines.join('\n');
+}
+
+/** Tall som norsk Excel leser som tall: desimalkomma, ingen tusenskille. */
+export function excelNumber(value: number | null | undefined): string {
+  if (value == null) return '';
+  return value.toLocaleString('nb-NO', { useGrouping: false, maximumFractionDigits: 2 });
 }
 
 export function csvFilename(base: string, date = new Date()): string {

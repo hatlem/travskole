@@ -43,3 +43,14 @@ describe('csvFilename', () => {
     expect(csvFilename('!!!', new Date('2026-09-29T10:00:00Z'))).toBe('eksport-2026-09-29.csv');
   });
 });
+
+describe('toCsv with EXCEL_CSV', () => {
+  it('uses semicolons, keeps decimal commas unquoted and still blocks formulas', async () => {
+    const { EXCEL_CSV, excelNumber } = await import('@/lib/crm/csv-export');
+    const csv = toCsv(['Navn', 'Beløp', 'Notat'], [['Kari', excelNumber(1234.5), '=1+1'], ['Ola; Per', excelNumber(1500), null]], EXCEL_CSV);
+    expect(csv).toBe('﻿Navn;Beløp;Notat\nKari;1234,5;\'=1+1\n"Ola; Per";1500;');
+    const { headers, rows } = parseCsv(csv);
+    expect(headers).toEqual(['Navn', 'Beløp', 'Notat']);
+    expect(rows[1][0]).toBe('Ola; Per');
+  });
+});

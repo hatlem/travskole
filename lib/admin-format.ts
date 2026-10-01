@@ -29,6 +29,12 @@ export function formatPhone(raw: string | null | undefined): string {
   return `+47 ${digits.slice(0, 3)} ${digits.slice(3, 5)} ${digits.slice(5)}`;
 }
 
+/** Til Excel: norske nummer som «900 00 001» (leses som tekst, ikke formel), andre urørt. */
+export function formatPhoneForExport(raw: string | null | undefined): string {
+  const formatted = formatPhone(raw);
+  return formatted.startsWith('+47 ') ? formatted.slice(4) : formatted;
+}
+
 /** «3 / 12», eller «3 / Ubegrenset» når kurset ikke har maks. */
 export function formatCapacity(count: number, max: number | null | undefined): string {
   return max == null ? `${count} / Ubegrenset` : `${count} / ${max}`;

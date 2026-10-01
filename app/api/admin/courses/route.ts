@@ -4,6 +4,7 @@ import { requireAdmin } from '@/lib/auth';
 import { occupiedRegistrationsCount } from '@/lib/registrations/capacity';
 import { logActivity } from '@/lib/activity';
 import { serializePaymentMethods } from '@/lib/payments';
+import { isCourseStatus } from '@/lib/course-status';
 import logger from '@/lib/logger';
 
 export async function GET() {
@@ -37,8 +38,13 @@ export async function POST(request: NextRequest) {
 
     const mode = registrationMode === 'request' ? 'request' : 'standard';
 
-    if (!name || !type || !status || (mode === 'standard' && !startDate)) {
+    if (!name || !type || (mode === 'standard' && !startDate)) {
       return NextResponse.json({ error: 'Manglende pakrevde felter' }, { status: 400 });
+    }
+    // Nye kurs er stengt (utkast) til admin trykker «Publiser».
+    const initialStatus = status ?? 'closed';
+    if (!isCourseStatus(initialStatus)) {
+      return NextResponse.json({ error: 'Ugyldig status' }, { status: 400 });
     }
 
     // Generate slug from name if not provided
@@ -59,7 +65,7 @@ export async function POST(request: NextRequest) {
         price: price != null ? Number(price) : null,
         minParticipants: minParticipants != null ? Number(minParticipants) : null,
         maxParticipants: maxParticipants != null ? Number(maxParticipants) : null,
-        status,
+        status: initialStatus,
         imageUrl: imageUrl || null,
         registrationMode: mode,
         paymentMethods: serializePaymentMethods(paymentMethods),
