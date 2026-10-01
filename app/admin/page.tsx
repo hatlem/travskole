@@ -261,7 +261,7 @@ export default async function AdminDashboard() {
                       <span className="shrink-0 text-sm text-gray-600">
                         {course.startDate
                           ? course.startDate.toLocaleDateString('nb-NO', { day: 'numeric', month: 'short', year: 'numeric' })
-                          : 'Avtal tid'}
+                          : 'Avtales'}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">

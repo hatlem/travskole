@@ -102,7 +102,7 @@ export default async function CourseDetailPage({
             <p className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600">
               <span>{courseTypeLabel(parseCourseTypes(settings.course_types), course.type)}</span>
               <span>
-                {course.startDate ? formatDateLong(course.startDate) : 'Avtal tid'}
+                {course.startDate ? formatDateLong(course.startDate) : 'Avtales'}
                 {course.endDate ? ` – ${formatDateLong(course.endDate)}` : ''}
               </span>
               <span>{formatPrice(course.price)}</span>
@@ -273,7 +273,7 @@ export default async function CourseDetailPage({
         />
         <h1 className="mb-1 text-xl font-bold">{course.name}</h1>
         <p className="mb-4 text-sm text-gray-600">
-          {course.startDate ? formatDateLong(course.startDate) : 'Avtal tid'}
+          {course.startDate ? formatDateLong(course.startDate) : 'Avtales'}
           {course.endDate ? ` – ${formatDateLong(course.endDate)}` : ''}
         </p>
         <table className="w-full border-collapse text-sm">

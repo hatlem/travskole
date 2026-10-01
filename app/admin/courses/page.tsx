@@ -52,7 +52,7 @@ const DESCRIPTION =
 
 function dateRange(c: Course) {
   const start = formatDateShort(c.startDate, '');
-  if (!start) return 'Avtal tid';
+  if (!start) return 'Avtales';
   const end = formatDateShort(c.endDate, '');
   return end && end !== start ? `${start} – ${end}` : start;
 }
