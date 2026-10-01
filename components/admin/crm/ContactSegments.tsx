@@ -83,7 +83,7 @@ export function ContactSegments({ contactId, refreshKey, onAddToList }: ContactS
         </div>
       ))}
 
-      <p className="text-[11px] text-gray-500">
+      <p className="text-xs text-gray-500">
         Segmenter oppdateres automatisk ut fra reglene. Vil du styre medlemskap manuelt, bruk en liste.{' '}
         <button type="button" onClick={onAddToList} className="text-blue-700 hover:underline">
           Legg i liste

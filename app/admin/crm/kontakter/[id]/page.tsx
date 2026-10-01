@@ -11,6 +11,8 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CardSkeleton } from '@/components/admin/Skeleton';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
@@ -73,9 +75,6 @@ const ACTIVITY_ICONS: Record<string, string> = {
   deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄', list: '📋',
 };
 
-
-const secondaryBtn =
-  'rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50';
 const inlineSelect = 'w-full max-w-[16rem] border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white';
 
 export default function KontaktDetaljPage({ params }: { params: Promise<{ id: string }> }) {
@@ -379,12 +378,9 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             </p>
           )}
         </div>
-        <button
-          onClick={() => setConfirmDelete(true)}
-          className="rounded-md px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50"
-        >
+        <Button variant="dangerText" size="sm" onClick={() => setConfirmDelete(true)}>
           Slett kontakt
-        </button>
+        </Button>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -394,9 +390,9 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 id="kontakt-detaljer" className="font-semibold">Detaljer</h2>
               {!editing && (
-                <button onClick={() => setEditing(true)} className={secondaryBtn}>
+                <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
                   Rediger
-                </button>
+                </Button>
               )}
             </div>
             {editing ? (
@@ -511,17 +507,19 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                 <p className="text-sm text-gray-500">Kontakten har ingen e-post.</p>
               ) : contact.suppression ? (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
-                  <span className="bg-red-50 text-red-700 px-2 py-0.5 rounded text-xs font-medium">
+                  <Badge className="bg-red-50 text-red-700">
                     Står på listen – {SUPPRESSION_REASONS[contact.suppression.reason] ?? contact.suppression.reason} {formatDateNo(contact.suppression.createdAt)}
-                  </span>
+                  </Badge>
                   {canUnsuppress ? (
-                    <button
+                    <Button
+                      variant="link"
+                      size="sm"
                       onClick={() => setConfirmUnsuppress(true)}
-                      disabled={suppressionBusy}
-                      className="text-xs text-blue-700 hover:underline disabled:opacity-50"
+                      loading={suppressionBusy}
+                      loadingLabel="Fjerner …"
                     >
-                      {suppressionBusy ? 'Fjerner …' : 'Fjern fra listen'}
-                    </button>
+                      Fjern fra listen
+                    </Button>
                   ) : (
                     <span className="text-xs text-gray-500">Bare en superadmin kan fjerne adressen herfra</span>
                   )}
@@ -529,13 +527,15 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
               ) : (
                 <div className="flex flex-wrap items-center gap-3 text-sm">
                   <span className="text-gray-600">Kan få e-post fra flytene.</span>
-                  <button
+                  <Button
+                    variant="dangerText"
+                    size="sm"
                     onClick={() => setConfirmSuppress(true)}
-                    disabled={suppressionBusy}
-                    className="text-xs text-red-700 hover:underline disabled:opacity-50"
+                    loading={suppressionBusy}
+                    loadingLabel="Legger til …"
                   >
-                    {suppressionBusy ? 'Legger til …' : 'Legg til i ikke-kontakt-listen'}
-                  </button>
+                    Legg til i ikke-kontakt-listen
+                  </Button>
                 </div>
               )}
             </div>
@@ -610,12 +610,9 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Avtaler ({contact.deals.length}) <HelpTip term="deal" /></h2>
-              <button
-                onClick={() => setDealDialog({ dealId: null })}
-                className="text-sm text-blue-700 hover:underline"
-              >
+              <Button variant="link" size="sm" onClick={() => setDealDialog({ dealId: null })}>
                 + Ny avtale
-              </button>
+              </Button>
             </div>
             {contact.deals.length === 0 ? (
               <p className="text-sm text-gray-500">Ingen avtaler ennå. Lag en når kontakten vurderer å bestille noe, f.eks. et julebord.</p>
@@ -653,8 +650,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                 value={effectiveTaskAssignee}
                 onChange={(v) => { setTaskAssignee(v); setTaskAssigneeTouched(true); }}
               />
-              <button onClick={addTask} disabled={!taskTitle.trim()}
-                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm disabled:opacity-50">Legg til oppgave</button>
+              <Button variant="secondary" size="sm" onClick={addTask} disabled={!taskTitle.trim()}>Legg til oppgave</Button>
             </div>
             <ul className="space-y-1">
               {contact.tasks.map((t) => (
@@ -685,8 +681,7 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
             <div className="flex gap-2 mb-2">
               <textarea value={noteText} onChange={(e) => setNoteText(e.target.value)} placeholder="Skriv et notat"
                 rows={2} className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1" />
-              <button onClick={addNote} disabled={!noteText.trim()}
-                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50">Lagre notat</button>
+              <Button variant="secondary" size="sm" onClick={addNote} disabled={!noteText.trim()} className="self-end">Lagre notat</Button>
             </div>
             <ul className="space-y-2">
               {contact.notes.map((n) => (

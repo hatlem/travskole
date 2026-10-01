@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { Button } from '@/components/admin/Button';
 import { formatDateNo } from '@/lib/admin-format';
 import { usePopoverDismiss } from './usePopover';
 
@@ -167,17 +168,17 @@ export function ContactLists({ contactId, contactName, lists, onChanged, pickerO
       )}
 
       <div className="relative">
-        <button
+        <Button
           ref={triggerRef}
-          type="button"
+          variant="secondary"
+          size="sm"
           onClick={() => (pickerOpen ? close() : onPickerOpenChange(true))}
           aria-expanded={pickerOpen}
           aria-controls={popoverId}
           aria-haspopup="dialog"
-          className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
         >
           Legg i liste
-        </button>
+        </Button>
 
         {pickerOpen && (
           <div
@@ -241,13 +242,16 @@ export function ContactLists({ contactId, contactName, lists, onChanged, pickerO
                         autoFocus
                         className="min-w-0 flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm"
                       />
-                      <button
+                      <Button
+                        size="sm"
                         type="submit"
-                        disabled={busy || !newName.trim()}
-                        className="whitespace-nowrap rounded-md bg-bjerke-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
+                        disabled={!newName.trim()}
+                        loading={busy}
+                        loadingLabel="Lager …"
+                        className="whitespace-nowrap"
                       >
-                        {busy ? 'Lager …' : 'Lag og legg til'}
-                      </button>
+                        Lag og legg til
+                      </Button>
                     </form>
                   ) : (
                     <button
@@ -259,7 +263,7 @@ export function ContactLists({ contactId, contactName, lists, onChanged, pickerO
                     </button>
                   )}
                 </div>
-                <p className="mt-2 px-2 text-[11px] text-gray-500">
+                <p className="mt-2 px-2 text-xs text-gray-500">
                   Aktive flyter med startregelen «Lagt til i CRM-liste» starter når kontakten legges i listen.
                 </p>
               </>

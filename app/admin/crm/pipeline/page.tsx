@@ -11,6 +11,8 @@ import { paymentStatusBadge } from '@/lib/payments/badge';
 import { StageEditor } from './StageEditor';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 import { locateDeal, parseDealParam, withoutDealParam } from '@/lib/crm/pipeline-deep-link';
 
 interface DealCard {
@@ -229,15 +231,12 @@ export default function PipelinePage() {
     <div>
       <CrmTabs
         actions={
-          <button
-            onClick={() => setDealDialog({ dealId: null })}
-            className="inline-flex items-center gap-2 bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2"
-          >
+          <Button onClick={() => setDealDialog({ dealId: null })}>
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
             </svg>
             Ny avtale
-          </button>
+          </Button>
         }
       />
       {pipelines.length > 1 && (
@@ -256,12 +255,9 @@ export default function PipelinePage() {
           {pipeline.name}
           <HelpTip term="pipeline" />
         </h2>
-        <button
-          onClick={() => setEditingStages(true)}
-          className="border border-gray-300 bg-white text-gray-700 px-3 py-1.5 rounded-md text-sm hover:bg-gray-50"
-        >
+        <Button variant="secondary" size="sm" onClick={() => setEditingStages(true)}>
           Endre steg
-        </button>
+        </Button>
       </div>
 
       {totalDeals === 0 && (
@@ -354,7 +350,7 @@ export default function PipelinePage() {
                       <p className="font-medium leading-snug">{deal.title}</p>
                       <div className="flex flex-wrap gap-x-2 mt-1 text-xs text-gray-500">
                         {(() => { const b = paymentStatusBadge(deal.paymentStatus); return b ? (
-                          <span className={`font-semibold rounded-full px-2 py-0.5 ${b.className}`}>{b.label}</span>
+                          <Badge className={`font-semibold ${b.className}`}>{b.label}</Badge>
                         ) : null; })()}
                         {deal.eventType && <span className="bg-gray-100 px-1.5 py-0.5 rounded">{deal.eventType}</span>}
                         {deal.eventDate && <span>{formatDateNo(deal.eventDate)}</span>}

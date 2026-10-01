@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useToast } from '@/components/admin/Toast';
 import type { OrganizationSuggestion } from '@/lib/crm/org-suggestion';
 import { EntityPicker, type EntityRef } from './EntityPicker';
+import { Button } from '../Button';
 
 interface OrganizationLinkerProps {
   organization: EntityRef | null;
@@ -12,8 +13,6 @@ interface OrganizationLinkerProps {
   /** Lagrer koblingen (null = fjern). Returnerer true ved suksess. */
   onLink: (organizationId: number | null, successMessage: string) => Promise<boolean>;
 }
-
-const linkBtn = 'text-sm text-bjerke-blue hover:underline disabled:opacity-50';
 
 /** Bedriften kontakten hører til: vis, koble til (søk eller forslag fra e-posten), bytt eller fjern. */
 export function OrganizationLinker({ organization, suggestion, onLink }: OrganizationLinkerProps) {
@@ -95,25 +94,20 @@ export function OrganizationLinker({ organization, suggestion, onLink }: Organiz
             : <>E-posten er fra {suggestion.domain}. Gjelder det en bedrift, kan du opprette den. Er det en privat adresse, lar du dette være.</>}
         </p>
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-          <button
-            type="button"
-            onClick={acceptSuggestion}
-            disabled={busy}
-            className="rounded-md bg-bjerke-blue px-3 py-1.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark disabled:opacity-50"
-          >
+          <Button variant="secondary" size="sm" onClick={acceptSuggestion} loading={busy}>
             {suggestion.kind === 'existing' ? `Koble til ${suggestion.name}` : `Opprett «${suggestion.name}» og koble til`}
-          </button>
-          <button type="button" onClick={() => setPicking(true)} disabled={busy} className={linkBtn}>
+          </Button>
+          <Button variant="link" size="sm" onClick={() => setPicking(true)} disabled={busy}>
             Velg en annen bedrift
-          </button>
+          </Button>
         </div>
       </div>
     );
   }
 
   return (
-    <button type="button" onClick={() => setPicking(true)} className={linkBtn}>
+    <Button variant="link" size="sm" onClick={() => setPicking(true)}>
       Koble til bedrift
-    </button>
+    </Button>
   );
 }

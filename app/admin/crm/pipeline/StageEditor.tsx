@@ -5,6 +5,7 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { useToast } from '@/components/admin/Toast';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
 import { stageDeleteBlockedReason, stageRole, type StageRole } from '@/lib/crm/stages';
 
 export interface EditableStage {
@@ -173,13 +174,15 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
               disabled={busy}
               className={inputClass}
             />
-            <button
+            <Button
+              variant="secondary"
+              size="sm"
               onClick={renamePipeline}
               disabled={busy || !name.trim() || name.trim() === pipelineName}
-              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50 shrink-0"
+              className="shrink-0"
             >
               Lagre
-            </button>
+            </Button>
           </div>
         </section>
 
@@ -227,13 +230,9 @@ export function StageEditor({ pipelineId, pipelineName, stages, onClose, onChang
             >
               {ROLE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
-            <button
-              type="submit"
-              disabled={busy || !newStageName.trim()}
-              className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm hover:bg-bjerke-blue-dark disabled:opacity-50"
-            >
+            <Button size="sm" type="submit" disabled={busy || !newStageName.trim()}>
               Legg til
-            </button>
+            </Button>
           </div>
         </form>
       </div>
@@ -312,17 +311,17 @@ function StageRow({ stage, busy, isFirst, isLast, onRename, onRoleChange, onMove
       <div className="flex">
         <button onClick={onMoveUp} disabled={busy || isFirst} className={iconButton} aria-label="Flytt opp" title="Flytt opp">↑</button>
         <button onClick={onMoveDown} disabled={busy || isLast} className={iconButton} aria-label="Flytt ned" title="Flytt ned">↓</button>
-        <button
+        <Button
+          variant="dangerText"
+          size="sm"
           onClick={() => (blockedReason ? setShowBlocked(true) : onDelete())}
           disabled={busy}
           aria-disabled={blockedReason !== null}
-          className={`px-2 py-1 text-sm rounded disabled:opacity-30 ${
-            blockedReason ? 'text-red-300 cursor-not-allowed' : 'text-red-600 hover:bg-red-50'
-          }`}
+          className="px-2"
           title={blockedReason ?? 'Slett steget'}
         >
           Slett
-        </button>
+        </Button>
       </div>
       {showBlocked && blockedReason && (
         <p role="alert" className="basis-full text-xs text-amber-700 bg-amber-50 rounded px-2 py-1">

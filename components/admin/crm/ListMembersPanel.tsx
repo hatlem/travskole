@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { Pagination } from '@/components/admin/Pagination';
+import { Button } from '@/components/admin/Button';
 
 interface ContactRef {
   id: number;
@@ -193,15 +194,17 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
           </ul>
         ) : null}
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={add}
-            disabled={selected.length === 0 || adding}
-            className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-xs font-medium disabled:opacity-50"
+            disabled={selected.length === 0}
+            loading={adding}
+            loadingLabel="Legger til …"
           >
-            {adding ? 'Legger til …' : selected.length > 0 ? `Legg ${selected.length} i listen` : 'Legg i listen'}
-          </button>
-          <span className="text-[11px] text-gray-500">
+            {selected.length > 0 ? `Legg ${selected.length} i listen` : 'Legg i listen'}
+          </Button>
+          <span className="text-xs text-gray-500">
             Flyter som starter når noen «legges i en liste», starter for disse kontaktene.
           </span>
         </div>
@@ -223,13 +226,15 @@ export function ListMembersPanel({ listId, listName, onChanged }: ListMembersPan
                   {m.name}
                 </Link>
                 <span className="text-gray-400 min-w-0 truncate">{m.email ?? '—'}</span>
-                <button
-                  type="button"
+                <Button
+                  variant="dangerText"
+                  size="sm"
                   onClick={() => setPendingRemove(m)}
-                  className="ml-auto text-gray-400 hover:text-red-600"
+                  className="ml-auto"
+                  aria-label={`Fjern ${m.name} fra listen`}
                 >
                   Fjern
-                </button>
+                </Button>
               </li>
             ))}
           </ul>

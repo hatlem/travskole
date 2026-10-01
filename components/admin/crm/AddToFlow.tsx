@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useToast } from '@/components/admin/Toast';
+import { Button } from '../Button';
 
 interface FlowOption { id: number; name: string; status: string; isMarketing: boolean; anchorMode: string }
 
@@ -94,14 +95,9 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, excludeFlowId
           <option value="">Velg e-postflyt</option>
           {choices.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
-        <button
-          type="button"
-          onClick={enroll}
-          disabled={!selected || busy}
-          className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
-        >
-          {busy ? 'Legger til …' : 'Legg til'}
-        </button>
+        <Button variant="secondary" size="sm" onClick={enroll} disabled={!selected} loading={busy} loadingLabel="Legger til …">
+          Legg til
+        </Button>
       </div>
       {selected?.isMarketing && !hasMarketingConsent && (
         <p className="text-xs text-amber-700">

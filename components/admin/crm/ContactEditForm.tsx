@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Field } from './CrmDialog';
 import { TagInput } from './TagInput';
+import { Button } from '../Button';
 
 export interface ContactEditValues {
   name: string;
@@ -78,11 +79,10 @@ export function ContactEditForm({ contact, saving, onCancel, onSave, tagSuggesti
         </div>
       </div>
       <div className="flex justify-end gap-2 mt-4">
-        <button type="button" onClick={onCancel} disabled={saving} className="text-sm text-gray-600 px-3 py-1.5">Avbryt</button>
-        <button type="submit" disabled={!valid || saving}
-          className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50">
-          {saving ? 'Lagrer …' : 'Lagre endringer'}
-        </button>
+        <Button variant="secondary" size="sm" onClick={onCancel} disabled={saving}>Avbryt</Button>
+        <Button size="sm" type="submit" disabled={!valid} loading={saving} loadingLabel="Lagrer …">
+          Lagre endringer
+        </Button>
       </div>
     </form>
   );

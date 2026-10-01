@@ -8,6 +8,7 @@ import { dateInputToIso, isoToDateInput, parseNokValue } from '@/lib/crm/form-ut
 import { CrmDialog, Field } from './CrmDialog';
 import { EntityPicker, type EntityRef } from './EntityPicker';
 import { AssigneeSelect } from './AssigneeSelect';
+import { Button } from '../Button';
 
 export interface DealDialogDefaults {
   title?: string;
@@ -204,32 +205,27 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
   const footer = confirmDelete ? (
     <div className="flex items-center gap-3">
       <span className="text-sm text-red-700 flex-1">Slette avtalen for godt? Den forsvinner fra salgstavlen, kontakten og bedriften. Dette kan ikke angres.</span>
-      <button type="button" onClick={() => setConfirmDelete(false)} disabled={saving} className="text-sm text-gray-600 px-3 py-1.5">
+      <Button variant="secondary" size="sm" onClick={() => setConfirmDelete(false)} disabled={saving}>
         Avbryt
-      </button>
-      <button type="button" onClick={remove} disabled={saving} className="bg-red-600 text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50">
-        {saving ? 'Sletter …' : 'Ja, slett avtalen'}
-      </button>
+      </Button>
+      <Button variant="danger" size="sm" onClick={remove} loading={saving} loadingLabel="Sletter …">
+        Ja, slett avtalen
+      </Button>
     </div>
   ) : (
     <div className="flex items-center gap-3">
       {isEdit && onDeleted && (
-        <button type="button" onClick={() => setConfirmDelete(true)} disabled={saving || loading} className="text-sm text-gray-500 hover:text-red-600">
+        <Button variant="dangerText" size="sm" onClick={() => setConfirmDelete(true)} disabled={saving || loading}>
           Slett
-        </button>
+        </Button>
       )}
       <div className="ml-auto flex gap-2">
-        <button type="button" onClick={onClose} disabled={saving} className="text-sm text-gray-600 px-3 py-1.5">
+        <Button variant="secondary" size="sm" onClick={onClose} disabled={saving}>
           Avbryt
-        </button>
-        <button
-          type="button"
-          onClick={save}
-          disabled={!valid || saving || loading}
-          className="bg-bjerke-blue text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
-        >
-          {saving ? 'Lagrer …' : isEdit ? 'Lagre' : 'Legg til avtale'}
-        </button>
+        </Button>
+        <Button size="sm" onClick={save} disabled={!valid || loading} loading={saving} loadingLabel="Lagrer …">
+          {isEdit ? 'Lagre' : 'Legg til avtale'}
+        </Button>
       </div>
     </div>
   );

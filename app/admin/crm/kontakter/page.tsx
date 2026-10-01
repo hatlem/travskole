@@ -9,6 +9,8 @@ import { useToast } from '@/components/admin/Toast';
 import { useOpenFromQuery } from '@/components/admin/useOpenFromQuery';
 import { HelpTip } from '@/components/admin/HelpTip';
 import { Pagination } from '@/components/admin/Pagination';
+import { Button, ButtonLink } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 import { assigneeLabel, useAssignees } from '@/components/admin/crm/useAssignees';
 import { formatPhone, formatDateNo } from '@/lib/admin-format';
 
@@ -174,7 +176,9 @@ export default function KontakterPage({
       toast(data.error || 'Kunne ikke lagre kontakten. Sjekk feltene og prøv igjen.', 'error');
       return;
     }
-    toast(`${newContact.name} er lagt til som kontakt`, 'success');
+    toast(`${newContact.name} er lagt til som kontakt`, 'success', {
+      action: data.contact?.id ? { label: 'Åpne', href: `/admin/crm/kontakter/${data.contact.id}` } : undefined,
+    });
     setShowNew(false);
     setNewContact({ name: '', email: '', phone: '' });
     load();
@@ -196,18 +200,12 @@ export default function KontakterPage({
       <CrmTabs
         actions={
           <>
-            <Link
-              href="/admin/crm/import"
-              className="border border-gray-300 bg-white text-gray-700 px-4 py-2 rounded-md text-sm font-medium hover:bg-gray-50"
-            >
+            <ButtonLink href="/admin/crm/import" variant="secondary">
               Importer fra Excel
-            </Link>
-            <button
-              onClick={() => setShowNew(true)}
-              className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-            >
+            </ButtonLink>
+            <Button variant={showNew ? 'secondary' : 'primary'} onClick={() => setShowNew(true)}>
               Legg til kontakt
-            </button>
+            </Button>
           </>
         }
       />
@@ -280,9 +278,9 @@ export default function KontakterPage({
         </select>
         <span className="text-sm text-gray-500">{total === 1 ? '1 kontakt' : `${total} kontakter`}</span>
         {hasFilters && (
-          <button type="button" onClick={clearFilters} className="text-sm text-blue-700 underline hover:no-underline">
+          <Button variant="link" size="sm" onClick={clearFilters}>
             Nullstill filtre
-          </button>
+          </Button>
         )}
       </div>
 
@@ -302,13 +300,14 @@ export default function KontakterPage({
               <HelpTip term="list" />
             </span>
           )}
-          <button
-            type="button"
+          <Button
+            variant="link"
+            size="sm"
             onClick={() => { setPage(1); setSegmentId(''); setListId(''); }}
-            className="ml-auto text-xs text-blue-700 underline hover:no-underline"
+            className="ml-auto"
           >
             Vis alle kontakter
-          </button>
+          </Button>
         </div>
       )}
 
@@ -332,11 +331,10 @@ export default function KontakterPage({
             <input id="new-contact-phone" type="tel" autoComplete="off" value={newContact.phone} onChange={(e) => setNewContact({ ...newContact, phone: e.target.value })}
               className="border border-gray-300 rounded-md px-3 py-2 text-sm" />
           </div>
-          <button onClick={createContact} disabled={!newContact.name}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50">
+          <Button onClick={createContact} disabled={!newContact.name}>
             Lagre kontakt
-          </button>
-          <button onClick={() => setShowNew(false)} className="text-sm text-gray-600 px-2 py-2">Avbryt</button>
+          </Button>
+          <Button variant="secondary" onClick={() => setShowNew(false)}>Avbryt</Button>
         </div>
       )}
 
@@ -374,9 +372,9 @@ export default function KontakterPage({
                 >
                   {c.name}
                 </Link>
-                <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                <Badge className="shrink-0 bg-gray-100 text-gray-700">
                   {STAGE_LABELS[c.stage] ?? c.stage}
-                </span>
+                </Badge>
               </div>
               {(c.email || c.phone) && (
                 <p className="mt-1 break-words text-gray-600">

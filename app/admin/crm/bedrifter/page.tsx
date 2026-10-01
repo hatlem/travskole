@@ -8,6 +8,8 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
 import { Pagination } from '@/components/admin/Pagination';
+import { Button } from '@/components/admin/Button';
+import { Badge } from '@/components/admin/StatusBadge';
 
 interface OrgRow {
   id: number;
@@ -93,7 +95,7 @@ export default function BedrifterPage() {
           phone: newOrg.phone || null,
         }),
       });
-      let data: { error?: string } = {};
+      let data: { error?: string; organization?: { id: number } } = {};
       try {
         data = await res.json();
       } catch {
@@ -103,7 +105,9 @@ export default function BedrifterPage() {
         toast(data.error || 'Kunne ikke lagre bedriften. Sjekk feltene og prøv igjen.', 'error');
         return;
       }
-      toast(`${newOrg.name} er lagt til`, 'success');
+      toast(`${newOrg.name} er lagt til`, 'success', {
+        action: data.organization?.id ? { label: 'Åpne', href: `/admin/crm/bedrifter/${data.organization.id}` } : undefined,
+      });
       setShowNew(false);
       setNewOrg({ name: '', domain: '', phone: '' });
       load();
@@ -118,12 +122,9 @@ export default function BedrifterPage() {
     <div>
       <CrmTabs
         actions={
-          <button
-            onClick={() => setShowNew(true)}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-          >
+          <Button variant={showNew ? 'secondary' : 'primary'} onClick={() => setShowNew(true)}>
             Legg til bedrift
-          </button>
+          </Button>
         }
       />
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -168,20 +169,17 @@ export default function BedrifterPage() {
               className="border border-gray-300 rounded-md px-3 py-2 text-sm"
             />
           </label>
-          <button
+          <Button
             onClick={createOrg}
-            disabled={!newOrg.name || creating}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm disabled:opacity-50"
+            disabled={!newOrg.name}
+            loading={creating}
+            loadingLabel="Lagrer …"
           >
-            {creating ? 'Lagrer …' : 'Lagre bedrift'}
-          </button>
-          <button
-            onClick={() => setShowNew(false)}
-            disabled={creating}
-            className="text-sm text-gray-600 px-2 py-2 disabled:opacity-50"
-          >
+            Lagre bedrift
+          </Button>
+          <Button variant="secondary" onClick={() => setShowNew(false)} disabled={creating}>
             Avbryt
-          </button>
+          </Button>
         </div>
       )}
 
@@ -218,9 +216,9 @@ export default function BedrifterPage() {
                 >
                   {o.name}
                 </Link>
-                <span className="shrink-0 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700">
+                <Badge className="shrink-0 bg-gray-100 text-gray-700">
                   {STAGE_LABELS[o.stage] ?? o.stage}
-                </span>
+                </Badge>
               </div>
               {(o.domain || o.phone) && (
                 <p className="mt-1 text-gray-600">

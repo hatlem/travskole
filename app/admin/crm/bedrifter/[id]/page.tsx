@@ -15,6 +15,7 @@ import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { CrmDialog, Field } from '@/components/admin/crm/CrmDialog';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { Button } from '@/components/admin/Button';
 
 interface OrgDetail {
   id: number;
@@ -288,20 +289,12 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
             />
           </label>
           <HelpTip term="owner" align="right" />
-          <button
-            type="button"
-            onClick={openEdit}
-            className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark"
-          >
+          <Button size="sm" onClick={openEdit}>
             Rediger bedrift
-          </button>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(true)}
-            className="border border-red-200 text-red-700 px-3 py-1.5 rounded-md text-sm font-medium hover:bg-red-50"
-          >
+          </Button>
+          <Button variant="dangerText" size="sm" onClick={() => setConfirmDelete(true)}>
             Slett
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -336,9 +329,9 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="font-semibold">Avtaler ({org.deals.length}) <HelpTip term="deal" /></h2>
-              <button onClick={() => setDealDialog({ dealId: null })} className="text-sm text-blue-700 hover:underline">
+              <Button variant="link" size="sm" onClick={() => setDealDialog({ dealId: null })}>
                 + Ny avtale
-              </button>
+              </Button>
             </div>
             {org.deals.length === 0 ? (
               <p className="text-sm text-gray-500">Ingen avtaler ennå. Lag en når bedriften vurderer å bestille noe.</p>
@@ -382,13 +375,9 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
                 rows={2}
                 className="border border-gray-300 rounded-md px-3 py-1.5 text-sm flex-1"
               />
-              <button
-                onClick={addNote}
-                disabled={!noteText.trim()}
-                className="bg-bjerke-blue text-white px-3 py-1.5 rounded-md text-sm self-end disabled:opacity-50"
-              >
+              <Button variant="secondary" size="sm" onClick={addNote} disabled={!noteText.trim()} className="self-end">
                 Lagre notat
-              </button>
+              </Button>
             </div>
           </section>
 
@@ -432,22 +421,19 @@ export default function BedriftDetaljPage({ params }: { params: Promise<{ id: st
         onClose={() => setEditValues(null)}
         footer={
           <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setEditValues(null)}
-              disabled={saving}
-              className="border border-gray-300 px-4 py-1.5 rounded-md text-sm hover:bg-white disabled:opacity-50"
-            >
+            <Button variant="secondary" size="sm" onClick={() => setEditValues(null)} disabled={saving}>
               Avbryt
-            </button>
-            <button
+            </Button>
+            <Button
+              size="sm"
               type="submit"
               form="org-edit-form"
-              disabled={saving || !editValues?.name.trim()}
-              className="bg-bjerke-blue hover:bg-bjerke-blue-dark text-white px-4 py-1.5 rounded-md text-sm disabled:opacity-50"
+              disabled={!editValues?.name.trim()}
+              loading={saving}
+              loadingLabel="Lagrer …"
             >
-              {saving ? 'Lagrer …' : 'Lagre'}
-            </button>
+              Lagre
+            </Button>
           </div>
         }
       >

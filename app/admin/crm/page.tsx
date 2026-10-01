@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import { CRM_GROUPS, CRM_QUICK_ACTIONS, groupHref } from '@/lib/admin-nav';
+import { ButtonLink } from '@/components/admin/Button';
+import { PageHeader } from '@/components/admin/PageHeader';
 
 export const metadata: Metadata = { title: 'CRM' };
 
@@ -17,26 +19,28 @@ const focusRing = 'focus-visible:outline-none focus-visible:ring-2 focus-visible
 export default function CrmIndexPage() {
   return (
     <div className="max-w-5xl">
-      <h1 className="text-3xl font-bold text-gray-900">Hva vil du gjøre?</h1>
-      <p className="mt-2 text-gray-600">
-        CRM er kundeoversikten deres: alle dere har kontakt med, salg som pågår, og e-poster som går ut av seg selv.
-        Start med en vanlig handling, eller velg et område.
-      </p>
+      <PageHeader
+        className=""
+        title="Hva vil du gjøre?"
+        description={
+          <>
+            CRM er kundeoversikten deres: alle dere har kontakt med, salg som pågår, og e-poster som går ut av seg selv.
+            Start med en vanlig handling, eller velg et område.
+          </>
+        }
+      />
 
       <section aria-labelledby="crm-quick-actions" className="mt-6">
         <h2 id="crm-quick-actions" className="sr-only">Vanlige handlinger</h2>
         <ul className="flex flex-wrap gap-3">
-          {CRM_QUICK_ACTIONS.map((action) => (
+          {CRM_QUICK_ACTIONS.map((action, index) => (
             <li key={action.href}>
-              <Link
-                href={action.href}
-                className={`inline-flex items-center gap-2 rounded-md bg-bjerke-blue px-4 py-2.5 text-sm font-medium text-white hover:bg-bjerke-blue-dark transition-colors ${focusRing}`}
-              >
+              <ButtonLink href={action.href} variant={index === 0 ? 'primary' : 'secondary'}>
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
                 </svg>
                 {action.label}
-              </Link>
+              </ButtonLink>
             </li>
           ))}
         </ul>
