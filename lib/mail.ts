@@ -4,6 +4,7 @@ import { makeT } from '@/lib/strings';
 import logger from '@/lib/logger';
 import { getBaseUrl } from '@/lib/site';
 import { BRAND } from '@/lib/brand';
+import { MAGIC_LINK_TTL_HOURS } from '@/lib/magic-link-ttl';
 
 function escapeHtml(str: string): string {
   return str
@@ -349,7 +350,7 @@ export async function sendMagicLinkEmail(email: string, token: string) {
           Logg inn
         </a>
       </p>
-      <p style="color:#666;font-size:14px">Denne lenken utløper om 15 minutter. Hvis du ikke ba om å logge inn, kan du ignorere denne e-posten.</p>
+      <p style="color:#666;font-size:14px">Denne lenken utløper om ${MAGIC_LINK_TTL_HOURS} timer. Hvis du ikke ba om å logge inn, kan du ignorere denne e-posten.</p>
       <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${siteName}</p>
     </div>`,
   );

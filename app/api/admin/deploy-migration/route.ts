@@ -9,6 +9,7 @@ import { MAGIC_LINK_PREFIX } from '@/lib/magic-link';
 import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 import { logActivity } from '@/lib/activity';
 import { parseNodeConfig, validateFlow, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
+import { MAGIC_LINK_TTL_MS } from '@/lib/magic-link-ttl';
 
 // Go-live-admins (Bjerke Travbane). Idempotent: skippes hvis brukeren allerede finnes.
 const BOOTSTRAP_ADMINS = [
@@ -32,7 +33,7 @@ async function sendLoginLink(email: string) {
   const rawToken = crypto.randomUUID();
   const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
   await prisma.verificationToken.create({
-    data: { identifier, token: tokenHash, expires: new Date(Date.now() + 15 * 60 * 1000) },
+    data: { identifier, token: tokenHash, expires: new Date(Date.now() + MAGIC_LINK_TTL_MS) },
   });
   await sendMagicLinkEmail(email, rawToken);
 }

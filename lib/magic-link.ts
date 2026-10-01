@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { sendMagicLinkEmail } from '@/lib/mail';
+import { MAGIC_LINK_TTL_MS } from '@/lib/magic-link-ttl';
 
 /**
  * Magic-link-tokens lagres i verification_tokens under et eget identifier-navnerom
@@ -9,8 +10,7 @@ import { sendMagicLinkEmail } from '@/lib/mail';
  */
 export const MAGIC_LINK_PREFIX = 'magiclink:';
 
-/** Levetid for en innloggingslenke. */
-export const MAGIC_LINK_TTL_MS = 15 * 60 * 1000;
+export { MAGIC_LINK_TTL_MS };
 
 /**
  * Utsteder en fersk innloggingslenke for e-posten og sender den på e-post.
