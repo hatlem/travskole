@@ -1,25 +1,34 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { HelpTip } from '@/components/admin/HelpTip';
+import { StatCardsSkeleton } from '@/components/admin/Skeleton';
 import { GjenbookingFane } from './GjenbookingFane';
-import { wonChartMessage } from '@/lib/crm/insights';
+import { dayMonthLong, dayMonthShort, monthLabel, wonChartMessage } from '@/lib/crm/insights';
 import { flowStatusLabel } from '@/lib/flows/status';
 import { AttribusjonFane } from './AttribusjonFane';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
 } from 'recharts';
 
-type Fane = 'flyter' | 'attribusjon' | 'gjenbooking' | 'pipeline' | 'besok' | 'ki';
+const FANER = ['flyter', 'attribusjon', 'gjenbooking', 'salg', 'besok', 'ki'] as const;
+type Fane = (typeof FANER)[number];
+const isFane = (v: string | null): v is Fane => v !== null && (FANER as readonly string[]).includes(v);
+
+interface SendAgg { sent: number; opened: number; clicked: number; replied: number; bounced: number }
 
 // (Typene speiler API-responsen fra /api/admin/crm/innsikt.)
 interface InsightsData {
   flows: null | {
-    perFlow: { flowId: number; name: string; status: string; sent: number; opened: number; clicked: number; replied: number; bounced: number; openRate: number; clickRate: number; activeEnrollments: number }[];
+    perFlow: ({ flowId: number; name: string; status: string; openRate: number; clickRate: number; activeEnrollments: number } & SendAgg)[];
     weekly: { weekStart: string; sent: number; opened: number }[];
     enrollmentStatus: { status: string; count: number }[];
+    totals: SendAgg & {
+      skippedNoConsent: number; skippedSuppressed: number; deletedFlows: SendAgg; openRate: number; clickRate: number;
+    };
   };
   pipeline: null | {
     byStage: { stageId: number; stageName: string; pipelineName: string; openValue: number; count: number }[];
@@ -37,12 +46,55 @@ const ENROLLMENT_STATUS_NO: Record<string, string> = {
   active: 'Underveis', completed: 'Ferdige', exited: 'Tatt ut av flyten', failed: 'Stoppet av en feil',
 };
 
+const CHART_HEIGHT = 260;
+const kr = (n: number) => `${Math.round(n).toLocaleString('nb-NO')} kr`;
+const weekTooltip = (label: unknown) => (typeof label === 'string' ? `Uka fra ${dayMonthLong(label)}` : '');
+const longDate = (iso: string) =>
+  new Date(iso).toLocaleDateString('nb-NO', { timeZone: 'Europe/Oslo', day: 'numeric', month: 'long', year: 'numeric' });
+
+const SECONDARY_BTN =
+  'inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue';
+
+/** Tom graf: samme høyde som grafen, så siden ikke hopper når tallene kommer. */
+function ChartEmpty({ title, text, action }: { title: string; text: string; action?: { label: string; href: string } }) {
+  return (
+    <div
+      className="flex flex-col items-center justify-center rounded-md border border-dashed border-gray-300 bg-gray-50 px-4 text-center"
+      style={{ minHeight: CHART_HEIGHT }}
+    >
+      <p className="font-medium text-gray-800">{title}</p>
+      <p className="mt-1 max-w-md text-sm text-gray-600 text-pretty">{text}</p>
+      {action && <Link href={action.href} className={`${SECONDARY_BTN} mt-4`}>{action.label}</Link>}
+    </div>
+  );
+}
+
 export default function InnsiktPage() {
-  const [fane, setFane] = useState<Fane>('flyter');
+  return (
+    <Suspense fallback={<div><CrmTabs /><StatCardsSkeleton count={3} /></div>}>
+      <InnsiktContent />
+    </Suspense>
+  );
+}
+
+function InnsiktContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const param = searchParams.get('fane');
+  const fane: Fane = isFane(param) ? param : 'flyter';
   const [data, setData] = useState<InsightsData | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [patching, setPatching] = useState<number | null>(null);
+
+  const velgFane = (next: Fane) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === 'flyter') params.delete('fane');
+    else params.set('fane', next);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -54,7 +106,7 @@ export default function InnsiktPage() {
       } catch (e) {
         if (!(e instanceof DOMException && e.name === 'AbortError')) setError('Kunne ikke hente tallene. Sjekk nettforbindelsen og last siden på nytt.');
       } finally {
-        setInitialLoading(false);
+        if (!controller.signal.aborted) setInitialLoading(false);
       }
     };
     const t = setTimeout(load, 0);
@@ -88,62 +140,108 @@ export default function InnsiktPage() {
     { key: 'flyter', label: 'E-postflyter' },
     { key: 'attribusjon', label: 'E-post → booking' },
     { key: 'gjenbooking', label: 'Kunder som kom tilbake' },
-    { key: 'pipeline', label: 'Salg' },
+    { key: 'salg', label: 'Salg' },
     { key: 'besok', label: 'Besøk på nettsiden' },
     { key: 'ki', label: `KI-forslag${data?.suggestions?.length ? ` (${data.suggestions.length})` : ''}` },
   ];
+  // Disse fanene henter egne tall og trenger ikke vente på resten.
+  const egenHenting = fane === 'attribusjon' || fane === 'gjenbooking';
 
   return (
     <div>
       <CrmTabs />
       {error && <p role="alert" className="text-red-600 mb-4">{error}</p>}
-      {initialLoading ? (
-        <p className="text-gray-500">Laster …</p>
+      <div className="-mx-4 mb-6 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+        <div className="inline-flex gap-1 rounded-lg bg-gray-100 p-1" role="group" aria-label="Velg rapport">
+          {faner.map((f) => (
+            <button
+              key={f.key}
+              type="button"
+              onClick={() => velgFane(f.key)}
+              aria-pressed={fane === f.key}
+              className={`whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue ${
+                fane === f.key ? 'bg-white text-bjerke-blue shadow-sm' : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      {fane === 'attribusjon' && <AttribusjonFane />}
+      {fane === 'gjenbooking' && <GjenbookingFane />}
+      {!egenHenting && (initialLoading ? (
+        <StatCardsSkeleton count={3} />
       ) : (
         <>
-          <div className="flex gap-1 border-b border-gray-200 mb-6 overflow-x-auto" role="group" aria-label="Velg rapport">
-            {faner.map((f) => (
-              <button key={f.key} onClick={() => setFane(f.key)} aria-pressed={fane === f.key}
-                className={`px-4 py-2 text-sm font-medium rounded-t-md border-b-2 -mb-px ${
-                  fane === f.key ? 'border-blue-600 text-blue-700 bg-blue-50' : 'border-transparent text-gray-600 hover:bg-gray-50'
-                }`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
           {fane === 'flyter' && <FlyterFane flows={data?.flows ?? null} />}
-          {fane === 'attribusjon' && <AttribusjonFane />}
-          {fane === 'gjenbooking' && <GjenbookingFane />}
-          {fane === 'pipeline' && <PipelineFane pipeline={data?.pipeline ?? null} />}
+          {fane === 'salg' && <PipelineFane pipeline={data?.pipeline ?? null} />}
           {fane === 'besok' && <BesokFane visits={data?.visits ?? null} />}
           {fane === 'ki' && (
             <KiFane suggestions={data?.suggestions ?? null} patching={patching} onAction={settSuggestionStatus} />
           )}
         </>
-      )}
+      ))}
     </div>
   );
 }
 
+function StatTile({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="bg-white rounded-lg border border-gray-200 p-4">
+      <div className="text-gray-500 text-sm">{label}</div>
+      <div className="text-3xl font-bold tabular-nums">{value}</div>
+      {sub && <div className="text-gray-500 text-sm">{sub}</div>}
+    </div>
+  );
+}
+
+const pct = (n: number) => `${n.toLocaleString('nb-NO')} %`;
+
 function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
   if (!flows) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
-  const harSendinger = flows.perFlow.some((f) => f.sent > 0);
+  const { totals } = flows;
   const harUkentligAktivitet = flows.weekly.some((w) => w.sent > 0 || w.opened > 0);
+  const rader = flows.perFlow.filter((f) => f.sent > 0 || f.activeEnrollments > 0 || f.status === 'active');
+  const ikkeSendt = totals.skippedNoConsent + totals.skippedSuppressed;
   return (
     <div className="space-y-8">
+      <section aria-labelledby="flyt-sum" className="space-y-3">
+        <h2 id="flyt-sum" className="font-semibold">E-poster fra e-postflyter – siste 30 dager</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatTile label="Sendt" value={totals.sent.toLocaleString('nb-NO')} />
+          <StatTile label="Andel åpnet" value={pct(totals.openRate)} sub={`${totals.opened} åpnet`} />
+          <StatTile label="Andel klikket" value={pct(totals.clickRate)} sub={`${totals.clicked} klikket`} />
+        </div>
+        <p className="text-sm text-gray-500 text-pretty">
+          Teller alle e-poster som e-postflytene har sendt automatisk, også fra flyter som er satt på pause, arkivert eller slettet.
+          Kurs-e-poster (påmeldingsbekreftelser og påminnelser fra kursmalene) og test-e-poster du sender til deg selv, er ikke med.
+          {ikkeSendt > 0 && (
+            <>
+              {' '}I tillegg ble {ikkeSendt} {ikkeSendt === 1 ? 'e-post' : 'e-poster'} ikke sendt
+              {totals.skippedNoConsent > 0 && ` – ${totals.skippedNoConsent} fordi personen ikke har sagt ja til markedsføring`}
+              {totals.skippedSuppressed > 0 && `${totals.skippedNoConsent > 0 ? ',' : ' –'} ${totals.skippedSuppressed} fordi personen har meldt seg av`}
+              .
+            </>
+          )}
+        </p>
+      </section>
+
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Sendte og åpnede e-poster per uke (siste 12 uker)</h2>
+        <h2 className="font-semibold mb-3">Sendt og åpnet per uke (siste 12 uker)</h2>
         {!harUkentligAktivitet ? (
-          <p className="text-gray-500">
-            Ingen e-poster sendt ennå — <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">slå på en e-postflyt</Link>, så dukker tallene opp her.
-          </p>
+          <ChartEmpty
+            title="Ingen e-poster sendt de siste 12 ukene"
+            text="Når en e-postflyt er aktivert og personer er med i den, ser du her hvor mange e-poster som går ut og blir åpnet hver uke."
+            action={{ label: 'Gå til e-postflytene', href: '/admin/crm/flyter' }}
+          />
         ) : (
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
             <LineChart data={flows.weekly}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
+              <XAxis dataKey="weekStart" tick={{ fontSize: 12 }} tickFormatter={dayMonthShort} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+              <Tooltip labelFormatter={weekTooltip} />
               <Legend />
               <Line type="monotone" dataKey="sent" name="Sendt" stroke="#2563eb" />
               <Line type="monotone" dataKey="opened" name="Åpnet" stroke="#16a34a" />
@@ -151,10 +249,14 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
           </ResponsiveContainer>
         )}
       </div>
+
       <div className="bg-white rounded-lg border border-gray-200 overflow-x-auto">
         <h2 className="font-semibold p-4 pb-0">Per e-postflyt (siste 30 dager)</h2>
-        {!harSendinger ? (
-          <p className="text-gray-500 p-4">Ingen e-poster sendt de siste 30 dagene.</p>
+        {rader.length === 0 && totals.deletedFlows.sent === 0 ? (
+          <p className="text-gray-500 p-4">
+            Ingen e-postflyter har sendt noe de siste 30 dagene.{' '}
+            <Link href="/admin/crm/flyter" className="text-blue-700 hover:underline">Se e-postflytene</Link>
+          </p>
         ) : (
           <table className="min-w-full text-sm">
             <thead><tr className="text-left text-gray-500 border-b">
@@ -164,31 +266,58 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
               <th className="p-3">Andel åpnet</th><th className="p-3">Andel klikket</th>
               <th className="p-3">Underveis nå</th>
             </tr></thead>
-            <tbody>
-              {flows.perFlow.map((f) => (
-                <tr key={f.flowId} className="border-b last:border-0">
+            <tbody className="tabular-nums">
+              {rader.map((f) => (
+                <tr key={f.flowId} className="border-b">
                   <td className="p-3"><Link href={`/admin/crm/flyter/${f.flowId}`} className="text-blue-700 hover:underline">{f.name}</Link></td>
                   <td className="p-3">{flowStatusLabel(f.status)}</td>
                   <td className="p-3">{f.sent}</td><td className="p-3">{f.opened}</td>
                   <td className="p-3">{f.clicked}</td><td className="p-3">{f.replied}</td>
                   <td className="p-3">{f.bounced}</td>
-                  <td className="p-3">{f.openRate} %</td><td className="p-3">{f.clickRate} %</td>
+                  <td className="p-3">{pct(f.openRate)}</td><td className="p-3">{pct(f.clickRate)}</td>
                   <td className="p-3">{f.activeEnrollments}</td>
                 </tr>
               ))}
+              {totals.deletedFlows.sent > 0 && (
+                <tr className="border-b text-gray-600">
+                  <td className="p-3 italic">Slettede e-postflyter</td>
+                  <td className="p-3">—</td>
+                  <td className="p-3">{totals.deletedFlows.sent}</td><td className="p-3">{totals.deletedFlows.opened}</td>
+                  <td className="p-3">{totals.deletedFlows.clicked}</td><td className="p-3">{totals.deletedFlows.replied}</td>
+                  <td className="p-3">{totals.deletedFlows.bounced}</td>
+                  <td className="p-3">—</td><td className="p-3">—</td><td className="p-3">—</td>
+                </tr>
+              )}
+              <tr className="font-semibold bg-gray-50">
+                <td className="p-3">Totalt</td><td className="p-3" />
+                <td className="p-3">{totals.sent}</td><td className="p-3">{totals.opened}</td>
+                <td className="p-3">{totals.clicked}</td><td className="p-3">{totals.replied}</td>
+                <td className="p-3">{totals.bounced}</td>
+                <td className="p-3">{pct(totals.openRate)}</td><td className="p-3">{pct(totals.clickRate)}</td>
+                <td className="p-3">{rader.reduce((sum, f) => sum + f.activeEnrollments, 0)}</td>
+              </tr>
             </tbody>
           </table>
         )}
+        {flows.perFlow.length > rader.length && (
+          <p className="px-4 pb-4 text-xs text-gray-500">
+            Flyter som ikke har sendt noe og ikke har noen underveis, er skjult.
+          </p>
+        )}
       </div>
+
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3 flex items-center">Personer i flytene<HelpTip term="recipients" /></h2>
-        <div className="flex gap-6">
-          {flows.enrollmentStatus.map((s) => (
-            <div key={s.status}><span className="text-2xl font-bold">{s.count}</span>{' '}
-              <span className="text-gray-500 text-sm">{ENROLLMENT_STATUS_NO[s.status] ?? s.status}</span></div>
-          ))}
-          {flows.enrollmentStatus.length === 0 && <p className="text-gray-500">Ingen personer har vært med i en e-postflyt ennå.</p>}
-        </div>
+        {flows.enrollmentStatus.length === 0 ? (
+          <p className="text-gray-500">Ingen personer har vært med i en e-postflyt ennå.</p>
+        ) : (
+          <div className="flex flex-wrap gap-6">
+            {flows.enrollmentStatus.map((s) => (
+              <div key={s.status}><span className="text-2xl font-bold tabular-nums">{s.count}</span>{' '}
+                <span className="text-gray-500 text-sm">{ENROLLMENT_STATUS_NO[s.status] ?? s.status}</span></div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -196,41 +325,61 @@ function FlyterFane({ flows }: { flows: InsightsData['flows'] }) {
 
 function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
   if (!pipeline) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
+  const pagaende = pipeline.byStage.reduce((sum, s) => sum + s.count, 0);
+  const harVerdi = pipeline.byStage.some((s) => s.openValue > 0);
+  const wonMessage = wonChartMessage(pipeline.wonByMonth, pipeline.totals.won);
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-3 gap-4">
-        {[['Avtaler som pågår', pipeline.totals.open], ['Vunnet (totalt)', pipeline.totals.won], ['Tapt (totalt)', pipeline.totals.lost]].map(([label, n]) => (
-          <div key={label as string} className="bg-white rounded-lg border border-gray-200 p-4 text-center">
-            <div className="text-3xl font-bold">{n}</div><div className="text-gray-500 text-sm">{label}</div>
-          </div>
-        ))}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatTile label="Avtaler som pågår" value={String(pipeline.totals.open)} />
+        <StatTile label="Vunnet (totalt)" value={String(pipeline.totals.won)} />
+        <StatTile label="Tapt (totalt)" value={String(pipeline.totals.lost)} />
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3 flex items-center">Verdi av avtaler som pågår, per steg (kr)<HelpTip term="stage" /></h2>
-        {pipeline.byStage.length === 0 ? <p className="text-gray-500">Ingen avtaler pågår nå. <Link href="/admin/crm/pipeline" className="text-blue-700 hover:underline">Åpne salgstavlen</Link> for å legge inn en.</p> : (
-          <ResponsiveContainer width="100%" height={260}>
+        {pagaende === 0 ? (
+          <ChartEmpty
+            title="Ingen avtaler pågår nå"
+            text="Legg inn en avtale på salgstavlen, så ser du her hvor mye som ligger i hvert steg."
+            action={{ label: 'Åpne salgstavlen', href: '/admin/crm/pipeline' }}
+          />
+        ) : !harVerdi ? (
+          <ChartEmpty
+            title={`${pagaende === 1 ? '1 avtale pågår' : `${pagaende} avtaler pågår`}, men uten beløp`}
+            text="Fyll inn «Verdi» på avtalene på salgstavlen for å se hvor mye som ligger i hvert steg."
+            action={{ label: 'Åpne salgstavlen', href: '/admin/crm/pipeline' }}
+          />
+        ) : (
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
             <BarChart data={pipeline.byStage.map((s) => ({ ...s, label: `${s.stageName} (${s.pipelineName})` }))}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="label" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="openValue" name="Verdi som pågår" fill="#2563eb" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v: number) => v.toLocaleString('nb-NO')} />
+              <Tooltip formatter={(v) => (typeof v === 'number' ? kr(v) : v)} />
+              <Bar dataKey="openValue" name="Verdi som pågår" fill="#2563eb" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Vunnet verdi per måned (siste 6 måneder)</h2>
-        {wonChartMessage(pipeline.wonByMonth, pipeline.totals.won) ? (
-          <p className="text-gray-500">{wonChartMessage(pipeline.wonByMonth, pipeline.totals.won)}</p>
+        {wonMessage ? (
+          <ChartEmpty
+            title="Ingen graf å vise ennå"
+            text={wonMessage}
+            action={{ label: 'Åpne salgstavlen', href: '/admin/crm/pipeline' }}
+          />
         ) : (
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
             <BarChart data={pipeline.wonByMonth}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <Tooltip />
-              <Bar dataKey="value" name="Vunnet verdi (kr)" fill="#16a34a" />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} />
+              <XAxis dataKey="month" tick={{ fontSize: 12 }} tickFormatter={(m: string) => monthLabel(m, true)} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={(v: number) => v.toLocaleString('nb-NO')} />
+              <Tooltip
+                labelFormatter={(m) => (typeof m === 'string' ? monthLabel(m) : '')}
+                formatter={(v) => (typeof v === 'number' ? kr(v) : v)}
+              />
+              <Bar dataKey="value" name="Vunnet verdi" fill="#16a34a" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         )}
@@ -242,22 +391,27 @@ function PipelineFane({ pipeline }: { pipeline: InsightsData['pipeline'] }) {
 function BesokFane({ visits }: { visits: InsightsData['visits'] }) {
   if (!visits) return <p className="text-gray-500">Kunne ikke hente tallene for denne delen. Last siden på nytt.</p>;
   const harBesok = visits.weekly.some((w) => w.pageViews > 0 || w.courseViews > 0);
+  const { funnel } = visits;
+  const harTrakt = funnel.viewed > 0 || funnel.signupStarted > 0 || funnel.registered > 0;
   return (
     <div className="space-y-8">
       <p className="text-sm text-gray-500 bg-gray-50 border border-gray-200 rounded-md p-3">
         Vi teller bare besøkende som har sagt ja til informasjonskapsler (cookies), så det reelle tallet er trolig høyere.
       </p>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
-        <h2 className="font-semibold mb-3">Visninger per uke (12 uker)</h2>
+        <h2 className="font-semibold mb-3">Visninger per uke (siste 12 uker)</h2>
         {!harBesok ? (
-          <p className="text-gray-500">Ingen besøk registrert ennå. Bare besøkende som sier ja til informasjonskapsler, blir telt.</p>
+          <ChartEmpty
+            title="Ingen besøk registrert ennå"
+            text="Besøk telles fra nettsiden når sporingen er satt opp og den besøkende har sagt ja til informasjonskapsler."
+          />
         ) : (
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
             <LineChart data={visits.weekly}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="weekStart" tick={{ fontSize: 11 }} />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-              <Tooltip />
+              <XAxis dataKey="weekStart" tick={{ fontSize: 12 }} tickFormatter={dayMonthShort} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 12 }} />
+              <Tooltip labelFormatter={weekTooltip} />
               <Legend />
               <Line type="monotone" dataKey="pageViews" name="Sidevisninger" stroke="#2563eb" />
               <Line type="monotone" dataKey="courseViews" name="Kursvisninger" stroke="#9333ea" />
@@ -267,13 +421,17 @@ function BesokFane({ visits }: { visits: InsightsData['visits'] }) {
       </div>
       <div className="bg-white rounded-lg border border-gray-200 p-4">
         <h2 className="font-semibold mb-3">Fra besøk til påmelding (siste 30 dager)</h2>
-        <div className="flex items-center gap-4 text-center">
-          <div><div className="text-3xl font-bold">{visits.funnel.viewed}</div><div className="text-gray-500 text-sm">Så på et kurs</div></div>
-          <div className="text-gray-400">→</div>
-          <div><div className="text-3xl font-bold">{visits.funnel.signupStarted}</div><div className="text-gray-500 text-sm">Begynte å melde seg på</div></div>
-          <div className="text-gray-400">→</div>
-          <div><div className="text-3xl font-bold">{visits.funnel.registered}</div><div className="text-gray-500 text-sm">Fullførte påmeldingen</div></div>
-        </div>
+        {!harTrakt ? (
+          <p className="text-gray-500">Ingen har sett på et kurs de siste 30 dagene (blant dem som har sagt ja til informasjonskapsler).</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-4 text-center">
+            <div><div className="text-3xl font-bold tabular-nums">{funnel.viewed}</div><div className="text-gray-500 text-sm">Så på et kurs</div></div>
+            <div className="text-gray-400" aria-hidden="true">→</div>
+            <div><div className="text-3xl font-bold tabular-nums">{funnel.signupStarted}</div><div className="text-gray-500 text-sm">Begynte å melde seg på</div></div>
+            <div className="text-gray-400" aria-hidden="true">→</div>
+            <div><div className="text-3xl font-bold tabular-nums">{funnel.registered}</div><div className="text-gray-500 text-sm">Fullførte påmeldingen</div></div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -296,7 +454,7 @@ function KiFane({ suggestions, patching, onAction }: {
             <p className="font-medium">{s.title}</p>
             <p className="text-sm text-gray-500">
               <Link href={`/admin/crm/flyter/${s.flowId}`} className="text-blue-700 hover:underline">{s.flowName}</Link>
-              {' · '}{new Date(s.createdAt).toLocaleDateString('nb-NO')}
+              {' · '}{longDate(s.createdAt)}
             </p>
           </div>
           <div className="flex gap-2 shrink-0">
