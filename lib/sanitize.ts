@@ -24,5 +24,7 @@ export function sanitizeLegalHtml(dirty: string): string {
     // Tillat kun http(s), mailto og interne relative lenker
     ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto):|\/(?!\/)|#)/i,
     ADD_ATTR: ['target'],
+    // Egendefinert URI-regex får ellers DOMPurify til å regex-sjekke target/rel og fjerne dem.
+    ADD_URI_SAFE_ATTR: ['target', 'rel'],
   });
 }

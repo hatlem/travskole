@@ -48,18 +48,12 @@ beforeEach(() => {
   prisma.bookingRequest.create.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ id: 11, ...data }));
 });
 
-describe('POST /api/bookings — hasAccount', () => {
-  it('false when the e-mail has no account', async () => {
+describe('POST /api/bookings — no account oracle', () => {
+  it('never reveals whether the e-mail has an account', async () => {
     prisma.user.findUnique.mockResolvedValue(null);
     const res = await submit('Firma@Example.no');
     expect(res.status).toBe(201);
-    expect((await res.json()).hasAccount).toBe(false);
-    expect(prisma.user.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { email: 'firma@example.no' } }));
-  });
-
-  it('true when the e-mail has an account', async () => {
-    prisma.user.findUnique.mockResolvedValue({ id: 3 });
-    expect((await (await submit()).json()).hasAccount).toBe(true);
+    expect(await res.json()).not.toHaveProperty('hasAccount');
   });
 });
 

@@ -168,7 +168,6 @@ export default function RequestForm({ courseId, courseType, summary, requireLogi
         email: form.email.trim().toLowerCase(),
         checkoutToken: null,
         providers: [],
-        ...(typeof data.hasAccount === 'boolean' && { hasAccount: data.hasAccount }),
       });
       router.push('/pamelding/bekreftet');
     } catch (err) {
