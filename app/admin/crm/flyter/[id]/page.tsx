@@ -29,7 +29,7 @@ export default async function FlyterEditorPage({
 
   await ensureSenderIdentitiesSeeded();
 
-  const [flow, senderIdentities, segments, courses, adminUsers, activeEnrollments] = await Promise.all([
+  const [flow, senderIdentities, segments, lists, courses, adminUsers, activeEnrollments] = await Promise.all([
     prisma.flow.findUnique({
       where: { id: flowId },
       include: {
@@ -40,6 +40,7 @@ export default async function FlyterEditorPage({
     }),
     prisma.senderIdentity.findMany({ where: { active: true }, orderBy: { id: 'asc' } }),
     prisma.segment.findMany({ orderBy: { name: 'asc' } }),
+    prisma.contactList.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.course.findMany({
       orderBy: [{ startDate: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       select: { id: true, name: true, slug: true, startDate: true },
@@ -92,6 +93,7 @@ export default async function FlyterEditorPage({
           displayName: identity.displayName,
         }))}
         segments={segments.map((segment) => ({ id: segment.id, name: segment.name }))}
+        lists={lists}
         courses={courses.map((course) => ({
           id: course.id,
           name: course.name,

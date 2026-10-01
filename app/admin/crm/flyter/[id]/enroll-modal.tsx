@@ -9,6 +9,12 @@ interface SegmentOption {
   name: string;
 }
 
+interface ListOption {
+  id: number;
+  name: string;
+  memberCount: number;
+}
+
 interface ContactHit {
   id: number;
   name: string;
@@ -30,7 +36,7 @@ interface EnrollModalProps {
   onEnrolled: (result: EnrollResult) => void;
 }
 
-type Mode = 'segment' | 'contacts';
+type Mode = 'segment' | 'list' | 'contacts';
 
 const SEGMENT_CAP = 500;
 
@@ -40,6 +46,8 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
   const [segments, setSegments] = useState<SegmentOption[] | null>(null);
   const [segmentId, setSegmentId] = useState<number | ''>('');
   const [preview, setPreview] = useState<{ segmentId: number; count: number } | null>(null);
+  const [lists, setLists] = useState<ListOption[] | null>(null);
+  const [listId, setListId] = useState<number | ''>('');
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<ContactHit[]>([]);
   const [searching, setSearching] = useState(false);
@@ -59,6 +67,19 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
         if (err instanceof DOMException && err.name === 'AbortError') return;
         setSegments([]);
         toast('Kunne ikke laste segmenter', 'error');
+      });
+    return () => controller.abort();
+  }, [toast]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/admin/crm/lists', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error())))
+      .then((data) => setLists(Array.isArray(data.lists) ? data.lists : []))
+      .catch((err) => {
+        if (err instanceof DOMException && err.name === 'AbortError') return;
+        setLists([]);
+        toast('Kunne ikke laste lister', 'error');
       });
     return () => controller.abort();
   }, [toast]);
@@ -101,7 +122,10 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
 
   const previewCount = preview && preview.segmentId === segmentId ? preview.count : null;
   const visibleHits = query.trim().length >= 2 ? hits : [];
-  const canSubmit = !submitting && (mode === 'segment' ? segmentId !== '' : selected.length > 0);
+  const selectedList = lists?.find((l) => l.id === listId) ?? null;
+  const canSubmit =
+    !submitting &&
+    (mode === 'segment' ? segmentId !== '' : mode === 'list' ? listId !== '' : selected.length > 0);
 
   function toggleContact(contact: ContactHit) {
     setSelected((prev) =>
@@ -113,7 +137,12 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
     if (!canSubmit) return;
     setSubmitting(true);
     try {
-      const body = mode === 'segment' ? { segmentId } : { contactIds: selected.map((c) => c.id) };
+      const body =
+        mode === 'segment'
+          ? { segmentId }
+          : mode === 'list'
+            ? { listId }
+            : { contactIds: selected.map((c) => c.id) };
       const res = await fetch(`/api/admin/crm/flows/${flowId}/enrollments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -188,6 +217,7 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
           <div className="space-y-4">
             <div className="flex gap-2">
               <button className={tabCls(mode === 'segment')} onClick={() => setMode('segment')}>Segment</button>
+              <button className={tabCls(mode === 'list')} onClick={() => setMode('list')}>CRM-liste</button>
               <button className={tabCls(mode === 'contacts')} onClick={() => setMode('contacts')}>Enkeltkontakter</button>
             </div>
 
@@ -211,6 +241,28 @@ export function EnrollModal({ flowId, isMarketing, onClose, onEnrolled }: Enroll
                     {previewCount === null
                       ? 'Teller kontakter …'
                       : `${previewCount} kontakter matcher segmentet nå${previewCount > SEGMENT_CAP ? ` — de første ${SEGMENT_CAP} meldes inn` : ''}.`}
+                  </p>
+                )}
+              </div>
+            ) : mode === 'list' ? (
+              <div>
+                <label htmlFor="enroll-list" className="block text-xs font-medium text-gray-600 mb-1">Meld inn hel liste</label>
+                <select
+                  id="enroll-list"
+                  value={listId}
+                  onChange={(e) => setListId(e.target.value ? Number(e.target.value) : '')}
+                  disabled={lists === null}
+                  className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                >
+                  <option value="">{lists === null ? 'Laster …' : 'Velg liste …'}</option>
+                  {(lists ?? []).map((l) => (
+                    <option key={l.id} value={l.id}>{l.name} ({l.memberCount})</option>
+                  ))}
+                </select>
+                {selectedList && (
+                  <p className="mt-1 text-xs text-gray-600">
+                    {selectedList.memberCount} kontakter i listen
+                    {selectedList.memberCount > SEGMENT_CAP ? ` — maks ${SEGMENT_CAP} meldes inn per gang` : ''}.
                   </p>
                 )}
               </div>

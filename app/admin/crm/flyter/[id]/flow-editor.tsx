@@ -18,7 +18,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { CrmTabs } from '@/components/admin/CrmTabs';
 import { useToast } from '@/components/admin/Toast';
-import type { CourseOption } from '@/lib/flows/event-labels';
+import type { CourseOption, ListOption } from '@/lib/flows/event-labels';
 import { isFlowEditable, isTemplateStatus } from '@/lib/flows/status';
 import { freeNodePosition, validateEditorGraph } from '@/lib/flows/editor';
 import { nodeTypes, NODE_TYPE_ORDER, NODE_LABELS, type FlowRFNode, type FlowNodeType } from './node-types';
@@ -67,6 +67,7 @@ interface FlowEditorProps {
   senderIdentities: SenderIdentityOption[];
   segments: SegmentOption[];
   courses: CourseOption[];
+  lists: ListOption[];
   adminUsers: AdminUserOption[];
   initialActiveEnrollments: number;
 }
@@ -88,6 +89,7 @@ export function FlowEditor({
   senderIdentities,
   segments,
   courses,
+  lists,
   adminUsers,
   initialActiveEnrollments,
 }: FlowEditorProps) {
@@ -545,7 +547,14 @@ export function FlowEditor({
             {isTemplate && (
               <p className="mb-2 text-xs text-gray-500">Utløsere i en mal kopieres til nye flyter, men utløser aldri noe selv.</p>
             )}
-            <TriggerPanel flowId={flow.id} triggers={triggers} courses={courses} onTriggersChange={setTriggers} />
+            <TriggerPanel
+              flowId={flow.id}
+              triggers={triggers}
+              courses={courses}
+              lists={lists}
+              anchorMode={flow.anchorMode}
+              onTriggersChange={setTriggers}
+            />
           </div>
         </div>
       </div>

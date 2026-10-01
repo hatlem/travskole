@@ -8,7 +8,10 @@ import {
   describeTriggerFilter,
   eventLabel,
   groupedEventTypes,
+  isListEvent,
+  withListFilter,
   type CourseOption,
+  type ListOption,
 } from '@/lib/flows/event-labels';
 
 export interface TriggerRow {
@@ -21,6 +24,8 @@ interface TriggerPanelProps {
   flowId: number;
   triggers: TriggerRow[];
   courses: CourseOption[];
+  lists: ListOption[];
+  anchorMode: string;
   onTriggersChange: (triggers: TriggerRow[]) => void;
 }
 
@@ -31,10 +36,11 @@ function courseOptionLabel(course: CourseOption): string {
   return `${course.name} (${new Date(course.startDate).toLocaleDateString('nb-NO')})`;
 }
 
-export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: TriggerPanelProps) {
+export function TriggerPanel({ flowId, triggers, courses, lists, anchorMode, onTriggersChange }: TriggerPanelProps) {
   const { toast } = useToast();
   const [eventType, setEventType] = useState('');
   const [course, setCourse] = useState('');
+  const [listId, setListId] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [filterText, setFilterText] = useState('');
   const [filterError, setFilterError] = useState<string | null>(null);
@@ -42,6 +48,7 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
   const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const courseKey = courseFilterKeyFor(eventType);
+  const listEvent = isListEvent(eventType);
   // courseSlug-hendelser kan bare filtreres på kurs som har en slug; slug er unik kun per kurstype.
   const courseChoices =
     courseKey === 'courseSlug'
@@ -72,7 +79,11 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
     setFilterError(null);
 
     const courseValue = course === '' ? null : courseKey === 'courseId' ? Number(course) : course;
-    const filter = buildTriggerFilter(eventType, courseValue, advanced);
+    const filter = withListFilter(
+      eventType,
+      listId === '' ? null : Number(listId),
+      buildTriggerFilter(eventType, courseValue, advanced),
+    );
 
     setCreating(true);
     try {
@@ -92,6 +103,7 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
       ]);
       setEventType('');
       setCourse('');
+      setListId('');
       setFilterText('');
       setShowAdvanced(false);
       toast('Utløser lagt til', 'success');
@@ -133,7 +145,7 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
       ) : (
         <ul className="space-y-2">
           {triggers.map((t) => {
-            const details = describeTriggerFilter(t.eventType, t.filter, courses);
+            const details = describeTriggerFilter(t.eventType, t.filter, courses, lists);
             return (
               <li
                 key={t.id}
@@ -144,6 +156,9 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
                   {details.map((d) => (
                     <div key={d} className="mt-0.5 text-gray-500">{d}</div>
                   ))}
+                  {anchorMode === 'course' && isListEvent(t.eventType) && (
+                    <div className="mt-0.5 text-amber-700">Virker ikke i en kurs-forankret flyt</div>
+                  )}
                 </div>
                 <button
                   onClick={() => deleteTrigger(t.id)}
@@ -167,6 +182,7 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
             onChange={(e) => {
               setEventType(e.target.value);
               setCourse('');
+              setListId('');
             }}
             className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
           >
@@ -202,6 +218,32 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
           </div>
         )}
 
+        {listEvent && (
+          <div>
+            <label htmlFor="trigger-list" className="block text-xs font-medium text-gray-600 mb-1">CRM-liste</label>
+            <select
+              id="trigger-list"
+              value={listId}
+              onChange={(e) => setListId(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+            >
+              <option value="">Alle lister</option>
+              {lists.map((l) => (
+                <option key={l.id} value={String(l.id)}>{l.name}</option>
+              ))}
+            </select>
+            {lists.length === 0 && (
+              <p className="mt-1 text-[11px] text-gray-500">Ingen lister ennå — opprett dem under Segmenter.</p>
+            )}
+            {anchorMode === 'course' && (
+              <p className="mt-1 text-[11px] text-amber-700">
+                Denne flyten er kurs-forankret og må startes av en påmelding. Listehendelser har ikke noe kurs, så
+                løpet avsluttes ved første «Planlegg»-node. Bytt til kontakt-forankring i Innstillinger.
+              </p>
+            )}
+          </div>
+        )}
+
         <div>
           <label className="flex items-center gap-2 text-xs text-gray-600">
             <input
@@ -230,6 +272,7 @@ export function TriggerPanel({ flowId, triggers, courses, onTriggersChange }: Tr
               <p className="text-[11px] text-gray-500">
                 Nøklene må matche hendelsens data eksakt (tall og tekst skilles).
                 {courseKey ? ' Kursvalget over legges til automatisk.' : ''}
+                {listEvent ? ' Listevalget over legges til automatisk.' : ''}
               </p>
             </>
           )}

@@ -3,9 +3,9 @@
  *
  * `enrollFromEvent` is the fire-safe entrypoint called (best-effort) from the
  * event bus — it never throws, so a bug here can never break the request
- * that emitted the event. `enrollContact` and `enrollSegment` are used by the
- * admin API and are allowed to throw (the API layer decides how to surface
- * that to the caller).
+ * that emitted the event. `enrollContact`, `enrollSegment` and `enrollList`
+ * are used by the admin API and are allowed to throw (the API layer decides
+ * how to surface that to the caller).
  *
  * Race safety: the in-code `hasActiveEnrollment` check is advisory — the
  * real guard is a partial unique index (`flow_enrollments_one_active` on
@@ -194,6 +194,39 @@ export async function enrollSegment(flowId: number, segmentId: number): Promise<
   if (!ids) return emptySummary();
   const summary = await enrollContacts(flowId, ids.slice(0, SEGMENT_ENROLL_CAP));
   summary.capped = Math.max(0, ids.length - SEGMENT_ENROLL_CAP);
+  return summary;
+}
+
+/**
+ * Melder inn alle medlemmer av en CRM-liste (samme vern som `enrollContacts`).
+ * Allerede aktive tas ut før taket, så en ny kjøring når resten av listen.
+ * null når listen ikke finnes.
+ */
+export async function enrollList(flowId: number, listId: number): Promise<EnrollSummary | null> {
+  const list = await prisma.contactList.findUnique({ where: { id: listId }, select: { id: true } });
+  if (!list) return null;
+
+  const memberships = await prisma.contactListMembership.findMany({
+    where: { listId },
+    orderBy: [{ addedAt: 'asc' }, { id: 'asc' }],
+    select: { contactId: true },
+  });
+  const ids = memberships.map((m) => m.contactId);
+  if (ids.length === 0) return emptySummary();
+
+  const active = new Set(
+    (
+      await prisma.flowEnrollment.findMany({
+        where: { flowId, status: 'active', contactId: { in: ids } },
+        select: { contactId: true },
+      })
+    ).map((e) => e.contactId),
+  );
+  const pending = ids.filter((id) => !active.has(id));
+
+  const summary = await enrollContacts(flowId, pending.slice(0, SEGMENT_ENROLL_CAP));
+  summary.skippedActive += ids.length - pending.length;
+  summary.capped = Math.max(0, pending.length - SEGMENT_ENROLL_CAP);
   return summary;
 }
 

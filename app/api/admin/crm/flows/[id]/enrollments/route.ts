@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
-import { enrollContacts, enrollSegment, type EnrollSummary } from '@/lib/flows/enroll';
+import { enrollContacts, enrollList, enrollSegment, type EnrollSummary } from '@/lib/flows/enroll';
 import { canEnrollIntoStatus, isTemplateStatus } from '@/lib/flows/status';
 
 const PAGE_SIZE = 50;
@@ -46,7 +46,7 @@ export async function GET(
 
 const MAX_CONTACT_IDS = 500;
 
-// Nøyaktig én av contactId / contactIds / segmentId.
+// Nøyaktig én av contactId / contactIds / segmentId / listId.
 const enrollSchema = z
   .object({
     contactId: z.number().int().positive().optional(),
@@ -56,10 +56,11 @@ const enrollSchema = z
       .max(MAX_CONTACT_IDS, `Maks ${MAX_CONTACT_IDS} kontakter per innmelding`)
       .optional(),
     segmentId: z.number().int().positive().optional(),
+    listId: z.number().int().positive().optional(),
   })
   .refine(
-    (v) => [v.contactId, v.contactIds, v.segmentId].filter((x) => x !== undefined).length === 1,
-    { message: 'Oppgi nøyaktig én av contactId, contactIds eller segmentId' },
+    (v) => [v.contactId, v.contactIds, v.segmentId, v.listId].filter((x) => x !== undefined).length === 1,
+    { message: 'Oppgi nøyaktig én av contactId, contactIds, segmentId eller listId' },
   );
 
 export async function POST(
@@ -121,6 +122,12 @@ export async function POST(
       return NextResponse.json({ error: 'Fant ingen segment med denne iden' }, { status: 404 });
     }
     summary = await enrollSegment(flowId, data.segmentId);
+  } else if (data.listId !== undefined) {
+    const listSummary = await enrollList(flowId, data.listId);
+    if (!listSummary) {
+      return NextResponse.json({ error: 'Fant ingen liste med denne iden' }, { status: 404 });
+    }
+    summary = listSummary;
   } else {
     const ids = data.contactIds ?? [data.contactId as number];
     summary = await enrollContacts(flowId, ids);
@@ -130,7 +137,7 @@ export async function POST(
   }
 
   logActivity({
-    action: data.segmentId !== undefined ? 'enroll_segment' : 'enroll',
+    action: data.segmentId !== undefined ? 'enroll_segment' : data.listId !== undefined ? 'enroll_list' : 'enroll',
     entity: 'flow',
     entityId: flowId,
     userEmail: session.user.email,

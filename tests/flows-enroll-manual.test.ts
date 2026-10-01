@@ -2,15 +2,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
-    flowEnrollment: { findFirst: vi.fn(), create: vi.fn() },
+    flowEnrollment: { findFirst: vi.fn(), findMany: vi.fn(), create: vi.fn() },
     contact: { findMany: vi.fn() },
     suppression: { findMany: vi.fn() },
     segment: { findUnique: vi.fn() },
+    contactList: { findUnique: vi.fn() },
+    contactListMembership: { findMany: vi.fn() },
   },
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
 
-import { enrollContacts, enrollSegment, SEGMENT_ENROLL_CAP } from '@/lib/flows/enroll';
+import { enrollContacts, enrollList, enrollSegment, SEGMENT_ENROLL_CAP } from '@/lib/flows/enroll';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -75,5 +77,46 @@ describe('enrollSegment', () => {
   it('ukjent segment gir tom oppsummering', async () => {
     prisma.segment.findUnique.mockResolvedValue(null);
     expect((await enrollSegment(5, 1)).enrolled).toBe(0);
+  });
+});
+
+describe('enrollList', () => {
+  it('melder inn listens medlemmer; aktive og suppresserte hoppes over', async () => {
+    prisma.contactList.findUnique.mockResolvedValue({ id: 3 });
+    prisma.contactListMembership.findMany.mockResolvedValue([{ contactId: 1 }, { contactId: 2 }, { contactId: 3 }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ contactId: 2 }]);
+    prisma.contact.findMany.mockResolvedValue([
+      { id: 1, email: 'a@example.no' },
+      { id: 3, email: 'avmeldt@example.no' },
+    ]);
+    prisma.suppression.findMany.mockResolvedValue([{ email: 'avmeldt@example.no' }]);
+    prisma.flowEnrollment.findFirst.mockResolvedValue(null);
+
+    const summary = await enrollList(5, 3);
+
+    expect(summary).toEqual({ enrolled: 1, skippedActive: 1, skippedSuppressed: 1, skippedMissing: 0, capped: 0 });
+    expect(prisma.contact.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: { in: [1, 3] } } }));
+  });
+
+  it('allerede aktive tas ut før taket, så en ny kjøring når resten', async () => {
+    const total = SEGMENT_ENROLL_CAP + 10;
+    prisma.contactList.findUnique.mockResolvedValue({ id: 3 });
+    prisma.contactListMembership.findMany.mockResolvedValue(Array.from({ length: total }, (_, i) => ({ contactId: i + 1 })));
+    prisma.flowEnrollment.findMany.mockResolvedValue(
+      Array.from({ length: SEGMENT_ENROLL_CAP }, (_, i) => ({ contactId: i + 1 })),
+    );
+    prisma.contact.findMany.mockImplementation(async ({ where }: { where: { id: { in: number[] } } }) =>
+      where.id.in.map((id) => ({ id, email: null })),
+    );
+    prisma.flowEnrollment.findFirst.mockResolvedValue(null);
+
+    const summary = await enrollList(5, 3);
+
+    expect(summary).toMatchObject({ enrolled: 10, skippedActive: SEGMENT_ENROLL_CAP, capped: 0 });
+  });
+
+  it('ukjent liste ⇒ null', async () => {
+    prisma.contactList.findUnique.mockResolvedValue(null);
+    expect(await enrollList(5, 99)).toBeNull();
   });
 });
