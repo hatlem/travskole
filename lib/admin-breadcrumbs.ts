@@ -14,7 +14,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   bedrifter: 'Bedrifter',
   pipeline: 'Pipeline',
   oppgaver: 'Oppgaver',
-  segmenter: 'Segmenter',
+  segmenter: 'Segmenter og lister',
   hendelser: 'Hendelser',
   flyter: 'Flyter',
   innsikt: 'Innsikt',
