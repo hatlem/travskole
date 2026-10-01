@@ -2,6 +2,7 @@
 
 import { useId, useState } from 'react';
 import { useStrings } from '@/components/SettingsProvider';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { fieldClass, type DashboardChild } from './types';
 
 interface ChildrenSectionProps {
@@ -9,6 +10,8 @@ interface ChildrenSectionProps {
   /** Uten profil finnes det ingen Parent-rad å henge barn på ennå. */
   hasProfile: boolean;
   onChange: (children: DashboardChild[]) => void;
+  /** Kort bekreftelse (toast) etter lagring/fjerning. */
+  notify?: (message: string) => void;
 }
 
 interface ChildForm {
@@ -39,7 +42,7 @@ function formatDate(iso: string) {
  * navn kunne ikke rettes av noen. Skjemaet her snakker med
  * /api/dashboard/children, som deler regler med admin-veien.
  */
-export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSectionProps) {
+export function ChildrenSection({ items, hasProfile, onChange, notify }: ChildrenSectionProps) {
   const t = useStrings();
   const fieldId = useId();
   const [editingId, setEditingId] = useState<number | 'new' | null>(null);
@@ -47,6 +50,7 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
   const [saving, setSaving] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<DashboardChild | null>(null);
 
   function startAdd() {
     setForm(emptyForm);
@@ -89,6 +93,7 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
           : items.map((c) => (c.id === result.child.id ? result.child : c))
       );
       setEditingId(null);
+      notify?.(t('dash.child_saved'));
     } catch {
       setError('Noe gikk galt. Prøv igjen.');
     } finally {
@@ -97,7 +102,6 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
   }
 
   async function remove(child: DashboardChild) {
-    if (!window.confirm(t('dash.child_remove_confirm', { navn: child.name }))) return;
     setError(null);
     setRemovingId(child.id);
     try {
@@ -108,6 +112,8 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
         return;
       }
       onChange(items.filter((c) => c.id !== child.id));
+      setConfirmRemove(null);
+      notify?.(t('dash.child_removed'));
     } catch {
       setError('Noe gikk galt. Prøv igjen.');
     } finally {
@@ -149,21 +155,23 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
           value={form.allergies}
           onChange={(e) => setForm((f) => ({ ...f, allergies: e.target.value }))}
           placeholder={t('dash.child_allergies_placeholder')}
+          aria-describedby={`${fieldId}-allergies-hint`}
           className={fieldClass}
         />
+        <p id={`${fieldId}-allergies-hint`} className="mt-1 text-sm text-gray-500">La stå tomt hvis barnet ikke har allergier.</p>
       </div>
       <div className="flex gap-3 pt-1">
         <button
           disabled={saving}
           onClick={save}
-          className="bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
+          className="min-h-11 bg-bjerke-blue text-white px-5 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
         >
           {saving ? t('dash.saving') : t('dash.save')}
         </button>
         <button
           disabled={saving}
           onClick={cancel}
-          className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+          className="min-h-11 text-gray-700 px-5 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
         >
           {t('dash.cancel')}
         </button>
@@ -176,7 +184,7 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-gray-900">{t('dash.children_heading')}</h2>
         {hasProfile && editingId !== 'new' && (
-          <button onClick={startAdd} className="text-sm text-bjerke-blue hover:underline font-medium">
+          <button onClick={startAdd} className="inline-flex min-h-11 items-center rounded-lg px-3 -mr-3 text-sm text-bjerke-blue hover:bg-blue-50 font-medium">
             + {t('dash.children_add')}
           </button>
         )}
@@ -212,17 +220,19 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
                           : t('dash.child_allergies_none')}
                       </p>
                     </div>
-                    <div className="flex shrink-0 gap-3">
+                    <div className="-mr-2 -mt-2 flex shrink-0">
                       <button
                         onClick={() => startEdit(child)}
-                        className="text-sm text-bjerke-blue hover:underline font-medium"
+                        aria-label={`${t('dash.edit')} ${child.name}`}
+                        className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-bjerke-blue hover:bg-blue-50 font-medium"
                       >
                         {t('dash.edit')}
                       </button>
                       <button
-                        onClick={() => remove(child)}
+                        onClick={() => setConfirmRemove(child)}
                         disabled={removingId === child.id}
-                        className="text-sm text-red-600 hover:underline font-medium disabled:opacity-50"
+                        aria-label={`${t('dash.child_remove')} ${child.name}`}
+                        className="inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-red-700 hover:bg-red-50 font-medium disabled:opacity-50"
                       >
                         {t('dash.child_remove')}
                       </button>
@@ -240,6 +250,19 @@ export function ChildrenSection({ items, hasProfile, onChange }: ChildrenSection
           )
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmRemove !== null}
+        title={confirmRemove ? t('dash.child_remove_confirm', { navn: confirmRemove.name }) : ''}
+        message="Barnet fjernes fra profilen din. Har barnet aktive påmeldinger, må de avbestilles først."
+        confirmLabel={t('dash.child_remove')}
+        cancelLabel={t('dash.keep')}
+        busy={removingId !== null}
+        busyLabel="Fjerner …"
+        error={confirmRemove ? error : null}
+        onConfirm={() => confirmRemove && remove(confirmRemove)}
+        onCancel={() => setConfirmRemove(null)}
+      />
     </section>
   );
 }

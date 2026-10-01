@@ -236,7 +236,7 @@ export async function sendBookingApprovedPayEmail(
       <p style="margin:24px 0">
         <a href="${escapeHtml(data.payUrl)}" style="background:#1d4ed8;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Betal nå</a>
       </p>
-      <p style="color:#666;font-size:13px">Lenken er gyldig i 14 dager. Er du innlogget, kan du også betale under «Mine bookinger».</p>
+      <p style="color:#666;font-size:13px">Lenken er gyldig i 14 dager. Du kan også betale fra Min side.</p>
       <p>Spørsmål? Ta kontakt på <a href="mailto:${escapeHtml(adminEmail)}">${escapeHtml(adminEmail)}</a></p>
       <p style="color:#666;margin-top:24px">Med vennlig hilsen,<br>${escapeHtml(siteName)}</p>
     </div>`,

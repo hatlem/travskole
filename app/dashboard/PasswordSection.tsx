@@ -72,7 +72,7 @@ export function PasswordSection({ hasPassword, onChanged }: PasswordSectionProps
               setDone(false);
               setOpen(true);
             }}
-            className="text-sm text-bjerke-blue hover:underline font-medium"
+            className="-mr-3 inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-bjerke-blue hover:bg-blue-50 font-medium"
           >
             {hasPassword ? t('dash.password_change') : t('dash.password_set')}
           </button>
@@ -142,7 +142,7 @@ export function PasswordSection({ hasPassword, onChanged }: PasswordSectionProps
               <button
                 disabled={saving}
                 onClick={save}
-                className="bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
+                className="bg-bjerke-blue text-white min-h-11 px-5 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
               >
                 {saving ? t('dash.saving') : t('dash.save')}
               </button>
@@ -152,7 +152,7 @@ export function PasswordSection({ hasPassword, onChanged }: PasswordSectionProps
                   setOpen(false);
                   reset();
                 }}
-                className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+                className="text-gray-600 min-h-11 px-5 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
               >
                 {t('dash.cancel')}
               </button>

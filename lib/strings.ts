@@ -168,7 +168,7 @@ export const STRINGS: Record<string, string> = {
   'dash.child_name_label': 'Navn',
   'dash.child_birthdate_label': 'Fødselsdato',
   'dash.child_allergies_label': 'Allergier',
-  'dash.child_allergies_placeholder': 'F.eks. nøtter, melk. La stå tomt hvis ingen.',
+  'dash.child_allergies_placeholder': 'F.eks. nøtter, melk',
   'dash.child_allergies_none': 'Ingen allergier registrert',
   'dash.child_remove': 'Fjern',
   'dash.child_remove_confirm': 'Fjern {{navn}} fra profilen din?',

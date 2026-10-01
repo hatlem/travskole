@@ -69,7 +69,7 @@ export function ProfileSection({ profile, email, onSaved }: ProfileSectionProps)
           {missing ? t('dash.profile_complete_heading') : t('dash.profile_heading')}
         </h2>
         {!editing && (
-          <button onClick={startEditing} className="text-sm text-bjerke-blue hover:underline font-medium">
+          <button onClick={startEditing} className="-mr-3 inline-flex min-h-11 items-center rounded-lg px-3 text-sm text-bjerke-blue hover:bg-blue-50 font-medium">
             {t('dash.edit')}
           </button>
         )}
@@ -125,7 +125,7 @@ export function ProfileSection({ profile, email, onSaved }: ProfileSectionProps)
             <button
               disabled={saving}
               onClick={save}
-              className="bg-bjerke-blue text-white px-5 py-2 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
+              className="bg-bjerke-blue text-white min-h-11 px-5 rounded-lg hover:bg-bjerke-blue-dark transition disabled:opacity-50"
             >
               {saving ? t('dash.saving') : t('dash.save')}
             </button>
@@ -136,7 +136,7 @@ export function ProfileSection({ profile, email, onSaved }: ProfileSectionProps)
                   setEditing(false);
                   setError(null);
                 }}
-                className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+                className="text-gray-600 min-h-11 px-5 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
               >
                 {t('dash.cancel')}
               </button>

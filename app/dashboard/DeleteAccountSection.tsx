@@ -64,7 +64,7 @@ export function DeleteAccountSection({ hasPassword }: DeleteAccountSectionProps)
               setPassword('');
               setOpen(true);
             }}
-            className="text-sm font-medium text-red-600 hover:underline"
+            className="-ml-3 inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-medium text-red-700 hover:bg-red-50"
           >
             {t('dash.account_delete')}
           </button>
@@ -106,14 +106,14 @@ export function DeleteAccountSection({ hasPassword }: DeleteAccountSectionProps)
               <button
                 disabled={saving || !confirmed}
                 onClick={remove}
-                className="bg-red-600 text-white px-5 py-2 rounded-lg hover:bg-red-700 transition disabled:opacity-50"
+                className="bg-red-600 text-white min-h-11 px-5 rounded-lg hover:bg-red-700 transition disabled:opacity-50"
               >
                 {saving ? t('dash.saving') : t('dash.account_delete')}
               </button>
               <button
                 disabled={saving}
                 onClick={() => setOpen(false)}
-                className="text-gray-600 px-5 py-2 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
+                className="text-gray-600 min-h-11 px-5 rounded-lg hover:bg-gray-100 transition disabled:opacity-50"
               >
                 {t('dash.cancel')}
               </button>
