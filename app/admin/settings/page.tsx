@@ -4,6 +4,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { TrackingInstallSnippet } from '@/components/admin/TrackingInstallSnippet';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { HelpTip } from '@/components/admin/HelpTip';
+import { PageHeader } from '@/components/admin/PageHeader';
+import type { GlossaryKey } from '@/lib/admin-copy';
 import { useUnsavedChangesGuard } from '@/components/admin/useUnsavedChangesGuard';
 import { validateSettingValue } from '@/lib/settings-shared';
 import { planSettingsSave } from '@/lib/unsaved-changes';
@@ -18,6 +21,8 @@ interface SettingGroup {
     type: 'text' | 'textarea' | 'email' | 'tel' | 'toggle';
     placeholder?: string;
     help?: string;
+    /** Begrep som får en «?»-forklaring ved etiketten. */
+    term?: GlossaryKey;
   }[];
 }
 
@@ -29,16 +34,16 @@ interface GraphStatus {
 const SETTING_GROUPS: SettingGroup[] = [
   {
     title: 'Generelt',
-    description: 'Grunnleggende informasjon om nettstedet',
+    description: 'Navnet på nettsiden og hvordan den beskrives i Google.',
     fields: [
       { key: 'site_name', label: 'Navn på nettstedet', type: 'text', placeholder: 'Bjerke Registrering' },
-      { key: 'site_description', label: 'Beskrivelse (SEO)', type: 'textarea', placeholder: 'Påmelding til kurs og arrangementer...' },
+      { key: 'site_description', label: 'Beskrivelse i Google-søk', type: 'textarea', placeholder: 'Påmelding til kurs og arrangementer...' },
       { key: 'site_short_description', label: 'Kort beskrivelse', type: 'text', placeholder: 'Påmelding til kurs og arrangementer på Bjerke' },
     ],
   },
   {
     title: 'Kontaktinformasjon',
-    description: 'Vises i footer, e-poster og på kontaktsider',
+    description: 'Vises nederst på nettsiden, i e-poster og på kontaktsiden. Sjekk at e-post og telefon stemmer.',
     fields: [
       { key: 'contact_email', label: 'E-post', type: 'email', placeholder: 'registrering@bjerke.no' },
       { key: 'contact_phone', label: 'Telefon', type: 'tel', placeholder: '+47 XX XX XX XX' },
@@ -59,31 +64,31 @@ const SETTING_GROUPS: SettingGroup[] = [
     fields: [
       { key: 'hero_title', label: 'Hovedtittel', type: 'text', placeholder: 'Velkommen til Bjerke' },
       { key: 'hero_subtitle', label: 'Undertittel', type: 'textarea', placeholder: 'Opplev gleden ved travsporten...' },
-      { key: 'hero_cta_text', label: 'Hero-knapp', type: 'text', placeholder: 'Se alle arrangementer' },
+      { key: 'hero_cta_text', label: 'Knapp under hovedtittelen', type: 'text', placeholder: 'Se alle arrangementer' },
       { key: 'home_courses_heading', label: 'Overskrift: kommende kurs', type: 'text', placeholder: 'Kommende arrangementer' },
       { key: 'home_courses_empty_text', label: 'Tekst når ingen kurs', type: 'text', placeholder: 'Ingen kurs tilgjengelig...' },
-      { key: 'about_heading', label: 'Om oss overskrift', type: 'text', placeholder: 'Om tilbudet på Bjerke' },
-      { key: 'about_text', label: 'Om oss tekst', type: 'textarea', placeholder: 'Bjerke Travbane er en trygg arena...' },
+      { key: 'about_heading', label: 'Overskrift: om oss', type: 'text', placeholder: 'Om tilbudet på Bjerke' },
+      { key: 'about_text', label: 'Tekst: om oss', type: 'textarea', placeholder: 'Bjerke Travbane er en trygg arena...' },
       { key: 'home_feature_points', label: 'Hva vi tilbyr (ett punkt per linje)', type: 'textarea' },
-      { key: 'home_cta_heading', label: 'CTA-overskrift nederst', type: 'text', placeholder: 'Klar for å bli med?' },
-      { key: 'home_cta_text', label: 'CTA-tekst nederst', type: 'textarea', placeholder: 'Meld deg på et kurs...' },
-      { key: 'home_cta_button', label: 'CTA-knapp nederst', type: 'text', placeholder: 'Se alle arrangementer' },
-      { key: 'footer_text', label: 'Footer beskrivelse', type: 'textarea', placeholder: 'Vi tilbyr trygg og lærerik travsport...' },
+      { key: 'home_cta_heading', label: 'Overskrift i boksen nederst', type: 'text', placeholder: 'Klar for å bli med?' },
+      { key: 'home_cta_text', label: 'Tekst i boksen nederst', type: 'textarea', placeholder: 'Meld deg på et kurs...' },
+      { key: 'home_cta_button', label: 'Knapp i boksen nederst', type: 'text', placeholder: 'Se alle arrangementer' },
+      { key: 'footer_text', label: 'Tekst nederst på alle sider', type: 'textarea', placeholder: 'Vi tilbyr trygg og lærerik travsport...' },
     ],
   },
   {
     title: 'Arrangementer',
-    description: 'Tekster og arrangementstyper. Typer: én per linje på formatet verdi|Visningsnavn|flertall (f.eks. «kurs|Kurs|kurs»). Verdien inngår i nettadresser — bruk små bokstaver uten mellomrom, og ikke endre verdier som er i bruk.',
+    description: 'Tekstene på arrangementsoversikten, og hvilke typer arrangementer dere har. Typer skrives én per linje slik: kortnavn|Navn|flertall, f.eks. «leir|Leir|leirer». Kortnavnet står i nettadressen — bruk små bokstaver uten mellomrom, og ikke endre kortnavn som allerede er i bruk.',
     fields: [
       { key: 'arrangementer_heading', label: 'Overskrift', type: 'text', placeholder: 'Kurs og arrangementer' },
       { key: 'arrangementer_subtitle', label: 'Undertittel', type: 'text', placeholder: 'Utforsk vårt utvalg...' },
       { key: 'nav_courses_label', label: 'Menytekst', type: 'text', placeholder: 'Arrangementer' },
-      { key: 'course_types', label: 'Arrangementstyper (én per linje: verdi|Navn|flertall)', type: 'textarea', placeholder: 'kurs|Kurs|kurs\nleir|Leir|leirer\narrangement|Arrangement|arrangementer' },
+      { key: 'course_types', label: 'Arrangementstyper (én per linje: kortnavn|Navn|flertall)', type: 'textarea', placeholder: 'kurs|Kurs|kurs\nleir|Leir|leirer\narrangement|Arrangement|arrangementer' },
     ],
   },
   {
     title: 'Kursdetaljer',
-    description: 'Standardinnhold som vises på alle kursdetalj-sider. Bruk linjeskift for å skille punkter.',
+    description: 'Standardtekst som vises på siden til hvert kurs. Skriv ett punkt per linje.',
     fields: [
       { key: 'course_learning_points', label: 'Hva du lærer (ett punkt per linje)', type: 'textarea' },
       { key: 'course_packing_list', label: 'Pakkeliste (ett punkt per linje)', type: 'textarea' },
@@ -94,7 +99,7 @@ const SETTING_GROUPS: SettingGroup[] = [
   },
   {
     title: 'Samtykketekster',
-    description: 'Tekster som vises i påmeldingsskjemaet. Endringer påvirker fremtidige påmeldinger.',
+    description: 'Det foreldre og deltakere krysser av for når de melder seg på. Endringer gjelder bare nye påmeldinger.',
     adminEditable: true,
     fields: [
       { key: 'consent_activities_text', label: 'Samtykke: Aktiviteter utenfor Bjerke', type: 'textarea' },
@@ -103,12 +108,12 @@ const SETTING_GROUPS: SettingGroup[] = [
       { key: 'consent_risk_detail', label: 'Samtykke: Risiko (detaljer)', type: 'textarea' },
       { key: 'consent_media_text_adult', label: 'Samtykke voksne: Bilder og video', type: 'textarea' },
       { key: 'consent_risk_text_adult', label: 'Samtykke voksne: Risiko', type: 'textarea' },
-      { key: 'consent_terms_text', label: 'Vilkårsaksept ved påmelding (bindende / tapte dager / eget ansvar)', type: 'textarea' },
+      { key: 'consent_terms_text', label: 'Vilkår deltakerne godtar ved påmelding (bindende påmelding, avbestilling, eget ansvar)', type: 'textarea' },
     ],
   },
   {
     title: 'Påmeldingsskjema',
-    description: 'Styr hvilke felt som er obligatoriske i påmeldingsskjemaet.',
+    description: 'Velg hva som må fylles ut før noen kan melde seg på.',
     adminEditable: true,
     fields: [
       { key: 'registration_address_required', label: 'Krev adresse', type: 'toggle' },
@@ -120,43 +125,43 @@ const SETTING_GROUPS: SettingGroup[] = [
     description: 'Valgfri avkrysningsboks i påmeldings- og forespørselsskjemaet der deltakeren kan samtykke til å motta nyhetsbrev og tilbud. Boksen er aldri forhåndsavkrysset, og samtykket lagres på kontakten i CRM.',
     adminEditable: true,
     fields: [
-      { key: 'marketing_optin_enabled', label: 'Vis avkrysningsboks for markedsføring', type: 'toggle' },
+      { key: 'marketing_optin_enabled', label: 'Vis avkrysningsboks for markedsføring', type: 'toggle', term: 'marketing' },
       { key: 'marketing_optin_text', label: 'Tekst ved avkrysningsboksen', type: 'textarea', help: 'Si tydelig hva man samtykker til, og at man kan melde seg av når som helst.' },
     ],
   },
   {
     title: 'CRM og e-postflyter',
-    description: 'Hvordan svar på automatiske e-poster fanges opp og følges opp, og hvilket grunnlag som kreves for markedsføringsutsendelser.',
+    description: 'Hva som skjer når noen svarer på en automatisk e-post, og hvem som kan få markedsførings-e-post.',
     fields: [
-      { key: 'graph_mailboxes', label: 'Postbokser som leses for svar og returmeldinger (kommaseparert)', type: 'text', placeholder: 'registrering@bjerke.no', help: 'Alle automatiske e-poster ber om svar til registrering@bjerke.no, så den bør stå her. Krever at Microsoft Graph-tilgangen er satt opp på serveren.' },
+      { key: 'graph_mailboxes', label: 'E-postkontoer der svar havner (skill med komma)', type: 'text', placeholder: 'registrering@bjerke.no', help: 'Alle automatiske e-poster ber om svar til registrering@bjerke.no, så den bør stå her. Virker bare når koblingen til Microsoft-e-posten er satt opp (se boksen over).' },
       { key: 'reply_create_task', label: 'Opprett oppgave når en kontakt svarer', type: 'toggle', help: 'Oppgaven tildeles i denne rekkefølgen: brukeren som står som avsender av e-posten → kontaktens ansvarlige → bedriftens ansvarlige → standard ansvarlig under. Kun aktive admin-brukere kan få oppgaver.' },
-      { key: 'reply_task_default_assignee', label: 'Standard ansvarlig for svar-oppgaver (e-post til admin-bruker)', type: 'email', placeholder: 'navn@bjerke.no', help: 'Brukes når verken avsenderen, kontakten eller bedriften har en aktiv admin-bruker som ansvarlig. Tomt = oppgaven blir da ikke tildelt noen.' },
-      { key: 'reply_task_due_days', label: 'Frist for svar-oppgaver (dager)', type: 'text', placeholder: '1' },
-      { key: 'sender_allowed_domains', label: 'Tillatte domener for avsenderadresser (kommaseparert)', type: 'text', placeholder: 'bjerke.no', help: 'Nye avsendere under CRM → Avsendere må ligge på et av disse domenene, og må i tillegg verifiseres i Azure Communication Services av Basefarm før de kan sende.' },
-      { key: 'marketing_allow_legitimate_interest', label: 'Tillat markedsføring til bedriftskunder uten samtykke (berettiget interesse)', type: 'toggle', help: 'Gjelder kun kontakter som er knyttet til en organisasjon, dvs. eksisterende bedriftskunder. Alle andre må ha gitt samtykke. Avmelding vinner alltid: kontakter som har meldt seg av eller trukket samtykket får aldri markedsføring.' },
+      { key: 'reply_task_default_assignee', label: 'Hvem får svar-oppgavene hvis ingen andre er ansvarlig? (e-post til en admin-bruker)', type: 'email', term: 'owner', placeholder: 'navn@bjerke.no', help: 'Brukes når verken avsenderen, kontakten eller bedriften har en aktiv admin-bruker som ansvarlig. Tomt = oppgaven blir da ikke tildelt noen.' },
+      { key: 'reply_task_due_days', label: 'Antall dager man har på å følge opp et svar', type: 'text', placeholder: '1' },
+      { key: 'sender_allowed_domains', label: 'Hvilke e-postadresser kan brukes som avsender? (domener, skill med komma)', type: 'text', placeholder: 'bjerke.no', help: 'Nye avsendere under CRM → Avsendere må slutte på et av disse, f.eks. @bjerke.no. Basefarm må i tillegg godkjenne adressen før den kan sende.' },
+      { key: 'marketing_allow_legitimate_interest', label: 'Tillat markedsføring til bedriftskunder uten samtykke (berettiget interesse)', type: 'toggle', term: 'legitimateInterest', help: 'Gjelder kun kontakter som er knyttet til en bedrift, altså eksisterende bedriftskunder. Alle andre må ha gitt samtykke. Avmelding vinner alltid: kontakter som har meldt seg av eller trukket samtykket får aldri markedsføring.' },
     ],
   },
   {
     title: 'Betaling',
-    description: 'Testmodus bruker Stripe/Vipps sine testnøkler. Slå av for å ta ekte betalinger (live). Betalingsmåter velges per kurs.',
+    description: 'I testmodus er betalinger bare på liksom — ingen penger trekkes. Slå av testmodus for å ta imot ekte betalinger. Hvilke betalingsmåter som gjelder, velges på hvert kurs.',
     fields: [
-      { key: 'payment_test_mode', label: 'Testmodus (bruk testnøkler)', type: 'toggle' },
+      { key: 'payment_test_mode', label: 'Testmodus (ingen ekte betalinger)', type: 'toggle' },
     ],
   },
   {
     title: 'Sporing og deling',
-    description: 'Google Tag Manager og tekst på delingsbildet (Open Graph)',
+    description: 'Måling av besøk (Google Tag Manager) og teksten på bildet som vises når noen deler en lenke, f.eks. på Facebook.',
     fields: [
-      { key: 'gtm_id', label: 'Google Tag Manager ID (tomt = av)', type: 'text', placeholder: 'GTM-XXXXXXX' },
+      { key: 'gtm_id', label: 'Google Tag Manager-ID (la stå tomt for å slå av)', type: 'text', placeholder: 'GTM-XXXXXXX' },
       { key: 'og_tags', label: 'Delingsbilde: emneknagger (én per linje)', type: 'textarea', placeholder: 'Kurs\nSommerleirer\nDobbeltsulky' },
     ],
   },
   {
     title: 'Innsikt',
-    description: 'Hvordan CRM → Innsikt knytter bookinger til e-postflyter.',
+    description: 'Hvordan CRM → Innsikt avgjør om en booking kom av en e-post.',
     adminEditable: true,
     fields: [
-      { key: 'attribution_window_days', label: 'Attribusjonsvindu for e-post → booking (dager)', type: 'text', placeholder: '14', help: 'En booking, påmelding eller betaling krediteres flyten kontakten sist klikket i (eller åpnet, hvis ingen klikk) innen så mange dager før. Heltall fra 1 til 90.' },
+      { key: 'attribution_window_days', label: 'Hvor mange dager etter en e-post teller en booking som «takket være e-posten»?', type: 'text', placeholder: '14', help: 'Eksempel med 14: Kari klikker i en e-post 1. mai og booker 10. mai — da regnes bookingen som resultat av den e-postflyten. Skriv et tall fra 1 til 90.' },
     ],
   },
   {
@@ -185,7 +190,9 @@ const FIELD_LABELS: Record<string, string> = Object.fromEntries(
 function nativeFieldError(key: string): string | null {
   const el = document.getElementById(key);
   if (!(el instanceof HTMLInputElement) || el.validity.valid) return null;
-  return el.validity.typeMismatch && el.type === 'email' ? 'Ugyldig e-postadresse' : 'Ugyldig verdi';
+  return el.validity.typeMismatch && el.type === 'email'
+    ? 'Skriv en hel e-postadresse, f.eks. navn@bjerke.no'
+    : 'Sjekk det du har skrevet i feltet';
 }
 
 function fieldError(key: string, value: string): string | null {
@@ -208,13 +215,13 @@ export default function AdminSettingsPage() {
   const fetchSettings = useCallback(async () => {
     try {
       const res = await fetch('/api/admin/settings');
-      if (!res.ok) throw new Error('Kunne ikke hente innstillinger');
+      if (!res.ok) throw new Error('Kunne ikke hente innstillingene. Last siden på nytt.');
       const data = await res.json();
       setSettings(data.settings);
       setDefaults(data.defaults ?? {});
       setGraph(data.graph ?? null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Noe gikk galt');
+      setError(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.');
     } finally {
       setLoading(false);
     }
@@ -249,7 +256,7 @@ export default function AdminSettingsPage() {
         });
         if (!res.ok) {
           const body = await res.json().catch(() => null);
-          errors[key] = body?.error ?? 'Kunne ikke lagre';
+          errors[key] = body?.error ?? 'Ble ikke lagret — prøv igjen';
           continue;
         }
         setDirty(prev => {
@@ -312,7 +319,7 @@ export default function AdminSettingsPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <p className="text-gray-500">Laster innstillinger...</p>
+        <p className="text-gray-500">Laster innstillinger …</p>
       </div>
     );
   }
@@ -322,16 +329,15 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="max-w-4xl">
-      <div className="flex items-center justify-between mb-8">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Innstillinger</h1>
-          <p className="text-gray-500 mt-1">
-            {superadmin
-              ? 'Konfigurer nettstedet.'
-              : 'Rediger samtykketekster og påmeldingsinnstillinger. Øvrig konfigurasjon krever superadmin.'}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        className="mb-8"
+        title="Innstillinger"
+        description={
+          superadmin
+            ? 'Kontaktinfo, tekstene på nettsiden, påmeldingsskjemaet og e-post. Husk å trykke «Lagre endringer» nederst.'
+            : 'Samtykketekster og påmeldingsskjemaet. Resten kan bare superadmin endre. Husk å trykke «Lagre endringer» nederst.'
+        }
+      />
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
@@ -353,9 +359,16 @@ export default function AdminSettingsPage() {
                   : 'bg-amber-50 border-amber-200 text-amber-800'
               }`}>
                 {graph.credentialsConfigured
-                  ? 'Microsoft Graph er satt opp — svar og returmeldinger leses automatisk.'
-                  : 'Microsoft Graph er ikke satt opp på serveren ennå (GRAPH_TENANT_ID/GRAPH_CLIENT_ID/GRAPH_CLIENT_SECRET). Svar oppdages ikke før dette er på plass.'}
-                {graph.mailboxesEnvOverride && ' Postboksene er overstyrt av miljøvariabelen GRAPH_MAILBOXES, så feltet under har ingen effekt.'}
+                  ? 'Koblingen til Microsoft-e-posten er klar — svar og e-poster som ikke kom frem, oppdages automatisk.'
+                  : 'Koblingen til Microsoft-e-posten er ikke satt opp ennå, så svar oppdages ikke. Be den som drifter nettsiden om å sette den opp.'}
+                {graph.mailboxesEnvOverride && ' E-postkontoene er låst i serveroppsettet, så feltet under har ingen effekt.'}
+                {(!graph.credentialsConfigured || graph.mailboxesEnvOverride) && (
+                  <details className="mt-2 text-xs">
+                    <summary className="cursor-pointer">Teknisk info til den som drifter nettsiden</summary>
+                    {!graph.credentialsConfigured && <p className="mt-1">Mangler GRAPH_TENANT_ID, GRAPH_CLIENT_ID og GRAPH_CLIENT_SECRET.</p>}
+                    {graph.mailboxesEnvOverride && <p className="mt-1">Overstyrt av miljøvariabelen GRAPH_MAILBOXES.</p>}
+                  </details>
+                )}
               </div>
             )}
             {group.title === 'Sporing på bjerke.no' && <TrackingInstallSnippet />}
@@ -365,6 +378,7 @@ export default function AdminSettingsPage() {
                 <div key={field.key}>
                   <label htmlFor={field.key} className="block text-sm font-medium text-gray-700 mb-1 scroll-mt-24">
                     {field.label}
+                    {field.term && <HelpTip term={field.term} />}
                   </label>
                   {field.type === 'toggle' ? (
                     <button
@@ -415,7 +429,7 @@ export default function AdminSettingsPage() {
                     </p>
                   )}
                   {field.help && <p className="text-xs text-gray-500 mt-1">{field.help}</p>}
-                  <p className="text-xs text-gray-400 mt-1">Nøkkel: {field.key}</p>
+                  {superadmin && <p className="text-xs text-gray-400 mt-1">Teknisk navn: {field.key}</p>}
                 </div>
               ))}
             </div>
@@ -442,7 +456,7 @@ export default function AdminSettingsPage() {
             disabled={saving || dirty.size === 0}
             className="px-6 py-2.5 rounded-lg font-semibold text-sm transition bg-bjerke-blue hover:bg-bjerke-blue-dark text-white disabled:bg-gray-300 disabled:text-gray-600 disabled:cursor-not-allowed"
           >
-            {saving ? 'Lagrer...' : 'Lagre endringer'}
+            {saving ? 'Lagrer …' : 'Lagre endringer'}
           </button>
         </div>
       </div>
