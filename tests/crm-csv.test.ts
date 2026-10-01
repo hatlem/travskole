@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseCsv } from '@/lib/crm/csv';
+import { detectDelimiter, parseCsv } from '@/lib/crm/csv';
 
 describe('parseCsv', () => {
   it('parses comma-separated with header', () => {
@@ -30,6 +30,29 @@ describe('parseCsv', () => {
     expect(rows).toEqual([['1', '2']]);
   });
   it('empty input gives empty result', () => {
-    expect(parseCsv('')).toEqual({ headers: [], rows: [] });
+    expect(parseCsv('')).toMatchObject({ headers: [], rows: [] });
+  });
+  it('autodetects tab (paste from Excel/Sheets)', () => {
+    const { headers, rows, delimiter } = parseCsv('Navn\tE-post\tFirma\nKari\tk@x.no\tAcme, AS');
+    expect(delimiter).toBe('\t');
+    expect(headers).toEqual(['Navn', 'E-post', 'Firma']);
+    expect(rows[0]).toEqual(['Kari', 'k@x.no', 'Acme, AS']);
+  });
+  it('respects Excel sep= hint line', () => {
+    const { headers, rows, delimiter } = parseCsv('sep=;\r\nnavn;firma\r\nKari;Acme, AS\r\n');
+    expect(delimiter).toBe(';');
+    expect(headers).toEqual(['navn', 'firma']);
+    expect(rows).toEqual([['Kari', 'Acme, AS']]);
+  });
+  it('reports the detected delimiter', () => {
+    expect(parseCsv('a;b\n1;2').delimiter).toBe(';');
+    expect(parseCsv('a,b\n1,2').delimiter).toBe(',');
+    expect(parseCsv('enkolonne\nverdi').delimiter).toBe(',');
+  });
+});
+
+describe('detectDelimiter', () => {
+  it('ignores delimiters inside quotes', () => {
+    expect(detectDelimiter('"a;b;c",d,e')).toBe(',');
   });
 });
