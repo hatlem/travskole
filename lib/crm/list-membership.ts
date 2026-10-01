@@ -5,7 +5,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
-import { emitEvent } from '@/lib/events/bus';
+import { BULK_EVENT_CHUNK, emitEvents } from '@/lib/events/bus';
 
 export type ListChangeSource = 'manual' | 'import';
 
@@ -37,32 +37,45 @@ export function membershipDedupeKey(
   return `${type}:${listId}:${contactId}:${addedAt.getTime()}`;
 }
 
-async function recordChange(
+/**
+ * Sender hendelsene og skriver tidslinjen i bulk. Bare hendelser som faktisk
+ * ble lagret nå (ikke dedup-treff) får et tidslinjeinnslag. Listeendringer er
+ * admin-handlinger, ikke kontaktens egen aktivitet, så «Sist aktiv» står urørt.
+ */
+async function recordChanges(
   type: 'list.member_added' | 'list.member_removed',
   list: { id: number; name: string },
-  membership: { contactId: number; addedAt: Date },
+  memberships: { contactId: number; addedAt: Date }[],
   opts: ListChangeOptions,
 ): Promise<void> {
-  const inserted = await emitEvent({
-    type,
-    source: 'server',
-    contactId: membership.contactId,
-    meta: { listId: list.id, listName: list.name, source: opts.source },
-    dedupeKey: membershipDedupeKey(type, list.id, membership.contactId, membership.addedAt),
-  });
-  if (!inserted) return;
+  if (memberships.length === 0) return;
+  const inserted = await emitEvents(
+    memberships.map((membership) => ({
+      type,
+      source: 'server' as const,
+      contactId: membership.contactId,
+      meta: { listId: list.id, listName: list.name, source: opts.source },
+      dedupeKey: membershipDedupeKey(type, list.id, membership.contactId, membership.addedAt),
+      touchActivity: false,
+    })),
+  );
+  if (inserted.length === 0) return;
 
-  await prisma.contactActivity
-    .create({
-      data: {
-        contactId: membership.contactId,
-        type: 'list',
-        title: type === 'list.member_added' ? `Lagt til i listen ${list.name}` : `Fjernet fra listen ${list.name}`,
-        meta: JSON.stringify({ listId: list.id, source: opts.source }),
-        actorEmail: opts.actorEmail ?? null,
-      },
-    })
-    .catch(() => {});
+  const title = type === 'list.member_added' ? `Lagt til i listen ${list.name}` : `Fjernet fra listen ${list.name}`;
+  const meta = JSON.stringify({ listId: list.id, source: opts.source });
+  for (let start = 0; start < inserted.length; start += BULK_EVENT_CHUNK) {
+    await prisma.contactActivity
+      .createMany({
+        data: inserted.slice(start, start + BULK_EVENT_CHUNK).map((event) => ({
+          contactId: event.contactId,
+          type: 'list',
+          title,
+          meta,
+          actorEmail: opts.actorEmail ?? null,
+        })),
+      })
+      .catch(() => {});
+  }
 }
 
 /** Returnerer null når listen ikke finnes. Ukjente kontakt-ider telles som `missing`. */
@@ -105,10 +118,8 @@ export async function addContactsToList(
     select: { contactId: true, addedAt: true },
   });
 
-  for (const membership of created) {
-    await recordChange('list.member_added', list, membership, opts);
-    result.addedContactIds.push(membership.contactId);
-  }
+  await recordChanges('list.member_added', list, created, opts);
+  result.addedContactIds = created.map((m) => m.contactId);
   result.added = result.addedContactIds.length;
   result.alreadyMember += candidates.length - result.added;
   return result;
@@ -134,8 +145,6 @@ export async function removeContactsFromList(
     await prisma.contactListMembership.deleteMany({ where: { id: { in: existing.map((m) => m.id) } } });
   }
 
-  for (const membership of existing) {
-    await recordChange('list.member_removed', list, membership, opts);
-  }
+  await recordChanges('list.member_removed', list, existing, opts);
   return { removed: existing.length, notMember: uniqueIds.length - existing.length };
 }

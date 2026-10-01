@@ -230,42 +230,114 @@ export async function enrollList(flowId: number, listId: number): Promise<Enroll
   return summary;
 }
 
+export interface ActiveTrigger {
+  flowId: number;
+  eventType: string;
+  filter: string;
+  flow: { anchorMode: string };
+}
+
+/** Utløserne til alle aktive flyter — lastes én gang per hendelse, eller én gang per bulk-kall. */
+export async function loadActiveTriggers(): Promise<ActiveTrigger[]> {
+  return prisma.flowTrigger.findMany({
+    where: { flow: { status: 'active' } },
+    select: { flowId: true, eventType: true, filter: true, flow: { select: { anchorMode: true } } },
+  });
+}
+
+interface EnrollEvent {
+  type: string;
+  contactId: number | null;
+  meta: Record<string, unknown>;
+}
+
+function courseAnchor(meta: Record<string, unknown>): { registrationId: number; courseId: number } | null {
+  const registrationId = typeof meta.registrationId === 'number' ? meta.registrationId : null;
+  const courseId = typeof meta.courseId === 'number' ? meta.courseId : null;
+  return registrationId !== null && courseId !== null ? { registrationId, courseId } : null;
+}
+
 /**
  * Fire-safe event hook: matches an incoming bus event against the triggers
  * of all active flows and enrolls the contact into each match. Never throws
  * — any failure is logged and swallowed so the bus can call this best-effort.
  */
-export async function enrollFromEvent(input: {
-  type: string;
-  contactId: number | null;
-  meta: Record<string, unknown>;
-}): Promise<void> {
+export async function enrollFromEvent(input: EnrollEvent, preloaded?: ActiveTrigger[]): Promise<void> {
   try {
     if (!input.contactId) return;
     // Hendelsen logges, men avsender har bedt om at ingen flyt (e-post) startes.
     if (input.meta.suppressFlows === true) return;
     const contactId = input.contactId;
 
-    const triggers = await prisma.flowTrigger.findMany({
-      where: { flow: { status: 'active' } },
-      select: { flowId: true, eventType: true, filter: true, flow: { select: { anchorMode: true } } },
-    });
-
+    const triggers = preloaded ?? (await loadActiveTriggers());
     const anchorByFlow = new Map(triggers.map((t) => [t.flowId, t.flow.anchorMode]));
     const event: EventLike = { type: input.type, meta: input.meta };
     const matchedFlowIds = matchTriggers(event, triggers);
-
-    const registrationId = typeof input.meta.registrationId === 'number' ? input.meta.registrationId : null;
-    const courseId = typeof input.meta.courseId === 'number' ? input.meta.courseId : null;
+    const anchor = courseAnchor(input.meta);
 
     for (const flowId of matchedFlowIds) {
-      if (anchorByFlow.get(flowId) === 'course' && registrationId !== null && courseId !== null) {
-        await enrollCourseRegistration(flowId, contactId, courseId, registrationId);
+      if (anchorByFlow.get(flowId) === 'course' && anchor) {
+        await enrollCourseRegistration(flowId, contactId, anchor.courseId, anchor.registrationId);
       } else {
         await enrollContact(flowId, contactId);
       }
     }
   } catch (error) {
     logger.error('enrollFromEvent feilet', error);
+  }
+}
+
+/**
+ * Bulk-variant av enrollFromEvent med samme regler per kontakt: én oppslags-
+ * og én innsettingsspørring per treffende flyt, ikke per kontakt. Allerede
+ * aktive hoppes over, og den partielle unike indeksen (skipDuplicates) tar
+ * et eventuelt samtidig race. Kurs-forankrede treff går via enkeltkallet.
+ * Kaster aldri.
+ */
+export async function enrollFromEvents(events: EnrollEvent[], triggers: ActiveTrigger[]): Promise<void> {
+  try {
+    const anchorByFlow = new Map(triggers.map((t) => [t.flowId, t.flow.anchorMode]));
+    const contactsByFlow = new Map<number, Set<number>>();
+
+    for (const event of events) {
+      if (!event.contactId || event.meta.suppressFlows === true) continue;
+      const anchor = courseAnchor(event.meta);
+      for (const flowId of matchTriggers({ type: event.type, meta: event.meta }, triggers)) {
+        if (anchorByFlow.get(flowId) === 'course' && anchor) {
+          await enrollCourseRegistration(flowId, event.contactId, anchor.courseId, anchor.registrationId).catch(
+            (error) => logger.error('enrollFromEvents: kurs-innmelding feilet', error),
+          );
+          continue;
+        }
+        const ids = contactsByFlow.get(flowId) ?? new Set<number>();
+        ids.add(event.contactId);
+        contactsByFlow.set(flowId, ids);
+      }
+    }
+
+    for (const [flowId, ids] of contactsByFlow) {
+      try {
+        const contactIds = [...ids];
+        const active = new Set(
+          (
+            await prisma.flowEnrollment.findMany({
+              where: { flowId, status: 'active', contactId: { in: contactIds } },
+              select: { contactId: true },
+            })
+          ).map((e) => e.contactId),
+        );
+        const pending = contactIds.filter((id) => !active.has(id));
+        if (pending.length === 0) continue;
+        const nextRunAt = new Date();
+        await prisma.flowEnrollment.createMany({
+          data: pending.map((contactId) => ({ flowId, contactId, currentNodeId: null, status: 'active', nextRunAt })),
+          skipDuplicates: true,
+        });
+      } catch (error) {
+        logger.error('enrollFromEvents feilet for flyt', { flowId, error });
+      }
+    }
+  } catch (error) {
+    logger.error('enrollFromEvents feilet', error);
   }
 }

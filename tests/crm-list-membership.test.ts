@@ -1,17 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { prisma, emitEvent } = vi.hoisted(() => ({
+const { prisma, emitEvents } = vi.hoisted(() => ({
   prisma: {
     contactList: { findUnique: vi.fn() },
     contact: { findMany: vi.fn() },
     contactListMembership: { findMany: vi.fn(), createMany: vi.fn(), deleteMany: vi.fn() },
-    contactActivity: { create: vi.fn() },
+    contactActivity: { createMany: vi.fn() },
   },
-  emitEvent: vi.fn(),
+  emitEvents: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma }));
-vi.mock('@/lib/events/bus', () => ({ emitEvent }));
+vi.mock('@/lib/events/bus', () => ({ emitEvents, BULK_EVENT_CHUNK: 500 }));
 
 import { addContactsToList, membershipDedupeKey, removeContactsFromList } from '@/lib/crm/list-membership';
 
@@ -24,8 +24,8 @@ beforeEach(() => {
   prisma.contactList.findUnique.mockResolvedValue(LIST);
   prisma.contactListMembership.createMany.mockResolvedValue({ count: 0 });
   prisma.contactListMembership.deleteMany.mockResolvedValue({ count: 0 });
-  prisma.contactActivity.create.mockResolvedValue({ id: 1 });
-  emitEvent.mockResolvedValue(true);
+  prisma.contactActivity.createMany.mockResolvedValue({ count: 0 });
+  emitEvents.mockImplementation(async (events: unknown[]) => events);
 });
 
 describe('addContactsToList', () => {
@@ -48,22 +48,23 @@ describe('addContactsToList', () => {
       ],
       skipDuplicates: true,
     });
-    expect(emitEvent).toHaveBeenCalledTimes(2);
-    expect(emitEvent).toHaveBeenCalledWith({
-      type: 'list.member_added',
-      source: 'server',
-      contactId: 1,
-      meta: { listId: 3, listName: 'Nyhetsbrev', source: 'manual' },
-      dedupeKey: `list.member_added:3:1:${T1.getTime()}`,
-    });
-    expect(prisma.contactActivity.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
+    expect(emitEvents).toHaveBeenCalledTimes(1);
+    expect(emitEvents.mock.calls[0][0]).toEqual([
+      {
+        type: 'list.member_added',
+        source: 'server',
         contactId: 1,
-        type: 'list',
-        title: 'Lagt til i listen Nyhetsbrev',
-        actorEmail: 'admin@bjerke.no',
-      }),
-    });
+        meta: { listId: 3, listName: 'Nyhetsbrev', source: 'manual' },
+        dedupeKey: `list.member_added:3:1:${T1.getTime()}`,
+        touchActivity: false,
+      },
+      expect.objectContaining({ contactId: 3, dedupeKey: `list.member_added:3:3:${T2.getTime()}` }),
+    ]);
+    expect(prisma.contactActivity.createMany).toHaveBeenCalledTimes(1);
+    expect(prisma.contactActivity.createMany.mock.calls[0][0].data).toEqual([
+      expect.objectContaining({ contactId: 1, type: 'list', title: 'Lagt til i listen Nyhetsbrev', actorEmail: 'admin@bjerke.no' }),
+      expect.objectContaining({ contactId: 3 }),
+    ]);
   });
 
   it('ingen nye kontakter ⇒ ingen innsetting og ingen hendelser', async () => {
@@ -74,7 +75,7 @@ describe('addContactsToList', () => {
 
     expect(result).toEqual({ added: 0, alreadyMember: 1, missing: 0, addedContactIds: [] });
     expect(prisma.contactListMembership.createMany).not.toHaveBeenCalled();
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvents).not.toHaveBeenCalled();
   });
 
   it('dedup-treff i bussen (samtidig forespørsel) gir ingen dobbel tidslinje', async () => {
@@ -82,12 +83,25 @@ describe('addContactsToList', () => {
     prisma.contactListMembership.findMany
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ contactId: 1, addedAt: T1 }]);
-    emitEvent.mockResolvedValue(false);
+    emitEvents.mockResolvedValue([]);
 
     await addContactsToList(3, [1], { source: 'import' });
 
-    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ meta: expect.objectContaining({ source: 'import' }) }));
-    expect(prisma.contactActivity.create).not.toHaveBeenCalled();
+    expect(emitEvents.mock.calls[0][0]).toEqual([expect.objectContaining({ meta: expect.objectContaining({ source: 'import' }) })]);
+    expect(prisma.contactActivity.createMany).not.toHaveBeenCalled();
+  });
+
+  it('tidslinjen skrives bare for hendelser bussen faktisk lagret', async () => {
+    prisma.contact.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+    prisma.contactListMembership.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ contactId: 1, addedAt: T1 }, { contactId: 2, addedAt: T2 }]);
+    emitEvents.mockImplementation(async (events: { contactId: number }[]) => events.filter((e) => e.contactId === 2));
+
+    const result = await addContactsToList(3, [1, 2], { source: 'manual' });
+
+    expect(result?.addedContactIds).toEqual([1, 2]);
+    expect(prisma.contactActivity.createMany.mock.calls[0][0].data).toEqual([expect.objectContaining({ contactId: 2 })]);
   });
 
   it('ukjent liste ⇒ null uten skriving', async () => {
@@ -105,23 +119,24 @@ describe('removeContactsFromList', () => {
 
     expect(result).toEqual({ removed: 1, notMember: 1 });
     expect(prisma.contactListMembership.deleteMany).toHaveBeenCalledWith({ where: { id: { in: [11] } } });
-    expect(emitEvent).toHaveBeenCalledWith(
+    expect(emitEvents.mock.calls[0][0]).toEqual([
       expect.objectContaining({
         type: 'list.member_removed',
         contactId: 1,
         dedupeKey: `list.member_removed:3:1:${T1.getTime()}`,
+        touchActivity: false,
       }),
-    );
-    expect(prisma.contactActivity.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ title: 'Fjernet fra listen Nyhetsbrev' }),
-    });
+    ]);
+    expect(prisma.contactActivity.createMany.mock.calls[0][0].data).toEqual([
+      expect.objectContaining({ title: 'Fjernet fra listen Nyhetsbrev' }),
+    ]);
   });
 
   it('ikke medlem ⇒ ingen sletting eller hendelse', async () => {
     prisma.contactListMembership.findMany.mockResolvedValueOnce([]);
     expect(await removeContactsFromList(3, [1], { source: 'manual' })).toEqual({ removed: 0, notMember: 1 });
     expect(prisma.contactListMembership.deleteMany).not.toHaveBeenCalled();
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvents).not.toHaveBeenCalled();
   });
 });
 

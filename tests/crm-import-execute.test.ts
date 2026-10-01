@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Prisma } from '@prisma/client';
 
-const { prisma, emitEvent } = vi.hoisted(() => {
+const { prisma, emitEvents } = vi.hoisted(() => {
   const prisma = {
     $transaction: vi.fn(),
     organization: { create: vi.fn(), findFirst: vi.fn() },
@@ -10,10 +10,10 @@ const { prisma, emitEvent } = vi.hoisted(() => {
     consent: { upsert: vi.fn() },
     contactActivity: { create: vi.fn() },
   };
-  return { prisma, emitEvent: vi.fn() };
+  return { prisma, emitEvents: vi.fn() };
 });
 vi.mock('@/lib/prisma', () => ({ prisma }));
-vi.mock('@/lib/events/bus', () => ({ emitEvent }));
+vi.mock('@/lib/events/bus', () => ({ emitEvents }));
 vi.mock('@/lib/logger', () => ({ default: { error: vi.fn(), info: vi.fn(), warn: vi.fn() } }));
 
 import { executeImport, IMPORT_BATCH_SIZE } from '@/lib/crm/import/execute';
@@ -81,7 +81,7 @@ describe('executeImport', () => {
       { contacts: [existing({ id: 1, name: 'Kari', email: 'kari@x.no' }), existing({ id: 2, name: 'Ola', email: 'ola@x.no' })] },
     );
     expect(prisma.contact.update).toHaveBeenCalledTimes(1);
-    expect(prisma.contact.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { phone: '+4791234567', lastActivityAt: NOW } });
+    expect(prisma.contact.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { phone: '+4791234567' } });
     expect(prisma.contactActivity.create).toHaveBeenCalledTimes(1);
     expect(prisma.contactActivity.create.mock.calls[0][0].data.body).toBe('Oppdatert: telefon');
     expect(result).toMatchObject({ updated: 1, unchanged: 1, contactIds: [1, 2] });
@@ -107,14 +107,18 @@ describe('executeImport', () => {
       create: { contactId: 100, marketing: true, lawfulBasis: 'consent', consentAt: NOW, source: 'import' },
       update: { marketing: true, lawfulBasis: 'consent', consentAt: NOW, source: 'import' },
     });
-    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'consent.updated', contactId: 100 }));
+    expect(emitEvents).toHaveBeenCalledWith([
+      expect.objectContaining({
+        type: 'consent.updated', contactId: 100, touchActivity: false, dedupeKey: `consent.updated:import:100:${NOW.getTime()}`,
+      }),
+    ]);
   });
 
   it('writes no consent and reports it when the consent column was not confirmed', async () => {
     const result = await run([['Kari', 'kari@x.no', '', '', '', '', 'ja']], {}, DEFAULT_APPLY_OPTIONS);
     expect(prisma.contact.create).toHaveBeenCalled();
     expect(prisma.consent.upsert).not.toHaveBeenCalled();
-    expect(emitEvent).not.toHaveBeenCalled();
+    expect(emitEvents).toHaveBeenCalledWith([]);
     expect(result.consentNotice).toMatch(/Samtykke ble ikke registrert/);
   });
 
@@ -128,13 +132,13 @@ describe('executeImport', () => {
     expect(prisma.consent.upsert).not.toHaveBeenCalled();
   });
 
-
-
-  it('never grants consent to suppressed addresses', async () => {
-    await run([['Kari', 'kari@x.no', '', '', '', '', 'ja']], { suppressedEmails: new Set(['kari@x.no']) });
-    expect(prisma.contact.create).toHaveBeenCalled();
-    expect(prisma.consent.upsert).not.toHaveBeenCalled();
-    expect(emitEvent).not.toHaveBeenCalled();
+  it('only sets lastActivityAt on new contacts, never on updated ones', async () => {
+    await run(
+      [['Kari', 'kari@x.no', '91234567', '', '', '', 'ja'], ['Ny', 'ny@x.no', '', '', '', '', '']],
+      { contacts: [existing({ id: 1, name: 'Kari', email: 'kari@x.no' })] },
+    );
+    expect(prisma.contact.update.mock.calls[0][0].data).not.toHaveProperty('lastActivityAt');
+    expect(prisma.contact.create.mock.calls[0][0].data).toMatchObject({ lastActivityAt: NOW });
   });
 
   it('creating a possible duplicate grants consent as for a brand-new contact', async () => {
@@ -143,6 +147,13 @@ describe('executeImport', () => {
     await run([['Kari', 'kari@ny.no', '', 'Acme', '', '', 'ja']], { contacts: [candidate], organizations: orgs }, CONFIRMED, [{ row: 2, action: 'create' }]);
     expect(prisma.contact.create).toHaveBeenCalled();
     expect(prisma.consent.upsert).toHaveBeenCalledWith(expect.objectContaining({ where: { contactId: 100 } }));
+  });
+
+  it('never grants consent to suppressed addresses', async () => {
+    await run([['Kari', 'kari@x.no', '', '', '', '', 'ja']], { suppressedEmails: new Set(['kari@x.no']) });
+    expect(prisma.contact.create).toHaveBeenCalled();
+    expect(prisma.consent.upsert).not.toHaveBeenCalled();
+    expect(emitEvents).toHaveBeenCalledWith([]);
   });
 
   it('reports skipped rows as problems with reasons', async () => {

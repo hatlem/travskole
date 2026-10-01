@@ -4,7 +4,7 @@
 
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { emitEvent } from '@/lib/events/bus';
+import { emitEvents } from '@/lib/events/bus';
 import logger from '@/lib/logger';
 import { buildContactCreate, buildContactUpdate, type ContactPatch, type PlanContext } from '@/lib/crm/import/plan';
 import { CONSENT_NOT_CONFIRMED_NOTICE } from '@/lib/crm/import/types';
@@ -81,7 +81,8 @@ export async function executeImport(input: ExecuteImportInput): Promise<ImportRe
       const update = buildContactUpdate(existing, values, orgTarget, input.options);
       changes = update.changes;
       if (changes.length > 0) {
-        await tx.contact.update({ where: { id: contactId }, data: { ...patchToData(update.patch, organizationId), lastActivityAt: now } });
+        // «Sist aktiv» er kontaktens egen aktivitet — en import av eksisterende kontakter rører den ikke.
+        await tx.contact.update({ where: { id: contactId }, data: patchToData(update.patch, organizationId) });
       }
       outcome = changes.length > 0 ? 'updated' : 'unchanged';
     }
@@ -149,14 +150,16 @@ export async function executeImport(input: ExecuteImportInput): Promise<ImportRe
     }
   }
 
-  for (const contactId of consentGranted) {
-    await emitEvent({
+  await emitEvents(
+    consentGranted.map((contactId) => ({
       type: 'consent.updated',
-      source: 'server',
+      source: 'server' as const,
       contactId,
       meta: { marketing: true, lawfulBasis: 'consent', kilde: 'import' },
-    });
-  }
+      dedupeKey: `consent.updated:import:${contactId}:${now.getTime()}`,
+      touchActivity: false,
+    })),
+  );
 
   result.problems.sort((a: ImportProblem, b: ImportProblem) => a.row - b.row);
   return result;
