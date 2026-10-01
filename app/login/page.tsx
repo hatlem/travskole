@@ -1,8 +1,11 @@
+import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { redirect } from 'next/navigation';
 import { getServerSession } from '@/lib/auth';
 import { postLoginDestination } from '@/lib/auth-redirect';
 import LoginForm from './login-form';
+
+export const metadata: Metadata = { title: 'Logg inn', robots: { index: false } };
 
 export default async function LoginPage({
   searchParams,

@@ -37,7 +37,7 @@ export default function LoginForm() {
   const justRegistered = searchParams.get('registered') === 'true';
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [magicLinkSent, setMagicLinkSent] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'password' | 'magic'>(justRegistered ? 'password' : 'magic');
 
   const passwordForm = useForm<LoginFormData>({
@@ -89,7 +89,7 @@ export default function LoginForm() {
         const body = await res.json().catch(() => ({}));
         setError(body.error || 'Kunne ikke sende innloggingslenke. Prøv igjen.');
       } else {
-        setMagicLinkSent(true);
+        setMagicLinkSent(data.email.trim());
       }
     } catch {
       setError('Noe gikk galt. Vennligst prøv igjen.');
@@ -103,16 +103,13 @@ export default function LoginForm() {
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <h2 className="text-center text-3xl font-bold text-gray-900">
+        <h1 className="text-center text-3xl font-bold text-gray-900">
           {t('auth.login_button')}
-        </h2>
-        <p className="mt-2 text-center text-sm text-gray-600">
-          Eller{' '}
-          <Link
-            href="/register"
-            className="font-medium text-bjerke-blue hover:underline"
-          >
-            opprett en ny konto
+        </h1>
+        <p className="mt-2 px-4 text-center text-sm text-gray-600 text-pretty">
+          {t('auth.no_account_needed')}{' '}
+          <Link href="/register" className="font-medium text-bjerke-blue underline-offset-2 hover:underline">
+            Vil du heller lage konto med passord?
           </Link>
         </p>
       </div>
@@ -138,51 +135,56 @@ export default function LoginForm() {
           )}
 
           {/* Tabs */}
-          <div className="flex border-b border-gray-200 mb-6">
+          <div role="tablist" aria-label="Velg innloggingsmåte" className="flex border-b border-gray-200 mb-6">
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === 'magic'}
               onClick={() => setActiveTab('magic')}
-              className={`flex-1 pb-3 text-sm font-medium border-b-2 transition ${
+              className={`flex-1 min-h-11 pb-2 text-sm font-medium border-b-2 transition ${
                 activeTab === 'magic'
                   ? 'border-bjerke-blue text-bjerke-blue'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              Magic Link
+              {t('auth.magic_tab')}
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === 'password'}
               onClick={() => setActiveTab('password')}
-              className={`flex-1 pb-3 text-sm font-medium border-b-2 transition ${
+              className={`flex-1 min-h-11 pb-2 text-sm font-medium border-b-2 transition ${
                 activeTab === 'password'
                   ? 'border-bjerke-blue text-bjerke-blue'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              E-post & Passord
+              {t('auth.password_tab')}
             </button>
           </div>
 
           {/* Magic Link Tab */}
           {activeTab === 'magic' && (
             magicLinkSent ? (
-              <div className="text-center py-4">
-                <div className="text-green-600 text-lg font-semibold mb-2">
-                  Sjekk e-posten din
-                </div>
-                <p className="text-gray-600 text-sm">
-                  Vi har sendt en innloggingslenke til e-postadressen din. Klikk på lenken for å logge inn.
+              <div role="status" className="text-center py-4">
+                <p className="text-green-800 text-lg font-semibold mb-2">
+                  {t('auth.check_email_heading')}
+                </p>
+                <p className="text-gray-700 text-sm text-pretty">
+                  {t('auth.check_email_text', { epost: magicLinkSent })}
                 </p>
                 <button
                   type="button"
-                  onClick={() => setMagicLinkSent(false)}
-                  className="mt-4 text-sm text-bjerke-blue hover:underline"
+                  onClick={() => setMagicLinkSent(null)}
+                  className="mt-3 inline-flex min-h-11 items-center px-3 text-sm text-bjerke-blue hover:underline"
                 >
-                  Send på nytt
+                  Feil adresse? Send på nytt
                 </button>
               </div>
             ) : (
               <form onSubmit={magicForm.handleSubmit(onMagicLinkSubmit)} className="space-y-6">
+                <p className="text-sm text-gray-700 text-pretty">{t('auth.magic_explainer')}</p>
                 <div>
                   <label
                     htmlFor="magic-email"
@@ -198,7 +200,7 @@ export default function LoginForm() {
                     aria-invalid={!!magicForm.formState.errors.email}
                     aria-describedby={magicForm.formState.errors.email ? 'magic-email-error' : undefined}
                     className={`
-                      w-full px-3 py-2 border rounded-lg shadow-sm
+                      min-h-11 w-full px-3 py-2 text-base border rounded-lg shadow-sm
                       focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                       ${magicForm.formState.errors.email ? 'border-red-300' : 'border-gray-300'}
                     `}
@@ -246,7 +248,7 @@ export default function LoginForm() {
                   aria-invalid={!!passwordForm.formState.errors.email}
                   aria-describedby={passwordForm.formState.errors.email ? 'email-error' : undefined}
                   className={`
-                    w-full px-3 py-2 border rounded-lg shadow-sm
+                    min-h-11 w-full px-3 py-2 text-base border rounded-lg shadow-sm
                     focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                     ${passwordForm.formState.errors.email ? 'border-red-300' : 'border-gray-300'}
                   `}
@@ -274,7 +276,7 @@ export default function LoginForm() {
                   aria-invalid={!!passwordForm.formState.errors.password}
                   aria-describedby={passwordForm.formState.errors.password ? 'password-error' : undefined}
                   className={`
-                    w-full px-3 py-2 border rounded-lg shadow-sm
+                    min-h-11 w-full px-3 py-2 text-base border rounded-lg shadow-sm
                     focus:outline-none focus:ring-2 focus:ring-bjerke-blue focus:ring-opacity-20
                     ${passwordForm.formState.errors.password ? 'border-red-300' : 'border-gray-300'}
                   `}
@@ -286,7 +288,7 @@ export default function LoginForm() {
                   </p>
                 )}
                 <div className="mt-1 text-right">
-                  <Link href="/forgot-password" className="text-sm text-bjerke-blue hover:underline">
+                  <Link href="/forgot-password" className="inline-flex min-h-11 items-center text-sm text-bjerke-blue hover:underline">
                     Glemt passord?
                   </Link>
                 </div>

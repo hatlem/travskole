@@ -63,6 +63,7 @@ export default function CourseFilter({ courses }: CourseFilterProps) {
 
   return (
     <>
+      {(courseTypes.length > 1 || hasChildren) && (
       <div className="border-b border-gray-200 bg-white">
         <div className="mx-auto max-w-6xl space-y-3 px-4 py-4">
           {courseTypes.length > 1 && (
@@ -126,6 +127,7 @@ export default function CourseFilter({ courses }: CourseFilterProps) {
           )}
         </div>
       </div>
+      )}
 
       <section className="mx-auto max-w-6xl px-4 py-8 sm:py-12">
         <p className="mb-6 text-gray-600" aria-live="polite">
