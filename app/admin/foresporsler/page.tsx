@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { TableSkeleton, StatCardsSkeleton } from '@/components/admin/Skeleton';
 import { useToast } from '@/components/admin/Toast';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { PageHeader } from '@/components/admin/PageHeader';
 import { adminBookingStatusLabel } from '@/lib/bookings/withdrawn';
 import { paymentStatusBadge } from '@/lib/payments/badge';
 import { isSettledPaymentStatus } from '@/lib/payments/transitions';
@@ -26,6 +27,9 @@ interface Booking {
 }
 
 type StatusFilter = 'all' | 'new' | 'confirmed' | 'cancelled';
+
+const DESCRIPTION =
+  'Folk som har bedt om et tidspunkt, f.eks. til bursdag eller firmatur. Godta for å sende dem bekreftelse på e-post, eller avvis.';
 
 export default function AdminForesporslerPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -82,7 +86,7 @@ export default function AdminForesporslerPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
-      if (!res.ok) throw new Error('Kunne ikke oppdatere status');
+      if (!res.ok) throw new Error('Svaret ble ikke lagret. Prøv igjen.');
       const now = new Date().toISOString();
       setBookings(bookings.map(b =>
         b.id === id
@@ -99,9 +103,14 @@ export default function AdminForesporslerPage() {
         next.delete(id);
         return next;
       });
-      toast(status === 'confirmed' ? 'Forespørsel bekreftet' : 'Forespørsel avvist', 'success');
+      toast(
+        status === 'confirmed'
+          ? 'Forespørselen er godtatt, og personen får beskjed på e-post'
+          : 'Forespørselen er avvist',
+        'success',
+      );
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     }
   }
 
@@ -112,7 +121,7 @@ export default function AdminForesporslerPage() {
       const res = await fetch(`/api/admin/bookings/${deleteTarget.id}`, { method: 'DELETE' });
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        throw new Error(body?.error ?? 'Kunne ikke slette forespørselen');
+        throw new Error(body?.error ?? 'Forespørselen ble ikke slettet. Prøv igjen.');
       }
       const id = deleteTarget.id;
       setBookings(prev => prev.filter(b => b.id !== id));
@@ -121,10 +130,10 @@ export default function AdminForesporslerPage() {
         next.delete(id);
         return next;
       });
-      toast('Forespørsel slettet', 'success');
+      toast('Forespørselen er slettet', 'success');
       setDeleteTarget(null);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setDeleting(false);
     }
@@ -155,10 +164,10 @@ export default function AdminForesporslerPage() {
             }
           : b
       ));
-      toast(`${ids.length} forespørsel(er) oppdatert`, 'success');
+      toast(ids.length === 1 ? '1 forespørsel er oppdatert' : `${ids.length} forespørsler er oppdatert`, 'success');
       setSelected(new Set());
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Noe gikk galt', 'error');
+      toast(err instanceof Error ? err.message : 'Noe gikk galt. Prøv igjen om litt.', 'error');
     } finally {
       setBulkProcessing(false);
     }
@@ -192,7 +201,7 @@ export default function AdminForesporslerPage() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-6">Forespørsler</h1>
+        <PageHeader title="Forespørsler" description={DESCRIPTION} />
         <StatCardsSkeleton count={4} />
         <div className="mt-6">
           <TableSkeleton />
@@ -204,10 +213,7 @@ export default function AdminForesporslerPage() {
   return (
     <div>
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold text-gray-900">Forespørsler</h1>
-        <p className="text-gray-600 text-sm mt-1">Alle bookingforespørsler på tvers av arrangementer</p>
-      </div>
+      <PageHeader title="Forespørsler" description={DESCRIPTION} />
 
       {/* Stats bar */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
@@ -308,8 +314,8 @@ export default function AdminForesporslerPage() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <p className="text-gray-500">
             {bookings.length === 0
-              ? 'Ingen forespørsler ennå.'
-              : 'Ingen forespørsler matcher filteret.'}
+              ? 'Ingen forespørsler ennå. De kommer hit når noen ber om et tidspunkt på et arrangement med «Forespørsel» som påmeldingsmåte.'
+              : 'Ingen forespørsler passer med søket eller filteret. Prøv «Alle statuser».'}
           </p>
         </div>
       )}
@@ -322,7 +328,7 @@ export default function AdminForesporslerPage() {
             ? `Forespørselen fra ${deleteTarget.name}${deleteTarget.course ? ` (${deleteTarget.course.name})` : ''} slettes permanent. Dette kan ikke angres.`
             : ''
         }
-        confirmLabel="Slett"
+        confirmLabel="Ja, slett"
         variant="danger"
         loading={deleting}
         onConfirm={deleteBooking}
@@ -442,12 +448,14 @@ function BookingCard({
           <>
             <button
               onClick={() => onUpdateStatus(booking.id, 'confirmed')}
+              title={`Godtar forespørselen og sender e-post til ${booking.email}`}
               className="text-sm font-medium text-white bg-green-600 hover:bg-green-700 px-4 py-1.5 rounded-md transition"
             >
               Bekreft
             </button>
             <button
               onClick={() => onUpdateStatus(booking.id, 'cancelled')}
+              title="Avviser forespørselen"
               className="text-sm font-medium text-white bg-red-600 hover:bg-red-700 px-4 py-1.5 rounded-md transition"
             >
               Avvis
