@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
 
   if (!data.contactId && !data.organizationId && !data.dealId) {
     return NextResponse.json(
-      { error: 'Notat må knyttes til kontakt, bedrift eller deal' },
+      { error: 'Notatet må knyttes til en kontakt, bedrift eller avtale' },
       { status: 400 },
     );
   }

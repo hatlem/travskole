@@ -121,7 +121,7 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     // Deal.stage er onDelete: Restrict — en deal kom inn mellom tellingen og slettingen.
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
       return NextResponse.json(
-        { error: 'Stadiet har deals. Flytt dem til et annet stadium før du sletter.' },
+        { error: 'Steget har avtaler. Flytt dem til et annet steg før du sletter det.' },
         { status: 409 },
       );
     }

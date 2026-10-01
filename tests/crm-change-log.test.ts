@@ -15,7 +15,7 @@ describe('describeCrmChanges', () => {
 
   it('describes stage and owner changes in Norwegian', () => {
     expect(describeCrmChanges({ stage: 'lead', ownerId: null }, { stage: 'customer', ownerId: 2 }, owner)).toEqual([
-      'Stadium endret: Interessent → Kunde',
+      'Kundestatus endret: Interessent → Kunde',
       'Ansvarlig endret: ingen → bruker 2',
     ]);
   });

@@ -7,6 +7,9 @@ describe('activity labels', () => {
     expect(activityEntityLabel('sender_identity')).toBe('Avsender');
     expect(activityEntityLabel('child')).toBe('Barn');
     expect(activityEntityLabel('setting')).toBe('Innstilling');
+    expect(activityEntityLabel('pipeline')).toBe('Salgstavle');
+    expect(activityEntityLabel('deal')).toBe('Avtale');
+    expect(activityEntityLabel('stage')).toBe('Steg');
     expect(activityActionLabel('export')).toBe('Eksportert');
     expect(activityActionLabel('ukjent_handling')).toBe('ukjent_handling');
   });

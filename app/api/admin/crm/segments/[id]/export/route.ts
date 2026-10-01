@@ -53,7 +53,7 @@ export async function GET(
       c.tagList.join(', '),
     ]);
 
-  const csv = toCsv(['Navn', 'E-post', 'Telefon', 'Bedrift', 'Stadium', 'Tagger'], rows);
+  const csv = toCsv(['Navn', 'E-post', 'Telefon', 'Bedrift', 'Kundestatus', 'Stikkord'], rows);
 
   logActivity({
     action: 'export',

@@ -83,7 +83,7 @@ async function pipelineSection(now: Date) {
     const stage = stageById.get(row.stageId);
     return {
       stageId: row.stageId,
-      stageName: stage?.name ?? `Stadium ${row.stageId}`,
+      stageName: stage?.name ?? `Steg ${row.stageId}`,
       pipelineName: stage?.pipeline.name ?? '',
       openValue: row._sum.value ?? 0,
       count: row._count._all,

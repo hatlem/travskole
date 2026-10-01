@@ -24,7 +24,7 @@ export function describeCrmChanges(
   const titles: string[] = [];
   if (patch.stage !== undefined && patch.stage !== before.stage) {
     const label = (s: string) => CRM_STAGE_LABELS[s] ?? s;
-    titles.push(`Stadium endret: ${label(before.stage)} → ${label(patch.stage)}`);
+    titles.push(`Kundestatus endret: ${label(before.stage)} → ${label(patch.stage)}`);
   }
   if (patch.ownerId !== undefined && patch.ownerId !== before.ownerId) {
     titles.push(`Ansvarlig endret: ${ownerLabel(before.ownerId)} → ${ownerLabel(patch.ownerId)}`);

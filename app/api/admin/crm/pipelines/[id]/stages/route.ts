@@ -65,7 +65,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ stage }, { status: 201 });
   } catch (error) {
     logger.error('Error creating stage', { error });
-    return NextResponse.json({ error: 'Kunne ikke opprette stadium' }, { status: 500 });
+    return NextResponse.json({ error: 'Kunne ikke opprette steget' }, { status: 500 });
   }
 }
 

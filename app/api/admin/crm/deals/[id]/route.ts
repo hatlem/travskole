@@ -47,7 +47,7 @@ const patchSchema = z.object({
   eventType: z.string().trim().max(50).nullable().optional(),
   eventDate: z.string().datetime().nullable().optional(),
 }).refine((v) => v.pipelineId === undefined || v.stageId !== undefined, {
-  message: 'Velg stadium i ny pipeline',
+  message: 'Velg et steg i den nye salgstavlen',
 });
 
 export async function PATCH(
@@ -97,7 +97,7 @@ export async function PATCH(
     if (data.stageId !== undefined && (data.stageId !== existing.stageId || targetPipelineId !== existing.pipelineId)) {
       const stage = await prisma.stage.findUnique({ where: { id: data.stageId } });
       if (!stage || stage.pipelineId !== targetPipelineId) {
-        return NextResponse.json({ error: 'Ugyldig stadium' }, { status: 400 });
+        return NextResponse.json({ error: 'Ugyldig steg' }, { status: 400 });
       }
       newStageName = stage.name;
       statusPatch = stage.isWon

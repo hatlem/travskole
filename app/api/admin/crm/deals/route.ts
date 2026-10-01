@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
 
   const stage = await prisma.stage.findUnique({ where: { id: data.stageId } });
   if (!stage || stage.pipelineId !== data.pipelineId) {
-    return NextResponse.json({ error: 'Ugyldig stadium for valgt pipeline' }, { status: 400 });
+    return NextResponse.json({ error: 'Ugyldig steg for valgt salgstavle' }, { status: 400 });
   }
 
   try {
