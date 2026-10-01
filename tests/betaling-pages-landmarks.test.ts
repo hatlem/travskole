@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 
 vi.mock('@/lib/prisma', () => ({ prisma: { course: { findUnique: vi.fn(async () => null) }, bookingRequest: { findUnique: vi.fn(async () => null) } } }));
+vi.mock('next-auth/react', () => ({ useSession: () => ({ data: null, status: 'unauthenticated' }) }));
 vi.mock('@/lib/payments/reconcile', () => ({
   resolveThankYouStatus: vi.fn(async () => 'paid'),
   findPaymentSubject: vi.fn(async () => ({ kind: 'registration', status: 'pending' })),
@@ -28,5 +29,17 @@ describe('/betaling landmarks', () => {
     expect(html).toContain('Betalingen er mottatt – du får kvittering på e-post.');
     expect(html).toContain('Påmeldingen din er registrert');
     expect(html).not.toContain('Din registrering er bekreftet');
+  });
+
+  it('never sends anonymous buyers to a login wall', async () => {
+    const pages = [
+      await AvbruttPage({ searchParams: Promise.resolve({}) }),
+      await TakkPage({ searchParams: Promise.resolve({ ref: 'cs_x' }) }),
+    ];
+    for (const page of pages) {
+      const html = renderToStaticMarkup(page);
+      expect(html).not.toContain('href="/dashboard"');
+      expect(html).toContain('Få innloggingslenke på e-post');
+    }
   });
 });

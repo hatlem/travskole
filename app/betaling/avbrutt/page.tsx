@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
 import { parsePaymentMethods } from '@/lib/payments';
+import { PaymentExitActions } from '../payment-exit-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,30 +29,25 @@ export default async function AvbruttPage({
   const offersInvoice = await courseOffersInvoice(kurs);
 
   return (
-    <main className="bg-white">
-      <section className="bg-bjerke-blue text-white py-14">
-        <div className="max-w-3xl mx-auto px-6">
+    <main className="bg-gray-50">
+      <section className="bg-bjerke-blue text-white py-10 sm:py-14">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6">
           <h1 className="text-3xl sm:text-4xl font-bold">Betaling avbrutt</h1>
         </div>
       </section>
 
-      <section className="py-12 px-6">
+      <section className="py-8 sm:py-12 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto">
-          <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-8">
+          <div role="status" className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 sm:p-8">
             <h2 className="text-xl font-bold text-yellow-900 mb-2">
-              Betalingen ble avbrutt
+              Ingenting er trukket
             </h2>
-            <p className="text-yellow-800 mb-6">
-              Du har avbrutt betalingen. Du kan prøve igjen fra dashboard eller kontakte oss for andre betalingsalternativer.
-              {offersInvoice && ' Faktura er også tilgjengelig som betalingsmåte.'}
+            <p className="text-yellow-900 text-pretty">
+              Du avbrøt betalingen. Påmeldingen din er likevel registrert – du kan prøve igjen nå, eller betale senere fra Min side.
+              {offersInvoice && ' Du kan også betale med faktura – ta kontakt med oss, så ordner vi det.'}
             </p>
-            <Link
-              href="/dashboard"
-              className="inline-block px-4 py-2 bg-bjerke-blue text-white rounded-lg font-medium hover:opacity-90"
-            >
-              Gå til dashboard
-            </Link>
           </div>
+          <PaymentExitActions offerRetry />
         </div>
       </section>
     </main>

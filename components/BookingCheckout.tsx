@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-
-const PROVIDER_LABEL: Record<string, string> = { stripe: 'Betal med kort', vipps: 'Betal med Vipps' };
+import { payButtonLabel } from '@/lib/buyer-display';
 
 export function BookingCheckout({
   bookingRequestId,
   providers,
   token,
+  amountKr,
 }: {
   bookingRequestId: number;
   providers: ('stripe' | 'vipps')[];
   token?: string;
+  amountKr?: number | null;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -48,13 +49,15 @@ export function BookingCheckout({
             key={p}
             onClick={() => pay(p)}
             disabled={busy !== null}
-            className="bg-bjerke-blue text-white px-4 py-2 rounded-lg font-medium hover:opacity-90 disabled:opacity-50"
+            className={`min-h-11 rounded-lg px-5 font-semibold text-white transition-colors disabled:opacity-50 ${
+              p === 'vipps' ? 'bg-[#ff5b24] hover:bg-[#e64d1a]' : 'bg-bjerke-blue hover:bg-bjerke-blue-dark'
+            }`}
           >
-            {busy === p ? 'Starter …' : PROVIDER_LABEL[p]}
+            {busy === p ? 'Starter …' : payButtonLabel(p, amountKr)}
           </button>
         ))}
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     </div>
   );
 }

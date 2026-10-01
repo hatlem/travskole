@@ -9,6 +9,7 @@ import {
   isMeaningfulConsentText,
   participantsLabel,
   payButtonLabel,
+  postSubmitStep,
   priceLabel,
   spotsLeft,
   spotsLeftLabel,
@@ -119,5 +120,20 @@ describe('buttons', () => {
   });
   it('formats decimals when present', () => {
     expect(nbsp(formatKr(99.5))).toBe('99,5 kr');
+  });
+});
+
+describe('postSubmitStep', () => {
+  const base = { planKind: 'choice' as const, priceKr: 1500, waitlist: false, hasRegistrationId: true };
+  it('offers the payment choice for paid courses with several methods', () => {
+    expect(postSubmitStep(base)).toBe('choice');
+    expect(postSubmitStep({ ...base, planKind: 'redirect' })).toBe('redirect');
+  });
+  it('goes straight to the confirmation for invoice, free and waitlist', () => {
+    expect(postSubmitStep({ ...base, planKind: 'invoice' })).toBe('confirmation');
+    expect(postSubmitStep({ ...base, priceKr: 0 })).toBe('confirmation');
+    expect(postSubmitStep({ ...base, priceKr: null })).toBe('confirmation');
+    expect(postSubmitStep({ ...base, waitlist: true })).toBe('confirmation');
+    expect(postSubmitStep({ ...base, hasRegistrationId: false })).toBe('confirmation');
   });
 });

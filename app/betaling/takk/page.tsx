@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { findPaymentSubject, resolveThankYouStatus } from '@/lib/payments/reconcile';
 import { paidThankYouMessage } from '@/lib/payments/thank-you';
+import { PaymentExitActions } from '../payment-exit-actions';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,9 +14,11 @@ interface StatusBoxProps {
   title: string;
   message: string;
   color: 'green' | 'blue' | 'orange' | 'gray';
+  paid?: boolean;
+  offerRetry?: boolean;
 }
 
-function StatusBox({ title, message, color }: StatusBoxProps) {
+function StatusBox({ title, message, color, paid = false, offerRetry = false }: StatusBoxProps) {
   const colors = {
     green: {
       border: 'border-green-200',
@@ -47,19 +49,16 @@ function StatusBox({ title, message, color }: StatusBoxProps) {
   const c = colors[color];
 
   return (
-    <div className={`rounded-lg border ${c.border} ${c.bg} p-8`}>
-      <h2 className={`text-xl font-bold ${c.heading} mb-2`}>
-        {title}
-      </h2>
-      <p className={`${c.text} mb-6`}>
-        {message}
-      </p>
-      <Link
-        href="/dashboard"
-        className="inline-block px-4 py-2 bg-bjerke-blue text-white rounded-lg font-medium hover:opacity-90"
-      >
-        Gå til dashboard
-      </Link>
+    <div>
+      <div role="status" className={`rounded-2xl border ${c.border} ${c.bg} p-5 sm:p-8`}>
+        <h2 className={`text-xl font-bold ${c.heading} mb-2 text-balance`}>
+          {title}
+        </h2>
+        <p className={`${c.text} text-pretty`}>
+          {message}
+        </p>
+      </div>
+      <PaymentExitActions paid={paid} offerRetry={offerRetry} />
     </div>
   );
 }
@@ -79,20 +78,21 @@ export default async function TakkPage({
   const subject = status === 'paid' ? await findPaymentSubject(ref).catch(() => null) : null;
 
   return (
-    <main className="bg-white">
-      <section className="bg-bjerke-blue text-white py-14">
-        <div className="max-w-3xl mx-auto px-6">
+    <main className="bg-gray-50">
+      <section className="bg-bjerke-blue text-white py-10 sm:py-14">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6">
           <h1 className="text-3xl sm:text-4xl font-bold">Betaling</h1>
         </div>
       </section>
 
-      <section className="py-12 px-6">
+      <section className="py-8 sm:py-12 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto">
           {status === 'paid' && (
             <StatusBox
               title="Betalingen er mottatt — takk!"
               message={paidThankYouMessage(subject)}
               color="green"
+              paid
             />
           )}
 
@@ -107,8 +107,9 @@ export default async function TakkPage({
           {status === 'aborted' && (
             <StatusBox
               title="Betalingen ble avbrutt"
-              message="Betalingen ble avbrutt – du kan prøve igjen fra Min side."
+              message="Ingenting er trukket. Påmeldingen din er likevel registrert – du kan prøve igjen nå eller betale senere fra Min side."
               color="gray"
+              offerRetry
             />
           )}
 
@@ -123,16 +124,18 @@ export default async function TakkPage({
           {status === 'expired' && (
             <StatusBox
               title="Betalingslenken er utløpt"
-              message="Betalingen ble ikke fullført i tide. Start påmeldingen på nytt for å prøve igjen, eller gå til dashboard for å se statusen."
+              message="Betalingen ble ikke fullført i tide. Påmeldingen er likevel registrert – prøv igjen, eller betal senere fra Min side."
               color="gray"
+              offerRetry
             />
           )}
 
           {status === 'failed' && (
             <StatusBox
               title="Betalingen mislyktes"
-              message="Noe gikk galt med betalingen. Prøv igjen, eller kontakt oss hvis problemet vedvarer."
+              message="Noe gikk galt med betalingen, og ingenting er trukket. Prøv igjen, eller kontakt oss hvis problemet vedvarer."
               color="orange"
+              offerRetry
             />
           )}
 
@@ -147,7 +150,7 @@ export default async function TakkPage({
           {status === 'not_found' && (
             <StatusBox
               title="Vi fant ikke betalingsstatusen"
-              message="Vi kunne ikke finne informasjon om betalingen. Gå til dashboard for å se statusen på din registrering."
+              message="Vi kunne ikke finne informasjon om betalingen. Du ser statusen på påmeldingen din på Min side."
               color="gray"
             />
           )}

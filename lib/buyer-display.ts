@@ -115,3 +115,29 @@ export function payButtonLabel(provider: PayProvider, amountKr: number | null | 
 export function ctaWithPrice(base: string, price: number | null | undefined): string {
   return price != null && price > 0 ? `${base} – ${formatKr(price)}` : base;
 }
+
+/** Det kjøperen trenger å se om arrangementet gjennom hele påmeldingen. */
+export interface CourseSummary {
+  courseName: string;
+  courseHref: string;
+  dateText: string;
+  place: string | null;
+  audienceText: string;
+  priceText: string;
+  priceKr: number | null;
+}
+
+/** Hvilket betalingssteg kjøperen skal møte etter innsending. */
+export type PostSubmitStep = 'confirmation' | 'choice' | 'redirect';
+
+export function postSubmitStep(input: {
+  planKind: 'invoice' | 'redirect' | 'choice';
+  priceKr: number | null;
+  waitlist: boolean;
+  hasRegistrationId: boolean;
+}): PostSubmitStep {
+  if (!input.hasRegistrationId || input.waitlist) return 'confirmation';
+  if (input.priceKr == null || input.priceKr <= 0) return 'confirmation';
+  if (input.planKind === 'invoice') return 'confirmation';
+  return input.planKind;
+}
