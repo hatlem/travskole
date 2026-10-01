@@ -40,10 +40,10 @@ export function HistoryBackfillCard() {
     try {
       const res = await fetch('/api/admin/crm/backfill');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Kunne ikke hente status');
+      if (!res.ok) throw new Error(data.error || 'Kunne ikke sjekke hva som mangler. Last siden på nytt.');
       setMissing(data.missing);
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Kunne ikke hente status', 'error');
+      toast(err instanceof Error ? err.message : 'Kunne ikke sjekke hva som mangler. Last siden på nytt.', 'error');
     }
   }, [toast]);
 
@@ -73,7 +73,7 @@ export function HistoryBackfillCard() {
           body: JSON.stringify({ cursor }),
         });
         const data: BackfillResponse = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Historikkimporten feilet');
+        if (!res.ok) throw new Error(data.error || 'Innhentingen stoppet. Det som er gjort, er lagret — trykk på knappen igjen for å fortsette.');
 
         acc.bookings += data.processed.bookings;
         acc.registrations += data.processed.registrations;
@@ -86,7 +86,9 @@ export function HistoryBackfillCard() {
         if (data.done || !data.cursor) {
           setSummary({ ...acc });
           toast(
-            `Historikk importert: ${acc.bookings} bookinger og ${acc.registrations} påmeldinger`,
+            acc.failed
+              ? `${acc.failed} kunne ikke hentes inn. Resten er klart: ${acc.bookings} forespørsler og ${acc.registrations} påmeldinger. Prøv igjen senere, eller se Aktivitetsloggen.`
+              : `Ferdig: ${acc.bookings} forespørsler og ${acc.registrations} påmeldinger er hentet inn`,
             acc.failed ? 'error' : 'success',
           );
           break;
@@ -94,7 +96,7 @@ export function HistoryBackfillCard() {
         cursor = data.cursor;
       }
     } catch (err) {
-      toast(err instanceof Error ? err.message : 'Historikkimporten feilet', 'error');
+      toast(err instanceof Error ? err.message : 'Innhentingen stoppet. Det som er gjort, er lagret — trykk på knappen igjen for å fortsette.', 'error');
       if (acc.bookings + acc.registrations > 0) setSummary({ ...acc });
     } finally {
       setRunning(false);
@@ -107,18 +109,18 @@ export function HistoryBackfillCard() {
 
   return (
     <section className="border border-gray-200 rounded-lg p-4 bg-white">
-      <h2 className="font-semibold mb-1">Importer historikk fra bookinger og påmeldinger</h2>
+      <h2 className="font-semibold mb-1">Hent inn tidligere forespørsler og påmeldinger</h2>
       <p className="text-sm text-gray-500 mb-3">
-        Oppretter kontakter, bedrifter og deals for bookinger og påmeldinger som ikke er i CRM ennå.
-        Trygt å kjøre flere ganger — eksisterende deals og manuelle endringer røres ikke.
+        Lager kontakter, bedrifter og avtaler av gamle forespørsler og påmeldinger som ikke er hentet inn ennå.
+        Trygt å kjøre flere ganger — eksisterende avtaler og endringer du har gjort, røres ikke.
       </p>
 
       <p className="text-sm mb-3" aria-live="polite">
         {missing === null
           ? 'Sjekker status …'
           : remaining === 0
-            ? 'Alle bookinger og påmeldinger er allerede i CRM.'
-            : `${missing.bookings} bookinger og ${missing.registrations} påmeldinger er ikke i CRM ennå.`}
+            ? 'Alle forespørsler og påmeldinger er allerede hentet inn.'
+            : `${missing.bookings} forespørsler og ${missing.registrations} påmeldinger er ikke hentet inn ennå.`}
       </p>
 
       {running && (
@@ -137,17 +139,17 @@ export function HistoryBackfillCard() {
         disabled={running || !remaining}
         className="bg-bjerke-blue text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
       >
-        {running ? 'Importerer …' : 'Importer historikk'}
+        {running ? 'Henter inn …' : 'Hent inn historikk'}
       </button>
 
       {summary && (
         <div className="mt-4 border border-green-200 bg-green-50 rounded-lg p-3 text-sm">
           <p>
-            Behandlet {summary.bookings} bookinger og {summary.registrations} påmeldinger
-            {summary.failed > 0 && <span className="text-red-700"> ({summary.failed} feilet — se loggen)</span>}.
+            Behandlet {summary.bookings} forespørsler og {summary.registrations} påmeldinger
+            {summary.failed > 0 && <span className="text-red-700"> ({summary.failed} kunne ikke hentes inn — se Aktivitetsloggen)</span>}.
           </p>
           <p className="text-gray-600 mt-1">
-            CRM har nå {summary.contacts} kontakter, {summary.organizations} bedrifter og {summary.deals} deals.
+            Dere har nå {summary.contacts} kontakter, {summary.organizations} bedrifter og {summary.deals} avtaler.
           </p>
         </div>
       )}

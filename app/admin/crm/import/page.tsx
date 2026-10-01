@@ -39,7 +39,7 @@ export default function ImportPage() {
       const data = await res.json();
       setLists(data.lists || []);
     } catch {
-      toast('Kunne ikke hente listene dine', 'error');
+      toast('Kunne ikke hente listene dine. Du kan fortsatt importere uten å velge liste.', 'error');
     }
   }, [toast]);
 
@@ -104,7 +104,7 @@ export default function ImportPage() {
     const next = { result: data.result as ImportResult, list: (data.list as { id: number; name: string } | null) ?? null };
     setResult(next);
     setStep('done');
-    toast(`Importert: ${next.result.created} nye, ${next.result.updated} oppdatert`, 'success');
+    toast(`Ferdig: ${next.result.created} nye kontakter, ${next.result.updated} oppdatert`, 'success');
     if (settings.list.kind === 'new') loadLists();
   }
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { TagInput } from '@/components/admin/crm/TagInput';
+import { HelpTip } from '@/components/admin/HelpTip';
 import { assignColumn, columnProblems, columnSamples, headerLabel } from '@/lib/crm/import/columns';
 import { CONTACT_STAGE_LABELS, CONTACT_STAGES, FIELD_LABELS, IMPORT_FIELDS, type ColumnTarget, type ContactStage } from '@/lib/crm/import/types';
 import type { ImportSource } from '@/lib/crm/import/source';
@@ -129,7 +130,7 @@ export function ColumnsStep({
           className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
         >
           <span>Flere valg</span>
-          <span className="text-gray-400 text-xs">{moreOpen ? 'Skjul' : 'Oppdatering, ansvarlig, stadium, tagger og samtykke'}</span>
+          <span className="text-gray-400 text-xs">{moreOpen ? 'Skjul' : 'Oppdatering, ansvarlig, kundestatus, stikkord og samtykke'}</span>
         </button>
         {moreOpen && (
           <div className="border-t border-gray-100 p-4 space-y-5 text-sm">
@@ -141,18 +142,18 @@ export function ColumnsStep({
               </label>
               <label className="flex items-start gap-2">
                 <input type="radio" name="policy" checked={settings.policy === 'overwrite'} onChange={() => update({ policy: 'overwrite' })} className="mt-1" />
-                <span><strong>Bytt ut med det som står i fila</strong><br /><span className="text-gray-500">Tomme celler i fila sletter aldri noe. Tagger legges alltid til, aldri fjernet.</span></span>
+                <span><strong>Bytt ut med det som står i fila</strong><br /><span className="text-gray-500">Tomme celler i fila sletter aldri noe. Stikkord legges alltid til, aldri fjernet.</span></span>
               </label>
             </fieldset>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block">
-                <span className="block font-medium text-gray-800 mb-1">Ansvarlig</span>
+                <span className="block font-medium text-gray-800 mb-1">Ansvarlig <HelpTip term="owner" /></span>
                 <AssigneeSelect value={settings.ownerId} onChange={(ownerId) => update({ ownerId })} emptyLabel="Ingen endring" className={selectClass} />
                 <span className="block text-gray-500 mt-1">Settes på nye kontakter og på eksisterende som mangler ansvarlig.</span>
               </label>
               <label className="block">
-                <span className="block font-medium text-gray-800 mb-1">Stadium</span>
+                <span className="block font-medium text-gray-800 mb-1">Kundestatus</span>
                 <select
                   value={settings.stage ?? ''}
                   onChange={(e) => update({ stage: (e.target.value || null) as ContactStage | null })}
@@ -166,12 +167,12 @@ export function ColumnsStep({
             </div>
 
             <label className="block">
-              <span className="block font-medium text-gray-800 mb-1">Legg til tagger på alle</span>
+              <span className="block font-medium text-gray-800 mb-1">Legg til stikkord på alle</span>
               <TagInput value={settings.tags} onChange={(tags) => update({ tags })} id="import-tags" />
             </label>
 
             <div className="rounded-md bg-gray-50 border border-gray-200 p-3 text-gray-700">
-              <p className="font-medium text-gray-800 mb-1">Samtykke til markedsføring (GDPR)</p>
+              <p className="font-medium text-gray-800 mb-1">Samtykke til markedsføring (GDPR) <HelpTip term="marketing" /></p>
               <p>
                 {hasConsentColumn
                   ? 'Kontakter der samtykke-kolonnen sier «ja» får registrert samtykke (kilde: import). Alle andre får ikke samtykke.'
@@ -193,7 +194,7 @@ export function ColumnsStep({
           disabled={busy || problems.length > 0 || listInvalid}
           className="bg-bjerke-blue text-white px-5 py-2 rounded-md text-sm font-medium hover:bg-bjerke-blue-dark disabled:opacity-50"
         >
-          {busy ? 'Sjekker mot CRM …' : 'Neste'}
+          {busy ? 'Sjekker mot kontaktene dine …' : 'Neste: se over'}
         </button>
       </div>
     </div>

@@ -310,13 +310,13 @@ export function buildContactUpdate(
   }
   if (options.stage && overwrite && existing.stage !== options.stage) {
     patch.stage = options.stage;
-    changes.push('stadium');
+    changes.push('kundestatus');
   }
 
   const tags = mergeTags(existing.tags, values.tags, options.tags);
   if (tags.length !== existing.tags.length) {
     patch.tags = tags;
-    changes.push('tagger');
+    changes.push('stikkord');
   }
 
   const custom = { ...existing.customFields };

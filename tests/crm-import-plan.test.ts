@@ -236,7 +236,7 @@ describe('buildContactUpdate', () => {
   it('fill_empty only fills missing values and merges tags', () => {
     const { patch, changes } = buildContactUpdate(existing, values, { kind: 'existing', id: 11 }, { ...DEFAULT_APPLY_OPTIONS, ownerId: 4, stage: 'lead' });
     expect(patch).toEqual({ roleTitle: 'Leder', tags: ['Gammel', 'VIP'] });
-    expect(changes).toEqual(['stilling', 'tagger']);
+    expect(changes).toEqual(['stilling', 'stikkord']);
   });
 
   it('overwrite replaces differing values but keeps what the file does not have', () => {
@@ -245,7 +245,7 @@ describe('buildContactUpdate', () => {
       name: 'Kari Ny', phone: '+4799999999', roleTitle: 'Leder', organization: { kind: 'existing', id: 11 }, ownerId: 4,
       stage: 'lead', tags: ['Gammel', 'VIP', 'Import'], customFields: { Medlemsnr: '2', Annet: 'x' },
     });
-    expect(changes).toEqual(['navn', 'telefon', 'stilling', 'bedrift', 'ansvarlig', 'stadium', 'tagger', 'egne felt']);
+    expect(changes).toEqual(['navn', 'telefon', 'stilling', 'bedrift', 'ansvarlig', 'kundestatus', 'stikkord', 'egne felt']);
   });
 
   it('never overwrites with empty values or derived names', () => {

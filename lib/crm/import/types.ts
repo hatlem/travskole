@@ -19,7 +19,7 @@ export const FIELD_LABELS: Record<ImportField, string> = {
   orgNumber: 'Org.nr.',
   website: 'Nettside',
   roleTitle: 'Stilling',
-  tags: 'Tagger',
+  tags: 'Stikkord',
   note: 'Notat',
   consent: 'Samtykke til markedsføring',
 };
@@ -67,7 +67,7 @@ export const STATUS_LABELS: Record<RowStatus, string> = {
 };
 
 export const STATUS_HELP: Record<RowStatus, string> = {
-  new: 'Personen finnes ikke i CRM fra før og blir lagt til.',
+  new: 'Personen finnes ikke blant kontaktene dine fra før og blir lagt til.',
   update_email: 'Vi fant en kontakt med samme e-post. Den blir oppdatert, ikke kopiert.',
   update_phone: 'Vi fant en kontakt med samme telefonnummer. Den blir oppdatert, ikke kopiert.',
   possible_duplicate: 'Samme navn og bedrift som en kontakt du har. Velg selv hva som skal skje – ellers hoppes raden over.',
