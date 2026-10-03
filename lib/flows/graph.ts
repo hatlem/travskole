@@ -144,6 +144,34 @@ function validateScheduleConfig(node: GraphNode): ValidationError | null {
   return null;
 }
 
+/** DFS (3-farge) over hele grafen: id-en til en node som ligger i en ring, eller null. */
+export function findCycleNode(nodes: GraphNode[], edges: GraphEdge[]): number | null {
+  const outgoing = new Map<number, number[]>(nodes.map((node) => [node.id, []]));
+  for (const edge of edges) {
+    if (outgoing.has(edge.fromNodeId) && outgoing.has(edge.toNodeId)) outgoing.get(edge.fromNodeId)!.push(edge.toNodeId);
+  }
+  const color = new Map<number, 'white' | 'gray' | 'black'>(nodes.map((node) => [node.id, 'white']));
+  const visit = (nodeId: number): number | null => {
+    color.set(nodeId, 'gray');
+    for (const toId of outgoing.get(nodeId) ?? []) {
+      const state = color.get(toId);
+      if (state === 'gray') return toId;
+      if (state === 'white') {
+        const found = visit(toId);
+        if (found !== null) return found;
+      }
+    }
+    color.set(nodeId, 'black');
+    return null;
+  };
+  for (const node of nodes) {
+    if (color.get(node.id) !== 'white') continue;
+    const found = visit(node.id);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
 const isExitAction = (node: GraphNode): boolean => node.type === 'action' && node.config.kind === 'exit';
 
 /**
@@ -188,28 +216,9 @@ function validateStructure(nodes: GraphNode[], edges: GraphEdge[]): ValidationEr
     }
   }
 
-  // --- DFS cycle detection (3-color) over the whole graph ---
-  const color = new Map<number, 'white' | 'gray' | 'black'>(nodes.map((node) => [node.id, 'white']));
-  let cycleReported = false;
-  const visit = (nodeId: number): void => {
-    if (cycleReported) return;
-    color.set(nodeId, 'gray');
-    for (const edge of outgoing.get(nodeId) ?? []) {
-      if (cycleReported) return;
-      if (!nodesById.has(edge.toNodeId)) continue;
-      const state = color.get(edge.toNodeId);
-      if (state === 'gray') {
-        errors.push(err(edge.toNodeId, 'cycle', 'Pilene går i ring. En flyt må gå fremover fra start til slutt.'));
-        cycleReported = true;
-        return;
-      }
-      if (state === 'white') visit(edge.toNodeId);
-    }
-    color.set(nodeId, 'black');
-  };
-  for (const node of nodes) {
-    if (cycleReported) break;
-    if (color.get(node.id) === 'white') visit(node.id);
+  const cycleNodeId = findCycleNode(nodes, edges);
+  if (cycleNodeId !== null) {
+    errors.push(err(cycleNodeId, 'cycle', 'Pilene går i ring. En flyt må gå fremover fra start til slutt.'));
   }
 
   // --- Edge-count / branch rules ---

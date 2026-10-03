@@ -3,9 +3,11 @@
  *
  * Claims a bounded batch of due enrollments, resolves each one's graph
  * (cached per flowId within the batch), and drives it forward via
- * `planStep` — capped at `MAX_HOPS` per enrollment per tick so a
- * misconfigured no-wait loop can't spin forever inside one call. Waits whose
- * target time has already passed continue in the same tick. Each
+ * `planStep` — capped at `MAX_HOPS` per enrollment per tick so one long
+ * no-wait chain can't hog a batch. Waits whose target time has already passed
+ * continue in the same tick; when the cap is reached the enrollment saves its
+ * position and the next tick picks up. Only a graph with a cycle (which
+ * validation rejects) is treated as a runaway and failed. Each
  * enrollment is isolated in its own try/catch so one bad row can't take
  * down the rest of the batch.
  */
@@ -17,7 +19,7 @@ import { defaultTaskAssigneeId } from '@/lib/crm/reply-task';
 import { getSetting } from '@/lib/settings';
 import { sendAdminEmail } from '@/lib/mail';
 import { parseJsonArray } from '@/lib/crm/normalize';
-import { ENGAGEMENT_CONDITION_KINDS, parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from './graph';
+import { ENGAGEMENT_CONDITION_KINDS, findCycleNode, parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from './graph';
 import { planStep, type PlannedAction, type StepContext, type TaskActionPayload } from './step';
 import { sendFlowEmail } from './send';
 import { findReview } from '@/lib/ai/review';
@@ -42,6 +44,8 @@ interface FlowGraph {
   edges: GraphEdge[];
   nodesById: Map<number, GraphNode>;
   startNodeId: number | null;
+  /** Ingen ring ⇒ hvert løp er begrenset av antall noder, og hop-taket er bare et per-tick-budsjett. */
+  acyclic: boolean;
 }
 
 interface ContactState {
@@ -97,6 +101,7 @@ async function loadGraph(flowId: number): Promise<FlowGraph> {
     edges,
     nodesById: new Map(nodes.map((node) => [node.id, node])),
     startNodeId: startNode?.id ?? null,
+    acyclic: findCycleNode(nodes, edges) === null,
   };
 }
 
@@ -433,8 +438,16 @@ async function processEnrollment(
     }
   }
 
-  await failEnrollment(enrollment.id, 'hop-limit', now);
-  return { sent, failed: true, completed: false };
+  if (!graph.acyclic) {
+    await failEnrollment(enrollment.id, 'hop-limit', now);
+    return { sent, failed: true, completed: false };
+  }
+  // Lang kjede av hoppede/passerte steg: lagre posisjonen og fortsett neste tick.
+  await prisma.flowEnrollment.update({
+    where: { id: enrollment.id },
+    data: { currentNodeId, nextRunAt: now },
+  });
+  return { sent, failed: false, completed: false };
 }
 
 /**
