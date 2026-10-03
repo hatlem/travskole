@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { COURSE_DISPLAY_STATUS, isCourseStatus } from '@/lib/course-status';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,7 @@ import { PAYMENT_METHODS } from '@/lib/payments';
 import { useToast } from '@/components/admin/Toast';
 import { Button } from '@/components/admin/Button';
 import { formatPrice } from '@/lib/admin-format';
+import { useAdoptTypedValues } from '@/components/admin/useAdoptTypedValues';
 
 function slugify(text: string): string {
   return text
@@ -61,6 +62,13 @@ export default function NewCoursePage() {
   const [reqConsentMedia, setReqConsentMedia] = useState(false);
   const [reqConsentActivities, setReqConsentActivities] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<string[]>(['faktura']);
+
+  // Tekst skrevet mens siden lastet skal ikke forsvinne.
+  const formRef = useRef<HTMLFormElement>(null);
+  useAdoptTypedValues(formRef, {
+    name: setName, slug: setSlug, description: setDescription, startDate: setStartDate, endDate: setEndDate,
+    ageMin: setAgeMin, ageMax: setAgeMax, price: setPrice, minParticipants: setMinParticipants, maxParticipants: setMaxParticipants,
+  });
 
   // Validation
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -160,7 +168,7 @@ export default function NewCoursePage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit}>
+      <form ref={formRef} onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left column - Main fields */}
           <div className="lg:col-span-2 space-y-6">
