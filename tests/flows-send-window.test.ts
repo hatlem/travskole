@@ -384,6 +384,19 @@ describe('isExactSendWindowParking / sameSendWindow', () => {
     expect(isExactSendWindowParking(5, osloMidnight, null)).toBe(false);
   });
 
+  it('spredning 0 gjenkjennes også (vindusåpning uten forskyvning)', () => {
+    const seed = Array.from({ length: 5_000_000 }, (_, i) => i + 1).find((i) => sendJitterMs(i, DEFAULT_SEND_WINDOW) === 0)!;
+    expect(seed).toBeDefined();
+    const resumeAt = sendDeferral(night, DEFAULT_SEND_WINDOW, seed)!;
+    expect(isExactSendWindowParking(seed, resumeAt, DEFAULT_SEND_WINDOW)).toBe(true);
+  });
+
+  it('spredning 0 ved vindu som åpner 00:00 forveksles ikke med en kursplanlegging til midnatt', () => {
+    const midnightWindow = { ...DEFAULT_SEND_WINDOW, startHour: 0, startMinute: 0 };
+    const seed = Array.from({ length: 5_000_000 }, (_, i) => i + 1).find((i) => sendJitterMs(i, midnightWindow) === 0)!;
+    expect(isExactSendWindowParking(seed, new Date('2026-10-04T22:00:00Z'), midnightWindow)).toBe(false);
+  });
+
   it('sammenligner effektive vinduer', () => {
     expect(sameSendWindow(null, null)).toBe(true);
     expect(sameSendWindow(DEFAULT_SEND_WINDOW, null)).toBe(false);

@@ -4,6 +4,7 @@
  * av Intl. Et tidsrom kan ikke gå over midnatt (start må være før slutt).
  */
 import { z } from 'zod';
+import { osloDay, osloDayStartUtc } from './schedule';
 
 const OSLO_TZ = 'Europe/Oslo';
 const MINUTE_MS = 60_000;
@@ -272,9 +273,11 @@ export function isParkedForSendWindow(seed: number, nextRunAt: Date, w: SendWind
 export function isExactSendWindowParking(seed: number, nextRunAt: Date, w: SendWindow | null): boolean {
   if (!w) return false;
   const jitter = sendJitterMs(seed, w);
-  if (jitter === 0) return false;
   const opening = nextRunAt.getTime() - jitter;
-  return isWithinWindow(new Date(opening), w) && !isWithinWindow(new Date(opening - 1), w);
+  if (!isWithinWindow(new Date(opening), w) || isWithinWindow(new Date(opening - 1), w)) return false;
+  // Uten spredning kan en kursplanlegging til Oslo-midnatt ikke skilles fra en
+  // vindusåpning kl. 00:00 — den skal aldri vekkes for tidlig.
+  return jitter > 0 || nextRunAt.getTime() !== osloDayStartUtc(osloDay(nextRunAt)).getTime();
 }
 
 export function sameSendWindow(a: SendWindow | null, b: SendWindow | null): boolean {
