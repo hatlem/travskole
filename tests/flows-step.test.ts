@@ -331,10 +331,12 @@ describe('planStep: schedule med passert tidspunkt', () => {
       baseCtx({ courseDates: dates, now: new Date(now), nodeType }),
     );
 
-  it('standard: under ett døgn siden ⇒ send (fortsett til e-posten)', () => {
+  it('standard: samme Oslo-dag ⇒ send (fortsett til e-posten)', () => {
     expect(plan('2026-05-29T12:00:00Z')).toEqual({ kind: 'advance', nextNodeId: 3 });
+    expect(plan('2026-05-29T21:59:00Z')).toEqual({ kind: 'advance', nextNodeId: 3 });
   });
-  it('standard: mer enn ett døgn siden ⇒ hopp over e-posten', () => {
+  it('standard: en senere Oslo-dag ⇒ hopp over e-posten', () => {
+    expect(plan('2026-05-29T22:01:00Z')).toEqual({ kind: 'advance', nextNodeId: 4 });
     expect(plan('2026-05-31T12:00:00Z')).toEqual({ kind: 'advance', nextNodeId: 4 });
   });
   it('«Send likevel» sender også lenge etter', () => {
@@ -347,9 +349,19 @@ describe('planStep: schedule med passert tidspunkt', () => {
   it('fremtidig tidspunkt sover som før', () => {
     expect(plan('2026-05-01T12:00:00Z', 'skip').kind).toBe('sleep');
   });
-  it('shouldSkipPast: grensen på 24 timer', () => {
-    const until = new Date('2026-05-28T22:00:00Z');
-    expect(shouldSkipPast(undefined, '2026-05-29', until, new Date('2026-05-29T21:59:00Z'))).toBe(false);
-    expect(shouldSkipPast(undefined, '2026-05-29', until, new Date('2026-05-29T22:01:00Z'))).toBe(true);
+  it('shouldSkipPast: grensen er Oslo-midnatt, ikke 24 timer', () => {
+    expect(shouldSkipPast(undefined, '2026-05-29', new Date('2026-05-29T21:59:00Z'))).toBe(false);
+    expect(shouldSkipPast(undefined, '2026-05-29', new Date('2026-05-29T22:01:00Z'))).toBe(true);
+    expect(shouldSkipPast('send', '2026-05-01', new Date('2026-05-29T22:01:00Z'))).toBe(false);
+  });
+  it('shouldSkipPast: sommertid starter (23-timersdøgn) — 23:30 samme dag sendes, 00:30 hoppes over', () => {
+    // 2026-03-29: Oslo går fra UTC+1 til UTC+2; dagen varer 2026-03-28T23:00Z–2026-03-29T22:00Z.
+    expect(shouldSkipPast(undefined, '2026-03-29', new Date('2026-03-29T21:30:00Z'))).toBe(false);
+    expect(shouldSkipPast(undefined, '2026-03-29', new Date('2026-03-29T22:30:00Z'))).toBe(true);
+  });
+  it('shouldSkipPast: sommertid slutter (25-timersdøgn) — 23:30 samme dag sendes fortsatt', () => {
+    // 2026-10-25: Oslo går fra UTC+2 til UTC+1; dagen varer 2026-10-24T22:00Z–2026-10-25T23:00Z.
+    expect(shouldSkipPast(undefined, '2026-10-25', new Date('2026-10-25T22:30:00Z'))).toBe(false);
+    expect(shouldSkipPast(undefined, '2026-10-25', new Date('2026-10-25T23:05:00Z'))).toBe(true);
   });
 });

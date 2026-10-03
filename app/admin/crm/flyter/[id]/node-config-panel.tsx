@@ -614,7 +614,7 @@ export function NodeConfigPanel({
             </select>
             <p className="mt-1 text-xs text-gray-500">
               Gjelder når noen melder seg på etter at datoen er passert. «Hopp over» hopper over e-posten etter dette steget.
-              Automatisk: sendes hvis det er under ett døgn siden, ellers hoppes den over.
+              Automatisk: sendes hvis det fortsatt er samme dag, ellers hoppes den over.
             </p>
           </div>
         </div>

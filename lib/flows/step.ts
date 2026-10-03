@@ -163,21 +163,19 @@ function planSchedule(node: GraphNode, edges: GraphEdge[], ctx: StepContext): St
   if (day === null) return graceExit(`schedule: kurs mangler dato for anker ${anchor}`);
   const until = osloDayStartUtc(day);
   if (until.getTime() > ctx.now.getTime()) return { kind: 'sleep', until, nextNodeId: edge.toNodeId };
-  if (!shouldSkipPast(node.config.ifPast, day, until, ctx.now)) return { kind: 'advance', nextNodeId: edge.toNodeId };
+  if (!shouldSkipPast(node.config.ifPast, day, ctx.now)) return { kind: 'advance', nextNodeId: edge.toNodeId };
   return skipFollowingEmail(edge.toNodeId, edges, ctx);
 }
 
-const PAST_GRACE_MS = 24 * 60 * 60 * 1000;
-
 /**
- * Passert ankertidspunkt. Uten valg: send hvis det er under ett døgn siden
- * (påmelding samme dag får velkomsten), ellers hopp over. «Hopp over» gjelder
- * dager før i dag, så en e-post som bare ventet på sendetiden samme dag går.
+ * Passert ankertidspunkt. Standard og «Hopp over»: hopp over når ankerdagen
+ * er en tidligere Oslo-kalenderdag enn i dag; samme dag sendes (påmelding
+ * samme dag får velkomsten, og en e-post som ventet på sendetiden går).
+ * Oslo-dag i stedet for 24 timer, så 23- og 25-timersdøgn ved sommertid blir riktige.
  */
-export function shouldSkipPast(ifPast: unknown, day: string, until: Date, now: Date): boolean {
+export function shouldSkipPast(ifPast: unknown, day: string, now: Date): boolean {
   if (ifPast === 'send') return false;
-  if (ifPast === 'skip') return day < osloDay(now);
-  return now.getTime() - until.getTime() > PAST_GRACE_MS;
+  return day < osloDay(now);
 }
 
 /** «Hopp over» = hopp over e-posten planleggingssteget styrer, fortsett etter den. */
