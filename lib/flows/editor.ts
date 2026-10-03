@@ -62,26 +62,35 @@ export interface ViewportOptions {
   /** Laveste zoom som holder stegtekstene lesbare (≥12 px). */
   minZoom: number;
   maxZoom: number;
+  /** Absolutt laveste zoom for å få plass i bredden (samme som lerretets minZoom). */
+  minFitZoom: number;
   /** Luft rundt tegningen i skjermpiksler. */
   padding: number;
 }
 
-export const CANVAS_VIEWPORT: ViewportOptions = { minZoom: 0.86, maxZoom: 1, padding: 32 };
+export const CANVAS_VIEWPORT: ViewportOptions = { minZoom: 0.86, maxZoom: 1, minFitZoom: 0.3, padding: 32 };
 
 /**
  * Startutsnitt for tegningen: hele flyten hvis den får plass med lesbar tekst,
  * ellers lesbar zoom med toppen (Start-steget) synlig i stedet for midten.
+ * Bredden skal alltid få plass (zoomer ut under lesbar zoom om nødvendig), så
+ * brede grener ikke klippes til venstre; er den for bred selv da, vises venstre kant.
  */
 export function initialViewport(
   bounds: Rect,
   canvas: { width: number; height: number },
-  { minZoom, maxZoom, padding }: ViewportOptions = CANVAS_VIEWPORT,
+  { minZoom, maxZoom, minFitZoom, padding }: ViewportOptions = CANVAS_VIEWPORT,
 ): { x: number; y: number; zoom: number } {
   const availW = Math.max(1, canvas.width - padding * 2);
   const availH = Math.max(1, canvas.height - padding * 2);
-  const fit = Math.min(availW / Math.max(1, bounds.width), availH / Math.max(1, bounds.height));
-  const zoom = Math.min(maxZoom, Math.max(minZoom, fit));
-  const x = (canvas.width - bounds.width * zoom) / 2 - bounds.x * zoom;
+  const fitW = availW / Math.max(1, bounds.width);
+  const fitH = availH / Math.max(1, bounds.height);
+  const readable = Math.max(minZoom, Math.min(fitW, fitH));
+  const zoom = Math.min(maxZoom, readable, Math.max(minFitZoom, fitW));
+  const fitsHorizontally = bounds.width * zoom <= availW + 1e-9;
+  const x = fitsHorizontally
+    ? (canvas.width - bounds.width * zoom) / 2 - bounds.x * zoom
+    : padding - bounds.x * zoom;
   const fitsVertically = bounds.height * zoom <= availH;
   const y = fitsVertically
     ? (canvas.height - bounds.height * zoom) / 2 - bounds.y * zoom

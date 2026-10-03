@@ -68,6 +68,19 @@ describe('initialViewport', () => {
     expect(v.y).toBeCloseTo((600 - 600 * v.zoom) / 2);
   });
 
+  it('en bred flyt zoomes ut så venstre kant ikke klippes', () => {
+    const v = initialViewport({ x: -400, y: 0, width: 1400, height: 300 }, canvas);
+    expect(v.zoom).toBeCloseTo(736 / 1400);
+    expect(v.x + -400 * v.zoom).toBeGreaterThanOrEqual(CANVAS_VIEWPORT.padding - 1e-6);
+    expect(v.x + (1000) * v.zoom).toBeLessThanOrEqual(canvas.width - CANVAS_VIEWPORT.padding + 1e-6);
+  });
+
+  it('for bred selv på laveste zoom: venstre kant vises', () => {
+    const v = initialViewport({ x: 100, y: 0, width: 10_000, height: 300 }, canvas);
+    expect(v.zoom).toBe(CANVAS_VIEWPORT.minFitZoom);
+    expect(v.x).toBeCloseTo(CANVAS_VIEWPORT.padding - 100 * v.zoom);
+  });
+
   it('viser toppen av en høy flyt i stedet for midten', () => {
     const v = initialViewport({ x: -50, y: 100, width: 200, height: 2000 }, canvas);
     expect(v.zoom).toBe(CANVAS_VIEWPORT.minZoom);
