@@ -20,7 +20,7 @@ const { prisma } = vi.hoisted(() => ({
     contact: { findUnique: vi.fn() },
     registration: { findUnique: vi.fn() },
     messageSend: { findFirst: vi.fn() },
-    user: { findFirst: vi.fn() },
+    user: { findFirst: vi.fn(), findUnique: vi.fn() },
     task: { create: vi.fn() },
   },
 }));
@@ -28,7 +28,11 @@ vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/flows/send', () => ({ sendFlowEmail: vi.fn(async () => 'sent') }));
 vi.mock('@/lib/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock('@/lib/mail', () => ({ sendAdminEmail: vi.fn() }));
-vi.mock('@/lib/settings', () => ({ getSetting: vi.fn() }));
+const { settings } = vi.hoisted(() => ({ settings: {} as Record<string, string> }));
+vi.mock('@/lib/settings', () => ({
+  getSetting: vi.fn(async (key: string) => settings[key] ?? ''),
+  isAdmin: (role: string) => role === 'admin' || role === 'superadmin',
+}));
 const { notifyTaskAssignee } = vi.hoisted(() => ({ notifyTaskAssignee: vi.fn(async () => {}) }));
 vi.mock('@/lib/crm/task-notify', () => ({ notifyTaskAssignee }));
 
@@ -145,6 +149,45 @@ describe('runFlowBatch: create_task til kontaktens ansvarlige', () => {
     owners(42, null);
     await runFlowBatch(NOW);
     expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: 9 }) });
+  });
+
+  describe('standard ansvarlig for oppgaver', () => {
+    const STAFF = { id: 21, role: 'admin', deactivatedAt: null, anonymizedAt: null };
+    beforeEach(() => {
+      mockGraph(
+        [
+          { id: 10, type: 'start', config: {} },
+          { id: 11, type: 'action', config: { kind: 'create_task', title: 'Ring', assignTo: 'owner', dueDays: 1 } },
+          { id: 12, type: 'end', config: {} },
+        ],
+        [[10, 11, null], [11, 12, null]],
+      );
+      owners(null, null);
+      prisma.user.findUnique.mockImplementation(async ({ where }: { where: { email: string } }) =>
+        where.email === 'leder@bjerke.no' ? STAFF : null,
+      );
+    });
+
+    it('ny kontakt uten ansvarlig: oppgaven går til standard ansvarlig og varsles', async () => {
+      settings.reply_task_default_assignee = 'leder@bjerke.no';
+      prisma.task.create.mockResolvedValueOnce({ id: 88 });
+      await runFlowBatch(NOW);
+      expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: 21 }) });
+      expect(notifyTaskAssignee).toHaveBeenCalledWith(expect.objectContaining({ taskId: 88 }));
+    });
+
+    it('uten innstilling blir oppgaven ufordelt', async () => {
+      settings.reply_task_default_assignee = '';
+      await runFlowBatch(NOW);
+      expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: null }) });
+    });
+
+    it('en deaktivert standard ansvarlig gir ufordelt oppgave', async () => {
+      settings.reply_task_default_assignee = 'leder@bjerke.no';
+      prisma.user.findUnique.mockResolvedValue({ ...STAFF, deactivatedAt: new Date() });
+      await runFlowBatch(NOW);
+      expect(prisma.task.create).toHaveBeenCalledWith({ data: expect.objectContaining({ assigneeId: null }) });
+    });
   });
 });
 

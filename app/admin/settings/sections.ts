@@ -181,7 +181,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
         title: 'Oppgaver',
         fields: [
           { key: 'reply_create_task', label: 'Opprett oppgave når en kontakt svarer på en e-post', type: 'toggle', help: 'Oppgaven går til avsenderen av e-posten → kontaktens ansvarlige → bedriftens ansvarlige → standard ansvarlig under.' },
-          { key: 'reply_task_default_assignee', label: 'Hvem får svar-oppgavene hvis ingen andre er ansvarlig? (e-post til en admin-bruker)', type: 'email', term: 'owner', placeholder: 'navn@bjerke.no', help: 'Tomt = oppgaven blir ikke tildelt noen.' },
+          { key: 'reply_task_default_assignee', label: 'Standard ansvarlig for oppgaver', type: 'email', term: 'owner', placeholder: 'navn@bjerke.no', help: 'E-posten til en admin-bruker. Får svar-oppgaver og oppgaver fra e-postflyter når ingen andre er ansvarlig (f.eks. nye kontakter fra påmeldinger). Tomt = oppgaven blir ikke tildelt noen.' },
           { key: 'reply_task_due_days', label: 'Antall dager man har på å følge opp et svar', type: 'text', placeholder: '1' },
           { key: 'task_notify_assignee', label: 'Send e-post til den som får en oppgave tildelt av en kollega', type: 'toggle' },
         ],

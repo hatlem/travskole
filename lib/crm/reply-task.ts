@@ -44,6 +44,14 @@ async function findStaffUserIdByEmail(email: string | null | undefined): Promise
   return activeStaffId(await prisma.user.findUnique({ where: { email: normalized }, select: STAFF_SELECT }));
 }
 
+/**
+ * Standard ansvarlig for oppgaver uten annen ansvarlig — både svar-oppgaver og
+ * flyt-oppgaver («Opprett oppgave»). Innstillingen er en e-post til en aktiv admin.
+ */
+export async function defaultTaskAssigneeId(): Promise<number | null> {
+  return findStaffUserIdByEmail(await getSetting('reply_task_default_assignee'));
+}
+
 async function findStaffUserIdById(id: number | null | undefined): Promise<number | null> {
   if (id == null) return null;
   return activeStaffId(await prisma.user.findUnique({ where: { id }, select: STAFF_SELECT }));

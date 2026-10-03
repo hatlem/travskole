@@ -13,6 +13,7 @@
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
 import { notifyTaskAssignee } from '@/lib/crm/task-notify';
+import { defaultTaskAssigneeId } from '@/lib/crm/reply-task';
 import { getSetting } from '@/lib/settings';
 import { sendAdminEmail } from '@/lib/mail';
 import { parseJsonArray } from '@/lib/crm/normalize';
@@ -228,8 +229,9 @@ async function activeAdminId(userId: number | null | undefined): Promise<number 
 
 /**
  * Oppretter en CRM-oppgave på kontakten. Rekkefølge ved «kontaktens ansvarlige»:
- * kontaktens eier → bedriftens eier → fast ansvarlig. En slettet/degradert
- * ansvarlig gir en ufordelt oppgave i stedet for en feilet enrollment.
+ * kontaktens eier → bedriftens eier → fast ansvarlig → standard ansvarlig for
+ * oppgaver (innstilling). Finnes ingen aktiv admin, blir oppgaven ufordelt i
+ * stedet for at enrollmentet feiler.
  */
 async function createFlowTask(task: TaskActionPayload, contactId: number, now: Date): Promise<void> {
   let assigneeId: number | null = null;
@@ -242,6 +244,7 @@ async function createFlowTask(task: TaskActionPayload, contactId: number, now: D
       (await activeAdminId(owners?.ownerId)) ?? (await activeAdminId(owners?.organization?.ownerId));
   }
   assigneeId ??= await activeAdminId(task.assigneeUserId);
+  assigneeId ??= await defaultTaskAssigneeId();
   const created = await prisma.task.create({
     data: {
       title: task.title,

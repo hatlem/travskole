@@ -541,13 +541,16 @@ export function NodeConfigPanel({
                   className={inputCls}
                   aria-label={config.assignTo === 'owner' ? 'Reserve hvis kontakten mangler ansvarlig' : 'Ansvarlig'}
                 >
-                  <option value="">{config.assignTo === 'owner' ? 'Hvis ingen er ansvarlig: ingen bestemt' : 'Ingen bestemt (hvem som helst kan ta den)'}</option>
+                  <option value="">{config.assignTo === 'owner' ? 'Hvis ingen er ansvarlig: standard ansvarlig' : 'Standard ansvarlig for oppgaver'}</option>
                   {adminUsers.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.email}
                     </option>
                   ))}
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  «Standard ansvarlig for oppgaver» velges under Innstillinger → CRM. Er den tom, blir oppgaven ikke tildelt noen.
+                </p>
               </div>
               <div>
                 <label className={labelCls}>Frist (antall dager etter at personen kommer hit)</label>
