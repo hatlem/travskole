@@ -50,7 +50,8 @@ export function isAutoReply(msg: Pick<InboundMessageLike, 'subject' | 'headers'>
     const key = name.trim().toLowerCase();
     const val = value.trim().toLowerCase();
     if (key === 'auto-submitted' && val !== '' && val !== 'no') return true;
-    if (key === 'x-autoreply' || key === 'x-autorespond' || key === 'x-ms-exchange-inbox-rules-loop') return true;
+    // Ikke X-MS-Exchange-Inbox-Rules-Loop: den settes også på ekte svar som en innboksregel har flyttet/videresendt.
+    if (key === 'x-autoreply' || key === 'x-autorespond') return true;
     if (key === 'precedence' && AUTO_PRECEDENCE.has(val)) return true;
   }
   return false;

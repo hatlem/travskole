@@ -230,7 +230,6 @@ describe('autosvar regnes ikke som svar', () => {
     ['Precedence', 'auto_reply'],
     ['Precedence', 'bulk'],
     ['Precedence', 'junk'],
-    ['X-MS-Exchange-Inbox-Rules-Loop', 'kari@example.invalid'],
   ])('ignorerer header %s: %s', (name, value) => {
     expect(reply({ headers: [{ name, value }] })).toEqual({ kind: 'ignore' });
   });
@@ -241,6 +240,11 @@ describe('autosvar regnes ikke som svar', () => {
       expect(reply({ subject })).toEqual({ kind: 'ignore' });
     },
   );
+
+  it('X-MS-Exchange-Inbox-Rules-Loop alene er et ekte svar (innboksregel flyttet/videresendte det)', () => {
+    expect(reply({ headers: [{ name: 'X-MS-Exchange-Inbox-Rules-Loop', value: 'kari@example.invalid' }] }))
+      .toEqual({ kind: 'reply', matchedMessageId: 'sent-1@bjerke.no' });
+  });
 
   it('emner som bare nevner ordene midt i teksten er ikke autosvar', () => {
     expect(isAutoReply({ subject: 'Re: Takk for automatisk svar', headers: [] })).toBe(false);
