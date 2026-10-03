@@ -4,7 +4,8 @@
  * Claims a bounded batch of due enrollments, resolves each one's graph
  * (cached per flowId within the batch), and drives it forward via
  * `planStep` — capped at `MAX_HOPS` per enrollment per tick so a
- * misconfigured no-wait loop can't spin forever inside one call. Each
+ * misconfigured no-wait loop can't spin forever inside one call. Waits whose
+ * target time has already passed continue in the same tick. Each
  * enrollment is isolated in its own try/catch so one bad row can't take
  * down the rest of the batch.
  */
@@ -314,6 +315,7 @@ async function processEnrollment(
       lastSendReplied: engagement ? engagement.replied : null,
       now,
       courseDates,
+      nodeType: (id) => graph.nodesById.get(id)?.type,
     };
     const plan = planStep(node, graph.edges, ctx);
 
@@ -382,6 +384,13 @@ async function processEnrollment(
         continue;
       }
       case 'sleep': {
+        // Allerede passert (f.eks. vent 0 eller et kurstidspunkt som har vært):
+        // fortsett i samme kjøring i stedet for én cron-tick per steg. MAX_HOPS
+        // hindrer at en feilkoblet løkke spinner.
+        if (plan.until.getTime() <= now.getTime()) {
+          currentNodeId = plan.nextNodeId;
+          continue;
+        }
         await prisma.flowEnrollment.update({
           where: { id: enrollment.id },
           data: { currentNodeId: plan.nextNodeId, nextRunAt: plan.until },

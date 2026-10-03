@@ -9,7 +9,7 @@
 
 import type { GraphEdge, GraphNode } from './graph';
 import { contactMatchesSegment, parseSegmentRules, type SegmentContact } from '@/lib/crm/segments';
-import { computeAnchorDay, osloDayStartUtc, type ScheduleAnchor } from './schedule';
+import { computeAnchorDay, osloDay, osloDayStartUtc, type ScheduleAnchor } from './schedule';
 
 export interface StepContext {
   contact: SegmentContact & { stage: string | null; tags: string[] };
@@ -19,6 +19,7 @@ export interface StepContext {
   lastSendReplied?: boolean | null; // samme send: repliedAt satt
   now: Date;
   courseDates?: { startDate: Date | null; endDate: Date | null } | null; // fra enrollmentens registrering; undefined/null = ingen kurs-anker
+  nodeType?: (nodeId: number) => string | undefined; // for «hopp over» på passerte planleggingssteg
 }
 
 export interface TaskActionPayload {
@@ -160,7 +161,31 @@ function planSchedule(node: GraphNode, edges: GraphEdge[], ctx: StepContext): St
   if (!dates) return graceExit('schedule: enrollment mangler kurs-anker');
   const day = computeAnchorDay(anchor as ScheduleAnchor, offsetDays, dates.startDate, dates.endDate);
   if (day === null) return graceExit(`schedule: kurs mangler dato for anker ${anchor}`);
-  return { kind: 'sleep', until: osloDayStartUtc(day), nextNodeId: edge.toNodeId };
+  const until = osloDayStartUtc(day);
+  if (until.getTime() > ctx.now.getTime()) return { kind: 'sleep', until, nextNodeId: edge.toNodeId };
+  if (!shouldSkipPast(node.config.ifPast, day, until, ctx.now)) return { kind: 'advance', nextNodeId: edge.toNodeId };
+  return skipFollowingEmail(edge.toNodeId, edges, ctx);
+}
+
+const PAST_GRACE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Passert ankertidspunkt. Uten valg: send hvis det er under ett døgn siden
+ * (påmelding samme dag får velkomsten), ellers hopp over. «Hopp over» gjelder
+ * dager før i dag, så en e-post som bare ventet på sendetiden samme dag går.
+ */
+export function shouldSkipPast(ifPast: unknown, day: string, until: Date, now: Date): boolean {
+  if (ifPast === 'send') return false;
+  if (ifPast === 'skip') return day < osloDay(now);
+  return now.getTime() - until.getTime() > PAST_GRACE_MS;
+}
+
+/** «Hopp over» = hopp over e-posten planleggingssteget styrer, fortsett etter den. */
+function skipFollowingEmail(nextNodeId: number, edges: GraphEdge[], ctx: StepContext): StepPlan {
+  if (ctx.nodeType?.(nextNodeId) !== 'email') return { kind: 'advance', nextNodeId };
+  const after = edges.find((edge) => edge.fromNodeId === nextNodeId && edge.branch === null);
+  if (!after) return fail('E-post-noden mangler en utgående kobling.');
+  return { kind: 'advance', nextNodeId: after.toNodeId };
 }
 
 export function planStep(node: GraphNode, edges: GraphEdge[], ctx: StepContext): StepPlan {

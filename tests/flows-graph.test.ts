@@ -305,6 +305,14 @@ describe('validateFlow', () => {
       const [nodes, edges] = scheduleFlow({ anchor: 'tull', offsetDays: 0 });
       expect(validateFlow(nodes, edges).some((x) => x.code === 'schedule_config')).toBe(true);
     });
+    it('godtar ifPast send/skip og avviser andre verdier', () => {
+      for (const ifPast of ['send', 'skip']) {
+        const [nodes, edges] = scheduleFlow({ anchor: 'course_start', offsetDays: 0, ifPast });
+        expect(validateFlow(nodes, edges)).toEqual([]);
+      }
+      const [nodes, edges] = scheduleFlow({ anchor: 'course_start', offsetDays: 0, ifPast: 'kanskje' });
+      expect(validateFlow(nodes, edges).some((x) => x.code === 'schedule_config')).toBe(true);
+    });
     it('avviser ikke-heltalls offsetDays', () => {
       const [nodes, edges] = scheduleFlow({ anchor: 'course_start', offsetDays: 1.5 });
       expect(validateFlow(nodes, edges).some((x) => x.code === 'schedule_config')).toBe(true);

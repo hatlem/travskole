@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { planStep, type StepContext, type StepPlan } from '@/lib/flows/step';
+import { planStep, shouldSkipPast, type StepContext, type StepPlan } from '@/lib/flows/step';
 import { osloDayStartUtc } from '@/lib/flows/schedule';
 import type { GraphNode, GraphEdge, FlowNodeType } from '@/lib/flows/graph';
 import type { SegmentContact } from '@/lib/crm/segments';
@@ -314,5 +314,42 @@ describe('planStep: schedule', () => {
     const plan = planStep(scheduleNode, scheduleEdges, baseCtx());
     expect(plan.kind).toBe('act');
     if (plan.kind === 'act') expect(plan.nextNodeId).toBeNull();
+  });
+});
+
+describe('planStep: schedule med passert tidspunkt', () => {
+  const dates = { startDate: new Date('2026-06-01T10:00:00Z'), endDate: new Date('2026-06-11T10:00:00Z') };
+  const edges: GraphEdge[] = [
+    { id: 1, fromNodeId: 2, toNodeId: 3, branch: null },
+    { id: 2, fromNodeId: 3, toNodeId: 4, branch: null },
+  ];
+  const nodeType = (id: number) => (id === 3 ? 'email' : 'end');
+  const plan = (now: string, ifPast?: string) =>
+    planStep(
+      { id: 2, type: 'schedule', config: { anchor: 'course_start', offsetDays: -3, ...(ifPast && { ifPast }) } },
+      edges,
+      baseCtx({ courseDates: dates, now: new Date(now), nodeType }),
+    );
+
+  it('standard: under ett døgn siden ⇒ send (fortsett til e-posten)', () => {
+    expect(plan('2026-05-29T12:00:00Z')).toEqual({ kind: 'advance', nextNodeId: 3 });
+  });
+  it('standard: mer enn ett døgn siden ⇒ hopp over e-posten', () => {
+    expect(plan('2026-05-31T12:00:00Z')).toEqual({ kind: 'advance', nextNodeId: 4 });
+  });
+  it('«Send likevel» sender også lenge etter', () => {
+    expect(plan('2026-06-20T12:00:00Z', 'send')).toEqual({ kind: 'advance', nextNodeId: 3 });
+  });
+  it('«Hopp over» hopper over fra dagen etter, men ikke samme dag', () => {
+    expect(plan('2026-05-29T07:00:00Z', 'skip')).toEqual({ kind: 'advance', nextNodeId: 3 });
+    expect(plan('2026-05-30T07:00:00Z', 'skip')).toEqual({ kind: 'advance', nextNodeId: 4 });
+  });
+  it('fremtidig tidspunkt sover som før', () => {
+    expect(plan('2026-05-01T12:00:00Z', 'skip').kind).toBe('sleep');
+  });
+  it('shouldSkipPast: grensen på 24 timer', () => {
+    const until = new Date('2026-05-28T22:00:00Z');
+    expect(shouldSkipPast(undefined, '2026-05-29', until, new Date('2026-05-29T21:59:00Z'))).toBe(false);
+    expect(shouldSkipPast(undefined, '2026-05-29', until, new Date('2026-05-29T22:01:00Z'))).toBe(true);
   });
 });

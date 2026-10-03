@@ -137,6 +137,10 @@ function validateScheduleConfig(node: GraphNode): ValidationError | null {
   if (offsetDays !== undefined && !isInteger(offsetDays)) {
     return err(node.id, 'schedule_config', 'Antall dager før/etter kursdatoen må være et helt tall.');
   }
+  const { ifPast } = node.config;
+  if (ifPast !== undefined && ifPast !== 'send' && ifPast !== 'skip') {
+    return err(node.id, 'schedule_config', 'Velg hva som skal skje hvis tidspunktet allerede har passert.');
+  }
   return null;
 }
 

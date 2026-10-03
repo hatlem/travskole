@@ -100,7 +100,7 @@ describe('runFlowBatch: schedule-node wiring (mocked Prisma)', () => {
       course: { startDate: new Date('2026-06-01T10:00:00Z'), endDate: new Date('2026-06-11T10:00:00Z') },
     });
 
-    await runFlowBatch(new Date());
+    await runFlowBatch(new Date('2026-05-01T08:00:00Z'));
 
     // loadCourseDates fired for the schedule node with the enrollment's registrationId
     expect(prisma.registration.findUnique).toHaveBeenCalledWith(
@@ -159,5 +159,65 @@ describe('runFlowBatch: schedule-node wiring (mocked Prisma)', () => {
       expect.objectContaining({ registrationId: null }),
     );
     expect(prisma.registration.findUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe('runFlowBatch: passerte kurstidspunkter', () => {
+  const course = (startDate: string, endDate = '2026-06-11T10:00:00Z') =>
+    prisma.registration.findUnique.mockResolvedValue({ course: { startDate: new Date(startDate), endDate: new Date(endDate) } });
+  const statusUpdate = () =>
+    prisma.flowEnrollment.update.mock.calls.map((c) => c[0].data).find((d) => d.status !== undefined);
+
+  it('påmelding samme dag som «3 dager før»: sendes straks i samme kjøring', async () => {
+    prisma.flowEnrollment.findMany.mockResolvedValue([enrollment()]);
+    course('2026-06-01T10:00:00Z'); // anker 29. mai 00:00 Oslo
+    await runFlowBatch(new Date('2026-05-29T12:00:00Z'));
+    expect(sendFlowEmail).toHaveBeenCalledTimes(1);
+    expect(statusUpdate()).toMatchObject({ status: 'completed', currentNodeId: 13 });
+  });
+
+  it('påmelding dagen før kursstart: påminnelsen «3 dager før» hoppes over', async () => {
+    prisma.flowEnrollment.findMany.mockResolvedValue([enrollment()]);
+    course('2026-06-01T10:00:00Z');
+    await runFlowBatch(new Date('2026-05-31T12:00:00Z'));
+    expect(sendFlowEmail).not.toHaveBeenCalled();
+    expect(statusUpdate()).toMatchObject({ status: 'completed', currentNodeId: 13 });
+  });
+
+  it('ifPast: send — sendes likevel', async () => {
+    prisma.flowNode.findMany.mockResolvedValue(
+      NODES.map((n) => (n.id === 11 ? { ...n, config: JSON.stringify({ anchor: 'course_start', offsetDays: -3, ifPast: 'send' }) } : n)),
+    );
+    prisma.flowEnrollment.findMany.mockResolvedValue([enrollment()]);
+    course('2026-06-01T10:00:00Z');
+    await runFlowBatch(new Date('2026-05-31T12:00:00Z'));
+    expect(sendFlowEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('vent 0 timer fortsetter i samme kjøring i stedet for å sove en tick', async () => {
+    prisma.flowNode.findMany.mockResolvedValue([
+      { id: 10, flowId: 1, type: 'start', config: '{}' },
+      { id: 11, flowId: 1, type: 'wait', config: JSON.stringify({ days: 0, hours: 0 }) },
+      NODES[2],
+      NODES[3],
+    ]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([enrollment({ registrationId: null })]);
+    await runFlowBatch(new Date('2026-05-01T08:00:00Z'));
+    expect(sendFlowEmail).toHaveBeenCalledTimes(1);
+    expect(statusUpdate()).toMatchObject({ status: 'completed' });
+  });
+
+  it('en løkke uten venting stoppes av stegtaket', async () => {
+    prisma.flowNode.findMany.mockResolvedValue([
+      { id: 10, flowId: 1, type: 'start', config: '{}' },
+      { id: 11, flowId: 1, type: 'wait', config: JSON.stringify({ days: 0, hours: 0 }) },
+    ]);
+    prisma.flowEdge.findMany.mockResolvedValue([
+      { id: 1, flowId: 1, fromNodeId: 10, toNodeId: 11, branch: null },
+      { id: 2, flowId: 1, fromNodeId: 11, toNodeId: 11, branch: null },
+    ]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([enrollment({ registrationId: null })]);
+    await runFlowBatch(new Date('2026-05-01T08:00:00Z'));
+    expect(statusUpdate()).toMatchObject({ status: 'failed', failReason: 'hop-limit' });
   });
 });

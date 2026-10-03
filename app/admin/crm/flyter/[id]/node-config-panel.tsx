@@ -597,6 +597,23 @@ export function NodeConfigPanel({
             />
             <p className="mt-1 text-xs text-gray-500">Minus betyr før, pluss betyr etter. Eksempel: «Kursstart» og −3 = tre dager før kursstart. 0 = samme dag.</p>
           </div>
+          <div>
+            <label className={labelCls}>Hvis tidspunktet allerede har passert</label>
+            <select
+              value={config.ifPast === 'send' || config.ifPast === 'skip' ? config.ifPast : ''}
+              onChange={(e) => set({ ifPast: e.target.value === '' ? undefined : e.target.value })}
+              disabled={disabled}
+              className={inputCls}
+            >
+              <option value="">Automatisk</option>
+              <option value="skip">Hopp over</option>
+              <option value="send">Send likevel</option>
+            </select>
+            <p className="mt-1 text-xs text-gray-500">
+              Gjelder når noen melder seg på etter at datoen er passert. «Hopp over» hopper over e-posten etter dette steget.
+              Automatisk: sendes hvis det er under ett døgn siden, ellers hoppes den over.
+            </p>
+          </div>
         </div>
       )}
 
