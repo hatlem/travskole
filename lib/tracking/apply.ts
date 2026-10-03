@@ -75,16 +75,18 @@ export async function recordReply(
     data: { repliedAt: new Date() },
   });
 
-  // Kun ved første registrerte svar per utsendelse — gjentatte polls/svar i
-  // samme tråd gir ikke duplikate oppgaver.
-  if (firstReply > 0) {
-    await createReplyTask(send, inbound.subject);
-  }
-
   const enrollment =
     send.enrollmentId != null
       ? await prisma.flowEnrollment.findUnique({ where: { id: send.enrollmentId } })
       : null;
+  const branchesOnReply = enrollment ? await flowBranchesOnReply(enrollment.flowId) : false;
+
+  // Kun ved første registrerte svar per utsendelse — gjentatte polls/svar i
+  // samme tråd gir ikke duplikate oppgaver. Forgrener flyten på «svarte»,
+  // følger flyten selv opp svaret (ellers blir det to oppgaver).
+  if (firstReply > 0 && !branchesOnReply) {
+    await createReplyTask(send, inbound.subject);
+  }
 
   await emitEvent({
     type: 'email.replied',
@@ -101,7 +103,7 @@ export async function recordReply(
   if (send.enrollmentId != null) {
     // Et svar avslutter flyten — med mindre flyten selv forgrener på «svarte»,
     // da må den fortsette for å nå ja-grenen.
-    if (enrollment && enrollment.status === 'active' && !(await flowBranchesOnReply(enrollment.flowId))) {
+    if (enrollment && enrollment.status === 'active' && !branchesOnReply) {
       await prisma.flowEnrollment.update({
         where: { id: send.enrollmentId },
         data: { status: 'exited', finishedAt: new Date() },

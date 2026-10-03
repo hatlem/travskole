@@ -54,6 +54,7 @@ beforeEach(() => {
     reply_task_due_days: '2',
   });
   prisma.contact.findUnique.mockResolvedValue({ name: 'Kari Nordmann', organizationId: 9, ownerId: null, organization: null });
+  prisma.flowNode.findMany.mockResolvedValue([]);
   prisma.flowEnrollment.findUnique.mockResolvedValue({ flow: { name: 'Sommerleir-flyt' }, status: 'completed' });
   prisma.senderIdentity.findUnique.mockResolvedValue({ email: 'hege@bjerke.no' });
   usersByEmail({ 'hege@bjerke.no': STAFF, 'leder@bjerke.no': DEFAULT_STAFF });
@@ -209,5 +210,26 @@ describe('recordReply → flow exit', () => {
     prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'replied_email' }) }]);
     await recordReply('<abc@bjerke.no>', {});
     expect(prisma.flowEnrollment.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('recordReply → én oppgave per svar', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.messageSend.findFirst.mockResolvedValue({ ...SEND, sentAt: new Date() });
+    prisma.messageSend.updateMany.mockResolvedValue({ count: 1 });
+    prisma.flowEnrollment.findUnique.mockResolvedValue({ id: 5, flowId: 2, status: 'active', flow: { name: 'Kurs' } });
+  });
+
+  it('flyten forgrener på «svarte» og følger opp selv — ingen generell svar-oppgave', async () => {
+    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'replied_email' }) }]);
+    await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
+    expect(prisma.task.create).not.toHaveBeenCalled();
+  });
+
+  it('flyt uten svar-gren får fortsatt den generelle svar-oppgaven', async () => {
+    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'opened_email' }) }]);
+    await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
+    expect(prisma.task.create).toHaveBeenCalledTimes(1);
   });
 });
