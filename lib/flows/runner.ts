@@ -149,7 +149,8 @@ async function loadLastSendEngagement(enrollmentId: number): Promise<LastSendEng
   });
   if (!send) return null;
   return {
-    opened: send.openedAt !== null,
+    // Et klikk forutsetter en åpning, selv om sporingspikselen ble blokkert.
+    opened: send.openedAt !== null || send.firstClickedAt !== null || send.clickCount > 0,
     clicked: send.firstClickedAt !== null || send.clickCount > 0,
     replied: send.repliedAt !== null,
   };

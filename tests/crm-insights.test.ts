@@ -119,6 +119,14 @@ describe('aggregateFlowSends', () => {
   });
 });
 
+describe('aggregateFlowSends: klikk uten registrert åpning', () => {
+  it('teller som åpnet', () => {
+    const clickedOnly: FlowSendRow = { ...send(1), firstClickedAt: new Date() };
+    const { perFlow } = aggregateFlowSends([clickedOnly], new Map([[1, 10]]));
+    expect(perFlow.get(10)).toMatchObject({ sent: 1, opened: 1, clicked: 1 });
+  });
+});
+
 describe('norske datoetiketter', () => {
   it('dd.mm og «13. juli»', () => {
     expect(dayMonthShort('2026-07-13')).toBe('13.07');

@@ -171,6 +171,20 @@ describe('runFlowBatch: engasjementsbetingelser', () => {
     expect(completedAt()).toBe(12);
   });
 
+  it('opened_email: et klikk teller som åpning selv uten registrert åpning', async () => {
+    graphFor('opened_email');
+    prisma.messageSend.findFirst.mockResolvedValue({ openedAt: null, firstClickedAt: new Date(), clickCount: 1, repliedAt: null });
+    await runFlowBatch(NOW);
+    expect(completedAt()).toBe(12);
+  });
+
+  it('opened_email: verken åpnet eller klikket gir nei', async () => {
+    graphFor('opened_email');
+    prisma.messageSend.findFirst.mockResolvedValue({ openedAt: null, firstClickedAt: null, clickCount: 0, repliedAt: null });
+    await runFlowBatch(NOW);
+    expect(completedAt()).toBe(13);
+  });
+
   it('replied_email: åpnet men ikke svart gir nei', async () => {
     graphFor('replied_email');
     prisma.messageSend.findFirst.mockResolvedValue({ openedAt: new Date(), firstClickedAt: null, clickCount: 0, repliedAt: null });

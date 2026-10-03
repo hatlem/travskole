@@ -28,7 +28,7 @@ async function flowsSection(now: Date) {
     }),
     prisma.messageSend.findMany({
       where: { enrollmentId: { not: null }, status: 'sent', sentAt: { gte: twelveWeeksAgo } },
-      select: { sentAt: true, openedAt: true },
+      select: { sentAt: true, openedAt: true, firstClickedAt: true },
     }),
     prisma.flowEnrollment.groupBy({ by: ['flowId'], where: { status: 'active', flow: NOT_TEMPLATE }, _count: { _all: true } }),
     prisma.flowEnrollment.groupBy({ by: ['status'], where: { flow: NOT_TEMPLATE }, _count: { _all: true } }),
@@ -51,7 +51,10 @@ async function flowsSection(now: Date) {
 
   const sentBuckets = bucketCountsByWeek(sends12w.map((s) => s.sentAt), 12, now);
   const openedBuckets = bucketCountsByWeek(
-    sends12w.filter((s) => s.openedAt !== null).map((s) => s.openedAt as Date), 12, now,
+    sends12w.flatMap((s) => {
+      const openedAt = s.openedAt ?? s.firstClickedAt;
+      return openedAt ? [openedAt] : [];
+    }), 12, now,
   );
   const weekly = sentBuckets.map((bucket, i) => ({
     weekStart: bucket.weekStart, sent: bucket.count, opened: openedBuckets[i].count,

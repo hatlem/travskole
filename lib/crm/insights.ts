@@ -122,7 +122,8 @@ const emptyAgg = (): FlowSendAgg => ({ sent: 0, opened: 0, clicked: 0, replied: 
 
 function addSend(agg: FlowSendAgg, send: FlowSendRow): void {
   agg.sent++;
-  if (send.openedAt) agg.opened++;
+  // Et klikk betyr at e-posten ble åpnet, selv om sporingspikselen ble blokkert.
+  if (send.openedAt || send.firstClickedAt) agg.opened++;
   if (send.firstClickedAt) agg.clicked++;
   if (send.repliedAt) agg.replied++;
   if (send.bouncedAt) agg.bounced++;

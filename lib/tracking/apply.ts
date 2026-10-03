@@ -36,13 +36,18 @@ export async function recordClick(token: string, idx: number): Promise<string | 
   });
   if (!link) return null;
 
+  const now = new Date();
   await prisma.messageSend.update({
     where: { id: send.id },
     data: {
       clickCount: { increment: 1 },
-      firstClickedAt: send.firstClickedAt ?? new Date(),
+      firstClickedAt: send.firstClickedAt ?? now,
     },
   });
+  // Et klikk betyr at e-posten ble åpnet — også når pikselen ble blokkert.
+  if (send.openedAt === null) {
+    await prisma.messageSend.updateMany({ where: { id: send.id, openedAt: null }, data: { openedAt: now } });
+  }
 
   await emitEvent({
     type: 'email.clicked',
