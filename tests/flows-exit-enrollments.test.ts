@@ -39,6 +39,32 @@ describe('applyUnsubscribe', () => {
     });
   });
 
+  it.each(['bounce', 'complaint', 'manual', 'unsubscribe'])('beholder eksisterende sperreårsak «%s»', async (reason) => {
+    const rows = new Map<string, { email: string; reason: string }>([['kari@x.no', { email: 'kari@x.no', reason }]]);
+    prisma.suppression.upsert.mockImplementation(async (args: {
+      where: { email: string };
+      create: { email: string; reason: string };
+      update: Partial<{ reason: string }>;
+    }) => {
+      const existing = rows.get(args.where.email);
+      const next = existing ? { ...existing, ...args.update } : args.create;
+      rows.set(args.where.email, next);
+      return next;
+    });
+    prisma.contact.findUnique.mockResolvedValue({ id: 3, email: 'Kari@X.no' });
+    await applyUnsubscribe(3);
+    expect(rows.get('kari@x.no')?.reason).toBe(reason);
+  });
+
+  it('oppretter sperre med årsak «unsubscribe» når ingen finnes', async () => {
+    prisma.contact.findUnique.mockResolvedValue({ id: 3, email: 'Kari@X.no' });
+    await applyUnsubscribe(3);
+    expect(prisma.suppression.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { email: 'kari@x.no' },
+      create: { email: 'kari@x.no', reason: 'unsubscribe' },
+    }));
+  });
+
   it('touches nothing for unknown contacts', async () => {
     prisma.contact.findUnique.mockResolvedValue(null);
     await expect(applyUnsubscribe(3)).resolves.toBe('not_found');

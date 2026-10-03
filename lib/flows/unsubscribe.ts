@@ -26,10 +26,12 @@ export async function applyUnsubscribe(contactId: number): Promise<ApplyUnsubscr
   const normalizedEmail = normalizeEmail(contact.email);
   if (!normalizedEmail) return 'not_found';
 
+  // Finnes sperren allerede, beholdes årsaken: bounce/complaint/manual er
+  // sterkere enn en avmelding og skal ikke nedgraderes.
   await prisma.suppression.upsert({
     where: { email: normalizedEmail },
     create: { email: normalizedEmail, reason: 'unsubscribe' },
-    update: { reason: 'unsubscribe' },
+    update: {},
   });
 
   await prisma.consent.upsert({
