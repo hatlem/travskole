@@ -448,5 +448,32 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     return 'failed';
   }
 
+  await logFlowEmailActivity(input, subject);
   return 'sent';
+}
+
+export function flowEmailActivityTitle(subject: string, flowName: string | null): string {
+  return flowName ? `E-post sendt: ${subject} (flyt ${flowName})` : `E-post sendt: ${subject}`;
+}
+
+/** Tidslinjen på kontakten. Beste-forsøk: e-posten er allerede sendt. */
+async function logFlowEmailActivity(input: SendFlowEmailInput, subject: string): Promise<void> {
+  try {
+    const flow = input.flowId !== undefined
+      ? await prisma.flow.findUnique({ where: { id: input.flowId }, select: { name: true } })
+      : null;
+    await prisma.contactActivity.create({
+      data: {
+        contactId: input.contactId,
+        type: 'email',
+        title: flowEmailActivityTitle(subject, flow?.name ?? null),
+        meta: JSON.stringify({ enrollmentId: input.enrollmentId, nodeId: input.nodeId, flowId: input.flowId ?? null }),
+      },
+    });
+  } catch (error) {
+    logger.error('Kunne ikke logge sendt flyt-e-post på kontakten', {
+      contactId: input.contactId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
 }

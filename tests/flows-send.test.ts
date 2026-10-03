@@ -24,6 +24,8 @@ const { prisma } = vi.hoisted(() => ({
     deal: { findMany: vi.fn(async () => []) },
     bookingRequest: { findMany: vi.fn(async () => []) },
     registration: { findMany: vi.fn(async () => []) },
+    flow: { findUnique: vi.fn(async () => ({ name: 'Velkomst' })) },
+    contactActivity: { create: vi.fn() },
   },
 }));
 
@@ -32,7 +34,7 @@ vi.mock('@/lib/mail', () => ({ sendMailAs: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getLLMProvider: vi.fn(() => null) }));
 vi.mock('@/lib/flows/course-merge', () => ({ resolveCourseMergeContext: vi.fn() }));
 
-import { sendFlowEmail, suppressionBlocks, SERVICE_FOOTER_TEXT, type SendFlowEmailInput } from '@/lib/flows/send';
+import { sendFlowEmail, suppressionBlocks, flowEmailActivityTitle, SERVICE_FOOTER_TEXT, type SendFlowEmailInput } from '@/lib/flows/send';
 import { sendMailAs } from '@/lib/mail';
 import { getLLMProvider } from '@/lib/ai/provider';
 import { resolveCourseMergeContext } from '@/lib/flows/course-merge';
@@ -442,5 +444,32 @@ describe('avmelding vs. tjenestemeldinger', () => {
     await sendFlowEmail({ ...baseInput, bodyHtml: '<p>Hei</p><p>Med vennlig hilsen<br>Teamet</p>' });
     const html = mockedSendMailAs.mock.calls[0][0].html;
     expect(html.match(/vennlig hilsen/gi)).toHaveLength(1);
+  });
+});
+
+describe('tidslinje: sendt flyt-e-post logges på kontakten', () => {
+  it('skriver en ContactActivity med emne og flytnavn', async () => {
+    expect(await sendFlowEmail({ ...baseInput, flowId: 9 })).toBe('sent');
+    expect(prisma.contactActivity.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ contactId: 3, type: 'email', title: 'E-post sendt: Emne Kari Nordmann (flyt Velkomst)' }),
+    });
+  });
+
+  it('ikke ved skippet eller feilet sending', async () => {
+    prisma.suppression.findUnique.mockResolvedValue({ id: 1, email: 'kari@example.com', reason: 'bounce' });
+    await sendFlowEmail({ ...baseInput, flowId: 9 });
+    mockedSendMailAs.mockRejectedValueOnce(new Error('smtp'));
+    prisma.suppression.findUnique.mockResolvedValue(null);
+    await sendFlowEmail({ ...baseInput, flowId: 9 });
+    expect(prisma.contactActivity.create).not.toHaveBeenCalled();
+  });
+
+  it('en feil i loggingen velter ikke sendingen', async () => {
+    prisma.contactActivity.create.mockRejectedValueOnce(new Error('db'));
+    expect(await sendFlowEmail({ ...baseInput, flowId: 9 })).toBe('sent');
+  });
+
+  it('tittel uten flyt', () => {
+    expect(flowEmailActivityTitle('Hei', null)).toBe('E-post sendt: Hei');
   });
 });

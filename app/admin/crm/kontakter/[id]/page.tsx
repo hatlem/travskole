@@ -17,6 +17,7 @@ import { AssigneeSelect } from '@/components/admin/crm/AssigneeSelect';
 import { useAssignees } from '@/components/admin/crm/useAssignees';
 import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { AddToFlow } from '@/components/admin/crm/AddToFlow';
+import { enrollmentStatusLabel } from '@/lib/flows/enrollment-status';
 import { ContactLists, type ContactListMembershipRow } from '@/components/admin/crm/ContactLists';
 import { ContactSegments } from '@/components/admin/crm/ContactSegments';
 import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
@@ -46,6 +47,7 @@ interface ContactDetail {
   activities: { id: number; type: string; title: string; body: string | null; actorEmail: string | null; occurredAt: string }[];
   lists: ContactListMembershipRow[];
   flows: { enrollmentId: number; flowId: number; name: string; flowStatus: string; enteredAt: string }[];
+  pastFlows?: { enrollmentId: number; flowId: number; name: string; status: string; failReason: string | null; finishedAt: string }[];
   organizationSuggestion: OrganizationSuggestion | null;
 }
 
@@ -72,7 +74,7 @@ const CONSENT_SOURCES: Record<string, string> = {
 
 const ACTIVITY_ICONS: Record<string, string> = {
   booking: '📅', registration: '📝', note: '🗒️', task: '✅',
-  deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄', list: '📋',
+  deal_change: '💼', import: '📥', event: '⚡', crm_change: '🔄', list: '📋', email: '✉️',
 };
 
 const inlineSelect = 'w-full max-w-[16rem] border border-gray-300 rounded-md px-2 py-1.5 text-sm bg-white';
@@ -574,6 +576,21 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                     </li>
                   ))}
                 </ul>
+              )}
+              {contact.pastFlows && contact.pastFlows.length > 0 && (
+                <>
+                  <p className="text-xs font-medium text-gray-500 mt-2 mb-1">Tidligere</p>
+                  <ul className="mb-2 space-y-1 text-sm">
+                    {contact.pastFlows.map((f) => (
+                      <li key={f.enrollmentId} className="flex flex-wrap items-baseline gap-x-2">
+                        <Link href={`/admin/crm/flyter/${f.flowId}`} className="text-gray-700 hover:underline">{f.name}</Link>
+                        <span className="text-xs text-gray-500">
+                          {enrollmentStatusLabel(f)} · {formatDayMonthNo(f.finishedAt)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               )}
               <AddToFlow
                 contactId={contactId}

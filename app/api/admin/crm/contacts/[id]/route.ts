@@ -10,6 +10,9 @@ import { INVALID_ASSIGNEE_ERROR, isAssignableUser } from '@/lib/crm/assignees';
 import { purgeReviewDraftsForContact } from '@/lib/ai/review';
 import { suggestOrganization, suggestionDomain } from '@/lib/crm/org-suggestion';
 
+/** Siste avsluttede løp som vises under «E-postflyter». */
+const RECENT_FINISHED_FLOWS = 5;
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -52,6 +55,16 @@ export async function GET(
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });
   }
 
+  const finishedEnrollments = await prisma.flowEnrollment.findMany({
+    where: { contactId, status: { not: 'active' } },
+    orderBy: [{ finishedAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
+    take: RECENT_FINISHED_FLOWS,
+    select: {
+      id: true, status: true, failReason: true, finishedAt: true, enteredAt: true,
+      flow: { select: { id: true, name: true } },
+    },
+  });
+
   // Ikke-kontakt-listen er global og nøkles på normalisert e-post.
   const suppression = contact.email
     ? await prisma.suppression.findUnique({
@@ -71,8 +84,12 @@ export async function GET(
   const flows = flowEnrollments.map((e) => ({
     enrollmentId: e.id, flowId: e.flow.id, name: e.flow.name, flowStatus: e.flow.status, enteredAt: e.enteredAt,
   }));
+  const pastFlows = finishedEnrollments.map((e) => ({
+    enrollmentId: e.id, flowId: e.flow.id, name: e.flow.name,
+    status: e.status, failReason: e.failReason, finishedAt: e.finishedAt ?? e.enteredAt,
+  }));
   return NextResponse.json({
-    contact: { ...rest, tags: parseJsonArray(contact.tags), suppression, lists, flows, organizationSuggestion },
+    contact: { ...rest, tags: parseJsonArray(contact.tags), suppression, lists, flows, pastFlows, organizationSuggestion },
   });
 }
 
