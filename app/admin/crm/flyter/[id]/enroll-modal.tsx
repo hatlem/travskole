@@ -28,6 +28,7 @@ export interface EnrollResult {
   enrolled: number;
   skippedActive: number;
   skippedSuppressed: number;
+  skippedNoConsent: number;
   skippedMissing: number;
   capped: number;
   /** Bare i markedsføringsflyter: hvem av de nye som faktisk får e-post. */
@@ -170,6 +171,7 @@ export function EnrollModal({ flowId, isMarketing, isDraft, onActivate, sendWind
         enrolled: data.enrolled ?? 0,
         skippedActive: data.skippedActive ?? 0,
         skippedSuppressed: data.skippedSuppressed ?? 0,
+        skippedNoConsent: data.skippedNoConsent ?? 0,
         skippedMissing: data.skippedMissing ?? 0,
         capped: data.capped ?? 0,
         reach: data.reach ?? undefined,
@@ -228,6 +230,11 @@ export function EnrollModal({ flowId, isMarketing, isDraft, onActivate, sendWind
               )}
               <li><span className="font-medium">{result.skippedActive}</span> hoppet over — er allerede underveis i flyten</li>
               <li><span className="font-medium">{result.skippedSuppressed}</span> hoppet over — har meldt seg av eller står på ikke-kontakt-listen</li>
+              {result.skippedNoConsent > 0 && (
+                <li className="text-amber-700">
+                  <span className="font-medium">{result.skippedNoConsent}</span> hoppet over — mangler samtykke til markedsføring
+                </li>
+              )}
               {result.skippedMissing > 0 && (
                 <li><span className="font-medium">{result.skippedMissing}</span> fant vi ikke (kontakten er slettet)</li>
               )}

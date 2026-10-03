@@ -7,10 +7,12 @@ import { CardSkeleton } from '@/components/admin/Skeleton';
 import { useModalEscape } from '@/components/admin/useModalEscape';
 import { formatSendTime } from '@/lib/flows/send-window';
 import { formatDayMonthNo } from '@/lib/admin-format';
+import { enrollmentStatusLabel } from '@/lib/flows/enrollment-status';
 
 interface EnrollmentRow {
   id: number;
   status: string;
+  failReason?: string | null;
   enteredAt: string;
   finishedAt: string | null;
   nextRunAt: string;
@@ -19,17 +21,10 @@ interface EnrollmentRow {
   contact: { id: number; name: string };
 }
 
-const STATUS_LABELS_NO: Record<string, string> = {
-  active: 'Underveis',
-  completed: 'Ferdig',
-  exited: 'Tatt ut',
-  failed: 'Stoppet (feil)',
-};
-
 function statusLabel(e: EnrollmentRow): string {
   if (e.awaitingActivation) return 'Venter på aktivering';
   if (e.waitingForSendWindow) return `Venter på sendetid (${formatSendTime(new Date(e.nextRunAt), new Date())})`;
-  return STATUS_LABELS_NO[e.status] ?? e.status;
+  return enrollmentStatusLabel(e);
 }
 
 /** Teller for «personer i flyten» i verktøylinjen; klikk åpner listen (GET /enrollments). */

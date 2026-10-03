@@ -3,13 +3,16 @@ import { Prisma } from '@prisma/client';
 
 const { prisma } = vi.hoisted(() => ({
   prisma: {
-    flowEnrollment: { findFirst: vi.fn(), create: vi.fn() },
+    flowEnrollment: { findFirst: vi.fn(), create: vi.fn(), findMany: vi.fn(async () => []), createMany: vi.fn() },
     flowTrigger: { findMany: vi.fn() },
+    contact: { findMany: vi.fn() },
+    suppression: { findMany: vi.fn(async (): Promise<{ email: string; reason: string }[]> => []) },
   },
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
+vi.mock('@/lib/settings', () => ({ getSetting: vi.fn(async () => '') }));
 
-import { enrollCourseRegistration, enrollFromEvent } from '@/lib/flows/enroll';
+import { enrollCourseRegistration, enrollFromEvent, enrollFromEvents } from '@/lib/flows/enroll';
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -104,5 +107,47 @@ describe('enrollFromEvent: suppressFlows', () => {
     await enrollFromEvent({ type: 'registration.created', contactId: 7, meta: { registrationId: 42, courseId: 9, suppressFlows: true } });
     expect(prisma.flowTrigger.findMany).not.toHaveBeenCalled();
     expect(prisma.flowEnrollment.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('utløsere i markedsføringsflyter tar bare inn de som kan få e-post', () => {
+  const triggers = [
+    { flowId: 8, eventType: 'contact.created', filter: '{}', flow: { anchorMode: 'contact', isMarketing: true } },
+  ];
+  const consented = { marketing: true, lawfulBasis: 'consent', consentAt: new Date() };
+
+  it('enkelthendelse: uten samtykke ⇒ ingen innmelding', async () => {
+    prisma.contact.findMany.mockResolvedValue([{ id: 7, email: 'a@example.no', organizationId: null, consent: null }]);
+    await enrollFromEvent({ type: 'contact.created', contactId: 7, meta: {} }, triggers);
+    expect(prisma.flowEnrollment.create).not.toHaveBeenCalled();
+  });
+
+  it('enkelthendelse: med samtykke ⇒ innmeldt', async () => {
+    prisma.contact.findMany.mockResolvedValue([{ id: 7, email: 'a@example.no', organizationId: null, consent: consented }]);
+    prisma.flowEnrollment.findFirst.mockResolvedValue(null);
+    prisma.flowEnrollment.create.mockResolvedValue({ id: 1 });
+    await enrollFromEvent({ type: 'contact.created', contactId: 7, meta: {} }, triggers);
+    expect(prisma.flowEnrollment.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('enkelthendelse: samtykke men på ikke-kontakt-listen ⇒ ingen innmelding', async () => {
+    prisma.contact.findMany.mockResolvedValue([{ id: 7, email: 'a@example.no', organizationId: null, consent: consented }]);
+    prisma.suppression.findMany.mockResolvedValueOnce([{ email: 'a@example.no', reason: 'bounce' }]);
+    await enrollFromEvent({ type: 'contact.created', contactId: 7, meta: {} }, triggers);
+    expect(prisma.flowEnrollment.create).not.toHaveBeenCalled();
+  });
+
+  it('bulk: bare kontakter med samtykke meldes inn', async () => {
+    prisma.contact.findMany.mockResolvedValue([
+      { id: 7, email: 'a@example.no', organizationId: null, consent: consented },
+      { id: 8, email: 'b@example.no', organizationId: null, consent: null },
+    ]);
+    await enrollFromEvents(
+      [{ type: 'contact.created', contactId: 7, meta: {} }, { type: 'contact.created', contactId: 8, meta: {} }],
+      triggers,
+    );
+    expect(prisma.flowEnrollment.createMany).toHaveBeenCalledWith(
+      expect.objectContaining({ data: [expect.objectContaining({ flowId: 8, contactId: 7 })] }),
+    );
   });
 });

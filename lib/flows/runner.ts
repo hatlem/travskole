@@ -21,6 +21,7 @@ import { sendFlowEmail } from './send';
 import { findReview } from '@/lib/ai/review';
 import { isExactSendWindowParking, type SendWindow } from './send-window';
 import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
+import { STOP_REASON_NO_CONSENT, STOP_REASON_SUPPRESSED } from './enrollment-status';
 
 export const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
@@ -261,6 +262,7 @@ async function failEnrollment(enrollmentId: number, reason: string, now: Date, n
       status: 'failed',
       failReason: reason,
       finishedAt: now,
+      nextRunAt: now,
       ...(nodeId !== undefined ? { currentNodeId: nodeId } : {}),
     },
   });
@@ -359,8 +361,22 @@ async function processEnrollment(
           await failEnrollment(enrollment.id, 'send-failed', now, node.id);
           return { sent, failed: true, completed: false };
         }
-        // 'sent' | 'already_sent' | 'skipped_*' all advance —
-        // only an actual send/network failure halts the enrollment.
+        // Samtykket trukket/adressen sperret underveis: markedsføringsløpet
+        // stoppes synlig i stedet for å gå videre som om e-posten ble sendt.
+        if (enrollment.flow.isMarketing && (result === 'skipped_no_consent' || result === 'skipped_suppressed')) {
+          await prisma.flowEnrollment.update({
+            where: { id: enrollment.id },
+            data: {
+              status: 'exited',
+              failReason: result === 'skipped_no_consent' ? STOP_REASON_NO_CONSENT : STOP_REASON_SUPPRESSED,
+              finishedAt: now,
+              currentNodeId: node.id,
+              nextRunAt: now,
+            },
+          });
+          return { sent, failed: false, completed: false };
+        }
+        // 'sent' | 'already_sent' | 'skipped_review' (og skippede tjenestemeldinger) går videre.
         if (result === 'sent') sent++;
         currentNodeId = plan.nextNodeId;
         continue;
@@ -384,7 +400,7 @@ async function processEnrollment(
           }
           await prisma.flowEnrollment.update({
             where: { id: enrollment.id },
-            data: { status: 'exited', finishedAt: now, currentNodeId: node.id },
+            data: { status: 'exited', finishedAt: now, currentNodeId: node.id, nextRunAt: now },
           });
           return { sent, failed: false, completed: false };
         }
@@ -394,7 +410,7 @@ async function processEnrollment(
       case 'complete': {
         await prisma.flowEnrollment.update({
           where: { id: enrollment.id },
-          data: { status: 'completed', finishedAt: now, currentNodeId: node.id },
+          data: { status: 'completed', finishedAt: now, currentNodeId: node.id, nextRunAt: now },
         });
         return { sent, failed: false, completed: true };
       }
@@ -482,7 +498,7 @@ async function processClaimed(claimedIds: number[], now: Date): Promise<FlowBatc
         error: error instanceof Error ? error.message : String(error),
       });
       await prisma.flowEnrollment
-        .update({ where: { id: enrollment.id }, data: { status: 'failed', failReason: 'runner-error', finishedAt: now } })
+        .update({ where: { id: enrollment.id }, data: { status: 'failed', failReason: 'runner-error', finishedAt: now, nextRunAt: now } })
         .catch(() => {});
       result.failed++;
     }

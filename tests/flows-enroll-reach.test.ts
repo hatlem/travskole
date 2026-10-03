@@ -51,6 +51,17 @@ describe('enrollResultMessage', () => {
   });
 });
 
+describe('enrollResultMessage: mangler samtykke', () => {
+  it('teller de som ikke ble lagt til fordi samtykke mangler', () => {
+    expect(
+      enrollResultMessage({ enrolled: 2, skippedNoConsent: 3 }, { reach: { consented: 2, legitimateInterest: 0, missing: 0 } }),
+    ).toBe('2 lagt til – 2 har samtykket og får e-post. 3 personer ble ikke lagt til – mangler samtykke til markedsføring.');
+    expect(enrollResultMessage({ enrolled: 0, skippedNoConsent: 1 }, {})).toBe(
+      'Ingen nye ble lagt til. 1 person ble ikke lagt til – mangler samtykke til markedsføring.',
+    );
+  });
+});
+
 describe('isAwaitingActivation', () => {
   it('kjenner igjen løp parkert til aktivering', () => {
     expect(isAwaitingActivation({ status: 'active', currentNodeId: null, nextRunAt: AWAITING_ACTIVATION_RUN_AT })).toBe(true);

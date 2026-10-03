@@ -59,10 +59,11 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, excludeFlowId
         return;
       }
       const enrolled = typeof data.enrolled === 'number' ? data.enrolled : 0;
-      if (enrolled > 0 && selected.isMarketing && !hasMarketingConsent) {
-        toast(`Lagt til i «${selected.name}», men kontakten har ikke samtykket til markedsføring og får ingen e-post fra flyten`, 'info');
-      } else if (enrolled > 0) toast(`Lagt til i «${selected.name}» — første e-post går ut etter oppsettet i flyten`, 'success');
+      if (enrolled > 0) toast(`Lagt til i «${selected.name}» — første e-post går ut etter oppsettet i flyten`, 'success');
       else if (data.skippedSuppressed > 0) toast('Kontakten står på ikke-kontakt-listen og kan ikke få e-post fra flytene', 'error');
+      else if (data.skippedNoConsent > 0) {
+        toast(`Ikke lagt til i «${selected.name}» – kontakten mangler samtykke til markedsføring`, 'error');
+      }
       else toast(`Kontakten er allerede med i «${selected.name}»`, 'info');
       setFlowId('');
       if (enrolled > 0) onEnrolled?.();
@@ -101,7 +102,7 @@ export function AddToFlow({ contactId, hasMarketingConsent = true, excludeFlowId
       </div>
       {selected?.isMarketing && !hasMarketingConsent && (
         <p className="text-xs text-amber-700">
-          Dette er en markedsføringsflyt, og kontakten har ikke sagt ja til markedsføring. Kontakten blir med i flyten, men får ingen av e-postene.
+          Dette er en markedsføringsflyt, og kontakten har ikke sagt ja til markedsføring. Uten samtykke (eller berettiget interesse som bedriftskontakt) blir kontakten ikke lagt til.
         </p>
       )}
     </div>

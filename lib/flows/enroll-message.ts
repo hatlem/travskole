@@ -14,19 +14,30 @@ const people = (n: number) => (n === 1 ? '1 person' : `${n} personer`);
 
 /** Toasten etter «Legg til personer»: hvor mange som ble lagt til, og hvem som faktisk får e-post. */
 export function enrollResultMessage(
-  summary: Pick<EnrollSummary, 'enrolled'>,
+  summary: Pick<EnrollSummary, 'enrolled'> & Partial<Pick<EnrollSummary, 'skippedNoConsent'>>,
+  options: { reach?: MarketingReach | null; awaitingActivation?: boolean },
+): string {
+  const noConsent = summary.skippedNoConsent ?? 0;
+  const base = enrolledMessage(summary.enrolled, options);
+  if (noConsent === 0) return base;
+  const skipped = `${people(noConsent)} ble ikke lagt til – mangler samtykke til markedsføring.`;
+  return summary.enrolled === 0 ? `Ingen nye ble lagt til. ${skipped}` : `${base} ${skipped}`;
+}
+
+function enrolledMessage(
+  enrolled: number,
   { reach, awaitingActivation }: { reach?: MarketingReach | null; awaitingActivation?: boolean },
 ): string {
-  if (summary.enrolled === 0) return 'Ingen nye ble lagt til — se oversikten for hvorfor.';
+  if (enrolled === 0) return 'Ingen nye ble lagt til — se oversikten for hvorfor.';
   const when = awaitingActivation ? ' når flyten aktiveres' : '';
   const added = awaitingActivation
-    ? `${summary.enrolled} lagt til og venter på at flyten aktiveres`
-    : `${summary.enrolled} lagt til`;
+    ? `${enrolled} lagt til og venter på at flyten aktiveres`
+    : `${enrolled} lagt til`;
 
   if (!reach) {
     return awaitingActivation
       ? `${added}. Ingen e-post sendes før du aktiverer flyten.`
-      : `${people(summary.enrolled)} er lagt til i flyten og får e-postene.`;
+      : `${people(enrolled)} er lagt til i flyten og får e-postene.`;
   }
 
   const getsEmail = reach.consented + reach.legitimateInterest;

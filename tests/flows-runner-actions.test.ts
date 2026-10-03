@@ -33,6 +33,8 @@ const { notifyTaskAssignee } = vi.hoisted(() => ({ notifyTaskAssignee: vi.fn(asy
 vi.mock('@/lib/crm/task-notify', () => ({ notifyTaskAssignee }));
 
 import { runFlowBatch } from '@/lib/flows/runner';
+import { sendFlowEmail } from '@/lib/flows/send';
+import { enrollmentStatusLabel } from '@/lib/flows/enrollment-status';
 
 const CONTACT = {
   id: 7,
@@ -197,5 +199,53 @@ describe('runFlowBatch: engasjementsbetingelser', () => {
     prisma.messageSend.findFirst.mockResolvedValue(null);
     await runFlowBatch(NOW);
     expect(completedAt()).toBe(13);
+  });
+});
+
+describe('runFlowBatch: e-post som ikke kan sendes stopper markedsføringsløpet', () => {
+  beforeEach(() => {
+    mockGraph(
+      [
+        { id: 10, type: 'start', config: {} },
+        { id: 11, type: 'email', config: { subject: 'Hei', bodyHtml: '<p>Hei</p>', senderIdentityId: 1 } },
+        { id: 12, type: 'action', config: { kind: 'create_task', title: 'Ring', dueDays: 1 } },
+        { id: 13, type: 'end', config: {} },
+      ],
+      [[10, 11, null], [11, 12, null], [12, 13, null]],
+    );
+  });
+
+  it.each([
+    ['skipped_no_consent', 'no_consent', 'Stoppet – mangler samtykke'],
+    ['skipped_suppressed', 'suppressed', 'Stoppet – står på ikke-kontakt-listen'],
+  ] as const)('%s ⇒ avsluttet med synlig årsak, ingen senere steg', async (result, reason, label) => {
+    vi.mocked(sendFlowEmail).mockResolvedValueOnce(result);
+    await runFlowBatch(NOW);
+    expect(prisma.flowEnrollment.update).toHaveBeenCalledWith({
+      where: { id: 1 },
+      data: { status: 'exited', failReason: reason, finishedAt: NOW, currentNodeId: 11, nextRunAt: NOW },
+    });
+    expect(prisma.task.create).not.toHaveBeenCalled();
+    expect(enrollmentStatusLabel({ status: 'exited', failReason: reason })).toBe(label);
+  });
+
+  it('tjenesteflyt: en skippet e-post stopper ikke løpet', async () => {
+    prisma.flowEnrollment.findMany.mockResolvedValue([
+      { id: 1, flowId: 1, contactId: 7, currentNodeId: null, registrationId: null, flow: { status: 'active', isMarketing: false } },
+    ]);
+    vi.mocked(sendFlowEmail).mockResolvedValueOnce('skipped_suppressed');
+    await runFlowBatch(NOW);
+    expect(prisma.task.create).toHaveBeenCalled();
+    expect(prisma.flowEnrollment.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ status: 'completed', nextRunAt: NOW }) }),
+    );
+  });
+});
+
+describe('enrollmentStatusLabel', () => {
+  it('vanlige statuser', () => {
+    expect(enrollmentStatusLabel({ status: 'active' })).toBe('Underveis');
+    expect(enrollmentStatusLabel({ status: 'completed', failReason: null })).toBe('Ferdig');
+    expect(enrollmentStatusLabel({ status: 'failed', failReason: 'send-failed' })).toBe('Stoppet (feil)');
   });
 });

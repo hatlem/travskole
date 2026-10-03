@@ -21,6 +21,8 @@ import logger from '@/lib/logger';
 import { matchTriggers, type EventLike } from './match';
 import { contactMatchesSegment, parseSegmentRules } from '@/lib/crm/segments';
 import { normalizeEmail, parseJsonArray } from '@/lib/crm/normalize';
+import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
+import { getSetting } from '@/lib/settings';
 
 export const SEGMENT_ENROLL_CAP = 500;
 
@@ -110,6 +112,8 @@ export interface EnrollSummary {
   enrolled: number;
   skippedActive: number;
   skippedSuppressed: number;
+  /** Markedsføringsflyt: kontakten har ikke samtykke (eller berettiget interesse). */
+  skippedNoConsent: number;
   skippedMissing: number;
   /** Treff utover SEGMENT_ENROLL_CAP som ikke ble forsøkt meldt inn. */
   capped: number;
@@ -119,14 +123,55 @@ const emptySummary = (): EnrollSummary => ({
   enrolled: 0,
   skippedActive: 0,
   skippedSuppressed: 0,
+  skippedNoConsent: 0,
   skippedMissing: 0,
   capped: 0,
 });
 
+/** Suppresjonsårsaken per normalisert adresse. */
+async function suppressionReasons(emails: string[]): Promise<Map<string, string>> {
+  if (emails.length === 0) return new Map();
+  const rows = await prisma.suppression.findMany({
+    where: { email: { in: emails } },
+    select: { email: true, reason: true },
+  });
+  return new Map(rows.map((row) => [row.email, row.reason]));
+}
+
+const allowsLegitimateInterest = async (): Promise<boolean> =>
+  (await getSetting('marketing_allow_legitimate_interest')) === 'true';
+
+/**
+ * Kontaktene som kan få markedsføring nå (samme regel som sendelaget):
+ * samtykke eller berettiget interesse, og ingen suppresjon.
+ */
+export async function marketingEligibleContactIds(contactIds: number[]): Promise<Set<number>> {
+  if (contactIds.length === 0) return new Set();
+  const [contacts, allowLegitimateInterest] = await Promise.all([
+    prisma.contact.findMany({
+      where: { id: { in: contactIds } },
+      select: { id: true, email: true, organizationId: true, consent: true },
+    }),
+    allowsLegitimateInterest(),
+  ]);
+  const emails = contacts.map((c) => (c.email ? normalizeEmail(c.email) : null)).filter((e): e is string => Boolean(e));
+  const suppressed = await suppressionReasons(emails);
+  return new Set(
+    contacts
+      .filter((c) => {
+        const email = c.email ? normalizeEmail(c.email) : null;
+        if (email && suppressed.has(email)) return false;
+        return isMarketingAllowed({ consent: c.consent, organizationId: c.organizationId, allowLegitimateInterest });
+      })
+      .map((c) => c.id),
+  );
+}
+
 /**
  * Manuell innmelding av en liste kontakter. Hopper over kontakter som ikke
- * finnes, som står på suppresjonslista (avmeldt/bounce/klage — sendelaget ville
- * uansett hoppet over dem), og som allerede er aktive i flyten.
+ * finnes, som står på suppresjonslista (sendelaget ville uansett hoppet over
+ * dem — i tjenesteflyter stopper avmelding ikke), som i en markedsføringsflyt
+ * mangler samtykke, og som allerede er aktive i flyten.
  */
 export async function enrollContacts(
   flowId: number,
@@ -137,27 +182,33 @@ export async function enrollContacts(
   const uniqueIds = [...new Set(contactIds)];
   if (uniqueIds.length === 0) return summary;
 
+  const flow = await prisma.flow.findUnique({ where: { id: flowId }, select: { isMarketing: true } });
+  const isMarketing = flow?.isMarketing ?? true;
+
   const contacts = await prisma.contact.findMany({
     where: { id: { in: uniqueIds } },
-    select: { id: true, email: true },
+    select: { id: true, email: true, organizationId: true, consent: true },
   });
   summary.skippedMissing = uniqueIds.length - contacts.length;
 
   const emails = contacts
     .map((c) => (c.email ? normalizeEmail(c.email) : null))
     .filter((e): e is string => Boolean(e));
-  const suppressed = emails.length
-    ? new Set(
-        (await prisma.suppression.findMany({ where: { email: { in: emails } }, select: { email: true } })).map(
-          (s) => s.email,
-        ),
-      )
-    : new Set<string>();
+  const suppressed = await suppressionReasons(emails);
+  const allowLegitimateInterest = isMarketing ? await allowsLegitimateInterest() : false;
 
   for (const contact of contacts) {
     const email = contact.email ? normalizeEmail(contact.email) : null;
-    if (email && suppressed.has(email)) {
+    const reason = email ? suppressed.get(email) : undefined;
+    if (reason !== undefined && (isMarketing || reason !== 'unsubscribe')) {
       summary.skippedSuppressed++;
+      continue;
+    }
+    if (
+      isMarketing &&
+      !isMarketingAllowed({ consent: contact.consent, organizationId: contact.organizationId, allowLegitimateInterest })
+    ) {
+      summary.skippedNoConsent++;
       continue;
     }
     if (await enrollContact(flowId, contact.id, options.startAt)) {
@@ -255,14 +306,14 @@ export interface ActiveTrigger {
   flowId: number;
   eventType: string;
   filter: string;
-  flow: { anchorMode: string };
+  flow: { anchorMode: string; isMarketing?: boolean };
 }
 
 /** Utløserne til alle aktive flyter — lastes én gang per hendelse, eller én gang per bulk-kall. */
 export async function loadActiveTriggers(): Promise<ActiveTrigger[]> {
   return prisma.flowTrigger.findMany({
     where: { flow: { status: 'active' } },
-    select: { flowId: true, eventType: true, filter: true, flow: { select: { anchorMode: true } } },
+    select: { flowId: true, eventType: true, filter: true, flow: { select: { anchorMode: true, isMarketing: true } } },
   });
 }
 
@@ -292,11 +343,18 @@ export async function enrollFromEvent(input: EnrollEvent, preloaded?: ActiveTrig
 
     const triggers = preloaded ?? (await loadActiveTriggers());
     const anchorByFlow = new Map(triggers.map((t) => [t.flowId, t.flow.anchorMode]));
+    const marketingFlows = new Set(triggers.filter((t) => t.flow.isMarketing === true).map((t) => t.flowId));
     const event: EventLike = { type: input.type, meta: input.meta };
     const matchedFlowIds = matchTriggers(event, triggers);
     const anchor = courseAnchor(input.meta);
+    let marketingEligible: boolean | null = null;
 
     for (const flowId of matchedFlowIds) {
+      // Markedsføringsflyter tar bare inn de som faktisk kan få e-postene.
+      if (marketingFlows.has(flowId)) {
+        marketingEligible ??= (await marketingEligibleContactIds([contactId])).has(contactId);
+        if (!marketingEligible) continue;
+      }
       if (anchorByFlow.get(flowId) === 'course' && anchor) {
         await enrollCourseRegistration(flowId, contactId, anchor.courseId, anchor.registrationId);
       } else {
@@ -318,12 +376,20 @@ export async function enrollFromEvent(input: EnrollEvent, preloaded?: ActiveTrig
 export async function enrollFromEvents(events: EnrollEvent[], triggers: ActiveTrigger[]): Promise<void> {
   try {
     const anchorByFlow = new Map(triggers.map((t) => [t.flowId, t.flow.anchorMode]));
+    const marketingFlows = new Set(triggers.filter((t) => t.flow.isMarketing === true).map((t) => t.flowId));
     const contactsByFlow = new Map<number, Set<number>>();
+    const eligible =
+      marketingFlows.size > 0
+        ? await marketingEligibleContactIds([
+            ...new Set(events.map((e) => e.contactId).filter((id): id is number => id != null)),
+          ])
+        : new Set<number>();
 
     for (const event of events) {
       if (!event.contactId || event.meta.suppressFlows === true) continue;
       const anchor = courseAnchor(event.meta);
       for (const flowId of matchTriggers({ type: event.type, meta: event.meta }, triggers)) {
+        if (marketingFlows.has(flowId) && !eligible.has(event.contactId)) continue;
         if (anchorByFlow.get(flowId) === 'course' && anchor) {
           await enrollCourseRegistration(flowId, event.contactId, anchor.courseId, anchor.registrationId).catch(
             (error) => logger.error('enrollFromEvents: kurs-innmelding feilet', error),

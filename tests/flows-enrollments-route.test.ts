@@ -22,7 +22,7 @@ import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { enrollContacts, enrollList, enrollSegment } from '@/lib/flows/enroll';
 
-const SUMMARY = { enrolled: 2, skippedActive: 1, skippedSuppressed: 0, skippedMissing: 0, capped: 0 };
+const SUMMARY = { enrolled: 2, skippedActive: 1, skippedSuppressed: 0, skippedNoConsent: 0, skippedMissing: 0, capped: 0 };
 
 function call(body: unknown, id = '5') {
   const req = new NextRequest(`http://localhost/api/admin/crm/flows/${id}/enrollments`, {
