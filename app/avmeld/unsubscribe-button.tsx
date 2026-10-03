@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { CONFIRM_TEXT, UNSUBSCRIBED_TEXT } from './texts';
 
 /**
  * Client-side confirm-and-post: the actual unsubscribe mutation only ever
@@ -34,9 +35,7 @@ export function UnsubscribeButton({ token }: { token: string }) {
     return (
       <div className="rounded-lg border border-green-200 bg-green-50 p-8">
         <h2 className="text-xl font-bold text-green-900 mb-2">Du er nå avmeldt</h2>
-        <p className="text-green-800 mb-4">
-          Du har blitt fjernet fra markedsføringslisten og mottar ikke lenger e-postmeldinger fra oss.
-        </p>
+        <p className="text-green-800 mb-4">{UNSUBSCRIBED_TEXT}</p>
         <p className="text-green-800 mb-6">
           Du kan når som helst kontakte oss hvis du ønsker å melde deg på igjen.
         </p>
@@ -53,10 +52,7 @@ export function UnsubscribeButton({ token }: { token: string }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-gray-50 p-8">
       <h2 className="text-xl font-bold text-gray-900 mb-2">Meld deg av markedsføring</h2>
-      <p className="text-gray-700 mb-6">
-        Bekreft under for å melde deg av e-postmeldinger fra Bjerke Travbane. Dette påvirker ikke
-        e-post knyttet til påmeldinger du allerede har gjort.
-      </p>
+      <p className="text-gray-700 mb-6">{CONFIRM_TEXT}</p>
       <form onSubmit={handleSubmit}>
         <button
           type="submit"

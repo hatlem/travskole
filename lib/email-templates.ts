@@ -85,16 +85,20 @@ export const DEFAULT_TRIGGER_TYPES = [
   { type: 'after_end', offsetDays: 1 },
 ] as const;
 
-export function wrapEmailHtml(body: string, siteName: string): string {
+/** `signOff: false` når innholdet har sin egen hilsen (flyt-e-poster). */
+export function wrapEmailHtml(body: string, siteName: string, { signOff = true }: { signOff?: boolean } = {}): string {
+  const closing = signOff
+    ? `
+    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e0e0e0;color:#666;font-size:13px;text-align:center">
+      <p style="margin:0">Med vennlig hilsen,<br><strong style="color:#003B7A">${escapeHtmlValue(siteName)}</strong></p>
+    </div>`
+    : '';
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"></head>
 <body style="margin:0;padding:0;background:#f4f4f4">
   <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px;background:#ffffff">
-    ${body}
-    <div style="margin-top:32px;padding-top:16px;border-top:1px solid #e0e0e0;color:#666;font-size:13px;text-align:center">
-      <p style="margin:0">Med vennlig hilsen,<br><strong style="color:#003B7A">${escapeHtmlValue(siteName)}</strong></p>
-    </div>
+    ${body}${closing}
   </div>
 </body>
 </html>`;

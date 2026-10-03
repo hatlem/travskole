@@ -166,7 +166,7 @@ export async function POST(
       }
     }
   }
-  const html = wrapEmailHtml(testBanner(aiNote) + renderedBody, identity.displayName);
+  const html = wrapEmailHtml(testBanner(aiNote) + renderedBody, identity.displayName, { signOff: false });
 
   const testContactId = await ensureTestSendContactId();
 

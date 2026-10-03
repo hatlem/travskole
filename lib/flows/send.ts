@@ -1,7 +1,7 @@
 /**
  * Flow send layer — turns a planned `send_email` step into an actual
- * message: consent/suppression gating, merge-tag rendering, the unsubscribe
- * footer, and idempotent delivery via a verified sender identity.
+ * message: consent/suppression gating, merge-tag rendering, the footer
+ * (marketing unsubscribe or service note), and idempotent delivery via a verified sender identity.
  *
  * Idempotency: the `MessageSend` row with `dedupeKey` is created BEFORE the
  * network send. A unique-constraint violation (P2002) means a previous run
@@ -129,6 +129,22 @@ function oneClickUnsubscribeUrl(token: string): string {
 
 function unsubscribeFooter(unsubUrl: string): string {
   return `<p style="font-size:12px;color:#6b7280">Du mottar denne e-posten fra Bjerke Travbane. <a href="${unsubUrl}">Meld deg av</a></p>`;
+}
+
+/** Tjenestemeldinger (kurs/booking) har ingen markedsførings-avmelding. */
+export const SERVICE_FOOTER_TEXT =
+  'Du får denne e-posten fordi du er påmeldt/har sendt forespørsel hos Bjerke. Spørsmål? Svar på denne e-posten.';
+
+function serviceFooter(): string {
+  return `<p style="font-size:12px;color:#6b7280">${SERVICE_FOOTER_TEXT}</p>`;
+}
+
+/**
+ * Avmelding stopper kun markedsføring; tjenestemeldinger om en påmelding går
+ * fortsatt. Bounce/klage/manuell sperring gjelder adressen og stopper alt.
+ */
+export function suppressionBlocks(reason: string, isMarketing: boolean): boolean {
+  return isMarketing || reason !== 'unsubscribe';
 }
 
 /** Logs a skipped send (suppressed / no consent) — never gets a dedupeKey. */
@@ -268,7 +284,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   if (!normalizedEmail) return 'failed';
 
   const suppression = await prisma.suppression.findUnique({ where: { email: normalizedEmail } });
-  if (suppression) {
+  if (suppression && suppressionBlocks(suppression.reason, input.isMarketing)) {
     await logSkippedSend(input, contact.email, 'skipped_suppressed');
     return 'skipped_suppressed';
   }
@@ -309,10 +325,18 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   const personalizedBody = ai.aiPersonalized ? renderFlowEmailBody(ai.body, mergeData) : ai.body;
   const aiPersonalized = ai.aiPersonalized;
 
-  const unsubToken = signUnsubscribeToken(input.contactId);
-  const unsubUrl = unsubscribeUrl(unsubToken);
-  const oneClickUrl = oneClickUnsubscribeUrl(unsubToken);
-  const html = wrapEmailHtml(personalizedBody + unsubscribeFooter(unsubUrl), identity.displayName);
+  let footer = serviceFooter();
+  let listUnsubscribeHeaders: Record<string, string> | undefined;
+  if (input.isMarketing) {
+    const unsubToken = signUnsubscribeToken(input.contactId);
+    footer = unsubscribeFooter(unsubscribeUrl(unsubToken));
+    listUnsubscribeHeaders = {
+      'List-Unsubscribe': `<mailto:${REPLY_MAILBOX}>, <${oneClickUnsubscribeUrl(unsubToken)}>`,
+      'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+    };
+  }
+  // Flyt-malene eier sin egen hilsen — omslaget legger ikke til en til.
+  const html = wrapEmailHtml(personalizedBody + footer, identity.displayName, { signOff: false });
 
   const baseUrl = getBaseUrl();
   let finalHtml = html;
@@ -383,10 +407,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       to: contact.email,
       subject,
       html: finalHtml,
-      headers: {
-        'List-Unsubscribe': `<mailto:${REPLY_MAILBOX}>, <${oneClickUrl}>`,
-        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
-      },
+      ...(listUnsubscribeHeaders && { headers: listUnsubscribeHeaders }),
     });
     if (messageId) {
       // Normalisert (uten vinkelparenteser) slik at den matcher formatet

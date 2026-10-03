@@ -32,7 +32,7 @@ vi.mock('@/lib/mail', () => ({ sendMailAs: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getLLMProvider: vi.fn(() => null) }));
 vi.mock('@/lib/flows/course-merge', () => ({ resolveCourseMergeContext: vi.fn() }));
 
-import { sendFlowEmail, type SendFlowEmailInput } from '@/lib/flows/send';
+import { sendFlowEmail, suppressionBlocks, SERVICE_FOOTER_TEXT, type SendFlowEmailInput } from '@/lib/flows/send';
 import { sendMailAs } from '@/lib/mail';
 import { getLLMProvider } from '@/lib/ai/provider';
 import { resolveCourseMergeContext } from '@/lib/flows/course-merge';
@@ -388,5 +388,59 @@ describe('sendFlowEmail — samme rendring som forhåndsvisningen', () => {
     const html = mockedSendMailAs.mock.calls[0][0].html as string;
     expect(html).toContain('<p><a>Klikk</a></p>');
     expect(html).not.toContain('href="javascript:');
+  });
+});
+
+describe('avmelding vs. tjenestemeldinger', () => {
+  const transactional: SendFlowEmailInput = { ...baseInput, isMarketing: false };
+
+  it('suppressionBlocks: avmelding stopper kun markedsføring; bounce/klage/manuell stopper alt', () => {
+    expect(suppressionBlocks('unsubscribe', true)).toBe(true);
+    expect(suppressionBlocks('unsubscribe', false)).toBe(false);
+    for (const reason of ['bounce', 'complaint', 'manual']) {
+      expect(suppressionBlocks(reason, true)).toBe(true);
+      expect(suppressionBlocks(reason, false)).toBe(true);
+    }
+  });
+
+  it('en avmeldt kontakt får fortsatt tjenestemeldingen om kurset', async () => {
+    prisma.suppression.findUnique.mockResolvedValue({ id: 1, email: 'kari@example.com', reason: 'unsubscribe' });
+    expect(await sendFlowEmail(transactional)).toBe('sent');
+    expect(mockedSendMailAs).toHaveBeenCalledTimes(1);
+  });
+
+  it('en avmeldt kontakt får ikke markedsføring', async () => {
+    prisma.suppression.findUnique.mockResolvedValue({ id: 1, email: 'kari@example.com', reason: 'unsubscribe' });
+    expect(await sendFlowEmail(baseInput)).toBe('skipped_suppressed');
+    expect(mockedSendMailAs).not.toHaveBeenCalled();
+  });
+
+  it('bounce stopper også tjenestemeldinger', async () => {
+    prisma.suppression.findUnique.mockResolvedValue({ id: 1, email: 'kari@example.com', reason: 'bounce' });
+    expect(await sendFlowEmail(transactional)).toBe('skipped_suppressed');
+    expect(mockedSendMailAs).not.toHaveBeenCalled();
+  });
+
+  it('tjenestemelding: servicefot, ingen «Meld deg av» og ingen List-Unsubscribe', async () => {
+    await sendFlowEmail(transactional);
+    const mail = mockedSendMailAs.mock.calls[0][0];
+    expect(mail.html).toContain(SERVICE_FOOTER_TEXT);
+    expect(mail.html).not.toContain('Meld deg av');
+    expect(mail.html).not.toContain('/avmeld');
+    expect(mail.headers?.['List-Unsubscribe']).toBeUndefined();
+  });
+
+  it('markedsføring: avmeldingslenke og List-Unsubscribe, ingen servicefot', async () => {
+    await sendFlowEmail(baseInput);
+    const mail = mockedSendMailAs.mock.calls[0][0];
+    expect(mail.html).toContain('Meld deg av');
+    expect(mail.html).not.toContain(SERVICE_FOOTER_TEXT);
+    expect(mail.headers?.['List-Unsubscribe']).toBeDefined();
+  });
+
+  it('omslaget legger ikke til en ekstra hilsen — malen eier sin egen', async () => {
+    await sendFlowEmail({ ...baseInput, bodyHtml: '<p>Hei</p><p>Med vennlig hilsen<br>Teamet</p>' });
+    const html = mockedSendMailAs.mock.calls[0][0].html;
+    expect(html.match(/vennlig hilsen/gi)).toHaveLength(1);
   });
 });
