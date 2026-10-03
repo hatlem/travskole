@@ -6,6 +6,8 @@ import { prisma } from '@/lib/prisma';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { createReplyTask } from '@/lib/crm/reply-task';
+import { parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
+import { flowBranchesOnReply, latestTrackedSendQuery, replyConditionPending } from '@/lib/flows/reply-branch';
 
 export async function recordOpen(token: string): Promise<boolean> {
   const send = await prisma.messageSend.findUnique({ where: { trackingToken: token } });
@@ -77,15 +79,25 @@ export async function recordReply(
 
   const enrollment =
     send.enrollmentId != null
-      ? await prisma.flowEnrollment.findUnique({ where: { id: send.enrollmentId } })
+      ? await prisma.flowEnrollment.findUnique({
+        where: { id: send.enrollmentId },
+        select: { id: true, flowId: true, status: true, currentNodeId: true, flow: { select: { isMarketing: true } } },
+      })
       : null;
-  const branchesOnReply = enrollment ? await flowBranchesOnReply(enrollment.flowId) : false;
+  const graph = enrollment ? await loadFlowGraph(enrollment.flowId) : null;
+  const branchesOnReply = graph !== null && flowBranchesOnReply(graph.nodes);
+  const isActive = enrollment?.status === 'active';
 
   // Kun ved første registrerte svar per utsendelse — gjentatte polls/svar i
-  // samme tråd gir ikke duplikate oppgaver. Forgrener flyten på «svarte»,
-  // følger flyten selv opp svaret (ellers blir det to oppgaver).
-  if (firstReply > 0 && !branchesOnReply) {
-    await createReplyTask(send, inbound.subject);
+  // samme tråd gir ikke duplikate oppgaver. Oppgaven droppes bare når flyten
+  // garantert leser akkurat dette svaret i en «svarte»-betingelse; i tvil
+  // lages oppgaven heller enn at svaret blir liggende.
+  if (firstReply > 0) {
+    const flowWillReadReply =
+      enrollment !== null && graph !== null && isActive && branchesOnReply &&
+      (await isLatestTrackedSend(enrollment.id, send.id)) &&
+      replyConditionPending(graph.nodes, graph.edges, send.nodeId, enrollment.currentNodeId);
+    if (!flowWillReadReply) await createReplyTask(send, inbound.subject);
   }
 
   await emitEvent({
@@ -100,30 +112,30 @@ export async function recordReply(
     dedupeKey: `reply:${send.id}`,
   });
 
-  if (send.enrollmentId != null) {
-    // Et svar avslutter flyten — med mindre flyten selv forgrener på «svarte»,
-    // da må den fortsette for å nå ja-grenen.
-    if (enrollment && enrollment.status === 'active' && !branchesOnReply) {
-      await prisma.flowEnrollment.update({
-        where: { id: send.enrollmentId },
-        data: { status: 'exited', finishedAt: new Date() },
-      });
-    }
+  // Et svar avslutter et markedsføringsløp — med mindre flyten selv forgrener
+  // på «svarte». Transaksjonelle (kurs-)flyter inviterer til svar i bunnteksten
+  // og fortsetter; svar-oppgaven over sørger for at noen svarer.
+  if (enrollment && isActive && enrollment.flow.isMarketing && !branchesOnReply) {
+    await prisma.flowEnrollment.update({
+      where: { id: enrollment.id },
+      data: { status: 'exited', finishedAt: new Date() },
+    });
   }
 }
 
-async function flowBranchesOnReply(flowId: number): Promise<boolean> {
-  const conditions = await prisma.flowNode.findMany({
-    where: { flowId, type: 'condition' },
-    select: { config: true },
-  });
-  return conditions.some((node) => {
-    try {
-      return (JSON.parse(node.config) as { kind?: unknown }).kind === 'replied_email';
-    } catch {
-      return false;
-    }
-  });
+async function loadFlowGraph(flowId: number): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
+  const [nodeRows, edges] = await Promise.all([
+    prisma.flowNode.findMany({ where: { flowId }, select: { id: true, type: true, config: true } }),
+    prisma.flowEdge.findMany({ where: { flowId }, select: { id: true, fromNodeId: true, toNodeId: true, branch: true } }),
+  ]);
+  const nodes = nodeRows.map((row) => ({ id: row.id, type: row.type as FlowNodeType, config: parseNodeConfig(row.config) }));
+  return { nodes, edges };
+}
+
+/** Er dette den sendingen runnerens «svarte»-betingelse vil lese? */
+async function isLatestTrackedSend(enrollmentId: number, sendId: number): Promise<boolean> {
+  const latest = await prisma.messageSend.findFirst({ ...latestTrackedSendQuery(enrollmentId), select: { id: true } });
+  return latest?.id === sendId;
 }
 
 export async function recordBounce(

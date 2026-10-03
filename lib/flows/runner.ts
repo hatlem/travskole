@@ -22,6 +22,7 @@ import { parseJsonArray } from '@/lib/crm/normalize';
 import { ENGAGEMENT_CONDITION_KINDS, findCycleNode, parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from './graph';
 import { planStep, type PlannedAction, type StepContext, type TaskActionPayload } from './step';
 import { sendFlowEmail } from './send';
+import { latestTrackedSendQuery } from './reply-branch';
 import { findReview } from '@/lib/ai/review';
 import { isExactSendWindowParking, type SendWindow } from './send-window';
 import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
@@ -151,8 +152,7 @@ interface LastSendEngagement {
  */
 async function loadLastSendEngagement(enrollmentId: number): Promise<LastSendEngagement | null> {
   const send = await prisma.messageSend.findFirst({
-    where: { enrollmentId, dedupeKey: { not: null } },
-    orderBy: { sentAt: 'desc' },
+    ...latestTrackedSendQuery(enrollmentId),
     select: { openedAt: true, firstClickedAt: true, clickCount: true, repliedAt: true },
   });
   if (!send) return null;

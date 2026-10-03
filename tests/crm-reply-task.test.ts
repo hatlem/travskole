@@ -5,6 +5,7 @@ const { prisma, settings, emitEvent } = vi.hoisted(() => ({
     contact: { findUnique: vi.fn() },
     flowEnrollment: { findUnique: vi.fn(), update: vi.fn() },
     flowNode: { findMany: vi.fn() },
+    flowEdge: { findMany: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
     user: { findUnique: vi.fn() },
     task: { create: vi.fn() },
@@ -55,6 +56,7 @@ beforeEach(() => {
   });
   prisma.contact.findUnique.mockResolvedValue({ name: 'Kari Nordmann', organizationId: 9, ownerId: null, organization: null });
   prisma.flowNode.findMany.mockResolvedValue([]);
+  prisma.flowEdge.findMany.mockResolvedValue([]);
   prisma.flowEnrollment.findUnique.mockResolvedValue({ flow: { name: 'Sommerleir-flyt' }, status: 'completed' });
   prisma.senderIdentity.findUnique.mockResolvedValue({ email: 'hege@bjerke.no' });
   usersByEmail({ 'hege@bjerke.no': STAFF, 'leder@bjerke.no': DEFAULT_STAFF });
@@ -190,24 +192,76 @@ describe('recordReply → task idempotency', () => {
   });
 });
 
+// Graf: start(1) → e-post(2) → vent(3) → svarte?(4) ─ja→ oppgave(5) → slutt(6); nei → slutt(6)
+const REPLY_FLOW_NODES = [
+  { id: 1, type: 'start', config: '{}' },
+  { id: 2, type: 'email', config: '{}' },
+  { id: 3, type: 'wait', config: '{"days":2}' },
+  { id: 4, type: 'condition', config: JSON.stringify({ kind: 'replied_email' }) },
+  { id: 5, type: 'action', config: JSON.stringify({ kind: 'create_task', title: 'Ring' }) },
+  { id: 6, type: 'end', config: '{}' },
+];
+const REPLY_FLOW_EDGES = [
+  { id: 1, fromNodeId: 1, toNodeId: 2, branch: null },
+  { id: 2, fromNodeId: 2, toNodeId: 3, branch: null },
+  { id: 3, fromNodeId: 3, toNodeId: 4, branch: null },
+  { id: 4, fromNodeId: 4, toNodeId: 5, branch: 'ja' },
+  { id: 5, fromNodeId: 4, toNodeId: 6, branch: 'nei' },
+  { id: 6, fromNodeId: 5, toNodeId: 6, branch: null },
+];
+const NO_REPLY_FLOW_NODES = [
+  { id: 1, type: 'start', config: '{}' },
+  { id: 2, type: 'email', config: '{}' },
+  { id: 3, type: 'condition', config: JSON.stringify({ kind: 'opened_email' }) },
+  { id: 6, type: 'end', config: '{}' },
+];
+
+function mockSends(latestSendId: number) {
+  prisma.messageSend.findFirst.mockImplementation(async ({ where }: { where: { messageId?: string } }) =>
+    where.messageId != null ? { ...SEND, nodeId: 2, sentAt: new Date() } : { id: latestSendId },
+  );
+}
+
+function mockEnrollment(over: { status?: string; currentNodeId?: number | null; isMarketing?: boolean } = {}) {
+  prisma.flowEnrollment.findUnique.mockResolvedValue({
+    id: 5,
+    flowId: 2,
+    status: over.status ?? 'active',
+    currentNodeId: over.currentNodeId === undefined ? 4 : over.currentNodeId,
+    flow: { isMarketing: over.isMarketing ?? true, name: 'Flyt' },
+  });
+}
+
 describe('recordReply → flow exit', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prisma.messageSend.findFirst.mockResolvedValue({ ...SEND, sentAt: new Date() });
+    mockSends(10);
     prisma.messageSend.updateMany.mockResolvedValue({ count: 0 });
-    prisma.flowEnrollment.findUnique.mockResolvedValue({ id: 5, flowId: 2, status: 'active' });
+    prisma.flowEdge.findMany.mockResolvedValue([]);
   });
 
-  it('exits the enrollment when the flow does not branch on replies', async () => {
-    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'opened_email' }) }]);
+  it('exits a marketing enrollment when the flow does not branch on replies', async () => {
+    mockEnrollment({ isMarketing: true, currentNodeId: 3 });
+    prisma.flowNode.findMany.mockResolvedValue(NO_REPLY_FLOW_NODES);
     await recordReply('<abc@bjerke.no>', {});
     expect(prisma.flowEnrollment.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 5 }, data: expect.objectContaining({ status: 'exited' }) }),
     );
   });
 
+  it('lets a transactional (course) flow continue after a reply, and still creates the reply task', async () => {
+    mockEnrollment({ isMarketing: false, currentNodeId: 3 });
+    prisma.flowNode.findMany.mockResolvedValue(NO_REPLY_FLOW_NODES);
+    prisma.messageSend.updateMany.mockResolvedValue({ count: 1 });
+    await recordReply('<abc@bjerke.no>', { subject: 'SV: Kurs' });
+    expect(prisma.flowEnrollment.update).not.toHaveBeenCalled();
+    expect(prisma.task.create).toHaveBeenCalledTimes(1);
+  });
+
   it('keeps the enrollment running so a replied_email condition can take its yes-branch', async () => {
-    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'replied_email' }) }]);
+    mockEnrollment({ isMarketing: true });
+    prisma.flowNode.findMany.mockResolvedValue(REPLY_FLOW_NODES);
+    prisma.flowEdge.findMany.mockResolvedValue(REPLY_FLOW_EDGES);
     await recordReply('<abc@bjerke.no>', {});
     expect(prisma.flowEnrollment.update).not.toHaveBeenCalled();
   });
@@ -216,19 +270,41 @@ describe('recordReply → flow exit', () => {
 describe('recordReply → én oppgave per svar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    prisma.messageSend.findFirst.mockResolvedValue({ ...SEND, sentAt: new Date() });
+    mockSends(10);
     prisma.messageSend.updateMany.mockResolvedValue({ count: 1 });
-    prisma.flowEnrollment.findUnique.mockResolvedValue({ id: 5, flowId: 2, status: 'active', flow: { name: 'Kurs' } });
+    prisma.flowNode.findMany.mockResolvedValue(REPLY_FLOW_NODES);
+    prisma.flowEdge.findMany.mockResolvedValue(REPLY_FLOW_EDGES);
   });
 
-  it('flyten forgrener på «svarte» og følger opp selv — ingen generell svar-oppgave', async () => {
-    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'replied_email' }) }]);
+  it.each([3, 4])('flyten leser svaret i «svarte»-betingelsen (står på node %i) — ingen generell oppgave', async (currentNodeId) => {
+    mockEnrollment({ currentNodeId });
     await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
     expect(prisma.task.create).not.toHaveBeenCalled();
   });
 
+  it.each([5, 6])('betingelsen er allerede evaluert (står på node %i) — oppgave lages', async (currentNodeId) => {
+    mockEnrollment({ currentNodeId });
+    await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
+    expect(prisma.task.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('svar på en eldre utsendelse enn den betingelsen leser — oppgave lages', async () => {
+    mockSends(99);
+    mockEnrollment({ currentNodeId: 4 });
+    await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
+    expect(prisma.task.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['completed', 'exited', 'failed'])('løpet er %s — oppgave lages', async (status) => {
+    mockEnrollment({ status, currentNodeId: 4 });
+    await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
+    expect(prisma.task.create).toHaveBeenCalledTimes(1);
+  });
+
   it('flyt uten svar-gren får fortsatt den generelle svar-oppgaven', async () => {
-    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ kind: 'opened_email' }) }]);
+    prisma.flowNode.findMany.mockResolvedValue(NO_REPLY_FLOW_NODES);
+    prisma.flowEdge.findMany.mockResolvedValue([]);
+    mockEnrollment({ currentNodeId: 3 });
     await recordReply('<abc@bjerke.no>', { subject: 'SV: Hei' });
     expect(prisma.task.create).toHaveBeenCalledTimes(1);
   });
