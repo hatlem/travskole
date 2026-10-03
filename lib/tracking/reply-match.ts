@@ -33,6 +33,27 @@ export interface InboundMessageLike {
   dsnStatus?: string;
   /** The recipient email address that failed, from the DSN, if present. */
   failedRecipient?: string | null;
+  /** Raw internet headers (used to recognize auto-replies). */
+  headers?: { name: string; value: string }[];
+}
+
+const AUTO_REPLY_SUBJECT = /^\s*(automatisk svar|autosvar|out of office|fraværende|automatic reply|auto-?reply)\b/i;
+const AUTO_PRECEDENCE = new Set(['auto_reply', 'bulk', 'junk']);
+
+/**
+ * Fraværsmeldinger/autosvar (RFC 3834 Auto-Submitted, Exchange-/Gmail-
+ * varianter og kjente emneprefikser) er ikke et ekte svar fra kontakten.
+ */
+export function isAutoReply(msg: Pick<InboundMessageLike, 'subject' | 'headers'>): boolean {
+  if (AUTO_REPLY_SUBJECT.test(msg.subject)) return true;
+  for (const { name, value } of msg.headers ?? []) {
+    const key = name.trim().toLowerCase();
+    const val = value.trim().toLowerCase();
+    if (key === 'auto-submitted' && val !== '' && val !== 'no') return true;
+    if (key === 'x-autoreply' || key === 'x-autorespond' || key === 'x-ms-exchange-inbox-rules-loop') return true;
+    if (key === 'precedence' && AUTO_PRECEDENCE.has(val)) return true;
+  }
+  return false;
 }
 
 export type Classification =
@@ -74,6 +95,8 @@ export function extractMessageIds(headerValue: string | null): string[] {
  * happens to carry In-Reply-To/References headers that would otherwise
  * match a known message id.
  *
+ * Auto-replies (out-of-office etc., see isAutoReply) are ignored.
+ *
  * Otherwise, candidate message ids are built from In-Reply-To (first) and
  * then References (in original order), each normalized the same way as
  * extractMessageIds, and checked in that order against knownMessageIds.
@@ -92,6 +115,8 @@ export function classifyInboundMessage(
       failedRecipient: msg.failedRecipient ?? undefined,
     };
   }
+
+  if (isAutoReply(msg)) return { kind: 'ignore' };
 
   const candidates = [
     ...extractMessageIds(msg.inReplyTo),

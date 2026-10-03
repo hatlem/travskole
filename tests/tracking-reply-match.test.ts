@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractMessageIds, classifyInboundMessage } from '@/lib/tracking/reply-match';
+import { extractMessageIds, classifyInboundMessage, isAutoReply } from '@/lib/tracking/reply-match';
 import type { InboundMessageLike } from '@/lib/tracking/reply-match';
 
 /**
@@ -210,5 +210,43 @@ describe('classifyInboundMessage', () => {
       hard: true,
       failedRecipient: 'ikke-finnes@example.com',
     });
+  });
+});
+
+describe('autosvar regnes ikke som svar', () => {
+  const known = new Set(['sent-1@bjerke.no']);
+  const reply = (overrides: Partial<InboundMessageLike>) =>
+    classifyInboundMessage(baseMsg({ inReplyTo: '<sent-1@bjerke.no>', subject: 'Re: Kurs', ...overrides }), known);
+
+  it('et vanlig svar matches fortsatt', () => {
+    expect(reply({ headers: [{ name: 'Auto-Submitted', value: 'no' }] })).toEqual({ kind: 'reply', matchedMessageId: 'sent-1@bjerke.no' });
+  });
+
+  it.each([
+    ['Auto-Submitted', 'auto-replied'],
+    ['auto-submitted', 'auto-generated'],
+    ['X-Autoreply', 'yes'],
+    ['X-Autorespond', 'Out of office'],
+    ['Precedence', 'auto_reply'],
+    ['Precedence', 'bulk'],
+    ['Precedence', 'junk'],
+    ['X-MS-Exchange-Inbox-Rules-Loop', 'kari@example.invalid'],
+  ])('ignorerer header %s: %s', (name, value) => {
+    expect(reply({ headers: [{ name, value }] })).toEqual({ kind: 'ignore' });
+  });
+
+  it.each(['Automatisk svar: Kurs', 'Autosvar: Kurs', 'Out of Office: Kurs', 'Fraværende: Kurs', 'Automatic reply: Kurs', 'AUTOMATISK SVAR: Kurs'])(
+    'ignorerer emne «%s»',
+    (subject) => {
+      expect(reply({ subject })).toEqual({ kind: 'ignore' });
+    },
+  );
+
+  it('emner som bare nevner ordene midt i teksten er ikke autosvar', () => {
+    expect(isAutoReply({ subject: 'Re: Takk for automatisk svar', headers: [] })).toBe(false);
+  });
+
+  it('DSN prioriteres fortsatt foran autosvar-sjekken', () => {
+    expect(classifyInboundMessage(baseMsg({ isDsn: true, dsnStatus: '5.1.1', subject: 'Automatic reply' }), known).kind).toBe('bounce');
   });
 });

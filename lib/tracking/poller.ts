@@ -214,6 +214,7 @@ async function toInboundMessageLike(
     from: message.from?.emailAddress?.address ?? null,
     subject: message.subject ?? '',
     isDsn: false,
+    headers: message.internetMessageHeaders ?? [],
   };
 }
 
