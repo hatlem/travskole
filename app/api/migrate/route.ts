@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import logger from '@/lib/logger';
+import { COURSE_SCHEMA_STATEMENTS } from '@/lib/ensure-schema';
 
 /**
  * Engangs, idempotent skjema-migrasjon for prod.
@@ -26,9 +27,7 @@ export async function POST(request: NextRequest) {
     'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "deactivated_at" TIMESTAMP(3)',
     'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "anonymized_at" TIMESTAMP(3)',
     'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "payment_methods" TEXT NOT NULL DEFAULT \'faktura\'',
-    'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "start_time" TEXT',
-    'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "end_time" TEXT',
-    'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "location" TEXT',
+    ...COURSE_SCHEMA_STATEMENTS,
   ];
 
   try {
