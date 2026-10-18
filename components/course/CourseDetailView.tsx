@@ -10,6 +10,7 @@ import {
   cancellationExcerpt,
   ctaWithPrice,
   formatDateRange,
+  formatTimeRange,
   priceLabel,
   spotsLeft,
   spotsLeftLabel,
@@ -18,7 +19,7 @@ import { MobileCtaBar } from './MobileCtaBar';
 
 export type CourseDetail = Pick<
   Course,
-  | 'name' | 'slug' | 'description' | 'type' | 'audience' | 'startDate' | 'endDate' | 'ageMin' | 'ageMax'
+  | 'name' | 'slug' | 'description' | 'type' | 'audience' | 'startDate' | 'endDate' | 'startTime' | 'endTime' | 'location' | 'ageMin' | 'ageMax'
   | 'price' | 'maxParticipants' | 'status' | 'imageUrl' | 'registrationMode'
 >;
 
@@ -59,9 +60,10 @@ export function CourseDetailView({ course, settings, occupied }: CourseDetailVie
         : null;
 
   const facts: { label: string; value: string }[] = [
-    { label: isRequest ? 'Tid' : t('course.date'), value: course.startDate ? formatDateRange(course.startDate, course.endDate) : t('course.time_by_appointment') },
+    { label: isRequest ? 'Tid' : t('course.date'), value: course.startDate ? [formatDateRange(course.startDate, course.endDate), formatTimeRange(course.startTime, course.endTime)].filter(Boolean).join(', ') : t('course.time_by_appointment') },
   ];
-  if (settings.contact_address) facts.push({ label: t('course.place'), value: settings.contact_address });
+  const place = course.location || settings.contact_address;
+  if (place) facts.push({ label: t('course.place'), value: place });
   facts.push({ label: 'For', value: audienceLabel(course) });
   if (isRequest) facts.push({ label: 'Slik gjør du', value: 'Send en forespørsel, så avtaler vi tid' });
   else facts.push({ label: t('course.registration_label'), value: isAdult ? t('course.registration_adult') : t('course.registration_child') });

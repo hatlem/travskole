@@ -50,6 +50,9 @@ export default function NewCoursePage() {
   const [status, setStatus] = useState('draft');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
+  const [location, setLocation] = useState('');
   const [ageMin, setAgeMin] = useState('');
   const [ageMax, setAgeMax] = useState('');
   const [price, setPrice] = useState('');
@@ -76,7 +79,7 @@ export default function NewCoursePage() {
     setTouched((prev) => ({ ...prev, [field]: true }));
   }, []);
 
-  const validationErrors = validateCourseForm({ name, registrationMode, startDate, endDate, ageMin, ageMax });
+  const validationErrors = validateCourseForm({ name, registrationMode, startDate, endDate, startTime, endTime, ageMin, ageMax });
   const invalidFields = Object.keys(validationErrors);
 
   const effectiveSlug = slug || slugify(name);
@@ -100,6 +103,9 @@ export default function NewCoursePage() {
       audience,
       startDate,
       endDate: endDate || null,
+      startTime: startTime || null,
+      endTime: endTime || null,
+      location: location.trim() || null,
       ageMin: ageMin ? Number(ageMin) : null,
       ageMax: ageMax ? Number(ageMax) : null,
       price: price ? Number(price) : null,
@@ -364,6 +370,56 @@ export default function NewCoursePage() {
                 {touched.endDate && validationErrors.endDate && (
                   <p className={errorClass}>{validationErrors.endDate}</p>
                 )}
+              </div>
+
+              {/* Time + place */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="startTime" className={labelClass}>
+                    Starttid
+                  </label>
+                  <input
+                    type="time"
+                    id="startTime"
+                    name="startTime"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="endTime" className={labelClass}>
+                    Sluttid
+                  </label>
+                  <input
+                    type="time"
+                    id="endTime"
+                    name="endTime"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    onBlur={() => markTouched('endTime')}
+                    className={`${inputClass} ${touched.endTime && validationErrors.endTime ? 'border-red-400 focus:ring-red-400' : ''}`}
+                  />
+                  {touched.endTime && validationErrors.endTime && (
+                    <p className={errorClass}>{validationErrors.endTime}</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="location" className={labelClass}>
+                  Sted
+                </label>
+                <input
+                  type="text"
+                  id="location"
+                  name="location"
+                  maxLength={200}
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  placeholder="La stå tom for standardadressen"
+                  className={inputClass}
+                />
               </div>
 
               {/* Age range */}

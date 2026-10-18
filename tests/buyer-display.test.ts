@@ -5,6 +5,7 @@ import {
   consentTextOr,
   ctaWithPrice,
   formatDateRange,
+  formatTimeRange,
   formatKr,
   isMeaningfulConsentText,
   participantsLabel,
@@ -135,5 +136,14 @@ describe('postSubmitStep', () => {
     expect(postSubmitStep({ ...base, priceKr: null })).toBe('confirmation');
     expect(postSubmitStep({ ...base, waitlist: true })).toBe('confirmation');
     expect(postSubmitStep({ ...base, hasRegistrationId: false })).toBe('confirmation');
+  });
+});
+
+describe('formatTimeRange', () => {
+  it('formats from/to, from only, and nothing', () => {
+    expect(formatTimeRange('09:00', '15:00')).toBe('kl. 09:00–15:00');
+    expect(formatTimeRange('09:00', null)).toBe('kl. 09:00');
+    expect(formatTimeRange(null, '15:00')).toBe('');
+    expect(formatTimeRange()).toBe('');
   });
 });
