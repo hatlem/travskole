@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
     'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "deactivated_at" TIMESTAMP(3)',
     'ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "anonymized_at" TIMESTAMP(3)',
     'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "payment_methods" TEXT NOT NULL DEFAULT \'faktura\'',
+    'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "start_time" TEXT',
+    'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "end_time" TEXT',
+    'ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS "location" TEXT',
   ];
 
   try {

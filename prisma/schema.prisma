@@ -131,6 +131,9 @@ model Course {
   audience                 String    @default("barn") // 'barn' (foresatt melder på barn) | 'voksen' (deltaker melder på seg selv)
   startDate                DateTime? @map("start_date")
   endDate                  DateTime? @map("end_date")
+  startTime                String?   @map("start_time") // «HH:MM», valgfri
+  endTime                  String?   @map("end_time") // «HH:MM», valgfri
+  location                 String? // overstyrer contact_address som «Sted» på kurssiden
   ageMin                   Int?      @map("age_min")
   ageMax                   Int?      @map("age_max")
   price                    Float?

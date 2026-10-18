@@ -71,6 +71,13 @@ export function formatDateRange(start: Date | string | null | undefined, end?: D
   return `${startText} – ${endText}`;
 }
 
+/** «kl. 09:00–15:00», «kl. 09:00» eller «» uten klokkeslett. */
+export function formatTimeRange(start?: string | null, end?: string | null): string {
+  if (start && end) return `kl. ${start}–${end}`;
+  if (start) return `kl. ${start}`;
+  return '';
+}
+
 /** Samtykketekst som er for kort til å bety noe («x», «test») skal aldri vises. */
 export function isMeaningfulConsentText(text: string | null | undefined): text is string {
   return typeof text === 'string' && text.trim().length >= MIN_CONSENT_TEXT_LENGTH;
