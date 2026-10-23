@@ -9,6 +9,7 @@ import { validateCourseForm } from '@/lib/course-form';
 import Image from 'next/image';
 import ImageUpload from '@/components/ImageUpload';
 import { useSettings } from '@/components/SettingsProvider';
+import { CourseTextFields } from '@/components/admin/CourseTextFields';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
 import { PAYMENT_METHODS } from '@/lib/payments';
 import { useToast } from '@/components/admin/Toast';
@@ -53,6 +54,8 @@ export default function NewCoursePage() {
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [location, setLocation] = useState('');
+  const [learningPoints, setLearningPoints] = useState('');
+  const [packingList, setPackingList] = useState('');
   const [ageMin, setAgeMin] = useState('');
   const [ageMax, setAgeMax] = useState('');
   const [price, setPrice] = useState('');
@@ -106,6 +109,8 @@ export default function NewCoursePage() {
       startTime: startTime || null,
       endTime: endTime || null,
       location: location.trim() || null,
+      learningPoints,
+      packingList,
       ageMin: ageMin ? Number(ageMin) : null,
       ageMax: ageMax ? Number(ageMax) : null,
       price: price ? Number(price) : null,
@@ -237,12 +242,20 @@ export default function NewCoursePage() {
                   maxLength={2000}
                 />
                 <div className="flex justify-between mt-1">
-                  <p className="text-xs text-gray-500">Det foreldre og deltakere ser på nettsiden: hva kurset er, hvem det passer for og hva de må ha med.</p>
+                  <p className="text-xs text-gray-500">Det foreldre og deltakere ser på nettsiden: hva kurset er og hvem det passer for.</p>
                   <p className={`text-xs ${description.length > 1800 ? 'text-amber-600' : 'text-gray-400'}`}>
                     {description.length} / 2000
                   </p>
                 </div>
               </div>
+
+              <CourseTextFields
+                audience={audience}
+                learningPoints={learningPoints}
+                packingList={packingList}
+                onLearningPointsChange={setLearningPoints}
+                onPackingListChange={setPackingList}
+              />
 
               {/* Image */}
               <ImageUpload onUpload={setImageUrl} />

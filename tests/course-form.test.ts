@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeLocation, normalizeTime, validateCourseForm, type CourseFormFields } from '@/lib/course-form';
+import { normalizeCourseList, normalizeLocation, normalizeTime, validateCourseForm, type CourseFormFields } from '@/lib/course-form';
 
 const valid: CourseFormFields = {
   name: 'Ponniskole', registrationMode: 'standard', startDate: '2026-06-01', endDate: '2026-06-10', ageMin: '6', ageMax: '12',
@@ -46,5 +46,22 @@ describe('normalizeLocation', () => {
     expect(normalizeLocation('   ')).toBeNull();
     expect(normalizeLocation(undefined)).toBeNull();
     expect(normalizeLocation('x'.repeat(300))).toHaveLength(200);
+  });
+});
+
+describe('normalizeCourseList', () => {
+  it('keeps one trimmed point per line and drops blank lines', () => {
+    expect(normalizeCourseList(' Stell av hest \r\n\n  Kjøring på banen\n')).toBe('Stell av hest\nKjøring på banen');
+  });
+
+  it('returns null for empty input so the course falls back to the standard text', () => {
+    expect(normalizeCourseList('')).toBeNull();
+    expect(normalizeCourseList(' \n \n')).toBeNull();
+    expect(normalizeCourseList(undefined)).toBeNull();
+    expect(normalizeCourseList(42)).toBeNull();
+  });
+
+  it('caps the stored text', () => {
+    expect(normalizeCourseList('x'.repeat(3000))).toHaveLength(2000);
   });
 });

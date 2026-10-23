@@ -134,6 +134,8 @@ model Course {
   startTime                String?   @map("start_time") // «HH:MM», valgfri
   endTime                  String?   @map("end_time") // «HH:MM», valgfri
   location                 String? // overstyrer contact_address som «Sted» på kurssiden
+  learningPoints           String?   @map("learning_points") // én per linje; overstyrer course_learning_points(_adult)
+  packingList              String?   @map("packing_list") // én per linje; overstyrer course_packing_list(_adult)
   ageMin                   Int?      @map("age_min")
   ageMax                   Int?      @map("age_max")
   price                    Float?

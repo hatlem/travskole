@@ -39,6 +39,8 @@ interface Course {
   status: string;
   imageUrl: string | null;
   description: string | null;
+  learningPoints: string | null;
+  packingList: string | null;
   ageMin: number | null;
   ageMax: number | null;
   createdAt: string;
@@ -206,6 +208,8 @@ export default function AdminCoursesPage() {
           name: `${course.name} (kopi)`,
           slug: course.slug ? `${course.slug}-kopi` : null,
           description: course.description,
+          learningPoints: course.learningPoints,
+          packingList: course.packingList,
           type: course.type,
           startDate: course.startDate,
           endDate: course.endDate,
