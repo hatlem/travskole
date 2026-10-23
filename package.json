@@ -25,7 +25,7 @@
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.3",
     "isomorphic-dompurify": "^3.22.0",
-    "next": "^16.3.6",
+    "next": "^16.4.2",
     "next-auth": "^4.24.15",
     "nodemailer": "^10.0.12",
     "prisma": "^5.22.0",
@@ -47,10 +47,10 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "eslint": "^9",
-    "eslint-config-next": "^16.3.6",
+    "eslint-config-next": "^16.4.2",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "nodemailer": "^10.0.12",
@@ -69,7 +69,10 @@
     "brace-expansion@5": "^5.0.9",
     "browserslist": "^4.28.7",
     "@tiptap/core": "^3.30.4",
-    "baseline-browser-mapping": "^2.11.0"
+    "baseline-browser-mapping": "^2.11.0",
+    "source-map-js": ">=1.2.2 <2",
+    "postcss-selector-parser": ">=7.1.6 <8",
+    "vite": ">=8.1.6 <9"
   },
   "description": "This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).",
   "main": "index.js",

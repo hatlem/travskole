@@ -42,3 +42,6 @@ overrides:
   browserslist: '^4.28.7'
   '@tiptap/core': '^3.30.4'
   baseline-browser-mapping: '^2.11.0'
+  source-map-js: '>=1.2.2 <2'
+  postcss-selector-parser: '>=7.1.6 <8'
+  vite: '>=8.1.6 <9'
