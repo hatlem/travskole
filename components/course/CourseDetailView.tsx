@@ -19,7 +19,7 @@ import { MobileCtaBar } from './MobileCtaBar';
 
 export type CourseDetail = Pick<
   Course,
-  | 'name' | 'slug' | 'description' | 'type' | 'audience' | 'startDate' | 'endDate' | 'startTime' | 'endTime' | 'location' | 'ageMin' | 'ageMax'
+  | 'name' | 'slug' | 'description' | 'type' | 'audience' | 'startDate' | 'endDate' | 'startTime' | 'endTime' | 'location' | 'learningPoints' | 'packingList' | 'ageMin' | 'ageMax'
   | 'price' | 'maxParticipants' | 'status' | 'imageUrl' | 'registrationMode'
 >;
 
@@ -45,8 +45,8 @@ export function CourseDetailView({ course, settings, occupied }: CourseDetailVie
   const typeLabel = courseTypeLabel(parseCourseTypes(settings.course_types), course.type);
   const aboutHeading = course.type === 'kurs' && !isRequest ? t('course.about_heading') : t('course.about_heading_event');
 
-  const learningPoints = lines(isAdult ? settings.course_learning_points_adult : settings.course_learning_points);
-  const packingList = lines(isAdult ? settings.course_packing_list_adult : settings.course_packing_list);
+  const learningPoints = lines(course.learningPoints || (isAdult ? settings.course_learning_points_adult : settings.course_learning_points));
+  const packingList = lines(course.packingList || (isAdult ? settings.course_packing_list_adult : settings.course_packing_list));
   const cancellation = isRequest ? null : cancellationExcerpt(settings.consent_terms_text);
   const left = occupied === null ? null : spotsLeft(course.maxParticipants, occupied);
   const priceText = priceLabel(course);

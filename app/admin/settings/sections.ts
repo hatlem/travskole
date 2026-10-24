@@ -91,7 +91,7 @@ export const SETTING_SECTIONS: SettingSection[] = [
       },
       {
         title: 'Kurssidene',
-        description: 'Standardtekst som vises på siden til hvert kurs. Skriv ett punkt per linje.',
+        description: 'Standardtekst som vises på siden til hvert kurs. Skriv ett punkt per linje. Hvert kurs kan ha sin egen tekst under «Rediger kurs».',
         fields: [
           { key: 'course_learning_points', label: 'Hva du lærer (ett punkt per linje)', type: 'textarea' },
           { key: 'course_packing_list', label: 'Pakkeliste (ett punkt per linje)', type: 'textarea' },

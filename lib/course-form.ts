@@ -35,3 +35,12 @@ export function normalizeTime(value: unknown): string | null {
 export function normalizeLocation(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value.trim().slice(0, 200) : null;
 }
+
+const COURSE_LIST_MAX_LENGTH = 2000;
+
+/** Én linje per punkt, uten tomme linjer — eller null, så kurset bruker standardteksten. */
+export function normalizeCourseList(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const text = value.split('\n').map((line) => line.trim()).filter(Boolean).join('\n');
+  return text ? text.slice(0, COURSE_LIST_MAX_LENGTH) : null;
+}

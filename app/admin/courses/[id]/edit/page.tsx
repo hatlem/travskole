@@ -10,6 +10,7 @@ import ImageUpload from '@/components/ImageUpload';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useBreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { validateCourseForm } from '@/lib/course-form';
+import { CourseTextFields } from '@/components/admin/CourseTextFields';
 import { TableSkeleton } from '@/components/admin/Skeleton';
 import { useSettings } from '@/components/SettingsProvider';
 import { parseCourseTypes, courseTypeLabel } from '@/lib/settings-shared';
@@ -40,6 +41,8 @@ interface CourseData {
   startTime?: string | null;
   endTime?: string | null;
   location?: string | null;
+  learningPoints?: string | null;
+  packingList?: string | null;
   ageMin: number | null;
   ageMax: number | null;
   price: number | null;
@@ -88,6 +91,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [location, setLocation] = useState('');
+  const [learningPoints, setLearningPoints] = useState('');
+  const [packingList, setPackingList] = useState('');
   const [ageMin, setAgeMin] = useState('');
   const [ageMax, setAgeMax] = useState('');
   const [price, setPrice] = useState('');
@@ -136,6 +141,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
         setStartTime(c.startTime || '');
         setEndTime(c.endTime || '');
         setLocation(c.location || '');
+        setLearningPoints(c.learningPoints || '');
+        setPackingList(c.packingList || '');
         setAgeMin(c.ageMin != null ? String(c.ageMin) : '');
         setAgeMax(c.ageMax != null ? String(c.ageMax) : '');
         setPrice(c.price != null ? String(c.price) : '');
@@ -178,6 +185,8 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
       startTime: startTime || null,
       endTime: endTime || null,
       location: location.trim() || null,
+      learningPoints,
+      packingList,
       ageMin: ageMin ? Number(ageMin) : null,
       ageMax: ageMax ? Number(ageMax) : null,
       price: price ? Number(price) : null,
@@ -365,12 +374,20 @@ export default function EditCoursePage({ params }: { params: Promise<{ id: strin
                   maxLength={2000}
                 />
                 <div className="flex justify-between mt-1">
-                  <p className="text-xs text-gray-500">Det foreldre og deltakere ser på nettsiden: hva kurset er, hvem det passer for og hva de må ha med.</p>
+                  <p className="text-xs text-gray-500">Det foreldre og deltakere ser på nettsiden: hva kurset er og hvem det passer for.</p>
                   <p className={`text-xs ${description.length > 1800 ? 'text-amber-600' : 'text-gray-400'}`}>
                     {description.length} / 2000
                   </p>
                 </div>
               </div>
+
+              <CourseTextFields
+                audience={audience}
+                learningPoints={learningPoints}
+                packingList={packingList}
+                onLearningPointsChange={setLearningPoints}
+                onPackingListChange={setPackingList}
+              />
 
               {/* Image */}
               <ImageUpload currentUrl={imageUrl || undefined} onUpload={setImageUrl} />

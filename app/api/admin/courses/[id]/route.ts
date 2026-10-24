@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { normalizeLocation, normalizeTime } from '@/lib/course-form';
+import { normalizeCourseList, normalizeLocation, normalizeTime } from '@/lib/course-form';
 import { requireAdmin } from '@/lib/auth';
 import { logActivity } from '@/lib/activity';
 import { serializePaymentMethods } from '@/lib/payments';
@@ -63,7 +63,7 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, description, type, audience, startDate, endDate, startTime, endTime, location, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl, registrationMode, requestRequiresLogin, requestConsentRisk, requestConsentTerms, requestConsentMedia, requestConsentActivities, paymentMethods } = body;
+    const { name, description, type, audience, startDate, endDate, startTime, endTime, location, learningPoints, packingList, ageMin, ageMax, price, minParticipants, maxParticipants, status, slug, imageUrl, registrationMode, requestRequiresLogin, requestConsentRisk, requestConsentTerms, requestConsentMedia, requestConsentActivities, paymentMethods } = body;
 
     const mode = registrationMode === 'request' ? 'request' : 'standard';
 
@@ -99,6 +99,8 @@ export async function PUT(
         startTime: normalizeTime(startTime),
         endTime: normalizeTime(endTime),
         location: normalizeLocation(location),
+        learningPoints: normalizeCourseList(learningPoints),
+        packingList: normalizeCourseList(packingList),
         ageMin: ageMin != null ? Number(ageMin) : null,
         ageMax: ageMax != null ? Number(ageMax) : null,
         price: price != null ? Number(price) : null,
