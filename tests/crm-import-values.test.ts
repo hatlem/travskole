@@ -65,9 +65,14 @@ describe('extractRow', () => {
       values: {
         name: 'Kari Nordmann', nameExplicit: true, email: 'kari@acme.no', phone: '+4791234567',
         organizationName: 'Acme AS', orgNumber: '974760673', website: 'acme.no', roleTitle: 'Daglig leder',
-        tags: ['VIP', 'Sommer'], note: 'Ringte i mai', consent: true, customFields: { Medlemsnr: 'M-1' },
+        tags: ['VIP', 'Sommer'], note: 'Ringte i mai', consent: true, customFields: { Medlemsnr: 'M-1', Fornavn: 'Kari' },
       },
     });
+  });
+
+  it('keeps the first name as a custom field for {{fornavn}}', () => {
+    const r = extractRow(['Anna Maria', 'Aursund', 'a@x.no'], ['Fornavn', 'Etternavn', 'E-post'], ['firstName', 'lastName', 'email']);
+    expect(r).toMatchObject({ ok: true, values: { name: 'Anna Maria Aursund', customFields: { Fornavn: 'Anna Maria' } } });
   });
 
   it('prefers a full-name column over first/last name', () => {

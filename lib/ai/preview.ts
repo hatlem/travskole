@@ -23,14 +23,14 @@ export async function previewPersonalization(
   subject: string,
   bodyHtml: string,
 ): Promise<PersonalizationPreview | null> {
-  const contact = await prisma.contact.findUnique({ where: { id: contactId }, select: { id: true, name: true } });
+  const contact = await prisma.contact.findUnique({ where: { id: contactId }, select: { id: true, name: true, roleTitle: true, customFields: true, organization: { select: { name: true } } } });
   if (!contact) return null;
   const mergeData = contactMergeTagData(contact, await getSetting('contact_email'));
   const renderedSubject = replaceMergeTags(subject, mergeData);
   const originalBody = renderFlowEmailBody(bodyHtml, mergeData);
   const outcome = await personalizeForContact(provider, contact.id, originalBody);
   return {
-    contact,
+    contact: { id: contact.id, name: contact.name },
     subject: renderedSubject,
     originalBody,
     personalizedBody: outcome.ok ? renderFlowEmailBody(outcome.body, mergeData) : null,

@@ -6,7 +6,13 @@ export const MERGE_TAGS = [
   { tag: '{{kurs_sluttdato}}', description: 'Course end date (dd.mm.yyyy format)' },
   { tag: '{{allergier}}', description: 'Child allergies or "Ingen"' },
   { tag: '{{kontakt_epost}}', description: "Bjerke's contact email (site setting), not the recipient's" },
+  { tag: '{{fornavn}}', description: 'Recipient first name (falls back to first word of the name)' },
+  { tag: '{{bedrift}}', description: "Recipient's organization name" },
+  { tag: '{{stilling}}', description: "Recipient's job title" },
 ] as const;
+
+/** Egne felt fra kontaktimporten: {{felt:kolonnenavn}} (store/små bokstaver, mellomrom og _ likestilles). */
+export const CUSTOM_FIELD_TAG_EXAMPLE = '{{felt:kolonnenavn}}';
 
 /** Fylles kun i kurs-forankrede flyter (fra påmeldingen); tomme i kontaktflyter. */
 export const COURSE_ONLY_MERGE_TAGS: ReadonlySet<string> = new Set([
@@ -29,6 +35,29 @@ export interface MergeTagData {
   kurs_sluttdato: string;
   allergier: string;
   kontakt_epost: string;
+  fornavn?: string;
+  bedrift?: string;
+  stilling?: string;
+  /** Kontaktens egne felt (fra import). */
+  felt?: Record<string, string>;
+  /** Forhåndsvisning/test: vis «[feltnavn]» i stedet for tom tekst. */
+  feltPlassholder?: boolean;
+}
+
+export function customFieldKey(key: string): string {
+  return key.trim().toLowerCase().replace(/[\s_\-]+/g, '_');
+}
+
+function customFieldValue(data: MergeTagData, key: string): string {
+  const wanted = customFieldKey(key);
+  for (const [k, v] of Object.entries(data.felt ?? {})) {
+    if (customFieldKey(k) === wanted && v) return v;
+  }
+  return data.feltPlassholder ? `[${key.trim()}]` : '';
+}
+
+function firstNameOf(data: MergeTagData): string {
+  return data.fornavn?.trim() || data.forelder_navn.trim().split(/\s+/)[0] || '';
 }
 
 function escapeHtmlValue(value: string): string {
@@ -51,7 +80,11 @@ export function replaceMergeTags(template: string, data: MergeTagData): string {
     .replace(/\{\{kurs_startdato\}\}/g, escapeHtmlValue(data.kurs_startdato))
     .replace(/\{\{kurs_sluttdato\}\}/g, escapeHtmlValue(data.kurs_sluttdato))
     .replace(/\{\{allergier\}\}/g, escapeHtmlValue(data.allergier))
-    .replace(/\{\{kontakt_epost\}\}/g, escapeHtmlValue(data.kontakt_epost));
+    .replace(/\{\{kontakt_epost\}\}/g, escapeHtmlValue(data.kontakt_epost))
+    .replace(/\{\{fornavn\}\}/g, escapeHtmlValue(firstNameOf(data)))
+    .replace(/\{\{bedrift\}\}/g, escapeHtmlValue(data.bedrift ?? ''))
+    .replace(/\{\{stilling\}\}/g, escapeHtmlValue(data.stilling ?? ''))
+    .replace(/\{\{\s*felt:([^{}]{1,50}?)\s*\}\}/g, (_m, key: string) => escapeHtmlValue(customFieldValue(data, key)));
 }
 
 /** Eksempeldata for forhåndsvisning i adminpanelet. */
@@ -63,6 +96,10 @@ export const PREVIEW_MERGE_DATA: MergeTagData = {
   kurs_sluttdato: '15.06.2026',
   allergier: 'Ingen',
   kontakt_epost: 'registrering@bjerke.no',
+  fornavn: 'Kari',
+  bedrift: 'Nordmann Bygg AS',
+  stilling: 'Daglig leder',
+  feltPlassholder: true,
 };
 
 export const TRIGGER_TYPE_LABELS: Record<string, string> = {

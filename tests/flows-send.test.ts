@@ -180,6 +180,20 @@ describe('sendFlowEmail', () => {
     expect(prisma.messageSend.delete).not.toHaveBeenCalled();
   });
 
+  it('3b. fills B2B merge tags from the contact: first name, organization, title and custom fields', async () => {
+    prisma.contact.findUnique.mockResolvedValue({
+      ...CONTACT,
+      name: 'Anna Maria Aursund',
+      roleTitle: 'Direktør',
+      organization: { name: 'Vann- og avløpsetaten' },
+      customFields: JSON.stringify({ Fornavn: 'Anna Maria', personlig_linje: 'Gratulerer med 150 år!' }),
+    });
+    await sendFlowEmail({ ...baseInput, subject: 'Til {{bedrift}}', bodyHtml: '<p>Hei {{fornavn}} ({{stilling}}). {{felt:personlig_linje}}</p>' });
+    const sent = mockedSendMailAs.mock.calls[0][0] as { subject: string; html: string };
+    expect(sent.subject).toBe('Til Vann- og avløpsetaten');
+    expect(sent.html).toContain('Hei Anna Maria (Direktør). Gratulerer med 150 år!');
+  });
+
   it('4. P2002 on the dedupe create: returns already_sent, never sends, never touches links/delete', async () => {
     prisma.messageSend.create.mockRejectedValueOnce(p2002());
 

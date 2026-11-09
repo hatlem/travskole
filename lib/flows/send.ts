@@ -21,7 +21,7 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendMailAs } from '@/lib/mail';
-import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { customFieldKey, replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
 import { resolveCourseMergeContext } from './course-merge';
 import { normalizeEmail } from '@/lib/crm/normalize';
@@ -98,8 +98,28 @@ function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
   return `flow:${enrollmentId}:${nodeId}`;
 }
 
+export interface MergeContact {
+  name: string;
+  roleTitle?: string | null;
+  customFields?: string | null;
+  organization?: { name: string } | null;
+}
+
+function parseCustomFields(raw: string | null | undefined): Record<string, string> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter((e): e is [string, string] => typeof e[1] === 'string'));
+  } catch {
+    return {};
+  }
+}
+
 /** Kurs-feltene er tomme utenfor kursflyter; kontakt_epost er sidens kontaktadresse for alle flyter. */
-export function contactMergeTagData(contact: { name: string }, contactEmail: string): MergeTagData {
+export function contactMergeTagData(contact: MergeContact, contactEmail: string): MergeTagData {
+  const felt = parseCustomFields(contact.customFields);
+  const fornavn = Object.entries(felt).find(([k]) => customFieldKey(k) === 'fornavn')?.[1];
   return {
     forelder_navn: contact.name,
     barnets_navn: '',
@@ -108,6 +128,10 @@ export function contactMergeTagData(contact: { name: string }, contactEmail: str
     kurs_sluttdato: '',
     allergier: '',
     kontakt_epost: contactEmail,
+    fornavn,
+    bedrift: contact.organization?.name ?? '',
+    stilling: contact.roleTitle ?? '',
+    felt,
   };
 }
 
@@ -276,7 +300,10 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
 
   const contact = await prisma.contact.findUnique({
     where: { id: input.contactId },
-    select: { email: true, name: true, organizationId: true },
+    select: {
+      email: true, name: true, organizationId: true, roleTitle: true, customFields: true,
+      organization: { select: { name: true } },
+    },
   });
   if (!contact?.email) return 'failed';
 

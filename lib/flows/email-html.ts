@@ -112,6 +112,9 @@ const MERGE_TAG_LABELS: Record<string, string> = {
   '{{kurs_sluttdato}}': 'Kursslutt',
   '{{allergier}}': 'Allergier',
   '{{kontakt_epost}}': 'Bjerkes e-post',
+  '{{fornavn}}': 'Fornavn',
+  '{{bedrift}}': 'Bedrift',
+  '{{stilling}}': 'Stilling',
 };
 
 /** Flettefeltene som faktisk fylles ut i flytens forankring (kursfelt bare i kursflyter). */

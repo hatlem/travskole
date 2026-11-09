@@ -131,7 +131,7 @@ describe('isEmptyEmailBody', () => {
 describe('mergeTagChips', () => {
   it('viser kursfelt bare i kursflyter', () => {
     const contact = mergeTagChips('contact').map((c) => c.tag);
-    expect(contact).toEqual(['{{forelder_navn}}', '{{kontakt_epost}}']);
+    expect(contact).toEqual(['{{forelder_navn}}', '{{kontakt_epost}}', '{{fornavn}}', '{{bedrift}}', '{{stilling}}']);
     expect(mergeTagChips('course').map((c) => c.tag)).toContain('{{barnets_navn}}');
   });
 });
