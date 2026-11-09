@@ -1,6 +1,6 @@
 /** E-posttekst i flyter: sanitering ved lagring, kompatibilitet med tekstredigereren og forhåndsvisning. */
 import DOMPurify from 'isomorphic-dompurify';
-import { PREVIEW_MERGE_DATA, mergeTagsForAnchor, replaceMergeTags, type MergeTagData } from '@/lib/email-templates';
+import { PREVIEW_MERGE_DATA, mergeTagsForAnchor, replaceMergeTags, replaceMergeTagsInSubject, type MergeTagData } from '@/lib/email-templates';
 
 // Bredere enn sanitizeLegalHtml: eldre kursmaler kan ha tabeller, bilder og inline-stil.
 const EMAIL_TAGS = [
@@ -112,6 +112,9 @@ const MERGE_TAG_LABELS: Record<string, string> = {
   '{{kurs_sluttdato}}': 'Kursslutt',
   '{{allergier}}': 'Allergier',
   '{{kontakt_epost}}': 'Bjerkes e-post',
+  '{{fornavn}}': 'Fornavn',
+  '{{bedrift}}': 'Bedrift',
+  '{{stilling}}': 'Stilling',
 };
 
 /** Flettefeltene som faktisk fylles ut i flytens forankring (kursfelt bare i kursflyter). */
@@ -142,7 +145,7 @@ export function renderFlowEmailBody(bodyHtml: string, data: MergeTagData): strin
 /** Emne og tekst med eksempeldata, sanitert for visning i adminpanelet. */
 export function renderFlowEmailPreview(subject: string, bodyHtml: string): { subject: string; html: string } {
   return {
-    subject: replaceMergeTags(subject, PREVIEW_MERGE_DATA),
+    subject: replaceMergeTagsInSubject(subject, PREVIEW_MERGE_DATA),
     html: renderFlowEmailBody(bodyHtml, PREVIEW_MERGE_DATA),
   };
 }

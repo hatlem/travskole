@@ -1,5 +1,6 @@
 'use client';
 
+import { CUSTOM_FIELD_TAG_EXAMPLE } from '@/lib/email-templates';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Editor } from '@tiptap/react';
 import RichTextEditor from '@/components/admin/RichTextEditor';
@@ -223,6 +224,10 @@ export function EmailBodyEditor({ subject, bodyHtml, anchorMode, disabled, onCha
           {anchorMode !== 'course' && (
             <p className="mt-1 text-xs text-gray-500">Barnets navn, kursnavn og kursdatoer finnes bare i flyter som gjelder et kurs.</p>
           )}
+          <p className="mt-1 text-xs text-gray-500">
+            Egne kolonner fra en kontaktimport settes inn med <code>{CUSTOM_FIELD_TAG_EXAMPLE}</code>, for eksempel{' '}
+            <code>{'{{felt:personlig_linje}}'}</code>. Mangler feltet for en mottaker, blir det tomt.
+          </p>
         </div>
       )}
 

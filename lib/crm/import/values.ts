@@ -116,6 +116,11 @@ export function extractRow(raw: string[], headers: string[], columns: ColumnTarg
     const value = (raw[i] ?? '').trim();
     if (value) customFields[headerLabel(headers, i).slice(0, MAX_CUSTOM_KEY)] = value.slice(0, MAX_CUSTOM_VALUE);
   });
+  // Doble fornavn («Anna Maria») kan ikke utledes av fullt navn – ta vare på dem til {{fornavn}}.
+  const firstName = tidyText(cell('firstName'));
+  if (firstName && !Object.keys(customFields).some((k) => k.trim().toLowerCase() === 'fornavn')) {
+    customFields.Fornavn = firstName.slice(0, MAX_CUSTOM_VALUE);
+  }
 
   return {
     ok: true,

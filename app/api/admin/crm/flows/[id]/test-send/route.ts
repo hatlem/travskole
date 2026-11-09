@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { sendMailAs } from '@/lib/mail';
-import { replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { replaceMergeTagsInSubject, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { normalizeEmail } from '@/lib/crm/normalize';
@@ -23,6 +23,10 @@ const TEST_MERGE_DATA: MergeTagData = {
   kurs_sluttdato: '01.06.2026',
   allergier: 'Ingen',
   kontakt_epost: 'test@bjerke.no',
+  fornavn: 'Test',
+  bedrift: 'Testbedrift AS',
+  stilling: 'Testleder',
+  feltPlassholder: true,
 };
 
 const TEST_BANNER =
@@ -138,7 +142,7 @@ export async function POST(
     return NextResponse.json({ error: 'Adressen er suppressert' }, { status: 400 });
   }
 
-  let renderedSubject = replaceMergeTags(subject, TEST_MERGE_DATA);
+  let renderedSubject = replaceMergeTagsInSubject(subject, TEST_MERGE_DATA);
   let renderedBody = renderFlowEmailBody(bodyHtml, TEST_MERGE_DATA);
   let aiNote: string | null = null;
   let aiPersonalized = false;
