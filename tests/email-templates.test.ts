@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { replaceMergeTags, wrapEmailHtml, mergeTagsForAnchor, MERGE_TAGS, type MergeTagData } from '@/lib/email-templates';
+import { replaceMergeTags, replaceMergeTagsInSubject, wrapEmailHtml, mergeTagsForAnchor, MERGE_TAGS, type MergeTagData } from '@/lib/email-templates';
 
 const data: MergeTagData = {
   forelder_navn: 'Kari Nordmann',
@@ -86,5 +86,22 @@ describe('replaceMergeTags – B2B-kontaktfelt', () => {
     expect(replaceMergeTags('{{felt:x}}', { ...data, felt: { x: '<img src=x onerror=alert(1)>' } })).toBe(
       '&lt;img src=x onerror=alert(1)&gt;',
     );
+  });
+});
+
+describe('replaceMergeTagsInSubject', () => {
+  const b2b: MergeTagData = { ...data, bedrift: "C. M. Mathiesen & Co / Svendsen's", felt: { linje: 'a\nb' } };
+
+  it('escaper ikke emnet (ren tekst i innboksen)', () => {
+    expect(replaceMergeTagsInSubject('Julebord for {{bedrift}}?', b2b)).toBe("Julebord for C. M. Mathiesen & Co / Svendsen's?");
+  });
+
+  it('fjerner linjeskift fra verdier (ingen header-injeksjon)', () => {
+    expect(replaceMergeTagsInSubject('{{felt:linje}}', b2b)).toBe('a b');
+  });
+
+  it('tolker ikke $-mønstre i verdier', () => {
+    expect(replaceMergeTagsInSubject('{{bedrift}}', { ...data, bedrift: 'A$&B' })).toBe('A$&B');
+    expect(replaceMergeTags('{{bedrift}}', { ...data, bedrift: 'A$&B' })).toBe('A$&amp;B');
   });
 });

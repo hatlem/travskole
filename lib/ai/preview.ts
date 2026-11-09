@@ -1,7 +1,7 @@
 // Forhåndsvisning/test-utsending av per-mottaker-personalisering: samme
 // rendring og samme KI-vei som lib/flows/send.ts, men uten å sende noe.
 import { prisma } from '@/lib/prisma';
-import { replaceMergeTags } from '@/lib/email-templates';
+import { replaceMergeTagsInSubject } from '@/lib/email-templates';
 import { contactMergeTagData } from '@/lib/flows/send';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { getSetting } from '@/lib/settings';
@@ -26,7 +26,7 @@ export async function previewPersonalization(
   const contact = await prisma.contact.findUnique({ where: { id: contactId }, select: { id: true, name: true, roleTitle: true, customFields: true, organization: { select: { name: true } } } });
   if (!contact) return null;
   const mergeData = contactMergeTagData(contact, await getSetting('contact_email'));
-  const renderedSubject = replaceMergeTags(subject, mergeData);
+  const renderedSubject = replaceMergeTagsInSubject(subject, mergeData);
   const originalBody = renderFlowEmailBody(bodyHtml, mergeData);
   const outcome = await personalizeForContact(provider, contact.id, originalBody);
   return {

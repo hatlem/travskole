@@ -69,22 +69,32 @@ function escapeHtmlValue(value: string): string {
     .replace(/'/g, '&#39;');
 }
 
+function applyMergeTags(template: string, data: MergeTagData, esc: (value: string) => string): string {
+  return template
+    .replace(/\{\{forelder_navn\}\}/g, () => esc(data.forelder_navn))
+    .replace(/\{\{barnets_navn\}\}/g, () => esc(data.barnets_navn))
+    .replace(/\{\{kurs_navn\}\}/g, () => esc(data.kurs_navn))
+    .replace(/\{\{kurs_startdato\}\}/g, () => esc(data.kurs_startdato))
+    .replace(/\{\{kurs_sluttdato\}\}/g, () => esc(data.kurs_sluttdato))
+    .replace(/\{\{allergier\}\}/g, () => esc(data.allergier))
+    .replace(/\{\{kontakt_epost\}\}/g, () => esc(data.kontakt_epost))
+    .replace(/\{\{fornavn\}\}/g, () => esc(firstNameOf(data)))
+    .replace(/\{\{bedrift\}\}/g, () => esc(data.bedrift ?? ''))
+    .replace(/\{\{stilling\}\}/g, () => esc(data.stilling ?? ''))
+    .replace(/\{\{\s*felt:([^{}]{1,50}?)\s*\}\}/g, (_m, key: string) => esc(customFieldValue(data, key)));
+}
+
+/** For HTML-brødtekst. */
 export function replaceMergeTags(template: string, data: MergeTagData): string {
   // SECURITY: verdiene er data (navn, allergier) — escape dem så et navn som
   // «<img onerror=...>» aldri blir levende HTML i e-posten. Selve malen er
   // bevisst rå HTML skrevet av superadmin.
-  return template
-    .replace(/\{\{forelder_navn\}\}/g, escapeHtmlValue(data.forelder_navn))
-    .replace(/\{\{barnets_navn\}\}/g, escapeHtmlValue(data.barnets_navn))
-    .replace(/\{\{kurs_navn\}\}/g, escapeHtmlValue(data.kurs_navn))
-    .replace(/\{\{kurs_startdato\}\}/g, escapeHtmlValue(data.kurs_startdato))
-    .replace(/\{\{kurs_sluttdato\}\}/g, escapeHtmlValue(data.kurs_sluttdato))
-    .replace(/\{\{allergier\}\}/g, escapeHtmlValue(data.allergier))
-    .replace(/\{\{kontakt_epost\}\}/g, escapeHtmlValue(data.kontakt_epost))
-    .replace(/\{\{fornavn\}\}/g, escapeHtmlValue(firstNameOf(data)))
-    .replace(/\{\{bedrift\}\}/g, escapeHtmlValue(data.bedrift ?? ''))
-    .replace(/\{\{stilling\}\}/g, escapeHtmlValue(data.stilling ?? ''))
-    .replace(/\{\{\s*felt:([^{}]{1,50}?)\s*\}\}/g, (_m, key: string) => escapeHtmlValue(customFieldValue(data, key)));
+  return applyMergeTags(template, data, escapeHtmlValue);
+}
+
+/** For emnefeltet (ren tekst): ingen HTML-escaping, ellers vises «&amp;» i innboksen. */
+export function replaceMergeTagsInSubject(template: string, data: MergeTagData): string {
+  return applyMergeTags(template, data, (value) => value.replace(/[\r\n]+/g, ' '));
 }
 
 /** Eksempeldata for forhåndsvisning i adminpanelet. */

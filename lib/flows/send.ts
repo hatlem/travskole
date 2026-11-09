@@ -21,7 +21,7 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendMailAs } from '@/lib/mail';
-import { customFieldKey, replaceMergeTags, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { customFieldKey, replaceMergeTagsInSubject, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
 import { resolveCourseMergeContext } from './course-merge';
 import { normalizeEmail } from '@/lib/crm/normalize';
@@ -338,7 +338,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     const courseCtx = await resolveCourseMergeContext(input.registrationId);
     if (courseCtx) mergeData = { ...mergeData, ...courseCtx };
   }
-  const subject = replaceMergeTags(input.subject, mergeData);
+  const subject = replaceMergeTagsInSubject(input.subject, mergeData);
   const renderedBody = renderFlowEmailBody(input.bodyHtml, mergeData);
 
   const ai = await resolveAiBody(input, renderedBody, subject, contact.name);
