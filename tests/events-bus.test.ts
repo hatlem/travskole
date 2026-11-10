@@ -241,9 +241,7 @@ describe('addContactsToList i bulk (5 000 kontakter)', () => {
     db.triggers.push({ flowId: 3, eventType: 'list.member_added', filter: '{"listId":99}', flow: { anchorMode: 'contact' } });
     db.enrollments.push({ flowId: 1, contactId: 42, status: 'active' });
 
-    const started = Date.now();
     const result = await addContactsToList(3, Array.from({ length: N }, (_, i) => i + 1), { source: 'import', actorEmail: 'a@x.no' });
-    const elapsed = Date.now() - started;
 
     const chunks = Math.ceil(N / BULK_EVENT_CHUNK);
     expect(result).toMatchObject({ added: N, alreadyMember: 0, missing: 0 });
@@ -254,8 +252,8 @@ describe('addContactsToList i bulk (5 000 kontakter)', () => {
     expect(calls.get('contactActivity.createMany')).toBe(chunks);
     expect(calls.get('appEvent.create')).toBeUndefined();
     expect(calls.get('flowEnrollment.create')).toBeUndefined();
+    // Spørringstallet beviser skaleringen; veggklokke er ustabil på en travel maskin.
     expect(total()).toBeLessThanOrEqual(5 + chunks * 6);
-    expect(elapsed).toBeLessThan(5000);
 
     const perFlow = (flowId: number) => db.enrollments.filter((e) => e.flowId === flowId && e.contactId === 42).length;
     expect(db.enrollments.filter((e) => e.flowId === 1)).toHaveLength(N);
