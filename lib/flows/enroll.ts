@@ -249,9 +249,8 @@ export async function segmentContactIds(segmentId: number): Promise<number[] | n
 }
 
 /**
- * Evaluates a segment's rules against all contacts and enrolls the matches
- * (same guards as `enrollContacts`). Capped at 500 contacts per call — the
- * overflow is reported as `capped`.
+ * Melder inn treffene i et segment (samme vern som `enrollContacts`). Maks 500
+ * per kjøring; allerede aktive tas ut før taket, så en ny kjøring når resten.
  */
 export async function enrollSegment(
   flowId: number,
@@ -259,10 +258,8 @@ export async function enrollSegment(
   options: EnrollOptions = {},
 ): Promise<EnrollSummary> {
   const ids = await segmentContactIds(segmentId);
-  if (!ids) return emptySummary();
-  const summary = await enrollContacts(flowId, ids.slice(0, SEGMENT_ENROLL_CAP), options);
-  summary.capped = Math.max(0, ids.length - SEGMENT_ENROLL_CAP);
-  return summary;
+  if (!ids || ids.length === 0) return emptySummary();
+  return enrollPendingCapped(flowId, ids, options);
 }
 
 /**
@@ -285,7 +282,11 @@ export async function enrollList(
   });
   const ids = memberships.map((m) => m.contactId);
   if (ids.length === 0) return emptySummary();
+  return enrollPendingCapped(flowId, ids, options);
+}
 
+/** Tar ut allerede aktive, melder inn opptil taket og rapporterer resten som `capped`. */
+async function enrollPendingCapped(flowId: number, ids: number[], options: EnrollOptions): Promise<EnrollSummary> {
   const active = new Set(
     (
       await prisma.flowEnrollment.findMany({
