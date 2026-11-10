@@ -8,6 +8,8 @@ import { parseNodeConfig } from '@/lib/flows/graph';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { logActivity } from '@/lib/activity';
+import { getSetting } from '@/lib/settings';
+import { contactMergeTagData } from '@/lib/flows/send';
 import logger from '@/lib/logger';
 import { getLLMProvider } from '@/lib/ai/provider';
 import { previewPersonalization } from '@/lib/ai/preview';
@@ -142,8 +144,21 @@ export async function POST(
     return NextResponse.json({ error: 'Adressen er suppressert' }, { status: 400 });
   }
 
-  let renderedSubject = replaceMergeTagsInSubject(subject, TEST_MERGE_DATA);
-  let renderedBody = renderFlowEmailBody(bodyHtml, TEST_MERGE_DATA);
+  // Valgt kontakt → samme flettedata som ekte utsending; ellers tydelige testverdier.
+  let mergeData = TEST_MERGE_DATA;
+  if (parsed.data.contactId !== undefined) {
+    const contact = await prisma.contact.findUnique({
+      where: { id: parsed.data.contactId },
+      select: { name: true, roleTitle: true, customFields: true, organization: { select: { name: true } } },
+    });
+    if (!contact) {
+      return NextResponse.json({ error: 'Kontakten finnes ikke' }, { status: 404 });
+    }
+    mergeData = contactMergeTagData(contact, await getSetting('contact_email'));
+  }
+
+  let renderedSubject = replaceMergeTagsInSubject(subject, mergeData);
+  let renderedBody = renderFlowEmailBody(bodyHtml, mergeData);
   let aiNote: string | null = null;
   let aiPersonalized = false;
 
