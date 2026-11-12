@@ -13,6 +13,7 @@ import { GettingStartedChecklist } from '@/components/admin/GettingStartedCheckl
 import { PageHeader } from '@/components/admin/PageHeader';
 import { ButtonLink, buttonClass } from '@/components/admin/Button';
 import { Badge } from '@/components/admin/StatusBadge';
+import { utsendelseAttentionItems } from '@/lib/utsendelser/attention';
 
 const REG_STATUS: Record<string, { label: string; className: string }> = {
   pending: { label: 'Venter', className: 'bg-amber-100 text-amber-900' },
@@ -52,6 +53,7 @@ export default async function AdminDashboard() {
     activeRegistrations,
     totalUsers,
     newUsersThisMonth,
+    utsendelseItems,
   ] = await Promise.all([
     prisma.course.count(),
     prisma.course.count({ where: { status: 'open' } }),
@@ -87,13 +89,14 @@ export default async function AdminDashboard() {
     prisma.registration.count({ where: { status: { in: ['pending', 'confirmed'] } } }),
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } }),
+    utsendelseAttentionItems(),
   ]);
 
   const almostFullCourses = openCoursesWithCount.filter(
     (c) => c.maxParticipants && c._count.registrations / c.maxParticipants > 0.8,
   );
 
-  const attention = buildAttentionItems({
+  const attention = [...utsendelseItems, ...buildAttentionItems({
     newBookings,
     pendingRegistrations,
     unfinishedPayments: unfinishedRegistrationPayments + unfinishedBookingPayments,
@@ -101,7 +104,7 @@ export default async function AdminDashboard() {
     almostFullCourses: almostFullCourses.length,
     myTasksOverdue: myTasks.overdue,
     myTasksToday: myTasks.today,
-  });
+  })];
 
   // Vilkårsvarselet står allerede i «Krever oppmerksomhet» — ikke gjenta det i sjekklisten.
   const onboardingSteps = buildOnboardingSteps({
