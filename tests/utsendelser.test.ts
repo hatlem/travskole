@@ -9,6 +9,7 @@ const { prisma, enroll } = vi.hoisted(() => ({
     flowEnrollment: { findMany: vi.fn() },
     setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
     segment: { findMany: vi.fn() },
+    contactList: { findMany: vi.fn(async () => []) },
   },
   enroll: {
     enrollContacts: vi.fn(),

@@ -1,12 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Button } from '@/components/admin/Button';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useToast } from '@/components/admin/Toast';
 import type { StepView } from '@/lib/utsendelser/overview';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
 import { formatCount } from '../status';
+import { useUtsendelseAction } from './use-action';
 
 interface Props {
   utsendelseId: string;
@@ -14,41 +15,32 @@ interface Props {
   step: StepView;
   sampleContactId: number | null;
   myEmail: string;
+  canRemove: boolean;
 }
 
-export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myEmail }: Props) {
-  const router = useRouter();
+const MAX_DAYS = 60;
+
+export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myEmail, canRemove }: Props) {
   const { toast } = useToast();
+  const { run, busy } = useUtsendelseAction(utsendelseId);
   const [editing, setEditing] = useState(false);
+  const [editingWait, setEditingWait] = useState(false);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   const [expanded, setExpanded] = useState(step.number === 1);
   const [draft, setDraft] = useState({ subject: step.subject, bodyHtml: step.bodyHtml });
-  const [saving, setSaving] = useState(false);
+  const [days, setDays] = useState(step.waitDays ?? 7);
   const [testing, setTesting] = useState(false);
 
-  function startEditing() {
-    setDraft({ subject: step.subject, bodyHtml: step.bodyHtml });
-    setEditing(true);
+  async function save() {
+    if (await run('PATCH', '/epost', { flowId, nodeId: step.nodeId, ...draft }, `E-post ${step.number} er lagret.`)) setEditing(false);
   }
 
-  async function save() {
-    setSaving(true);
-    try {
-      const res = await fetch(`/api/admin/utsendelser/${utsendelseId}/epost`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ flowId, nodeId: step.nodeId, ...draft }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(data.error ?? 'Kunne ikke lagre. Prøv igjen.', 'error');
-        return;
-      }
-      toast(`E-post ${step.number} er lagret.`, 'success');
-      setEditing(false);
-      router.refresh();
-    } finally {
-      setSaving(false);
-    }
+  async function saveWait() {
+    if (await run('PATCH', '/ventetid', { flowId, nodeId: step.nodeId, days }, 'Ventetiden er endret.')) setEditingWait(false);
+  }
+
+  async function remove() {
+    if (await run('DELETE', '/epost', { flowId, nodeId: step.nodeId }, `E-post ${step.number} er fjernet.`)) setConfirmRemove(false);
   }
 
   async function sendTest() {
@@ -67,12 +59,49 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
     }
   }
 
+  const daysValid = Number.isInteger(days) && days >= 1 && days <= MAX_DAYS;
+
   return (
     <article className="rounded-xl border border-gray-200 bg-white" aria-labelledby={`step-${step.nodeId}`}>
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3">
         <div>
           <h4 id={`step-${step.nodeId}`} className="font-semibold text-gray-900">E-post {step.number}</h4>
-          <p className="text-sm text-gray-600">{step.timing}</p>
+          {editingWait ? (
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-gray-700">
+              <label htmlFor={`wait-${step.nodeId}`}>Sendes</label>
+              <input
+                id={`wait-${step.nodeId}`}
+                type="number"
+                min={1}
+                max={MAX_DAYS}
+                value={Number.isFinite(days) ? days : ''}
+                onChange={(e) => setDays(Number(e.target.value))}
+                className="w-16 rounded-md border border-gray-300 px-2 py-1 text-sm tabular-nums"
+              />
+              <span>dager etter e-post {step.number - 1}</span>
+              <Button size="sm" loading={busy} disabled={!daysValid} onClick={saveWait}>Lagre</Button>
+              <Button size="sm" variant="secondary" disabled={busy} onClick={() => setEditingWait(false)}>Avbryt</Button>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-600">
+              {step.timing}
+              {step.waitDays !== null && (
+                <>
+                  {' · '}
+                  <button
+                    type="button"
+                    className="font-medium text-bjerke-blue hover:underline"
+                    onClick={() => {
+                      setDays(step.waitDays ?? 7);
+                      setEditingWait(true);
+                    }}
+                  >
+                    Endre ventetid
+                  </button>
+                </>
+              )}
+            </p>
+          )}
         </div>
         {step.sent > 0 && (
           <p className="text-sm text-gray-700">
@@ -87,15 +116,13 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
             subject={draft.subject}
             bodyHtml={draft.bodyHtml}
             anchorMode="contact"
-            disabled={saving}
+            disabled={busy}
             onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
           />
-          {step.sent > 0 && (
-            <p className="text-sm text-amber-900">De som allerede har fått denne e-posten, får ikke den nye teksten.</p>
-          )}
+          {step.sent > 0 && <p className="text-sm text-amber-900">De som allerede har fått denne e-posten, får ikke den nye teksten.</p>}
           <div className="flex gap-3">
-            <Button loading={saving} onClick={save}>Lagre</Button>
-            <Button variant="secondary" disabled={saving} onClick={() => setEditing(false)}>Avbryt</Button>
+            <Button loading={busy} onClick={save}>Lagre</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => setEditing(false)}>Avbryt</Button>
           </div>
         </div>
       ) : (
@@ -114,15 +141,39 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
             <Button variant="secondary" size="sm" onClick={() => setExpanded((v) => !v)}>
               {expanded ? 'Vis mindre' : 'Vis hele e-posten'}
             </Button>
-            <Button variant="secondary" size="sm" onClick={startEditing}>Endre</Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setDraft({ subject: step.subject, bodyHtml: step.bodyHtml });
+                setEditing(true);
+              }}
+            >
+              Endre teksten
+            </Button>
             {myEmail && (
               <Button variant="secondary" size="sm" loading={testing} onClick={sendTest}>
                 Send test til meg
               </Button>
             )}
+            {canRemove && (
+              <Button variant="dangerText" size="sm" onClick={() => setConfirmRemove(true)}>
+                Fjern e-posten
+              </Button>
+            )}
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        open={confirmRemove}
+        title={`Fjerne e-post ${step.number}?`}
+        message="E-posten og teksten slettes. De andre e-postene blir som før."
+        confirmLabel="Fjern"
+        loading={busy}
+        onConfirm={remove}
+        onCancel={() => setConfirmRemove(false)}
+      />
     </article>
   );
 }

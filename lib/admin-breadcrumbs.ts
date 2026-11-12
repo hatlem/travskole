@@ -19,6 +19,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   sider: 'Sider',
   activity: 'Aktivitetslogg',
   new: 'Ny',
+  ny: 'Ny',
   edit: 'Rediger',
 };
 
