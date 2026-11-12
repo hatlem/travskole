@@ -13,11 +13,21 @@ interface Option {
 const inputCls = 'w-full rounded-md border border-gray-300 px-3 py-2 text-sm';
 const labelCls = 'mb-1 block text-sm font-medium text-gray-800';
 
-export function NewUtsendelseForm({ senders, lists, segments }: { senders: { id: number; label: string }[]; lists: Option[]; segments: Option[] }) {
+export function NewUtsendelseForm({
+  senders,
+  defaultSenderId,
+  lists,
+  segments,
+}: {
+  senders: { id: number; label: string }[];
+  defaultSenderId: number | null;
+  lists: Option[];
+  segments: Option[];
+}) {
   const router = useRouter();
   const { toast } = useToast();
   const [navn, setNavn] = useState('');
-  const [sender, setSender] = useState<number | ''>(senders.length === 1 ? senders[0].id : '');
+  const [sender, setSender] = useState<number | ''>(defaultSenderId ?? (senders.length === 1 ? senders[0].id : ''));
   const [kilder, setKilder] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 

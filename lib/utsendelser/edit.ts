@@ -8,7 +8,7 @@ import { parseNodeConfig } from '@/lib/flows/graph';
 import { getFlowSendWindowState, saveFlowSendWindowOverride } from '@/lib/flows/send-window-store';
 import { resolveEffectiveSendWindow, sameSendWindow, windowFromDraft, type Weekday } from '@/lib/flows/send-window';
 import { wakeSendWindowParked } from '@/lib/flows/runner';
-import { getUtsendelser, saveUtsendelse, slugify, type Utsendelse, type UtsendelseGruppe } from './config';
+import { getUtsendelser, saveUtsendelse, slugify, UTSENDELSER_SETTING_KEY, type Utsendelse, type UtsendelseGruppe } from './config';
 import logger from '@/lib/logger';
 import { acquireSendLock, PLACEHOLDER_MARK, PLACEHOLDER_SUBJECTS, releaseSendLock, UtsendelseError } from './actions';
 
@@ -304,4 +304,20 @@ export async function removeGroup(u: Utsendelse, gruppeId: string): Promise<Utse
   const next: Utsendelse = { ...u, grupper: u.grupper.filter((g) => g.id !== gruppeId) };
   await saveUtsendelse(next);
   return next;
+}
+
+/**
+ * Arkiverer utsendelsen: flytene settes til arkivert og den forsvinner fra lista.
+ * Bare når ingen er midt i rekken, så ingen mister e-poster de skulle fått.
+ */
+export async function archiveUtsendelse(u: Utsendelse): Promise<void> {
+  const flowIds = u.flyter.map((f) => f.flowId);
+  const active = await prisma.flowEnrollment.count({ where: { flowId: { in: flowIds }, status: 'active' } });
+  if (active > 0) {
+    throw new UtsendelseError(`${active} mottakere venter fortsatt på flere e-poster. Arkiver når alle har fått sine.`);
+  }
+  await prisma.flow.updateMany({ where: { id: { in: flowIds }, status: { not: 'template' } }, data: { status: 'archived' } });
+  const rest = (await getUtsendelser()).filter((x) => x.id !== u.id);
+  const value = JSON.stringify(rest);
+  await prisma.setting.upsert({ where: { key: UTSENDELSER_SETTING_KEY }, create: { key: UTSENDELSER_SETTING_KEY, value }, update: { value } });
 }

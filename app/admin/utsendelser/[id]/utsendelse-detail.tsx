@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Badge } from '@/components/admin/StatusBadge';
 import { Button } from '@/components/admin/Button';
@@ -98,6 +100,8 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
       </section>
 
       <Replies replies={view.replies} />
+
+      <ArchiveSection utsendelseId={view.id} activeEnrollments={view.activeEnrollments} />
     </div>
   );
 }
@@ -190,6 +194,39 @@ function Replies({ replies }: { replies: SerializedReply[] }) {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+function ArchiveSection({ utsendelseId, activeEnrollments }: { utsendelseId: string; activeEnrollments: number }) {
+  const router = useRouter();
+  const { run, busy } = useUtsendelseAction(utsendelseId);
+  const [confirm, setConfirm] = useState(false);
+
+  return (
+    <section aria-labelledby="archive-title" className="mt-12 border-t border-gray-200 pt-6">
+      <h2 id="archive-title" className="text-sm font-semibold text-gray-900">Ferdig med utsendelsen?</h2>
+      {activeEnrollments > 0 ? (
+        <p className="mt-1 text-sm text-gray-600">
+          Du kan arkivere den når alle har fått e-postene sine. Nå venter {activeEnrollments.toLocaleString('nb-NO')} på flere.
+        </p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-gray-600">Arkiver den, så forsvinner den fra lista. Kontaktene og svarene blir liggende i CRM.</p>
+          <Button className="mt-3" variant="secondary" size="sm" onClick={() => setConfirm(true)}>Arkiver utsendelsen</Button>
+        </>
+      )}
+      <ConfirmModal
+        open={confirm}
+        title="Arkivere utsendelsen?"
+        message="Den forsvinner fra lista over utsendelser og kan ikke sendes mer. Kontaktene og svarene blir liggende i CRM."
+        confirmLabel="Arkiver"
+        loading={busy}
+        onConfirm={async () => {
+          if (await run('DELETE', '', {}, 'Utsendelsen er arkivert.')) router.push('/admin/utsendelser');
+        }}
+        onCancel={() => setConfirm(false)}
+      />
     </section>
   );
 }
