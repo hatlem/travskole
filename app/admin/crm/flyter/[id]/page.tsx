@@ -4,6 +4,8 @@ import { parseNodeConfig, type FlowNodeType } from '@/lib/flows/graph';
 import { ensureSenderIdentitiesSeeded } from '@/lib/crm/sender-identities';
 import { FlowEditor } from './flow-editor';
 import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
+import Link from 'next/link';
+import { utsendelseForFlow } from '@/lib/utsendelser/config';
 
 /** Tolerant JSON parse for trigger filters: garbage/non-object JSON becomes {}. */
 function parseFilter(raw: string): Record<string, unknown> {
@@ -53,13 +55,23 @@ export default async function FlyterEditorPage({
     prisma.flowEnrollment.count({ where: { flowId, status: 'active' } }),
     getFlowSendWindowState(flowId),
   ]);
+  const utsendelse = await utsendelseForFlow(flowId).catch(() => null);
 
   if (!flow) {
     notFound();
   }
 
   return (
-    <FlowEditor
+    <>
+      {utsendelse && (
+        <p className="mb-4 rounded-xl border border-bjerke-blue/30 bg-bjerke-blue/5 px-5 py-3 text-sm text-gray-900">
+          Denne flyten hører til utsendelsen «{utsendelse.navn}». Det er enklest å lese, endre og sende den der.{' '}
+          <Link href={`/admin/utsendelser/${utsendelse.id}`} className="font-medium text-bjerke-blue hover:underline">
+            Åpne utsendelsen →
+          </Link>
+        </p>
+      )}
+      <FlowEditor
       flow={{
         id: flow.id,
         name: flow.name,
@@ -102,6 +114,7 @@ export default async function FlyterEditorPage({
       adminUsers={adminUsers}
       initialActiveEnrollments={activeEnrollments}
       initialSendWindow={{ global: sendWindow.global, override: sendWindow.override }}
-    />
+      />
+    </>
   );
 }

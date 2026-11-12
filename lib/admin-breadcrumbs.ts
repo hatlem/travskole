@@ -12,6 +12,7 @@ const SEGMENT_LABELS: Record<string, string> = {
   registrations: 'Påmeldinger',
   users: 'Brukere',
   foresporsler: 'Forespørsler',
+  utsendelser: 'Utsendelser',
   crm: 'CRM',
   settings: 'Innstillinger',
   tekster: 'Tekster',
