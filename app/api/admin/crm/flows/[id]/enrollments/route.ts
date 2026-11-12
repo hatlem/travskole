@@ -8,6 +8,7 @@ import { AWAITING_ACTIVATION_RUN_AT, isAwaitingActivation } from '@/lib/flows/aw
 import { settleParkedEnrollments } from '@/lib/flows/activation';
 import { marketingReach } from '@/lib/flows/enroll-reach';
 import { canEnrollIntoStatus, isTemplateStatus } from '@/lib/flows/status';
+import { utsendelseForFlow } from '@/lib/utsendelser/config';
 import { isWaitingForSendWindow } from '@/lib/flows/send-window';
 import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
 
@@ -124,6 +125,14 @@ export async function POST(
   if (flow.anchorMode === 'course') {
     return NextResponse.json(
       { error: 'Kurs-forankrede flyter startes av påmeldinger og kan ikke fylles manuelt.' },
+      { status: 409 },
+    );
+  }
+  // Utsendelser sendes fra utsendelsessiden, som aldri sender to ganger til samme person.
+  const utsendelse = await utsendelseForFlow(flowId);
+  if (utsendelse) {
+    return NextResponse.json(
+      { error: `Denne flyten hører til utsendelsen «${utsendelse.navn}». Send fra Utsendelser i menyen.` },
       { status: 409 },
     );
   }

@@ -7,21 +7,21 @@ const { prisma, enroll } = vi.hoisted(() => ({
     flow: { findUnique: vi.fn(), updateMany: vi.fn(), findMany: vi.fn() },
     flowNode: { findUnique: vi.fn(), update: vi.fn() },
     flowEnrollment: { findMany: vi.fn() },
-    setting: { findUnique: vi.fn(), upsert: vi.fn() },
+    setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
     segment: { findMany: vi.fn() },
   },
   enroll: {
     enrollContacts: vi.fn(),
-    segmentContactIds: vi.fn(),
     activateDraftFlow: vi.fn(),
+    loadAudience: vi.fn(),
   },
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/flows/enroll', () => ({
   enrollContacts: enroll.enrollContacts,
-  segmentContactIds: enroll.segmentContactIds,
   SEGMENT_ENROLL_CAP: 500,
 }));
+vi.mock('@/lib/utsendelser/audience', () => ({ loadAudience: enroll.loadAudience }));
 vi.mock('@/lib/flows/activation', () => ({ activateDraftFlow: enroll.activateDraftFlow }));
 const { requireAdmin } = vi.hoisted(() => ({ requireAdmin: vi.fn() }));
 vi.mock('@/lib/auth', () => ({ requireAdmin }));
@@ -55,9 +55,14 @@ const linearFlow = {
   edges: [[1, 2], [2, 3], [3, 4], [4, 5], [5, 6], [6, 7]].map(([fromNodeId, toNodeId]) => ({ fromNodeId, toNodeId })),
 };
 
+const audienceOf = (ids: number[], reachable: number[] = ids) =>
+  new Map([['prio-1', { ids, reachable: new Set(reachable) }]]);
+
 beforeEach(() => {
   vi.clearAllMocks();
   requireAdmin.mockResolvedValue({ user: { email: 'hilde@bjerke.no', role: 'admin' } });
+  prisma.setting.create.mockResolvedValue({});
+  prisma.setting.deleteMany.mockResolvedValue({ count: 1 });
 });
 
 describe('emailSteps', () => {
@@ -100,7 +105,7 @@ describe('sendGroup', () => {
   const summary = (enrolled: number) => ({ enrolled, skippedActive: 0, skippedSuppressed: 0, skippedNoConsent: 0, skippedMissing: 0, capped: 0 });
 
   it('aktiverer utkastet og sender bare til dem som aldri har vært med (også ferdige hoppes over)', async () => {
-    enroll.segmentContactIds.mockResolvedValue([1, 2, 3, 4]);
+    enroll.loadAudience.mockResolvedValue(audienceOf([1, 2, 3, 4]));
     prisma.flow.findUnique.mockResolvedValue({
       id: 22,
       status: 'draft',
@@ -120,7 +125,7 @@ describe('sendGroup', () => {
 
   it('deler opp i biter på 500, så store grupper går i én operasjon', async () => {
     const ids = Array.from({ length: 1218 }, (_, i) => i + 1);
-    enroll.segmentContactIds.mockResolvedValue(ids);
+    enroll.loadAudience.mockResolvedValue(audienceOf(ids));
     prisma.flow.findUnique.mockResolvedValue({ id: 22, status: 'active', nodes: [], edges: [] });
     prisma.flowEnrollment.findMany.mockResolvedValue([]);
     enroll.enrollContacts.mockImplementation(async (_flowId: number, chunk: number[]) => summary(chunk.length));
@@ -133,10 +138,40 @@ describe('sendGroup', () => {
   });
 
   it('nekter å sende mens utsendelsen står på pause', async () => {
-    enroll.segmentContactIds.mockResolvedValue([1]);
     prisma.flow.findUnique.mockResolvedValue({ id: 22, status: 'paused', nodes: [], edges: [] });
     await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow(UtsendelseError);
     expect(enroll.enrollContacts).not.toHaveBeenCalled();
+  });
+
+  it('sender ikke til dem uten adresse eller som har meldt seg av, og teller dem som hoppet over', async () => {
+    enroll.loadAudience.mockResolvedValue(audienceOf([1, 2, 3], [1, 3]));
+    prisma.flow.findUnique.mockResolvedValue({ id: 22, status: 'active', nodes: [], edges: [] });
+    prisma.flowEnrollment.findMany.mockResolvedValue([]);
+    enroll.enrollContacts.mockResolvedValue(summary(2));
+
+    const result = await sendGroup(UTSENDELSE, 'prio-1');
+
+    expect(enroll.enrollContacts).toHaveBeenCalledWith(22, [1, 3]);
+    expect(result).toMatchObject({ sent: 2, skippedMissing: 1 });
+  });
+
+  it('to samtidige trykk: den andre får beskjed og melder ingen inn', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 22, status: 'active', nodes: [], edges: [] });
+    const { Prisma } = await import('@prisma/client');
+    prisma.setting.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    prisma.setting.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow(/pågår allerede/);
+    expect(enroll.enrollContacts).not.toHaveBeenCalled();
+    expect(prisma.setting.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('slipper låsen også når sendingen feiler', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 22, status: 'active', nodes: [], edges: [] });
+    enroll.loadAudience.mockResolvedValue(audienceOf([1]));
+    prisma.flowEnrollment.findMany.mockRejectedValue(new Error('db nede'));
+    await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow('db nede');
+    expect(prisma.setting.deleteMany).toHaveBeenCalledWith({ where: { key: 'utsendelse_sender_22' } });
   });
 
   it('ukjent gruppe gir 404', async () => {
@@ -167,6 +202,15 @@ describe('updateEmailStep', () => {
     expect(saved.bodyHtml).not.toContain('<script');
   });
 
+  it('nekter tom tekst (også tomt avsnitt fra editoren)', async () => {
+    prisma.flowNode.findUnique.mockResolvedValue({
+      id: 4, flowId: 22, type: 'email', flow: { status: 'active' },
+      config: JSON.stringify({ subject: 'Gammel', bodyHtml: '<p>Gammel</p>', senderIdentityId: 2 }),
+    });
+    await expect(updateEmailStep(UTSENDELSE, { flowId: 22, nodeId: 4, subject: 'Hei', bodyHtml: '<p></p>' })).rejects.toMatchObject({ status: 400 });
+    expect(prisma.flowNode.update).not.toHaveBeenCalled();
+  });
+
   it('nekter e-post fra en annen flyt', async () => {
     prisma.flowNode.findUnique.mockResolvedValue({ id: 9, flowId: 99, type: 'email', flow: { status: 'active' }, config: '{}' });
     await expect(updateEmailStep(UTSENDELSE, { flowId: 22, nodeId: 9, subject: 'x', bodyHtml: '<p>x</p>' })).rejects.toMatchObject({ status: 404 });
@@ -194,5 +238,49 @@ describe('POST /api/admin/utsendelser/[id]/send', () => {
   it('ukjent utsendelse gir 404', async () => {
     prisma.setting.findUnique.mockResolvedValue({ value: '[]' });
     expect((await call()).status).toBe(404);
+  });
+});
+
+describe('POST /api/admin/utsendelser (lagre oppsett)', async () => {
+  const { POST: saveRoute } = await import('@/app/api/admin/utsendelser/route');
+  const save = (body: unknown) =>
+    saveRoute(new NextRequest('http://localhost/api/admin/utsendelser', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }));
+  const flow = (over: Record<string, unknown> = {}) => ({ id: 22, name: 'Juletrav', status: 'draft', anchorMode: 'contact', isMarketing: true, _count: { triggers: 0 }, ...over });
+
+  beforeEach(() => {
+    prisma.segment.findMany.mockResolvedValue([{ id: 2 }]);
+    prisma.setting.findUnique.mockResolvedValue({ value: '[]' });
+  });
+
+  it('lagrer en gyldig utsendelse', async () => {
+    prisma.flow.findMany.mockResolvedValue([flow()]);
+    expect((await save(UTSENDELSE)).status).toBe(200);
+    expect(prisma.setting.upsert).toHaveBeenCalled();
+  });
+
+  it('avviser flyt med startregel, så ingen meldes inn på nytt utenom utsendelsen', async () => {
+    prisma.flow.findMany.mockResolvedValue([flow({ _count: { triggers: 1 } })]);
+    const res = await save(UTSENDELSE);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('startregel');
+    expect(prisma.setting.upsert).not.toHaveBeenCalled();
+  });
+
+  it('avviser flyter som ikke er markedsføring', async () => {
+    prisma.flow.findMany.mockResolvedValue([flow({ isMarketing: false })]);
+    expect((await save(UTSENDELSE)).status).toBe(400);
+  });
+
+  it('avviser en flyt som allerede hører til en annen utsendelse', async () => {
+    prisma.flow.findMany.mockResolvedValue([flow()]);
+    prisma.setting.findUnique.mockResolvedValue({ value: JSON.stringify([{ ...UTSENDELSE, id: 'annen', navn: 'Annen' }]) });
+    const res = await save(UTSENDELSE);
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toContain('Annen');
+  });
+
+  it('krever innlogget ansatt', async () => {
+    requireAdmin.mockResolvedValue(null);
+    expect((await save(UTSENDELSE)).status).toBe(401);
   });
 });

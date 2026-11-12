@@ -9,6 +9,8 @@ const { prisma } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma }));
+const { utsendelseForFlow } = vi.hoisted(() => ({ utsendelseForFlow: vi.fn(async (): Promise<unknown> => null) }));
+vi.mock('@/lib/utsendelser/config', () => ({ utsendelseForFlow }));
 vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn() }));
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => undefined) }));
 vi.mock('@/lib/flows/enroll', () => ({
@@ -49,6 +51,14 @@ describe('POST /api/admin/crm/flows/[id]/enrollments med listId', () => {
     expect(enrollContacts).not.toHaveBeenCalled();
     expect(enrollSegment).not.toHaveBeenCalled();
     expect(vi.mocked(logActivity).mock.calls[0][0]).toMatchObject({ action: 'enroll_list', entityId: 5 });
+  });
+
+  it('flyt som hører til en utsendelse kan ikke fylles herfra (unngår dobbel utsending)', async () => {
+    utsendelseForFlow.mockResolvedValueOnce({ id: 'juletrav-2026', navn: 'Juletrav 2026' });
+    const res = await call({ listId: 3 });
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toContain('Juletrav 2026');
+    expect(enrollList).not.toHaveBeenCalled();
   });
 
   it('ukjent liste ⇒ 404', async () => {
