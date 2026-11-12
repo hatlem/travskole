@@ -1,40 +1,46 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { requireAdmin } from '@/lib/auth';
-import { logActivity } from '@/lib/activity';
-import { getUtsendelse } from '@/lib/utsendelser/config';
-import { updateEmailStep, UtsendelseError } from '@/lib/utsendelser/actions';
+import { updateEmailStep } from '@/lib/utsendelser/actions';
+import { appendEmail, removeEmail } from '@/lib/utsendelser/edit';
+import { invalid, withUtsendelse } from '@/lib/utsendelser/route-helpers';
 
-const schema = z.object({
+type Ctx = { params: Promise<{ id: string }> };
+
+const editSchema = z.object({
   flowId: z.number().int().positive(),
   nodeId: z.number().int().positive(),
   subject: z.string().max(300),
   bodyHtml: z.string().max(100_000),
 });
+const appendSchema = z.object({ flowId: z.number().int().positive(), days: z.number().int() });
+const removeSchema = z.object({ flowId: z.number().int().positive(), nodeId: z.number().int().positive() });
 
-export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await requireAdmin();
-  if (!session) return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
+/** Endre emne og tekst. */
+export async function PATCH(request: NextRequest, { params }: Ctx) {
   const { id } = await params;
-
-  const parsed = schema.safeParse(await request.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: 'Ugyldig forespørsel' }, { status: 400 });
-
-  const utsendelse = await getUtsendelse(id);
-  if (!utsendelse) return NextResponse.json({ error: 'Fant ikke utsendelsen.' }, { status: 404 });
-
-  try {
+  return withUtsendelse(request, id, 'edit_email', async ({ utsendelse, body }) => {
+    const parsed = editSchema.safeParse(body);
+    if (!parsed.success) invalid();
     await updateEmailStep(utsendelse, parsed.data);
-  } catch (error) {
-    if (error instanceof UtsendelseError) return NextResponse.json({ error: error.message }, { status: error.status });
-    throw error;
-  }
-  logActivity({
-    action: 'edit_email',
-    entity: 'flow',
-    entityId: parsed.data.flowId,
-    userEmail: session.user.email,
-    details: JSON.stringify({ utsendelse: id, nodeId: parsed.data.nodeId }),
-  }).catch(() => {});
-  return NextResponse.json({ ok: true });
+  });
+}
+
+/** Legg til en e-post sist. */
+export async function POST(request: NextRequest, { params }: Ctx) {
+  const { id } = await params;
+  return withUtsendelse(request, id, 'add_email', async ({ utsendelse, body }) => {
+    const parsed = appendSchema.safeParse(body);
+    if (!parsed.success) invalid();
+    await appendEmail(utsendelse, parsed.data.flowId, parsed.data.days);
+  });
+}
+
+/** Fjern en e-post. */
+export async function DELETE(request: NextRequest, { params }: Ctx) {
+  const { id } = await params;
+  return withUtsendelse(request, id, 'remove_email', async ({ utsendelse, body }) => {
+    const parsed = removeSchema.safeParse(body);
+    if (!parsed.success) invalid();
+    await removeEmail(utsendelse, parsed.data.flowId, parsed.data.nodeId);
+  });
 }

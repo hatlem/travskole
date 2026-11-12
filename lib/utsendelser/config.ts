@@ -20,18 +20,23 @@ export const utsendelseSchema = z
       .max(10),
     grupper: z
       .array(
-        z.object({
-          id: idSchema,
-          navn: z.string().trim().min(1).max(120),
-          beskrivelse: z.string().trim().max(300).optional(),
-          segmentId: z.number().int().positive(),
-          flowId: z.number().int().positive(),
-        }),
+        z
+          .object({
+            id: idSchema,
+            navn: z.string().trim().min(1).max(120),
+            beskrivelse: z.string().trim().max(300).optional(),
+            segmentId: z.number().int().positive().optional(),
+            listId: z.number().int().positive().optional(),
+            flowId: z.number().int().positive(),
+          })
+          .refine((g) => (g.segmentId === undefined) !== (g.listId === undefined), {
+            message: 'En gruppe må være enten en liste eller et segment',
+          }),
       )
-      .min(1)
       .max(30),
   })
   .superRefine((u, ctx) => {
+    if (u.id === 'ny') ctx.addIssue({ code: 'custom', message: '«ny» kan ikke brukes som id' });
     const flowIds = new Set(u.flyter.map((f) => f.flowId));
     if (flowIds.size !== u.flyter.length) ctx.addIssue({ code: 'custom', message: 'Samme flyt er lagt inn to ganger' });
     const groupIds = new Set(u.grupper.map((g) => g.id));
@@ -71,6 +76,8 @@ export async function getUtsendelse(id: string): Promise<Utsendelse | null> {
 
 /** Legger til eller erstatter utsendelsen med samme id. */
 export async function saveUtsendelse(utsendelse: Utsendelse): Promise<void> {
+  // Lagre aldri noe som ikke kan leses tilbake – da ville utsendelsen forsvinne.
+  utsendelseSchema.parse(utsendelse);
   const list = await getUtsendelser();
   const next = [...list.filter((u) => u.id !== utsendelse.id), utsendelse];
   const value = JSON.stringify(next);
@@ -79,6 +86,21 @@ export async function saveUtsendelse(utsendelse: Utsendelse): Promise<void> {
     create: { key: UTSENDELSER_SETTING_KEY, value },
     update: { value },
   });
+}
+
+/** Ny, ledig id fra navnet («Juletrav 2026» → «juletrav-2026», «juletrav-2026-2» …). */
+export function slugify(navn: string, taken: Iterable<string>): string {
+  const base =
+    navn
+      .toLowerCase()
+      .replace(/æ/g, 'ae').replace(/ø/g, 'o').replace(/å/g, 'a')
+      .normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 50) || 'utsendelse';
+  const used = new Set(taken);
+  if (!used.has(base)) return base;
+  for (let i = 2; ; i++) if (!used.has(`${base}-${i}`)) return `${base}-${i}`;
 }
 
 /** Utsendelsen en flyt hører til, for lenke fra flytredigereren. */

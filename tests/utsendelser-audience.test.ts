@@ -7,6 +7,8 @@ const { prisma, settings } = vi.hoisted(() => ({
     flow: { findMany: vi.fn() },
     contact: { findMany: vi.fn() },
     suppression: { findMany: vi.fn() },
+    contactList: { findMany: vi.fn(async () => [{ id: 5 }]) },
+    contactListMembership: { findMany: vi.fn(async () => [{ listId: 5, contactId: 1 }, { listId: 5, contactId: 6 }]) },
   },
   settings: { marketing_allow_legitimate_interest: 'true' } as Record<string, string>,
 }));
@@ -61,6 +63,13 @@ describe('loadAudience', () => {
   it('uten B2B berettiget interesse når ingen uten samtykke fram', async () => {
     settings.marketing_allow_legitimate_interest = 'false';
     expect((await loadAudience(U)).get('p1')?.reachable.size).toBe(0);
+  });
+
+  it('liste-gruppe: medlemmene i lista', async () => {
+    const withList: Utsendelse = { ...U, grupper: [{ id: 'l', navn: 'L', listId: 5, flowId: 22 }] };
+    const a = (await loadAudience(withList)).get('l');
+    expect(a?.ids).toEqual([1, 6]);
+    expect([...(a?.reachable ?? [])]).toEqual([1, 6]);
   });
 
   it('laster kontaktene én gang uansett antall grupper', async () => {

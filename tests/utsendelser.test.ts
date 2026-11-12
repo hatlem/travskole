@@ -9,6 +9,7 @@ const { prisma, enroll } = vi.hoisted(() => ({
     flowEnrollment: { findMany: vi.fn() },
     setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
     segment: { findMany: vi.fn() },
+    contactList: { findMany: vi.fn(async () => []) },
   },
   enroll: {
     enrollContacts: vi.fn(),
@@ -134,6 +135,21 @@ describe('sendGroup', () => {
 
     expect(enroll.enrollContacts.mock.calls.map((c) => c[1].length)).toEqual([500, 500, 218]);
     expect(result.sent).toBe(1218);
+    expect(enroll.activateDraftFlow).not.toHaveBeenCalled();
+  });
+
+  it('nekter å sende mens e-posten har eksempeltekst', async () => {
+    prisma.flow.findUnique.mockResolvedValue({
+      id: 22,
+      status: 'draft',
+      nodes: [
+        { id: 1, type: 'start', config: '{}' },
+        { id: 2, type: 'email', config: JSON.stringify({ subject: 'Skriv emnet her', bodyHtml: '<p>Hei</p>', senderIdentityId: 2 }) },
+        { id: 3, type: 'end', config: '{}' },
+      ],
+      edges: [{ id: 1, fromNodeId: 1, toNodeId: 2, branch: null }, { id: 2, fromNodeId: 2, toNodeId: 3, branch: null }],
+    });
+    await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow(/eksempeltekst/);
     expect(enroll.activateDraftFlow).not.toHaveBeenCalled();
   });
 

@@ -1,87 +1,35 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Badge } from '@/components/admin/StatusBadge';
 import { Button } from '@/components/admin/Button';
-import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { useToast } from '@/components/admin/Toast';
-import type { FlowView, GroupView, UtsendelseView } from '@/lib/utsendelser/overview';
-import { STATUS_BADGE, formatCount } from '../status';
+import type { FlowView, ReplyView, UtsendelseView } from '@/lib/utsendelser/overview';
+import { STATUS_BADGE } from '../status';
 import { EmailStepCard } from './email-step-card';
+import { GroupsSection, type SerializedGroup, type SourceOption } from './groups-section';
+import { SettingsCard, type SenderOption } from './settings-card';
+import { useUtsendelseAction } from './use-action';
 
-type SerializedGroup = Omit<GroupView, 'firstSentAt' | 'lastSentAt'> & { firstSentAt: string | null; lastSentAt: string | null };
-type SerializedView = Omit<UtsendelseView, 'groups'> & { groups: SerializedGroup[] };
+type SerializedReply = Omit<ReplyView, 'repliedAt'> & { repliedAt: string };
+export type SerializedView = Omit<UtsendelseView, 'groups' | 'replies'> & { groups: SerializedGroup[]; replies: SerializedReply[] };
 
-interface SendResult {
-  sent: number;
-  alreadySent: number;
-  skippedSuppressed: number;
-  skippedNoConsent: number;
-  skippedMissing: number;
+export interface DetailOptions {
+  senders: SenderOption[];
+  lists: SourceOption[];
+  segments: SourceOption[];
 }
 
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
-function resultMessage(r: SendResult): string {
-  const skipped = r.skippedSuppressed + r.skippedNoConsent + r.skippedMissing;
-  const base = r.sent === 0 ? 'Ingen nye å sende til.' : `Sendt til ${formatCount(r.sent)}. E-post 1 går ut i løpet av kort tid.`;
-  return skipped > 0 ? `${base} ${formatCount(skipped)} hoppet over (meldt av eller mangler adresse).` : base;
-}
-
-export function UtsendelseDetail({ view, myEmail }: { view: SerializedView; myEmail: string }) {
-  const router = useRouter();
-  const { toast } = useToast();
-  const [confirmGroup, setConfirmGroup] = useState<SerializedGroup | null>(null);
-  const [sending, setSending] = useState(false);
-  const [pausing, setPausing] = useState(false);
-
+export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedView; myEmail: string; options: DetailOptions }) {
+  const { run, busy } = useUtsendelseAction(view.id);
   const badge = STATUS_BADGE[view.status];
   const isPaused = view.status === 'pause';
   const canPause = view.flows.some((f) => f.status === 'active');
   const firstFlow = view.flows[0];
-
-  async function send(group: SerializedGroup) {
-    setSending(true);
-    try {
-      const res = await fetch(`/api/admin/utsendelser/${view.id}/send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gruppeId: group.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        toast(data.error ?? 'Kunne ikke sende. Prøv igjen.', 'error');
-        return;
-      }
-      toast(resultMessage(data as SendResult), 'success');
-      setConfirmGroup(null);
-      router.refresh();
-    } finally {
-      setSending(false);
-    }
-  }
-
-  async function togglePause() {
-    setPausing(true);
-    try {
-      const res = await fetch(`/api/admin/utsendelser/${view.id}/pause`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ paused: !isPaused }),
-      });
-      if (!res.ok) {
-        toast('Kunne ikke endre. Prøv igjen.', 'error');
-        return;
-      }
-      toast(isPaused ? 'Utsendelsen fortsetter.' : 'Utsendelsen står på pause. Ingen e-poster går ut.', 'success');
-      router.refresh();
-    } finally {
-      setPausing(false);
-    }
-  }
 
   return (
     <div className="max-w-4xl">
@@ -92,7 +40,13 @@ export function UtsendelseDetail({ view, myEmail }: { view: SerializedView; myEm
           <div className="flex items-center gap-3">
             <Badge className={badge.className}>{badge.label}</Badge>
             {(canPause || isPaused) && (
-              <Button variant="secondary" loading={pausing} onClick={togglePause}>
+              <Button
+                variant="secondary"
+                loading={busy}
+                onClick={() =>
+                  run('POST', '/pause', { paused: !isPaused }, isPaused ? 'Utsendelsen fortsetter.' : 'Utsendelsen står på pause. Ingen e-poster går ut.')
+                }
+              >
                 {isPaused ? 'Fortsett' : 'Sett på pause'}
               </Button>
             )}
@@ -106,48 +60,36 @@ export function UtsendelseDetail({ view, myEmail }: { view: SerializedView; myEm
         </p>
       )}
 
-      <dl className="mb-10 grid gap-3 rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm sm:grid-cols-3">
-        <div>
-          <dt className="text-gray-600">Sendt til</dt>
-          <dd className="mt-0.5 text-lg font-semibold text-gray-900">
-            {formatCount(view.totals.sent)} <span className="text-sm font-normal text-gray-600">av {formatCount(view.totals.sent + view.totals.remaining)}</span>
-          </dd>
-        </div>
-        {firstFlow?.senderName && (
-          <div>
-            <dt className="text-gray-600">Avsender</dt>
-            <dd className="mt-0.5 text-gray-900">{firstFlow.senderName}</dd>
-          </div>
-        )}
-        {firstFlow?.sendWindow && (
-          <div>
-            <dt className="text-gray-600">E-postene går ut</dt>
-            <dd className="mt-0.5 text-gray-900">{firstFlow.sendWindow}</dd>
-          </div>
-        )}
-      </dl>
+      {firstFlow && (
+        <SettingsCard
+          utsendelseId={view.id}
+          navn={view.navn}
+          beskrivelse={view.beskrivelse}
+          senderIdentityId={firstFlow.senderIdentityId}
+          senderName={firstFlow.senderName}
+          sendWindow={firstFlow.sendWindow}
+          sendWindowDraft={firstFlow.sendWindowDraft}
+          senderMixed={view.senderMixed}
+          windowMixed={view.windowMixed}
+          senders={options.senders}
+          sent={view.totals.sent}
+          total={view.totals.total}
+        />
+      )}
 
-      <section aria-labelledby="send-title" className="mb-12">
-        <h2 id="send-title" className="text-lg font-semibold text-gray-900">Send</h2>
-        <p className="mt-1 mb-4 text-sm text-gray-600">
-          Velg hvem som skal få e-post 1 nå. Resten av e-postene kommer automatisk. Ingen får samme e-post to ganger.
-        </p>
-        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
-          {view.groups.map((g) => (
-            <GroupRow
-              key={g.id}
-              group={g}
-              showFlowName={view.flows.length > 1}
-              disabled={isPaused || (g.flowStatus !== 'draft' && g.flowStatus !== 'active')}
-              onSend={() => setConfirmGroup(g)}
-            />
-          ))}
-        </ul>
-      </section>
+      <GroupsSection
+        utsendelseId={view.id}
+        groups={view.groups}
+        flows={view.flows.map((f) => ({ flowId: f.flowId, navn: f.navn }))}
+        lists={options.lists}
+        segments={options.segments}
+        paused={isPaused}
+        sendWindow={firstFlow?.sendWindow ?? ''}
+      />
 
-      <section aria-labelledby="emails-title">
+      <section aria-labelledby="emails-title" className="mb-12">
         <h2 id="emails-title" className="text-lg font-semibold text-gray-900">E-postene</h2>
-        <p className="mt-1 mb-4 text-sm text-gray-600">Slik ser e-postene ut for mottakeren. Trykk «Endre» for å endre teksten.</p>
+        <p className="mt-1 mb-4 text-sm text-gray-600">Slik ser e-postene ut for mottakeren. Du kan endre teksten og ventetiden når som helst.</p>
         <div className="space-y-10">
           {view.flows.map((flow) => (
             <FlowEmails key={flow.flowId} flow={flow} utsendelseId={view.id} myEmail={myEmail} showHeading={view.flows.length > 1} />
@@ -155,75 +97,17 @@ export function UtsendelseDetail({ view, myEmail }: { view: SerializedView; myEm
         </div>
       </section>
 
-      <ConfirmModal
-        open={confirmGroup !== null}
-        variant="info"
-        title={confirmGroup ? `Sende til «${confirmGroup.navn}»?` : ''}
-        message={
-          confirmGroup && (
-            <>
-              <strong>{formatCount(confirmGroup.remaining)}</strong> {confirmGroup.remaining === 1 ? 'person får' : 'personer får'} e-post 1 nå.
-              {firstFlow?.sendWindow ? ` E-postene går ut ${firstFlow.sendWindow.toLowerCase()}.` : ''} Resten av e-postene kommer automatisk etterpå.
-              Du kan sette utsendelsen på pause når som helst.
-            </>
-          )
-        }
-        confirmLabel="Send nå"
-        loading={sending}
-        onConfirm={() => confirmGroup && send(confirmGroup)}
-        onCancel={() => setConfirmGroup(null)}
-      />
+      <Replies replies={view.replies} />
     </div>
   );
 }
 
-function GroupRow({
-  group,
-  showFlowName,
-  disabled,
-  onSend,
-}: {
-  group: SerializedGroup;
-  showFlowName: boolean;
-  disabled: boolean;
-  onSend: () => void;
-}) {
-  const people = group.sent + group.remaining;
-  return (
-    <li className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0">
-        <p className="font-medium text-gray-900">{group.navn}</p>
-        <p className="mt-0.5 text-sm text-gray-600">
-          {formatCount(people)} {people === 1 ? 'person' : 'personer'}
-          {showFlowName && group.flowNavn ? ` · ${group.flowNavn.toLowerCase()}` : ''}
-          {group.beskrivelse ? ` · ${group.beskrivelse}` : ''}
-        </p>
-        {group.unreachable > 0 && (
-          <p className="mt-0.5 text-xs text-gray-500">
-            {formatCount(group.unreachable)} til kan ikke få e-post (har meldt seg av eller mangler adresse).
-          </p>
-        )}
-        {group.missingSegment && <p className="mt-0.5 text-sm text-red-700">Gruppen finnes ikke lenger.</p>}
-      </div>
-      <div className="shrink-0 sm:text-right">
-        {group.sent > 0 && group.lastSentAt && (
-          <p className="text-sm text-green-800">
-            <span aria-hidden="true">✓ </span>Sendt til {formatCount(group.sent)} · {dateTime(group.lastSentAt)}
-          </p>
-        )}
-        {group.remaining > 0 ? (
-          <Button className="mt-1" variant={group.sent > 0 ? 'secondary' : 'primary'} disabled={disabled} onClick={onSend}>
-            {group.sent > 0 ? `Send til ${formatCount(group.remaining)} nye` : 'Send nå'}
-          </Button>
-        ) : (
-          group.sent === 0 && !group.missingSegment && <p className="text-sm text-gray-500">Ingen å sende til</p>
-        )}
-      </div>
-    </li>
-  );
-}
-
 function FlowEmails({ flow, utsendelseId, myEmail, showHeading }: { flow: FlowView; utsendelseId: string; myEmail: string; showHeading: boolean }) {
+  const { run, busy } = useUtsendelseAction(utsendelseId);
+  const [adding, setAdding] = useState(false);
+  const [days, setDays] = useState(7);
+  const daysValid = Number.isInteger(days) && days >= 1 && days <= 60;
+
   return (
     <div>
       {showHeading && <h3 className="mb-1 font-semibold text-gray-900">{flow.navn}</h3>}
@@ -237,10 +121,75 @@ function FlowEmails({ flow, utsendelseId, myEmail, showHeading }: { flow: FlowVi
               step={step}
               sampleContactId={flow.sampleContactId}
               myEmail={myEmail}
+              canRemove={flow.canChangeSteps && flow.steps.length > 1}
             />
           </li>
         ))}
       </ol>
+      {flow.canChangeSteps ? (
+        adding ? (
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-700">
+            <label htmlFor={`add-${flow.flowId}`}>Ny e-post sendes</label>
+            <input
+              id={`add-${flow.flowId}`}
+              type="number"
+              min={1}
+              max={60}
+              value={Number.isFinite(days) ? days : ''}
+              onChange={(e) => setDays(Number(e.target.value))}
+              className="w-16 rounded-md border border-gray-300 px-2 py-1 text-sm tabular-nums"
+            />
+            <span>dager etter e-post {flow.steps.length}</span>
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={!daysValid}
+              onClick={async () => {
+                if (await run('POST', '/epost', { flowId: flow.flowId, days }, 'E-posten er lagt til. Skriv teksten i den nye e-posten.')) setAdding(false);
+              }}
+            >
+              Legg til
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setAdding(false)}>Avbryt</Button>
+          </div>
+        ) : (
+          <Button className="mt-4" variant="secondary" onClick={() => setAdding(true)}>+ Legg til en e-post</Button>
+        )
+      ) : (
+        <p className="mt-3 text-xs text-gray-500">E-poster kan bare legges til eller fjernes før du har sendt. Tekst og ventetid kan du endre når som helst.</p>
+      )}
     </div>
+  );
+}
+
+function Replies({ replies }: { replies: SerializedReply[] }) {
+  return (
+    <section aria-labelledby="replies-title">
+      <h2 id="replies-title" className="text-lg font-semibold text-gray-900">Svar</h2>
+      <p className="mt-1 mb-4 text-sm text-gray-600">Svarene kommer til registrering@bjerke.no. Her ser du hvem som har svart.</p>
+      {replies.length === 0 ? (
+        <p className="rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">Ingen har svart ennå.</p>
+      ) : (
+        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+          {replies.map((r) => (
+            <li key={`${r.contactId}-${r.repliedAt}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900">
+                  {r.name}
+                  {r.organization ? <span className="font-normal text-gray-600"> · {r.organization}</span> : null}
+                </p>
+                <p className="text-gray-600">
+                  {r.email}
+                  {r.stepNumber ? ` · svarte på e-post ${r.stepNumber}` : ''} · {dateTime(r.repliedAt)}
+                </p>
+              </div>
+              <Link href={`/admin/crm/kontakter/${r.contactId}`} className="shrink-0 font-medium text-bjerke-blue hover:underline">
+                Åpne kontakten →
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

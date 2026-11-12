@@ -8,6 +8,16 @@ import { Prisma } from '@prisma/client';
 import { loadAudience } from './audience';
 import type { Utsendelse } from './config';
 
+/** Eksempeltekst fra «Ny utsendelse» / «Legg til e-post» som ikke skal sendes. */
+export const PLACEHOLDER_MARK = 'Skriv teksten her.';
+export const PLACEHOLDER_SUBJECTS = ['Skriv emnet her', 'Skriv emnet for neste e-post'];
+
+function hasPlaceholder(config: Record<string, unknown>): boolean {
+  const subject = typeof config.subject === 'string' ? config.subject.trim() : '';
+  const body = typeof config.bodyHtml === 'string' ? config.bodyHtml : '';
+  return PLACEHOLDER_SUBJECTS.includes(subject) || body.includes(PLACEHOLDER_MARK);
+}
+
 export class UtsendelseError extends Error {
   constructor(message: string, readonly status: number = 409) {
     super(message);
@@ -34,6 +44,9 @@ async function validateAndActivate(flowId: number): Promise<void> {
   const edges: GraphEdge[] = flow.edges.map((e) => ({ id: e.id, fromNodeId: e.fromNodeId, toNodeId: e.toNodeId, branch: e.branch }));
   const errors = validateFlow(nodes, edges);
   if (errors.length > 0) throw new UtsendelseError(`E-postene er ikke klare: ${errors[0].message}`, 400);
+  if (nodes.some((n) => n.type === 'email' && hasPlaceholder(n.config))) {
+    throw new UtsendelseError('En av e-postene har fortsatt eksempeltekst. Skriv emne og tekst før du sender.', 400);
+  }
   await activateDraftFlow(flowId);
 }
 
@@ -41,7 +54,7 @@ const LOCK_STALE_MS = 10 * 60 * 1000;
 const lockKey = (flowId: number) => `utsendelse_sender_${flowId}`;
 
 /** Én sending om gangen per flyt, også på tvers av servere. En lås eldre enn 10 min regnes som død. */
-async function acquireSendLock(flowId: number): Promise<boolean> {
+export async function acquireSendLock(flowId: number): Promise<boolean> {
   const key = lockKey(flowId);
   try {
     await prisma.setting.create({ data: { key, value: new Date().toISOString() } });
@@ -57,7 +70,7 @@ async function acquireSendLock(flowId: number): Promise<boolean> {
   return count === 1;
 }
 
-async function releaseSendLock(flowId: number): Promise<void> {
+export async function releaseSendLock(flowId: number): Promise<void> {
   await prisma.setting.deleteMany({ where: { key: lockKey(flowId) } });
 }
 

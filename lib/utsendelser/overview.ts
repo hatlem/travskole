@@ -6,7 +6,7 @@ import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { contactMergeTagData } from '@/lib/flows/send';
 import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
-import { describeSendWindow } from '@/lib/flows/send-window';
+import { describeSendWindow, formatTime, DEFAULT_SEND_WINDOW, type Weekday } from '@/lib/flows/send-window';
 import { emailSteps, stepTimingLabel, type EmailStep } from './steps';
 import type { Utsendelse } from './config';
 import { loadAudience, type GroupAudience } from './audience';
@@ -15,6 +15,8 @@ export type UtsendelseStatus = 'ikke_startet' | 'sender' | 'pause' | 'ferdig';
 
 export interface StepView extends EmailStep {
   timing: string;
+  /** Hele dager før denne e-posten (null for den første eller ved timer). */
+  waitDays: number | null;
   previewSubject: string;
   previewHtml: string;
   sent: number;
@@ -28,7 +30,11 @@ export interface FlowView {
   navn: string;
   status: string;
   senderName: string | null;
+  senderIdentityId: number | null;
   sendWindow: string;
+  sendWindowDraft: { start: string; end: string; days: Weekday[] };
+  /** E-poster kan legges til/fjernes bare før noen er sendt til. */
+  canChangeSteps: boolean;
   sampleName: string | null;
   sampleContactId: number | null;
   steps: StepView[];
@@ -41,6 +47,7 @@ export interface GroupView {
   flowId: number;
   flowNavn: string;
   flowStatus: string;
+  kilde: string;
   missingSegment: boolean;
   total: number;
   sent: number;
@@ -60,6 +67,19 @@ export interface UtsendelseView {
   flows: FlowView[];
   groups: GroupView[];
   totals: { total: number; sent: number; remaining: number };
+  replies: ReplyView[];
+  /** Flytene har ulik avsender / sendetid – vises som «varierer» og endres bare hvis brukeren velger noe nytt. */
+  senderMixed: boolean;
+  windowMixed: boolean;
+}
+
+export interface ReplyView {
+  contactId: number;
+  name: string;
+  organization: string | null;
+  email: string;
+  stepNumber: number | null;
+  repliedAt: Date;
 }
 
 export function utsendelseStatus(flowStatuses: string[], totals: { sent: number; remaining: number }): UtsendelseStatus {
@@ -74,11 +94,13 @@ async function loadGroups(
   flowStatus: Map<number, string>,
 ): Promise<GroupView[]> {
   const flowNames = new Map(utsendelse.flyter.map((f) => [f.flowId, f.navn]));
+  const kilder = await sourceLabels(utsendelse);
   return Promise.all(
     utsendelse.grupper.map(async (g): Promise<GroupView> => {
       const base = {
         id: g.id, navn: g.navn, beskrivelse: g.beskrivelse, flowId: g.flowId,
         flowNavn: flowNames.get(g.flowId) ?? '', flowStatus: flowStatus.get(g.flowId) ?? 'archived',
+        kilde: kilder.get(g.id) ?? '',
       };
       const members = audience.get(g.id);
       if (!members?.ids) {
@@ -104,6 +126,23 @@ async function loadGroups(
         lastSentAt: times.length ? new Date(Math.max(...times)) : null,
       };
     }),
+  );
+}
+
+async function sourceLabels(utsendelse: Utsendelse): Promise<Map<string, string>> {
+  const listIds = utsendelse.grupper.flatMap((g) => (g.listId ? [g.listId] : []));
+  const segmentIds = utsendelse.grupper.flatMap((g) => (g.segmentId ? [g.segmentId] : []));
+  const [lists, segments] = await Promise.all([
+    prisma.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true, name: true } }),
+    prisma.segment.findMany({ where: { id: { in: segmentIds } }, select: { id: true, name: true } }),
+  ]);
+  const listName = new Map(lists.map((l) => [l.id, l.name]));
+  const segmentName = new Map(segments.map((x) => [x.id, x.name]));
+  return new Map(
+    utsendelse.grupper.map((g) => [
+      g.id,
+      g.listId ? `Liste: ${listName.get(g.listId) ?? 'slettet'}` : `Segment: ${segmentName.get(g.segmentId!) ?? 'slettet'}`,
+    ]),
   );
 }
 
@@ -180,11 +219,13 @@ async function loadFlow(
     flow.nodes.map((n) => ({ id: n.id, type: n.type, config: parseNodeConfig(n.config), posY: n.posY })),
     flow.edges,
   );
-  const [sample, stats, sendWindow] = await Promise.all([
+  const [sample, stats, sendWindow, enrollmentCount] = await Promise.all([
     sampleContact(utsendelse, flowId, audience),
     stepStats(steps.map((s) => s.nodeId)),
     getFlowSendWindowState(flowId).catch(() => null),
+    prisma.flowEnrollment.count({ where: { flowId } }),
   ]);
+  const w = sendWindow?.effective ?? DEFAULT_SEND_WINDOW;
   const mergeData = sample ? contactMergeTagData(sample, contactEmail) : null;
 
   const firstSender = flow.nodes
@@ -199,12 +240,16 @@ async function loadFlow(
     navn,
     status: flow.status,
     senderName: sender ? `${sender.displayName} <${sender.email}>` : null,
+    senderIdentityId: firstSender ?? null,
     sendWindow: sendWindow ? describeSendWindow(sendWindow.effective) : '',
+    sendWindowDraft: { start: formatTime(w.startHour, w.startMinute), end: formatTime(w.endHour, w.endMinute), days: [...w.days] },
+    canChangeSteps: enrollmentCount === 0 && flow.status !== 'archived' && flow.status !== 'template' && steps.every((st) => st.hoursAfterPrevious !== null),
     sampleName: sample?.name ?? null,
     sampleContactId: sample?.id ?? null,
     steps: steps.map((s) => ({
       ...s,
       timing: stepTimingLabel(s),
+      waitDays: s.number > 1 && s.hoursAfterPrevious !== null && s.hoursAfterPrevious > 0 && s.hoursAfterPrevious % 24 === 0 ? s.hoursAfterPrevious / 24 : null,
       previewSubject: mergeData ? replaceMergeTagsInSubject(s.subject, mergeData) : s.subject,
       previewHtml: mergeData ? renderFlowEmailBody(s.bodyHtml, mergeData) : renderFlowEmailBody(s.bodyHtml, { ...emptyMerge(contactEmail), feltPlassholder: true }),
       ...(stats.get(s.nodeId) ?? { sent: 0, opened: 0, clicked: 0, replied: 0 }),
@@ -221,7 +266,11 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
   const flows = await Promise.all(utsendelse.flyter.map((f) => loadFlow(utsendelse, f.flowId, f.navn, contactEmail, audience)));
   const presentFlows = flows.filter((f): f is FlowView => f !== null);
   const flowStatus = new Map(presentFlows.map((f) => [f.flowId, f.status]));
-  const [groups, totals] = await Promise.all([loadGroups(utsendelse, audience, flowStatus), dedupedTotals(utsendelse, audience)]);
+  const [groups, totals, replies] = await Promise.all([
+    loadGroups(utsendelse, audience, flowStatus),
+    dedupedTotals(utsendelse, audience),
+    loadReplies(presentFlows),
+  ]);
   return {
     id: utsendelse.id,
     navn: utsendelse.navn,
@@ -230,7 +279,34 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
     flows: presentFlows,
     groups,
     totals,
+    replies,
+    senderMixed: new Set(presentFlows.map((f) => f.senderIdentityId)).size > 1,
+    windowMixed: new Set(presentFlows.map((f) => JSON.stringify(f.sendWindowDraft))).size > 1,
   };
+}
+
+async function loadReplies(flows: FlowView[]): Promise<ReplyView[]> {
+  const stepNumber = new Map(flows.flatMap((f) => f.steps.map((s) => [s.nodeId, s.number] as const)));
+  if (stepNumber.size === 0) return [];
+  const rows = await prisma.messageSend.findMany({
+    where: { nodeId: { in: [...stepNumber.keys()] }, status: 'sent', repliedAt: { not: null } },
+    orderBy: { repliedAt: 'desc' },
+    take: 200,
+    select: {
+      nodeId: true,
+      repliedAt: true,
+      toEmail: true,
+      contact: { select: { id: true, name: true, organization: { select: { name: true } } } },
+    },
+  });
+  return rows.map((r) => ({
+    contactId: r.contact.id,
+    name: r.contact.name,
+    organization: r.contact.organization?.name ?? null,
+    email: r.toEmail,
+    stepNumber: r.nodeId != null ? stepNumber.get(r.nodeId) ?? null : null,
+    repliedAt: r.repliedAt!,
+  }));
 }
 
 /** Lett oppsummering til lista og forsiden (uten forhåndsvisning). */

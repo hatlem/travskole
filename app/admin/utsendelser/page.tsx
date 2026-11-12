@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { PageHeader } from '@/components/admin/PageHeader';
 import { Badge } from '@/components/admin/StatusBadge';
 import { EmptyState } from '@/components/admin/EmptyState';
+import { ButtonLink } from '@/components/admin/Button';
 import { getUtsendelser } from '@/lib/utsendelser/config';
 import { loadUtsendelseSummary } from '@/lib/utsendelser/overview';
 import { STATUS_BADGE, formatCount } from './status';
@@ -16,9 +17,10 @@ export default async function UtsendelserPage() {
       <PageHeader
         title="Utsendelser"
         description="E-poster til mange på én gang. Les e-postene, endre teksten og send til én gruppe om gangen."
+        actions={<ButtonLink href="/admin/utsendelser/ny">+ Ny utsendelse</ButtonLink>}
       />
       {summaries.length === 0 ? (
-        <EmptyState title="Ingen utsendelser ennå" description="Når en utsendelse er lagt opp, finner du den her." />
+        <EmptyState title="Ingen utsendelser ennå" description="Trykk «Ny utsendelse» for å lage den første." />
       ) : (
         <ul className="space-y-3">
           {summaries.map((s) => {
