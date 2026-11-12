@@ -6,10 +6,10 @@ import { createUtsendelse } from '@/lib/utsendelser/edit';
 import { UtsendelseError } from '@/lib/utsendelser/actions';
 
 const schema = z.object({
-  navn: z.string().max(120),
+  navn: z.string().max(200),
   senderIdentityId: z.number().int().positive(),
   grupper: z
-    .array(z.object({ navn: z.string().max(120), listId: z.number().int().positive().optional(), segmentId: z.number().int().positive().optional() }))
+    .array(z.object({ navn: z.string().transform((v) => v.trim().slice(0, 120) || 'Gruppe'), listId: z.number().int().positive().optional(), segmentId: z.number().int().positive().optional() }))
     .max(30),
 });
 

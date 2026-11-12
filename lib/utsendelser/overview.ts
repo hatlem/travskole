@@ -68,6 +68,9 @@ export interface UtsendelseView {
   groups: GroupView[];
   totals: { total: number; sent: number; remaining: number };
   replies: ReplyView[];
+  /** Flytene har ulik avsender / sendetid – vises som «varierer» og endres bare hvis brukeren velger noe nytt. */
+  senderMixed: boolean;
+  windowMixed: boolean;
 }
 
 export interface ReplyView {
@@ -240,13 +243,13 @@ async function loadFlow(
     senderIdentityId: firstSender ?? null,
     sendWindow: sendWindow ? describeSendWindow(sendWindow.effective) : '',
     sendWindowDraft: { start: formatTime(w.startHour, w.startMinute), end: formatTime(w.endHour, w.endMinute), days: [...w.days] },
-    canChangeSteps: enrollmentCount === 0 && flow.status !== 'archived',
+    canChangeSteps: enrollmentCount === 0 && flow.status !== 'archived' && flow.status !== 'template' && steps.every((st) => st.hoursAfterPrevious !== null),
     sampleName: sample?.name ?? null,
     sampleContactId: sample?.id ?? null,
     steps: steps.map((s) => ({
       ...s,
       timing: stepTimingLabel(s),
-      waitDays: s.number > 1 && s.hoursAfterPrevious !== null && s.hoursAfterPrevious % 24 === 0 ? s.hoursAfterPrevious / 24 : null,
+      waitDays: s.number > 1 && s.hoursAfterPrevious !== null && s.hoursAfterPrevious > 0 && s.hoursAfterPrevious % 24 === 0 ? s.hoursAfterPrevious / 24 : null,
       previewSubject: mergeData ? replaceMergeTagsInSubject(s.subject, mergeData) : s.subject,
       previewHtml: mergeData ? renderFlowEmailBody(s.bodyHtml, mergeData) : renderFlowEmailBody(s.bodyHtml, { ...emptyMerge(contactEmail), feltPlassholder: true }),
       ...(stats.get(s.nodeId) ?? { sent: 0, opened: 0, clicked: 0, replied: 0 }),
@@ -277,6 +280,8 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
     groups,
     totals,
     replies,
+    senderMixed: new Set(presentFlows.map((f) => f.senderIdentityId)).size > 1,
+    windowMixed: new Set(presentFlows.map((f) => JSON.stringify(f.sendWindowDraft))).size > 1,
   };
 }
 
@@ -284,7 +289,7 @@ async function loadReplies(flows: FlowView[]): Promise<ReplyView[]> {
   const stepNumber = new Map(flows.flatMap((f) => f.steps.map((s) => [s.nodeId, s.number] as const)));
   if (stepNumber.size === 0) return [];
   const rows = await prisma.messageSend.findMany({
-    where: { nodeId: { in: [...stepNumber.keys()] }, repliedAt: { not: null } },
+    where: { nodeId: { in: [...stepNumber.keys()] }, status: 'sent', repliedAt: { not: null } },
     orderBy: { repliedAt: 'desc' },
     take: 200,
     select: {

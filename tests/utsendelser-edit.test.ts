@@ -15,9 +15,10 @@ const { prisma, store } = vi.hoisted(() => {
       contactList: { findUnique: vi.fn() },
       segment: { findUnique: vi.fn() },
       flowEnrollment: { count: vi.fn() },
+      flow: { findUnique: vi.fn(), delete: vi.fn(async () => ({})) },
       flowNode: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn((a: unknown) => a), deleteMany: vi.fn((a: unknown) => a) },
       flowEdge: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn((a: unknown) => a), create: vi.fn((a: unknown) => a) },
-      setting: { findUnique: vi.fn(), upsert: vi.fn() },
+      setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
     },
     store: { saved: null as unknown },
   };
@@ -49,7 +50,19 @@ beforeEach(() => {
   prisma.segment.findUnique.mockResolvedValue({ id: 2 });
   prisma.flowEnrollment.count.mockResolvedValue(0);
   getState.mockResolvedValue({ global: null, override: { mode: 'default' }, effective: null });
+  prisma.flow.findUnique.mockResolvedValue({ status: 'draft' });
+  prisma.setting.create.mockResolvedValue({});
+  prisma.setting.deleteMany.mockResolvedValue({ count: 1 });
   store.saved = null;
+});
+
+describe('saveUtsendelse', () => {
+  it('nekter å lagre noe som ikke kan leses tilbake (f.eks. id «ny»)', async () => {
+    const { saveUtsendelse } = await import('@/lib/utsendelser/config');
+    await expect(saveUtsendelse({ ...U, id: 'ny' })).rejects.toThrow();
+    await expect(saveUtsendelse({ ...U, grupper: [{ id: 'x', navn: '', segmentId: 2, flowId: 22 }] })).rejects.toThrow();
+    expect(prisma.setting.upsert).not.toHaveBeenCalled();
+  });
 });
 
 describe('slugify', () => {
@@ -130,9 +143,10 @@ describe('setWaitBefore', () => {
 
 describe('appendEmail / removeEmail', () => {
   it('legger til ventetid + e-post før slutt, med samme avsender', async () => {
-    prisma.flowNode.findFirst.mockResolvedValue({ id: 9, posX: 0, posY: 480 });
-    prisma.flowEdge.findFirst.mockResolvedValue({ id: 50, fromNodeId: 8, toNodeId: 9 });
-    prisma.flowNode.findMany.mockResolvedValue([{ config: JSON.stringify({ senderIdentityId: 2 }) }]);
+    prisma.flowNode.findMany
+      .mockResolvedValueOnce([{ id: 9, posX: 0, posY: 480 }])
+      .mockResolvedValueOnce([{ config: JSON.stringify({ senderIdentityId: 2 }) }]);
+    prisma.flowEdge.findMany.mockResolvedValue([{ id: 50, fromNodeId: 8, toNodeId: 9, branch: null }]);
     prisma.tx.flowNode.create.mockImplementation(async ({ data }: { data: { type: string } }) => ({ id: data.type === 'wait' ? 60 : 61 }));
 
     await appendEmail(U, 22, 5);
@@ -143,6 +157,30 @@ describe('appendEmail / removeEmail', () => {
     expect(prisma.tx.flowEdge.createMany).toHaveBeenCalledWith({
       data: [{ flowId: 22, fromNodeId: 8, toNodeId: 60 }, { flowId: 22, fromNodeId: 60, toNodeId: 61 }, { flowId: 22, fromNodeId: 61, toNodeId: 9 }],
     });
+    expect(prisma.setting.deleteMany).toHaveBeenCalledWith({ where: { key: 'utsendelse_sender_22' } });
+  });
+
+  it('forgrenet flyt (to slutter eller ja/nei-kobling) endres ikke her', async () => {
+    prisma.flowNode.findMany.mockResolvedValueOnce([{ id: 9 }, { id: 10 }]);
+    await expect(appendEmail(U, 22, 5)).rejects.toMatchObject({ status: 409 });
+    prisma.flowNode.findMany.mockResolvedValueOnce([{ id: 9, posX: 0, posY: 0 }]);
+    prisma.flowEdge.findMany.mockResolvedValue([{ id: 50, fromNodeId: 8, toNodeId: 9, branch: 'ja' }]);
+    await expect(appendEmail(U, 22, 5)).rejects.toMatchObject({ status: 409 });
+    expect(prisma.tx.flowEdge.delete).not.toHaveBeenCalled();
+  });
+
+  it('venter ikke på en pågående utsending: gir beskjed og endrer ingenting', async () => {
+    const { Prisma } = await import('@prisma/client');
+    prisma.setting.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    prisma.setting.updateMany.mockResolvedValue({ count: 0 });
+    await expect(appendEmail(U, 22, 5)).rejects.toThrow(/pågår/);
+    expect(prisma.flowEnrollment.count).not.toHaveBeenCalled();
+  });
+
+  it('arkivert utsendelse kan ikke endres', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ status: 'archived' });
+    await expect(appendEmail(U, 22, 5)).rejects.toThrow(/arkivert/);
+    await expect(setWaitBefore(U, 22, 6, 3)).rejects.toThrow(/arkivert/);
   });
 
   it('nekter å legge til eller fjerne etter at noen er sendt til', async () => {
@@ -154,7 +192,7 @@ describe('appendEmail / removeEmail', () => {
   // start(1) → e1(2) → wait(3) → e2(4) → wait(5) → e3(6) → end(7)
   const chain = () => {
     const ids = [1, 2, 3, 4, 5, 6, 7];
-    prisma.flowEdge.findMany.mockResolvedValue(ids.slice(0, -1).map((id, i) => ({ fromNodeId: id, toNodeId: ids[i + 1] })));
+    prisma.flowEdge.findMany.mockResolvedValue(ids.slice(0, -1).map((id, i) => ({ fromNodeId: id, toNodeId: ids[i + 1], branch: null })));
     prisma.flowNode.findMany.mockResolvedValue(
       ['start', 'email', 'wait', 'email', 'wait', 'email', 'end'].map((type, i) => ({ id: i + 1, type })),
     );

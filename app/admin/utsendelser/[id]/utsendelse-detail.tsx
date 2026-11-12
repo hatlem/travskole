@@ -69,6 +69,8 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
           senderName={firstFlow.senderName}
           sendWindow={firstFlow.sendWindow}
           sendWindowDraft={firstFlow.sendWindowDraft}
+          senderMixed={view.senderMixed}
+          windowMixed={view.windowMixed}
           senders={options.senders}
           sent={view.totals.sent}
           total={view.totals.total}

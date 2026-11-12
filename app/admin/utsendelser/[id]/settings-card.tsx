@@ -20,6 +20,8 @@ interface Props {
   senderName: string | null;
   sendWindow: string;
   sendWindowDraft: SendWindowDraft;
+  senderMixed: boolean;
+  windowMixed: boolean;
   senders: SenderOption[];
   sent: number;
   total: number;
@@ -34,25 +36,34 @@ export function SettingsCard(props: Props) {
   const [editing, setEditing] = useState(false);
   const [navn, setNavn] = useState(props.navn);
   const [beskrivelse, setBeskrivelse] = useState(props.beskrivelse ?? '');
-  const [sender, setSender] = useState<number | ''>(props.senderIdentityId ?? '');
+  const initialSender = props.senderMixed ? '' : (props.senderIdentityId ?? '');
+  const [sender, setSender] = useState<number | ''>(initialSender);
   const [window, setWindow] = useState<SendWindowDraft>(props.sendWindowDraft);
+  const [windowTouched, setWindowTouched] = useState(false);
 
   function open() {
     setNavn(props.navn);
     setBeskrivelse(props.beskrivelse ?? '');
-    setSender(props.senderIdentityId ?? '');
+    setSender(initialSender);
     setWindow(props.sendWindowDraft);
+    setWindowTouched(false);
     setEditing(true);
   }
 
+  // Bare det brukeren faktisk har endret sendes, så et nytt navn aldri overskriver avsender eller sendetid.
+  const changes = {
+    ...(navn.trim() !== props.navn && { navn }),
+    ...(beskrivelse.trim() !== (props.beskrivelse ?? '') && { beskrivelse }),
+    ...(sender !== '' && sender !== initialSender && { senderIdentityId: sender }),
+    ...(windowTouched && JSON.stringify(window) !== JSON.stringify(props.sendWindowDraft) && { sendetid: window }),
+  };
+
   async function save() {
-    const ok = await run(
-      'PATCH',
-      '',
-      { navn, beskrivelse, ...(sender !== '' && { senderIdentityId: sender }), sendetid: window },
-      'Endringene er lagret.',
-    );
-    if (ok) setEditing(false);
+    if (Object.keys(changes).length === 0) {
+      setEditing(false);
+      return;
+    }
+    if (await run('PATCH', '', changes, 'Endringene er lagret.')) setEditing(false);
   }
 
   const windowError = windowFromDraft(window);
@@ -71,18 +82,27 @@ export function SettingsCard(props: Props) {
         <div>
           <label htmlFor="u-avsender" className={labelCls}>Avsender (gjelder alle e-postene)</label>
           <select id="u-avsender" className={inputCls} value={sender} onChange={(e) => setSender(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">Velg avsender …</option>
+            <option value="">{props.senderMixed ? 'Varierer – velg for å bruke én for alle' : 'Velg avsender …'}</option>
             {props.senders.map((s) => (
               <option key={s.id} value={s.id}>{s.label}</option>
             ))}
           </select>
         </div>
         <div>
-          <p className={labelCls}>Når e-postene kan gå ut</p>
-          <SendWindowFields idPrefix="u-sendetid" value={window} onChange={setWindow} disabled={busy} showError />
+          <p className={labelCls}>Når e-postene kan gå ut{props.windowMixed ? ' (varierer nå – endrer du, gjelder det alle)' : ''}</p>
+          <SendWindowFields
+            idPrefix="u-sendetid"
+            value={window}
+            onChange={(w) => {
+              setWindow(w);
+              setWindowTouched(true);
+            }}
+            disabled={busy}
+            showError
+          />
         </div>
         <div className="flex gap-3">
-          <Button loading={busy} disabled={!navn.trim() || !windowError.ok} onClick={save}>Lagre</Button>
+          <Button loading={busy} disabled={!navn.trim() || (windowTouched && !windowError.ok)} onClick={save}>Lagre</Button>
           <Button variant="secondary" disabled={busy} onClick={() => setEditing(false)}>Avbryt</Button>
         </div>
       </section>
@@ -100,11 +120,11 @@ export function SettingsCard(props: Props) {
         </div>
         <div>
           <dt className="text-gray-600">Avsender</dt>
-          <dd className="mt-0.5 text-gray-900">{props.senderName ?? 'Ikke valgt'}</dd>
+          <dd className="mt-0.5 text-gray-900">{props.senderMixed ? 'Varierer' : props.senderName ?? 'Ikke valgt'}</dd>
         </div>
         <div>
           <dt className="text-gray-600">E-postene går ut</dt>
-          <dd className="mt-0.5 text-gray-900">{props.sendWindow || 'Når som helst'}</dd>
+          <dd className="mt-0.5 text-gray-900">{props.windowMixed ? 'Varierer' : props.sendWindow || 'Når som helst'}</dd>
         </div>
       </dl>
       <Button className="mt-3" variant="secondary" size="sm" onClick={open}>Endre navn, avsender eller tidspunkt</Button>

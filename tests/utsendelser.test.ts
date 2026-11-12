@@ -138,6 +138,21 @@ describe('sendGroup', () => {
     expect(enroll.activateDraftFlow).not.toHaveBeenCalled();
   });
 
+  it('nekter å sende mens e-posten har eksempeltekst', async () => {
+    prisma.flow.findUnique.mockResolvedValue({
+      id: 22,
+      status: 'draft',
+      nodes: [
+        { id: 1, type: 'start', config: '{}' },
+        { id: 2, type: 'email', config: JSON.stringify({ subject: 'Skriv emnet her', bodyHtml: '<p>Hei</p>', senderIdentityId: 2 }) },
+        { id: 3, type: 'end', config: '{}' },
+      ],
+      edges: [{ id: 1, fromNodeId: 1, toNodeId: 2, branch: null }, { id: 2, fromNodeId: 2, toNodeId: 3, branch: null }],
+    });
+    await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow(/eksempeltekst/);
+    expect(enroll.activateDraftFlow).not.toHaveBeenCalled();
+  });
+
   it('nekter å sende mens utsendelsen står på pause', async () => {
     prisma.flow.findUnique.mockResolvedValue({ id: 22, status: 'paused', nodes: [], edges: [] });
     await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow(UtsendelseError);

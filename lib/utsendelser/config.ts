@@ -36,6 +36,7 @@ export const utsendelseSchema = z
       .max(30),
   })
   .superRefine((u, ctx) => {
+    if (u.id === 'ny') ctx.addIssue({ code: 'custom', message: '«ny» kan ikke brukes som id' });
     const flowIds = new Set(u.flyter.map((f) => f.flowId));
     if (flowIds.size !== u.flyter.length) ctx.addIssue({ code: 'custom', message: 'Samme flyt er lagt inn to ganger' });
     const groupIds = new Set(u.grupper.map((g) => g.id));
@@ -75,6 +76,8 @@ export async function getUtsendelse(id: string): Promise<Utsendelse | null> {
 
 /** Legger til eller erstatter utsendelsen med samme id. */
 export async function saveUtsendelse(utsendelse: Utsendelse): Promise<void> {
+  // Lagre aldri noe som ikke kan leses tilbake – da ville utsendelsen forsvinne.
+  utsendelseSchema.parse(utsendelse);
   const list = await getUtsendelser();
   const next = [...list.filter((u) => u.id !== utsendelse.id), utsendelse];
   const value = JSON.stringify(next);
