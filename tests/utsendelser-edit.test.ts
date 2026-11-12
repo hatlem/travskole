@@ -15,7 +15,7 @@ const { prisma, store } = vi.hoisted(() => {
       contactList: { findUnique: vi.fn() },
       segment: { findUnique: vi.fn() },
       flowEnrollment: { count: vi.fn() },
-      flow: { findUnique: vi.fn(), delete: vi.fn(async () => ({})) },
+      flow: { findUnique: vi.fn(), delete: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) },
       flowNode: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn((a: unknown) => a), deleteMany: vi.fn((a: unknown) => a) },
       flowEdge: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn((a: unknown) => a), create: vi.fn((a: unknown) => a) },
       setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
@@ -29,7 +29,7 @@ const { saveOverride, getState } = vi.hoisted(() => ({ saveOverride: vi.fn(), ge
 vi.mock('@/lib/flows/send-window-store', () => ({ saveFlowSendWindowOverride: saveOverride, getFlowSendWindowState: getState }));
 
 import {
-  addGroup, appendEmail, createUtsendelse, removeEmail, removeGroup, renameGroup, setWaitBefore, updateSettings,
+  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, renameGroup, setWaitBefore, updateSettings,
 } from '@/lib/utsendelser/edit';
 import { slugify, type Utsendelse } from '@/lib/utsendelser/config';
 
@@ -240,5 +240,29 @@ describe('grupper', () => {
     prisma.contactList.findUnique.mockResolvedValue({ id: 5 });
     await expect(addGroup(U, { navn: 'X', listId: 5, flowId: 99 })).rejects.toMatchObject({ status: 404 });
     await expect(addGroup(U, { navn: 'X' })).rejects.toMatchObject({ status: 400 });
+  });
+});
+
+describe('archiveUtsendelse', () => {
+  it('arkiverer flytene og fjerner utsendelsen fra lista når ingen venter', async () => {
+    prisma.flowEnrollment.count.mockResolvedValue(0);
+    await archiveUtsendelse(U);
+    expect(prisma.flow.updateMany).toHaveBeenCalledWith({ where: { id: { in: [22] }, status: { not: 'template' } }, data: { status: 'archived' } });
+    expect(savedConfig()).toEqual([]);
+  });
+
+  it('nekter mens noen venter på flere e-poster, og slipper låsen', async () => {
+    prisma.flowEnrollment.count.mockResolvedValue(12);
+    await expect(archiveUtsendelse(U)).rejects.toThrow(/12 mottakere venter/);
+    expect(prisma.flow.updateMany).not.toHaveBeenCalled();
+    expect(prisma.setting.deleteMany).toHaveBeenCalledWith({ where: { key: 'utsendelse_sender_22' } });
+  });
+
+  it('venter ikke på en pågående utsending', async () => {
+    const { Prisma } = await import('@prisma/client');
+    prisma.setting.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    prisma.setting.updateMany.mockResolvedValue({ count: 0 });
+    await expect(archiveUtsendelse(U)).rejects.toThrow(/pågår/);
+    expect(prisma.flow.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -71,6 +71,8 @@ export interface UtsendelseView {
   /** Flytene har ulik avsender / sendetid – vises som «varierer» og endres bare hvis brukeren velger noe nytt. */
   senderMixed: boolean;
   windowMixed: boolean;
+  /** Mottakere som fortsatt venter på flere e-poster – arkivering er stengt til de er ferdige. */
+  activeEnrollments: number;
 }
 
 export interface ReplyView {
@@ -266,10 +268,11 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
   const flows = await Promise.all(utsendelse.flyter.map((f) => loadFlow(utsendelse, f.flowId, f.navn, contactEmail, audience)));
   const presentFlows = flows.filter((f): f is FlowView => f !== null);
   const flowStatus = new Map(presentFlows.map((f) => [f.flowId, f.status]));
-  const [groups, totals, replies] = await Promise.all([
+  const [groups, totals, replies, activeEnrollments] = await Promise.all([
     loadGroups(utsendelse, audience, flowStatus),
     dedupedTotals(utsendelse, audience),
     loadReplies(presentFlows),
+    prisma.flowEnrollment.count({ where: { flowId: { in: utsendelse.flyter.map((f) => f.flowId) }, status: 'active' } }),
   ]);
   return {
     id: utsendelse.id,
@@ -282,6 +285,7 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
     replies,
     senderMixed: new Set(presentFlows.map((f) => f.senderIdentityId)).size > 1,
     windowMixed: new Set(presentFlows.map((f) => JSON.stringify(f.sendWindowDraft))).size > 1,
+    activeEnrollments,
   };
 }
 

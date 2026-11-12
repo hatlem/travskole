@@ -88,6 +88,15 @@ export async function saveUtsendelse(utsendelse: Utsendelse): Promise<void> {
   });
 }
 
+export async function removeUtsendelse(id: string): Promise<void> {
+  const value = JSON.stringify((await getUtsendelser()).filter((u) => u.id !== id));
+  await prisma.setting.upsert({
+    where: { key: UTSENDELSER_SETTING_KEY },
+    create: { key: UTSENDELSER_SETTING_KEY, value },
+    update: { value },
+  });
+}
+
 /** Ny, ledig id fra navnet («Juletrav 2026» → «juletrav-2026», «juletrav-2026-2» …). */
 export function slugify(navn: string, taken: Iterable<string>): string {
   const base =

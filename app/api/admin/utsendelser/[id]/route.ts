@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
 import { WEEKDAYS } from '@/lib/flows/send-window';
-import { updateSettings } from '@/lib/utsendelser/edit';
+import { archiveUtsendelse, updateSettings } from '@/lib/utsendelser/edit';
 import { invalid, withUtsendelse } from '@/lib/utsendelser/route-helpers';
 
 const schema = z.object({
@@ -18,5 +18,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const parsed = schema.safeParse(body);
     if (!parsed.success) invalid(parsed.error.issues[0].message);
     await updateSettings(utsendelse, parsed.data);
+  });
+}
+
+/** Arkiver (fjerner fra lista). Bare når ingen venter på flere e-poster. */
+export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return withUtsendelse(request, id, 'archive', async ({ utsendelse }) => {
+    await archiveUtsendelse(utsendelse);
   });
 }

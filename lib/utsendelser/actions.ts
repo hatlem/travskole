@@ -88,6 +88,9 @@ export async function sendGroup(utsendelse: Utsendelse, gruppeId: string): Promi
     throw new UtsendelseError('En utsending pågår allerede. Vent litt og last siden på nytt.');
   }
   try {
+    // Flyten kan ha blitt satt på pause eller arkivert mens vi ventet på låsen.
+    const current = await prisma.flow.findUnique({ where: { id: gruppe.flowId }, select: { status: true } });
+    if (current?.status !== 'active') throw new UtsendelseError('Utsendelsen er satt på pause eller arkivert. Last siden på nytt.');
     const audience = (await loadAudience(utsendelse, [gruppe.id])).get(gruppe.id);
     if (!audience?.ids) throw new UtsendelseError('Gruppen finnes ikke lenger.', 404);
 

@@ -107,12 +107,13 @@ describe('sendGroup', () => {
 
   it('aktiverer utkastet og sender bare til dem som aldri har vært med (også ferdige hoppes over)', async () => {
     enroll.loadAudience.mockResolvedValue(audienceOf([1, 2, 3, 4]));
-    prisma.flow.findUnique.mockResolvedValue({
+    prisma.flow.findUnique.mockResolvedValueOnce({
       id: 22,
       status: 'draft',
       nodes: linearFlow.nodes.map((n) => ({ ...n, config: JSON.stringify({ ...n.config, ...(n.type === 'email' && { senderIdentityId: 2 }) }) })),
       edges: linearFlow.edges.map((e, i) => ({ id: i + 1, ...e, branch: null })),
     });
+    prisma.flow.findUnique.mockResolvedValue({ status: 'active' });
     prisma.flowEnrollment.findMany.mockResolvedValue([{ contactId: 2 }, { contactId: 4 }]);
     enroll.enrollContacts.mockResolvedValue(summary(2));
 
@@ -188,6 +189,15 @@ describe('sendGroup', () => {
     prisma.flowEnrollment.findMany.mockRejectedValue(new Error('db nede'));
     await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow('db nede');
     expect(prisma.setting.deleteMany).toHaveBeenCalledWith({ where: { key: 'utsendelse_sender_22' } });
+  });
+
+  it('arkivert eller pauset mens vi ventet på låsen: melder ingen inn', async () => {
+    prisma.flow.findUnique
+      .mockResolvedValueOnce({ id: 22, status: 'active', nodes: [], edges: [] })
+      .mockResolvedValueOnce({ status: 'archived' });
+    await expect(sendGroup(UTSENDELSE, 'prio-1')).rejects.toThrow(/pause eller arkivert/);
+    expect(enroll.enrollContacts).not.toHaveBeenCalled();
+    expect(prisma.setting.deleteMany).toHaveBeenCalled();
   });
 
   it('ukjent gruppe gir 404', async () => {
