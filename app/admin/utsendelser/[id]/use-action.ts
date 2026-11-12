@@ -15,6 +15,7 @@ export function useUtsendelseAction(utsendelseId: string) {
     path: string,
     body: unknown,
     success: string | ((data: Record<string, unknown>) => string),
+    { refresh = true }: { refresh?: boolean } = {},
   ): Promise<Record<string, unknown> | null> {
     setBusy(true);
     try {
@@ -29,7 +30,7 @@ export function useUtsendelseAction(utsendelseId: string) {
         return null;
       }
       toast(typeof success === 'function' ? success(data) : success, 'success');
-      router.refresh();
+      if (refresh) router.refresh();
       return data;
     } catch {
       toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');

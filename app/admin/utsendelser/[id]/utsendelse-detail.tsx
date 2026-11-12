@@ -223,7 +223,7 @@ function ArchiveSection({ utsendelseId, activeEnrollments }: { utsendelseId: str
         confirmLabel="Arkiver"
         loading={busy}
         onConfirm={async () => {
-          if (await run('DELETE', '', {}, 'Utsendelsen er arkivert.')) router.push('/admin/utsendelser');
+          if (await run('DELETE', '', {}, 'Utsendelsen er arkivert.', { refresh: false })) router.replace('/admin/utsendelser');
         }}
         onCancel={() => setConfirm(false)}
       />

@@ -251,9 +251,18 @@ describe('archiveUtsendelse', () => {
     expect(savedConfig()).toEqual([]);
   });
 
-  it('nekter mens noen venter på flere e-poster', async () => {
+  it('nekter mens noen venter på flere e-poster, og slipper låsen', async () => {
     prisma.flowEnrollment.count.mockResolvedValue(12);
     await expect(archiveUtsendelse(U)).rejects.toThrow(/12 mottakere venter/);
+    expect(prisma.flow.updateMany).not.toHaveBeenCalled();
+    expect(prisma.setting.deleteMany).toHaveBeenCalledWith({ where: { key: 'utsendelse_sender_22' } });
+  });
+
+  it('venter ikke på en pågående utsending', async () => {
+    const { Prisma } = await import('@prisma/client');
+    prisma.setting.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }));
+    prisma.setting.updateMany.mockResolvedValue({ count: 0 });
+    await expect(archiveUtsendelse(U)).rejects.toThrow(/pågår/);
     expect(prisma.flow.updateMany).not.toHaveBeenCalled();
   });
 });
