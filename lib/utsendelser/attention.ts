@@ -4,8 +4,18 @@ import { loadUtsendelseSummary } from './overview';
 
 const count = (n: number) => n.toLocaleString('nb-NO');
 
-/** Utsendelser med noen som ikke har fått e-post ennå, til «Krever oppmerksomhet». Feil skjuler bare kortet. */
+const CACHE_MS = 60_000;
+let cache: { at: number; items: AttentionItem[] } | null = null;
+
+/** Utsendelser med noen som ikke har fått e-post ennå, til «Krever oppmerksomhet». Bufres ett minutt; feil skjuler bare kortet. */
 export async function utsendelseAttentionItems(): Promise<AttentionItem[]> {
+  if (cache && Date.now() - cache.at < CACHE_MS) return cache.items;
+  const items = await computeItems();
+  cache = { at: Date.now(), items };
+  return items;
+}
+
+async function computeItems(): Promise<AttentionItem[]> {
   try {
     const summaries = await Promise.all((await getUtsendelser()).map(loadUtsendelseSummary));
     return summaries

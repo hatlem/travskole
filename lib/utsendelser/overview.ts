@@ -1,17 +1,15 @@
 /** Alt utsendelsessiden viser: e-postene slik mottakeren ser dem, og status per gruppe. */
 import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
-import { normalizeEmail } from '@/lib/crm/normalize';
-import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { replaceMergeTagsInSubject } from '@/lib/email-templates';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { contactMergeTagData } from '@/lib/flows/send';
-import { segmentContactIds } from '@/lib/flows/enroll';
 import { getFlowSendWindowState } from '@/lib/flows/send-window-store';
 import { describeSendWindow } from '@/lib/flows/send-window';
 import { emailSteps, stepTimingLabel, type EmailStep } from './steps';
-import type { Utsendelse, UtsendelseGruppe } from './config';
+import type { Utsendelse } from './config';
+import { loadAudience, type GroupAudience } from './audience';
 
 export type UtsendelseStatus = 'ikke_startet' | 'sender' | 'pause' | 'ferdig';
 
@@ -42,6 +40,7 @@ export interface GroupView {
   beskrivelse?: string;
   flowId: number;
   flowNavn: string;
+  flowStatus: string;
   missingSegment: boolean;
   total: number;
   sent: number;
@@ -63,71 +62,44 @@ export interface UtsendelseView {
   totals: { total: number; sent: number; remaining: number };
 }
 
-interface GroupMembers {
-  ids: number[];
-  reachable: Set<number>;
-}
-
-async function groupMembers(segmentId: number, allowLegitimateInterest: boolean): Promise<GroupMembers | null> {
-  const ids = await segmentContactIds(segmentId);
-  if (!ids) return null;
-  if (ids.length === 0) return { ids, reachable: new Set() };
-  const contacts = await prisma.contact.findMany({
-    where: { id: { in: ids } },
-    select: {
-      id: true,
-      email: true,
-      organizationId: true,
-      consent: { select: { marketing: true, lawfulBasis: true, consentAt: true } },
-    },
-  });
-  const emails = contacts.map((c) => normalizeEmail(c.email)).filter((e): e is string => !!e);
-  const suppressed = new Set(
-    (await prisma.suppression.findMany({ where: { email: { in: emails } }, select: { email: true } })).map((s) => s.email),
-  );
-  const reachable = new Set(
-    contacts
-      .filter((c) => {
-        const email = normalizeEmail(c.email);
-        if (!email || suppressed.has(email)) return false;
-        return isMarketingAllowed({ consent: c.consent, organizationId: c.organizationId, allowLegitimateInterest });
-      })
-      .map((c) => c.id),
-  );
-  return { ids, reachable };
-}
-
 export function utsendelseStatus(flowStatuses: string[], totals: { sent: number; remaining: number }): UtsendelseStatus {
   if (flowStatuses.some((s) => s === 'paused')) return 'pause';
   if (totals.sent === 0) return 'ikke_startet';
   return totals.remaining > 0 ? 'sender' : 'ferdig';
 }
 
-async function loadGroups(utsendelse: Utsendelse, allowLegitimateInterest: boolean): Promise<GroupView[]> {
+async function loadGroups(
+  utsendelse: Utsendelse,
+  audience: Map<string, GroupAudience>,
+  flowStatus: Map<number, string>,
+): Promise<GroupView[]> {
   const flowNames = new Map(utsendelse.flyter.map((f) => [f.flowId, f.navn]));
   return Promise.all(
-    utsendelse.grupper.map(async (g: UtsendelseGruppe): Promise<GroupView> => {
-      const base = { id: g.id, navn: g.navn, beskrivelse: g.beskrivelse, flowId: g.flowId, flowNavn: flowNames.get(g.flowId) ?? '' };
-      const members = await groupMembers(g.segmentId, allowLegitimateInterest);
-      if (!members) {
+    utsendelse.grupper.map(async (g): Promise<GroupView> => {
+      const base = {
+        id: g.id, navn: g.navn, beskrivelse: g.beskrivelse, flowId: g.flowId,
+        flowNavn: flowNames.get(g.flowId) ?? '', flowStatus: flowStatus.get(g.flowId) ?? 'archived',
+      };
+      const members = audience.get(g.id);
+      if (!members?.ids) {
         return { ...base, missingSegment: true, total: 0, sent: 0, remaining: 0, unreachable: 0, firstSentAt: null, lastSentAt: null };
       }
-      const enrollments = members.ids.length
+      const ids = members.ids;
+      const enrollments = ids.length
         ? await prisma.flowEnrollment.findMany({
-            where: { flowId: g.flowId, contactId: { in: members.ids } },
+            where: { flowId: g.flowId, contactId: { in: ids } },
             select: { contactId: true, createdAt: true },
           })
         : [];
       const enrolled = new Set(enrollments.map((e) => e.contactId));
       const times = enrollments.map((e) => e.createdAt.getTime());
-      const remaining = [...members.reachable].filter((id) => !enrolled.has(id)).length;
       return {
         ...base,
         missingSegment: false,
-        total: members.ids.length,
+        total: ids.length,
         sent: enrolled.size,
-        remaining,
-        unreachable: members.ids.filter((id) => !members.reachable.has(id) && !enrolled.has(id)).length,
+        remaining: [...members.reachable].filter((id) => !enrolled.has(id)).length,
+        unreachable: ids.filter((id) => !members.reachable.has(id) && !enrolled.has(id)).length,
         firstSentAt: times.length ? new Date(Math.min(...times)) : null,
         lastSentAt: times.length ? new Date(Math.max(...times)) : null,
       };
@@ -135,12 +107,34 @@ async function loadGroups(utsendelse: Utsendelse, allowLegitimateInterest: boole
   );
 }
 
-async function sampleContact(utsendelse: Utsendelse, flowId: number) {
+/** Totaler uten å telle en kontakt to ganger når gruppene i samme flyt overlapper. */
+async function dedupedTotals(utsendelse: Utsendelse, audience: Map<string, GroupAudience>) {
+  let sent = 0;
+  let remaining = 0;
+  for (const { flowId } of utsendelse.flyter) {
+    const all = new Set<number>();
+    const reachable = new Set<number>();
+    for (const g of utsendelse.grupper.filter((x) => x.flowId === flowId)) {
+      const a = audience.get(g.id);
+      a?.ids?.forEach((id) => all.add(id));
+      a?.reachable.forEach((id) => reachable.add(id));
+    }
+    if (all.size === 0) continue;
+    const enrolled = new Set(
+      (await prisma.flowEnrollment.findMany({ where: { flowId, contactId: { in: [...all] } }, select: { contactId: true } })).map((e) => e.contactId),
+    );
+    sent += enrolled.size;
+    remaining += [...reachable].filter((id) => !enrolled.has(id)).length;
+  }
+  return { total: sent + remaining, sent, remaining };
+}
+
+async function sampleContact(utsendelse: Utsendelse, flowId: number, audience: Map<string, GroupAudience>) {
   for (const g of utsendelse.grupper.filter((x) => x.flowId === flowId)) {
-    const ids = await segmentContactIds(g.segmentId);
-    if (!ids?.length) continue;
+    const ids = [...(audience.get(g.id)?.reachable ?? [])];
+    if (!ids.length) continue;
     const contact = await prisma.contact.findFirst({
-      where: { id: { in: ids }, email: { not: null } },
+      where: { id: { in: ids } },
       orderBy: { id: 'asc' },
       select: { id: true, name: true, roleTitle: true, customFields: true, organization: { select: { name: true } } },
     });
@@ -169,7 +163,13 @@ async function stepStats(nodeIds: number[]) {
   return stats;
 }
 
-async function loadFlow(utsendelse: Utsendelse, flowId: number, navn: string, contactEmail: string): Promise<FlowView | null> {
+async function loadFlow(
+  utsendelse: Utsendelse,
+  flowId: number,
+  navn: string,
+  contactEmail: string,
+  audience: Map<string, GroupAudience>,
+): Promise<FlowView | null> {
   const flow = await prisma.flow.findUnique({
     where: { id: flowId },
     select: { id: true, status: true, nodes: true, edges: true },
@@ -181,7 +181,7 @@ async function loadFlow(utsendelse: Utsendelse, flowId: number, navn: string, co
     flow.edges,
   );
   const [sample, stats, sendWindow] = await Promise.all([
-    sampleContact(utsendelse, flowId),
+    sampleContact(utsendelse, flowId, audience),
     stepStats(steps.map((s) => s.nodeId)),
     getFlowSendWindowState(flowId).catch(() => null),
   ]);
@@ -217,19 +217,11 @@ function emptyMerge(contactEmail: string) {
 }
 
 export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<UtsendelseView> {
-  const [contactEmail, legit] = await Promise.all([
-    getSetting('contact_email'),
-    getSetting('marketing_allow_legitimate_interest'),
-  ]);
-  const [flows, groups] = await Promise.all([
-    Promise.all(utsendelse.flyter.map((f) => loadFlow(utsendelse, f.flowId, f.navn, contactEmail))),
-    loadGroups(utsendelse, legit === 'true'),
-  ]);
+  const [contactEmail, audience] = await Promise.all([getSetting('contact_email'), loadAudience(utsendelse)]);
+  const flows = await Promise.all(utsendelse.flyter.map((f) => loadFlow(utsendelse, f.flowId, f.navn, contactEmail, audience)));
   const presentFlows = flows.filter((f): f is FlowView => f !== null);
-  const totals = groups.reduce(
-    (acc, g) => ({ total: acc.total + g.total, sent: acc.sent + g.sent, remaining: acc.remaining + g.remaining }),
-    { total: 0, sent: 0, remaining: 0 },
-  );
+  const flowStatus = new Map(presentFlows.map((f) => [f.flowId, f.status]));
+  const [groups, totals] = await Promise.all([loadGroups(utsendelse, audience, flowStatus), dedupedTotals(utsendelse, audience)]);
   return {
     id: utsendelse.id,
     navn: utsendelse.navn,
@@ -243,23 +235,16 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
 
 /** Lett oppsummering til lista og forsiden (uten forhåndsvisning). */
 export async function loadUtsendelseSummary(utsendelse: Utsendelse) {
-  const legit = (await getSetting('marketing_allow_legitimate_interest')) === 'true';
-  const [groups, flows] = await Promise.all([
-    loadGroups(utsendelse, legit),
+  const [audience, flows] = await Promise.all([
+    loadAudience(utsendelse),
     prisma.flow.findMany({ where: { id: { in: utsendelse.flyter.map((f) => f.flowId) } }, select: { status: true } }),
   ]);
-  const totals = groups.reduce(
-    (acc, g) => ({ total: acc.total + g.total, sent: acc.sent + g.sent, remaining: acc.remaining + g.remaining }),
-    { total: 0, sent: 0, remaining: 0 },
-  );
-  const groupsNotStarted = groups.filter((g) => g.sent === 0 && g.remaining > 0).length;
+  const totals = await dedupedTotals(utsendelse, audience);
   return {
     id: utsendelse.id,
     navn: utsendelse.navn,
     beskrivelse: utsendelse.beskrivelse,
     status: utsendelseStatus(flows.map((f) => f.status), totals),
     totals,
-    groupsNotStarted,
-    groupCount: groups.length,
   };
 }

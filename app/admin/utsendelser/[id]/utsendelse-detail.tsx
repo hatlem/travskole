@@ -134,7 +134,13 @@ export function UtsendelseDetail({ view, myEmail }: { view: SerializedView; myEm
         </p>
         <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
           {view.groups.map((g) => (
-            <GroupRow key={g.id} group={g} showFlowName={view.flows.length > 1} disabled={isPaused} onSend={() => setConfirmGroup(g)} />
+            <GroupRow
+              key={g.id}
+              group={g}
+              showFlowName={view.flows.length > 1}
+              disabled={isPaused || (g.flowStatus !== 'draft' && g.flowStatus !== 'active')}
+              onSend={() => setConfirmGroup(g)}
+            />
           ))}
         </ul>
       </section>

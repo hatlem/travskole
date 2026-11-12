@@ -23,6 +23,8 @@ const { prisma } = vi.hoisted(() => {
   return { prisma };
 });
 vi.mock('@/lib/prisma', () => ({ prisma }));
+const { utsendelseForFlow } = vi.hoisted(() => ({ utsendelseForFlow: vi.fn(async (): Promise<unknown> => null) }));
+vi.mock('@/lib/utsendelser/config', () => ({ utsendelseForFlow }));
 vi.mock('@/lib/auth', () => ({ requireAdmin: vi.fn(async () => ({ user: { email: 'admin@x.no' } })) }));
 vi.mock('@/lib/activity', () => ({ logActivity: vi.fn(async () => {}) }));
 
