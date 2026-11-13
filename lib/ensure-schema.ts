@@ -37,6 +37,9 @@ export const UTSENDELSE_SCHEMA_STATEMENTS = [
     CONSTRAINT "utsendelse_recipients_contact_id_fkey" FOREIGN KEY ("contact_id") REFERENCES "contacts"("id") ON DELETE CASCADE ON UPDATE CASCADE
   )`,
   'CREATE INDEX IF NOT EXISTS "utsendelse_recipients_contact_id_idx" ON "utsendelse_recipients"("contact_id")',
+  'ALTER TABLE "utsendelse_recipients" ADD COLUMN IF NOT EXISTS "excluded" BOOLEAN NOT NULL DEFAULT false',
+  // Første versjon lagret «tatt ut» som group_id = null. Slike rader finnes ikke ellers, så dette er trygt å kjøre hver gang.
+  'UPDATE "utsendelse_recipients" SET "excluded" = true WHERE "group_id" IS NULL AND "excluded" = false',
 ];
 
 /** Idempotent DDL ved oppstart (prod-databasen er stengt utenfra). Én feil stopper ikke resten. */

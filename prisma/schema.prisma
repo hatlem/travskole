@@ -737,12 +737,13 @@ model FlowMessageOverride {
   @@map("flow_message_overrides")
 }
 
-/// Manuelle valg per mottaker i en utsendelse: flyttet til en gruppe (groupId) eller tatt ut (groupId = null).
+/// Manuelle valg per mottaker i en utsendelse: flyttet til en gruppe (groupId) og/eller tatt ut (excluded).
 model UtsendelseRecipient {
   utsendelseId String   @map("utsendelse_id")
   contactId    Int      @map("contact_id")
   contact      Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
   groupId      String?  @map("group_id")
+  excluded     Boolean  @default(false)
   updatedBy    String?  @map("updated_by")
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")

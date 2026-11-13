@@ -43,7 +43,7 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
     if (!parsed.success) invalid();
     const input = parsed.data;
     if (input.action === 'exclude') return excludeRecipient(utsendelse, input.contactId, email);
-    if (input.action === 'include') return includeRecipient(utsendelse, input.contactId);
+    if (input.action === 'include') return includeRecipient(utsendelse, input.contactId, email);
     return moveRecipient(utsendelse, input.contactId, input.gruppeId, email);
   });
 }
