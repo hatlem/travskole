@@ -107,4 +107,9 @@ describe('loadAudience', () => {
     await loadAudience(U);
     expect(prisma.utsendelseRecipient.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { utsendelseId: 'u' } }));
   });
+
+  it('flyttet til en gruppe som er fjernet: tilbake i sin vanlige gruppe', async () => {
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: 'fjernet' }]);
+    expect((await loadAudience(U)).get('p1')?.ids).toEqual([1, 2, 3, 4, 5]);
+  });
 });

@@ -50,7 +50,10 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
     prisma.utsendelseRecipient.findMany({ where: { utsendelseId: utsendelse.id }, select: { contactId: true, groupId: true } }),
   ]);
   /** contactId → gruppen personen er flyttet til, eller null når personen er tatt ut. */
-  const choices = new Map(choiceRows.map((r) => [r.contactId, r.groupId]));
+  const groupIds = new Set(utsendelse.grupper.map((g) => g.id));
+  const choices = new Map(
+    choiceRows.filter((r) => r.groupId === null || groupIds.has(r.groupId)).map((r) => [r.contactId, r.groupId]),
+  );
 
   const emails = contacts.map((c) => normalizeEmail(c.email)).filter((e): e is string => !!e);
   const suppressed = new Set(

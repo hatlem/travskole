@@ -50,8 +50,6 @@ export interface GroupView {
   flowNavn: string;
   flowStatus: string;
   kilde: string;
-  /** Kontaktlisten i CRM, filtrert på gruppens segment eller liste. */
-  peopleHref: string;
   missingSegment: boolean;
   total: number;
   sent: number;
@@ -107,7 +105,6 @@ async function loadGroups(
         id: g.id, navn: g.navn, beskrivelse: g.beskrivelse, flowId: g.flowId,
         flowNavn: flowNames.get(g.flowId) ?? '', flowStatus: flowStatus.get(g.flowId) ?? 'archived',
         kilde: kilder.get(g.id) ?? '',
-        peopleHref: g.segmentId ? `/admin/crm/kontakter?segmentId=${g.segmentId}` : `/admin/crm/kontakter?listId=${g.listId}`,
       };
       const members = audience.get(g.id);
       if (!members?.ids) {

@@ -73,6 +73,8 @@ const testSendSchema = z.object({
   toEmail: z.string().email('Ugyldig e-postadresse'),
   /** Kontakten hvis historikk KI-personaliseringen skal bruke (aiPersonalize-noder). */
   contactId: z.number().int().positive().optional(),
+  /** Fellesteksten med kontaktens flettedata, selv om kontakten har egen tekst. */
+  ignoreOverride: z.boolean().optional(),
 });
 
 export async function POST(
@@ -158,7 +160,7 @@ export async function POST(
   }
 
   // Egen tekst for denne kontakten sendes i stedet for fellesteksten, akkurat som ved ekte utsending.
-  const override = parsed.data.contactId !== undefined
+  const override = parsed.data.contactId !== undefined && !parsed.data.ignoreOverride
     ? await prisma.flowMessageOverride.findUnique({
         where: { nodeId_contactId: { nodeId: node.id, contactId: parsed.data.contactId } },
         select: { subject: true, bodyHtml: true },

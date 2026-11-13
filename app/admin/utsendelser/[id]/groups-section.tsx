@@ -110,7 +110,7 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
                     {!g.missingSegment && (
                       <>
                         {' · '}
-                        <Link href={g.peopleHref} className="font-medium text-blue-700 underline-offset-2 hover:underline">
+                        <Link href={`/admin/utsendelser/${utsendelseId}/${g.id}?modus=en`} className="font-medium text-blue-700 underline-offset-2 hover:underline">
                           Se hvem som er med
                         </Link>
                       </>

@@ -19,6 +19,7 @@ interface Props {
   rows: RecipientRow[];
   myEmail: string;
   onBack: () => void;
+  onDirtyChange: (dirty: boolean) => void;
 }
 
 type Filter = 'ikke' | 'alle' | 'sendt' | 'ut';
@@ -46,7 +47,7 @@ function matchesFilter(row: RecipientRow, filter: Filter) {
   return row.status === filter;
 }
 
-export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows: initialRows, myEmail, onBack }: Props) {
+export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows: initialRows, myEmail, onBack, onDirtyChange }: Props) {
   const { toast } = useToast();
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [rows, setRows] = useState(initialRows);
@@ -86,13 +87,15 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
   const selected = rows.find((r) => r.id === selectedId) ?? null;
 
   /** Henter e-postene til én person. Bare det siste svaret brukes, så rask klikking ikke blander personer. */
+  const fetchDetail = useCallback(async (contactId: number) => {
+    const res = await fetch(`/api/admin/utsendelser/${utsendelseId}/mottaker?gruppe=${encodeURIComponent(group.id)}&kontakt=${contactId}`);
+    if (!res.ok) throw new Error();
+    return (await res.json()) as RecipientDetail;
+  }, [utsendelseId, group.id]);
+
   const load = useCallback((contactId: number) => {
     const id = ++requestId.current;
-    fetch(`/api/admin/utsendelser/${utsendelseId}/mottaker?gruppe=${encodeURIComponent(group.id)}&kontakt=${contactId}`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error();
-        return (await res.json()) as RecipientDetail;
-      })
+    fetchDetail(contactId)
       .then((data) => {
         if (id !== requestId.current) return;
         const base = Object.fromEntries(data.emails.map((e) => [e.nodeId, { subject: e.subject, bodyHtml: e.bodyHtml }]));
@@ -104,7 +107,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
       .catch(() => {
         if (id === requestId.current) setLoadError(true);
       });
-  }, [utsendelseId, group.id]);
+  }, [fetchDetail]);
 
   const [firstId] = useState(selectedId);
   useEffect(() => {
@@ -121,6 +124,8 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
 
   const isDirty = (nodeId: number) =>
     !!drafts[nodeId] && (drafts[nodeId].subject !== saved[nodeId]?.subject || drafts[nodeId].bodyHtml !== saved[nodeId]?.bodyHtml);
+  const anyDirty = !!detail?.emails.some((e) => !e.sentAt && isDirty(e.nodeId));
+  useEffect(() => onDirtyChange(anyDirty), [anyDirty, onDirtyChange]);
 
   /** Lagrer egen tekst for e-postene som er endret. Kalles før alt som flytter bort fra personen. */
   async function flush(): Promise<boolean> {
@@ -145,6 +150,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
     const index = rows.findIndex((r) => r.id === fromId);
     const next = rows.slice(index + 1).find((r) => r.status === 'ikke' && r.id !== fromId) ?? rows.find((r) => r.status === 'ikke' && r.id !== fromId);
     if (next) open(next.id);
+    else load(fromId);
   }
 
   async function select(id: number) {
@@ -193,9 +199,15 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
     if (!detail) return;
     const ok = await run('DELETE', '/mottaker/epost', { contactId: detail.id, nodeId }, 'Personen får fellesteksten igjen.', { refresh: false });
     if (!ok) return;
-    load(detail.id);
     const stillEdited = detail.emails.some((e) => e.nodeId !== nodeId && e.edited);
     updateRow(detail.id, { edited: stillEdited });
+    // Bare denne e-posten byttes; ulagrede endringer i de andre beholdes.
+    const fresh = (await fetchDetail(detail.id).catch(() => null))?.emails.find((e) => e.nodeId === nodeId);
+    if (!fresh) return load(detail.id);
+    const text = { subject: fresh.subject, bodyHtml: fresh.bodyHtml };
+    setDetail((d) => d && { ...d, emails: d.emails.map((e) => (e.nodeId === nodeId ? fresh : e)) });
+    setSaved((sv) => ({ ...sv, [nodeId]: text }));
+    setDrafts((dr) => ({ ...dr, [nodeId]: text }));
   }
 
   async function sendRest() {
@@ -227,7 +239,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
   return (
     <div>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <button type="button" onClick={onBack} className="text-sm text-bjerke-blue hover:underline">← Tilbake til e-posten</button>
+        <button type="button" onClick={async () => { if (await flush()) onBack(); }} className="text-sm text-bjerke-blue hover:underline">← Tilbake til e-posten</button>
         <h1 className="text-xl font-bold text-gray-900">{group.navn}: én og én</h1>
         <span className="rounded-full bg-gray-100 px-3 py-0.5 text-sm text-gray-700 tabular-nums">
           {formatCount(counts.sent)} sendt · {formatCount(counts.out)} tatt ut · {formatCount(counts.left)} igjen
@@ -412,6 +424,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
           busy={busy}
           onCancel={() => setAdding(false)}
           onAdd={async (contact) => {
+            if (!(await flush())) return;
             const ok = await run('PATCH', '/mottaker', { action: 'move', contactId: contact.id, gruppeId: group.id }, `${contact.name} er lagt til i ${group.navn}.`);
             if (!ok) return;
             setAdding(false);

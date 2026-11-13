@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/admin/Button';
@@ -67,6 +67,15 @@ export function SendView(props: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const [mode, setMode] = useState(props.initialMode);
+  const [dirty, setDirty] = useState(false);
+
+  // Ulagret tekst: spør før fanen lukkes eller lastes på nytt.
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
 
   function switchMode(next: 'alle' | 'en') {
     setMode(next);
@@ -75,7 +84,13 @@ export function SendView(props: Props) {
 
   return (
     <div className={mode === 'en' ? '' : 'max-w-5xl'}>
-      <Link href={`/admin/utsendelser/${props.utsendelseId}`} className="mb-3 inline-block text-sm text-bjerke-blue hover:underline">
+      <Link
+        href={`/admin/utsendelser/${props.utsendelseId}`}
+        onClick={(e) => {
+          if (dirty && !window.confirm('Du har endringer som ikke er lagret. Vil du gå uten å lagre dem?')) e.preventDefault();
+        }}
+        className="mb-3 inline-block text-sm text-bjerke-blue hover:underline"
+      >
         ← {props.utsendelseNavn}
       </Link>
       {props.paused && (
@@ -83,12 +98,24 @@ export function SendView(props: Props) {
           Utsendelsen står på pause. Trykk «Fortsett» på utsendelsen før du sender.
         </p>
       )}
-      {mode === 'en' ? <OneByOne {...props} onBack={() => switchMode('alle')} /> : <GroupCompose {...props} onOneByOne={() => switchMode('en')} />}
+      {mode === 'en' ? (
+        <OneByOne {...props} onBack={() => switchMode('alle')} onDirtyChange={setDirty} />
+      ) : (
+        <GroupCompose {...props} onOneByOne={() => switchMode('en')} onDirtyChange={setDirty} />
+      )}
     </div>
   );
 }
 
-function GroupCompose({ utsendelseId, group, flow, paused, myEmail, onOneByOne }: Props & { onOneByOne: () => void }) {
+function GroupCompose({
+  utsendelseId,
+  group,
+  flow,
+  paused,
+  myEmail,
+  onOneByOne,
+  onDirtyChange,
+}: Props & { onOneByOne: () => void; onDirtyChange: (dirty: boolean) => void }) {
   const router = useRouter();
   const { toast } = useToast();
   const { run, busy } = useUtsendelseAction(utsendelseId);
@@ -98,11 +125,13 @@ function GroupCompose({ utsendelseId, group, flow, paused, myEmail, onOneByOne }
   const [confirm, setConfirm] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  const dirtyIds = flow.steps.filter((s) => drafts[s.nodeId].subject !== saved[s.nodeId].subject || drafts[s.nodeId].bodyHtml !== saved[s.nodeId].bodyHtml).map((s) => s.nodeId);
+  const dirty = dirtyIds.length > 0;
+  useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
+
   const step = flow.steps[active];
   if (!step) return <p className="text-gray-600">Utsendelsen har ingen e-poster ennå.</p>;
   const draft = drafts[step.nodeId];
-  const dirtyIds = flow.steps.filter((s) => drafts[s.nodeId].subject !== saved[s.nodeId].subject || drafts[s.nodeId].bodyHtml !== saved[s.nodeId].bodyHtml).map((s) => s.nodeId);
-  const dirty = dirtyIds.length > 0;
   const canSend = group.remaining > 0 && !paused && flow.status !== 'archived';
 
   async function saveAll() {
@@ -129,7 +158,7 @@ function GroupCompose({ utsendelseId, group, flow, paused, myEmail, onOneByOne }
       const res = await fetch(`/api/admin/crm/flows/${flow.flowId}/test-send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId: step.nodeId, toEmail: myEmail, ...(flow.sampleContactId && { contactId: flow.sampleContactId }) }),
+        body: JSON.stringify({ nodeId: step.nodeId, toEmail: myEmail, ...(flow.sampleContactId && { contactId: flow.sampleContactId, ignoreOverride: true }) }),
       });
       const data = await res.json().catch(() => ({}));
       toast(res.ok ? `Test av e-post ${step.number} sendt til ${myEmail}.` : data.error ?? 'Kunne ikke sende test.', res.ok ? 'success' : 'error');
@@ -158,7 +187,7 @@ function GroupCompose({ utsendelseId, group, flow, paused, myEmail, onOneByOne }
             <span className="rounded-full bg-blue-50 px-3 py-0.5 font-medium text-blue-900 ring-1 ring-blue-200">
               {group.navn} · {group.remaining > 0 ? people(group.remaining) : 'alle har fått den'}
             </span>
-            <button type="button" className="font-medium text-bjerke-blue hover:underline" onClick={onOneByOne}>Se hvem</button>
+            {!dirty && <button type="button" className="font-medium text-bjerke-blue hover:underline" onClick={onOneByOne}>Se hvem</button>}
           </dd>
         </div>
         <div className="flex items-center gap-3 px-5 py-2.5">

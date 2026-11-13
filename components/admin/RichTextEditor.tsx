@@ -180,7 +180,8 @@ export default function RichTextEditor({
   }, [editor, onReady]);
 
   useEffect(() => {
-    if (editor && editor.isEditable !== editable) editor.setEditable(editable);
+    // false: å låse/låse opp er ikke en endring av teksten (ellers blir den «endret» uten at noen skrev).
+    if (editor && editor.isEditable !== editable) editor.setEditable(editable, false);
   }, [editor, editable]);
 
   if (!editor) {
