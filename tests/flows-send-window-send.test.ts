@@ -9,6 +9,7 @@ const { prisma } = vi.hoisted(() => ({
   prisma: {
     contact: { findUnique: vi.fn() },
     suppression: { findUnique: vi.fn() },
+    flowMessageOverride: { findUnique: vi.fn(async () => null) },
     consent: { findUnique: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
     messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },

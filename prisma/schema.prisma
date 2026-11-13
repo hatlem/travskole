@@ -300,20 +300,22 @@ model Contact {
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
 
-  organization    Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  owner           User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  user            User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
-  parent          Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
-  deals           Deal[]
-  memberships     ContactListMembership[]
-  activities      ContactActivity[]
-  tasks           Task[]
-  notes           Note[]
-  consent         Consent?
-  visitors        Visitor[]
-  events          AppEvent[]
-  flowEnrollments FlowEnrollment[]
-  messageSends    MessageSend[]
+  organization         Organization?           @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  owner                User?                   @relation("ContactOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  user                 User?                   @relation("ContactUser", fields: [userId], references: [id], onDelete: SetNull)
+  parent               Parent?                 @relation(fields: [parentId], references: [id], onDelete: SetNull)
+  deals                Deal[]
+  memberships          ContactListMembership[]
+  activities           ContactActivity[]
+  tasks                Task[]
+  notes                Note[]
+  consent              Consent?
+  visitors             Visitor[]
+  events               AppEvent[]
+  flowEnrollments      FlowEnrollment[]
+  messageSends         MessageSend[]
+  messageOverrides     FlowMessageOverride[]
+  utsendelseRecipients UtsendelseRecipient[]
 
   @@index([organizationId])
   @@index([stage])
@@ -578,6 +580,8 @@ model FlowNode {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
+  messageOverrides FlowMessageOverride[]
+
   @@index([flowId])
   @@map("flow_nodes")
 }
@@ -713,4 +717,37 @@ model AiSuggestion {
 
   @@index([flowId, status])
   @@map("ai_suggestions")
+}
+
+/// Egen tekst til én mottaker i én e-post («Gå gjennom én og én»). Brukes i stedet for e-postens felles tekst.
+model FlowMessageOverride {
+  id        Int      @id @default(autoincrement())
+  nodeId    Int      @map("node_id")
+  node      FlowNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  contactId Int      @map("contact_id")
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  subject   String
+  bodyHtml  String   @map("body_html")
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([nodeId, contactId])
+  @@index([contactId])
+  @@map("flow_message_overrides")
+}
+
+/// Manuelle valg per mottaker i en utsendelse: flyttet til en gruppe (groupId) eller tatt ut (groupId = null).
+model UtsendelseRecipient {
+  utsendelseId String   @map("utsendelse_id")
+  contactId    Int      @map("contact_id")
+  contact      Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  groupId      String?  @map("group_id")
+  updatedBy    String?  @map("updated_by")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@id([utsendelseId, contactId])
+  @@index([contactId])
+  @@map("utsendelse_recipients")
 }

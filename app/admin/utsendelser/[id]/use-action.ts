@@ -11,7 +11,7 @@ export function useUtsendelseAction(utsendelseId: string) {
   const [busy, setBusy] = useState(false);
 
   async function run(
-    method: 'POST' | 'PATCH' | 'DELETE',
+    method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     path: string,
     body: unknown,
     success: string | ((data: Record<string, unknown>) => string),

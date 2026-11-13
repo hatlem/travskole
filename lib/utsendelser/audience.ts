@@ -10,9 +10,13 @@ import { contactMatchesSegment, parseSegmentRules } from '@/lib/crm/segments';
 import type { Utsendelse } from './config';
 
 export interface GroupAudience {
-  /** null når segmentet er slettet. */
+  /** null når segmentet er slettet. Med flyttede inn, uten flyttede ut og tatt ut. */
   ids: number[] | null;
   reachable: Set<number>;
+  /** Hører til gruppen, men er tatt ut av utsendelsen. */
+  excluded: number[];
+  /** Flyttet hit for hånd. */
+  movedIn: Set<number>;
 }
 
 const parseTags = (raw: string): string[] => {
@@ -28,7 +32,7 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
   const groups = utsendelse.grupper.filter((g) => !onlyGroupIds || onlyGroupIds.includes(g.id));
   const segmentIds = [...new Set(groups.flatMap((g) => (g.segmentId ? [g.segmentId] : [])))];
   const listIds = [...new Set(groups.flatMap((g) => (g.listId ? [g.listId] : [])))];
-  const [segments, lists, memberships, flows, contacts, legit] = await Promise.all([
+  const [segments, lists, memberships, flows, contacts, legit, choiceRows] = await Promise.all([
     prisma.segment.findMany({ where: { id: { in: segmentIds } }, select: { id: true, rules: true } }),
     prisma.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true } }),
     prisma.contactListMembership.findMany({ where: { listId: { in: listIds } }, select: { listId: true, contactId: true } }),
@@ -43,7 +47,13 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
       },
     }),
     getSetting('marketing_allow_legitimate_interest'),
+    prisma.utsendelseRecipient.findMany({ where: { utsendelseId: utsendelse.id }, select: { contactId: true, groupId: true } }),
   ]);
+  /** contactId → gruppen personen er flyttet til, eller null når personen er tatt ut. */
+  const groupIds = new Set(utsendelse.grupper.map((g) => g.id));
+  const choices = new Map(
+    choiceRows.filter((r) => r.groupId === null || groupIds.has(r.groupId)).map((r) => [r.contactId, r.groupId]),
+  );
 
   const emails = contacts.map((c) => normalizeEmail(c.email)).filter((e): e is string => !!e);
   const suppressed = new Set(
@@ -61,7 +71,7 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
     let members: typeof segmentContacts;
     if (g.listId) {
       if (!existingLists.has(g.listId)) {
-        result.set(g.id, { ids: null, reachable: new Set() });
+        result.set(g.id, { ids: null, reachable: new Set(), excluded: [], movedIn: new Set() });
         continue;
       }
       const inList = listMembers.get(g.listId) ?? new Set<number>();
@@ -69,7 +79,7 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
     } else {
       const rules = g.segmentId ? rulesBySegment.get(g.segmentId) : undefined;
       if (!rules) {
-        result.set(g.id, { ids: null, reachable: new Set() });
+        result.set(g.id, { ids: null, reachable: new Set(), excluded: [], movedIn: new Set() });
         continue;
       }
       members = segmentContacts.filter((c) =>
@@ -79,6 +89,12 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
         ),
       );
     }
+    const excluded = members.filter((c) => choices.get(c.id) === null).map((c) => c.id);
+    const movedIn = new Set([...choices].filter(([, groupId]) => groupId === g.id).map(([id]) => id));
+    members = [
+      ...members.filter((c) => !choices.has(c.id)),
+      ...segmentContacts.filter((c) => movedIn.has(c.id)),
+    ];
     const isMarketing = marketingByFlow.get(g.flowId) ?? true;
     const reachable = new Set(
       members
@@ -90,7 +106,7 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
         })
         .map((c) => c.id),
     );
-    result.set(g.id, { ids: members.map((c) => c.id), reachable });
+    result.set(g.id, { ids: members.map((c) => c.id), reachable, excluded, movedIn });
   }
   return result;
 }

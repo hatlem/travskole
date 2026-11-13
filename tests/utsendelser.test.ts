@@ -57,7 +57,7 @@ const linearFlow = {
 };
 
 const audienceOf = (ids: number[], reachable: number[] = ids) =>
-  new Map([['prio-1', { ids, reachable: new Set(reachable) }]]);
+  new Map([['prio-1', { ids, reachable: new Set(reachable), excluded: [] as number[], movedIn: new Set<number>() }]]);
 
 beforeEach(() => {
   vi.clearAllMocks();

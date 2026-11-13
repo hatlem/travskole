@@ -10,6 +10,7 @@ import { describeSendWindow, formatTime, DEFAULT_SEND_WINDOW, type Weekday } fro
 import { emailSteps, stepTimingLabel, type EmailStep } from './steps';
 import type { Utsendelse } from './config';
 import { loadAudience, type GroupAudience } from './audience';
+import { sampleLabel } from './sample';
 
 export type UtsendelseStatus = 'ikke_startet' | 'sender' | 'pause' | 'ferdig';
 
@@ -35,7 +36,8 @@ export interface FlowView {
   sendWindowDraft: { start: string; end: string; days: Weekday[] };
   /** E-poster kan legges til/fjernes bare før noen er sendt til. */
   canChangeSteps: boolean;
-  sampleName: string | null;
+  /** «Ola Nordmann i AF Gruppen» eller «post@firma.no (Firma AS)». */
+  sampleLabel: string | null;
   sampleContactId: number | null;
   steps: StepView[];
 }
@@ -177,7 +179,7 @@ async function sampleContact(utsendelse: Utsendelse, flowId: number, audience: M
     const contact = await prisma.contact.findFirst({
       where: { id: { in: ids } },
       orderBy: { id: 'asc' },
-      select: { id: true, name: true, roleTitle: true, customFields: true, organization: { select: { name: true } } },
+      select: { id: true, name: true, email: true, roleTitle: true, customFields: true, organization: { select: { name: true } } },
     });
     if (contact) return contact;
   }
@@ -246,7 +248,7 @@ async function loadFlow(
     sendWindow: sendWindow ? describeSendWindow(sendWindow.effective) : '',
     sendWindowDraft: { start: formatTime(w.startHour, w.startMinute), end: formatTime(w.endHour, w.endMinute), days: [...w.days] },
     canChangeSteps: enrollmentCount === 0 && flow.status !== 'archived' && flow.status !== 'template' && steps.every((st) => st.hoursAfterPrevious !== null),
-    sampleName: sample?.name ?? null,
+    sampleLabel: sample ? sampleLabel(sample) : null,
     sampleContactId: sample?.id ?? null,
     steps: steps.map((s) => ({
       ...s,

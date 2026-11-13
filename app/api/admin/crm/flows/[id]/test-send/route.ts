@@ -73,6 +73,8 @@ const testSendSchema = z.object({
   toEmail: z.string().email('Ugyldig e-postadresse'),
   /** Kontakten hvis historikk KI-personaliseringen skal bruke (aiPersonalize-noder). */
   contactId: z.number().int().positive().optional(),
+  /** Fellesteksten med kontaktens flettedata, selv om kontakten har egen tekst. */
+  ignoreOverride: z.boolean().optional(),
 });
 
 export async function POST(
@@ -157,14 +159,21 @@ export async function POST(
     mergeData = contactMergeTagData(contact, await getSetting('contact_email'));
   }
 
-  let renderedSubject = replaceMergeTagsInSubject(subject, mergeData);
-  let renderedBody = renderFlowEmailBody(bodyHtml, mergeData);
-  let aiNote: string | null = null;
+  // Egen tekst for denne kontakten sendes i stedet for fellesteksten, akkurat som ved ekte utsending.
+  const override = parsed.data.contactId !== undefined && !parsed.data.ignoreOverride
+    ? await prisma.flowMessageOverride.findUnique({
+        where: { nodeId_contactId: { nodeId: node.id, contactId: parsed.data.contactId } },
+        select: { subject: true, bodyHtml: true },
+      })
+    : null;
+  let renderedSubject = replaceMergeTagsInSubject(override?.subject ?? subject, mergeData);
+  let renderedBody = renderFlowEmailBody(override?.bodyHtml ?? bodyHtml, mergeData);
+  let aiNote: string | null = override ? 'Egen tekst for denne mottakeren.' : null;
   let aiPersonalized = false;
 
   // Samme KI-vei som ekte utsending (kun markedsføringsflyter), så admin ser
   // hva mottakeren faktisk får.
-  const provider = config.aiPersonalize === true && flow.isMarketing ? getLLMProvider() : null;
+  const provider = !override && config.aiPersonalize === true && flow.isMarketing ? getLLMProvider() : null;
   if (provider) {
     if (parsed.data.contactId === undefined) {
       aiNote = 'KI-personalisering er på, men ingen kontakt er valgt — dette er originalteksten.';

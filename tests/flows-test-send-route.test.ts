@@ -8,6 +8,7 @@ const { prisma } = vi.hoisted(() => ({
     flowNode: { findUnique: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
     suppression: { findUnique: vi.fn() },
+    flowMessageOverride: { findUnique: vi.fn(async (): Promise<{ subject: string; bodyHtml: string } | null> => null) },
     contact: { upsert: vi.fn(), findUnique: vi.fn() },
     messageSend: { create: vi.fn(), update: vi.fn() },
   },
@@ -86,5 +87,22 @@ describe('POST /api/admin/crm/flows/[id]/test-send', () => {
     const res = await send({ contactId: 999 });
     expect(res.status).toBe(404);
     expect(sendMailAs).not.toHaveBeenCalled();
+  });
+
+  it('egen tekst for kontakten brukes, med mindre fellesteksten er bedt om', async () => {
+    prisma.flowNode.findUnique.mockResolvedValue({
+      id: 5, flowId: 1, type: 'email',
+      config: JSON.stringify({ subject: 'Felles', bodyHtml: '<p>Felles tekst</p>', senderIdentityId: 2 }),
+    });
+    prisma.contact.findUnique.mockResolvedValue({ name: 'Kari Holm', roleTitle: null, customFields: '{}', organization: null });
+    prisma.flowMessageOverride.findUnique.mockResolvedValueOnce({ subject: 'Bare Kari', bodyHtml: '<p>Egen tekst</p>' });
+
+    await send({ contactId: 63 });
+    expect(vi.mocked(sendMailAs).mock.calls[0][0].subject).toBe('Bare Kari');
+    expect(vi.mocked(sendMailAs).mock.calls[0][0].html).toContain('Egen tekst');
+
+    await send({ contactId: 63, ignoreOverride: true });
+    expect(vi.mocked(sendMailAs).mock.calls[1][0].subject).toBe('Felles');
+    expect(vi.mocked(sendMailAs).mock.calls[1][0].html).toContain('Felles tekst');
   });
 });

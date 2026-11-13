@@ -19,6 +19,7 @@ import { DealDialog } from '@/components/admin/crm/DealDialog';
 import { AddToFlow } from '@/components/admin/crm/AddToFlow';
 import { enrollmentStatusLabel } from '@/lib/flows/enrollment-status';
 import { ContactLists, type ContactListMembershipRow } from '@/components/admin/crm/ContactLists';
+import { ContactUtsendelser } from '@/components/admin/crm/ContactUtsendelser';
 import { ContactSegments } from '@/components/admin/crm/ContactSegments';
 import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
 import { OrganizationLinker } from '@/components/admin/crm/OrganizationLinker';
@@ -559,6 +560,12 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                 pickerOpen={listPickerOpen}
                 onPickerOpenChange={setListPickerOpen}
               />
+            </div>
+
+            <div className="border-t border-gray-100 pt-3">
+              <h3 className="text-sm font-medium mb-1">Utsendelser</h3>
+              <p className="text-xs text-gray-500 mb-2">Flytt kontakten til en annen gruppe, ta den ut eller legg den til.</p>
+              <ContactUtsendelser contactId={contactId} contactName={contact.name} />
             </div>
 
             <div className="border-t border-gray-100 pt-3">

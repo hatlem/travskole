@@ -77,6 +77,13 @@ export async function PUT(
   if (!isFlowEditable(flow.status)) {
     return NextResponse.json({ error: 'Kan ikke endre grafen i en aktiv flyt' }, { status: 409 });
   }
+  // Lagring bytter ut alle noder, og da ville egne tekster per mottaker forsvinne.
+  if ((await prisma.flowMessageOverride.count({ where: { node: { flowId } } })) > 0) {
+    return NextResponse.json(
+      { error: 'Noen mottakere har egen tekst i disse e-postene. Endre e-postene fra Utsendelser i stedet.' },
+      { status: 409 },
+    );
+  }
 
   // Validate ref uniqueness and edge references before touching the database
   // so we fail with a clean 400 rather than a Prisma FK error mid-transaction.

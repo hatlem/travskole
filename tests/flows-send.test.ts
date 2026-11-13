@@ -16,6 +16,7 @@ const { prisma } = vi.hoisted(() => ({
   prisma: {
     contact: { findUnique: vi.fn() },
     suppression: { findUnique: vi.fn() },
+    flowMessageOverride: { findUnique: vi.fn(async (): Promise<{ subject: string; bodyHtml: string } | null> => null) },
     consent: { findUnique: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
     messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
@@ -94,6 +95,19 @@ beforeEach(() => {
 });
 
 describe('sendFlowEmail', () => {
+  it('egen tekst for mottakeren sendes i stedet for fellesteksten', async () => {
+    prisma.flowMessageOverride.findUnique.mockResolvedValueOnce({ subject: 'Bare til Kari', bodyHtml: '<p>Hei Kari, egen tekst</p>' });
+
+    const result = await sendFlowEmail(baseInput);
+
+    expect(result).toBe('sent');
+    expect(prisma.flowMessageOverride.findUnique).toHaveBeenCalledWith(expect.objectContaining({ where: { nodeId_contactId: { nodeId: 2, contactId: 3 } } }));
+    const mail = mockedSendMailAs.mock.calls[0][0];
+    expect(mail.subject).toBe('Bare til Kari');
+    expect(mail.html).toContain('Hei Kari, egen tekst');
+    expect(mail.html).not.toContain('lenke');
+  });
+
   it('1. suppressed contact: never sends, returns skipped_suppressed, logs an audit row with no dedupeKey', async () => {
     prisma.suppression.findUnique.mockResolvedValue({ id: 1, email: 'kari@example.com', reason: 'bounce' });
 

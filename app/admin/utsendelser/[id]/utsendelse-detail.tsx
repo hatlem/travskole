@@ -86,16 +86,33 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
         lists={options.lists}
         segments={options.segments}
         paused={isPaused}
-        sendWindow={firstFlow?.sendWindow ?? ''}
       />
 
       <section aria-labelledby="emails-title" className="mb-12">
         <h2 id="emails-title" className="text-lg font-semibold text-gray-900">E-postene</h2>
         <p className="mt-1 mb-4 text-sm text-gray-600">Slik ser e-postene ut for mottakeren. Du kan endre teksten og ventetiden når som helst.</p>
-        <div className="space-y-10">
-          {view.flows.map((flow) => (
-            <FlowEmails key={flow.flowId} flow={flow} utsendelseId={view.id} myEmail={myEmail} showHeading={view.flows.length > 1} />
-          ))}
+        <div className="space-y-6">
+          {view.flows.map((flow, i) =>
+            view.flows.length > 1 ? (
+              <details key={flow.flowId} open={i === 0} className="group rounded-xl border border-gray-200 bg-gray-50/60 px-5 py-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold text-gray-900">
+                  <span>
+                    {flow.navn}
+                    <span className="ml-2 text-sm font-normal text-gray-500">
+                      {flow.steps.length} {flow.steps.length === 1 ? 'e-post' : 'e-poster'}
+                    </span>
+                  </span>
+                  <span className="text-sm font-normal text-blue-700 group-open:hidden">Vis</span>
+                  <span className="hidden text-sm font-normal text-blue-700 group-open:inline">Skjul</span>
+                </summary>
+                <div className="mt-4">
+                  <FlowEmails flow={flow} utsendelseId={view.id} myEmail={myEmail} />
+                </div>
+              </details>
+            ) : (
+              <FlowEmails key={flow.flowId} flow={flow} utsendelseId={view.id} myEmail={myEmail} />
+            ),
+          )}
         </div>
       </section>
 
@@ -106,7 +123,7 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
   );
 }
 
-function FlowEmails({ flow, utsendelseId, myEmail, showHeading }: { flow: FlowView; utsendelseId: string; myEmail: string; showHeading: boolean }) {
+function FlowEmails({ flow, utsendelseId, myEmail }: { flow: FlowView; utsendelseId: string; myEmail: string }) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(7);
@@ -114,8 +131,7 @@ function FlowEmails({ flow, utsendelseId, myEmail, showHeading }: { flow: FlowVi
 
   return (
     <div>
-      {showHeading && <h3 className="mb-1 font-semibold text-gray-900">{flow.navn}</h3>}
-      {flow.sampleName && <p className="mb-3 text-sm text-gray-600">Eksempel: slik får {flow.sampleName} dem.</p>}
+      {flow.sampleLabel && <p className="mb-3 text-sm text-gray-600">Vist slik {flow.sampleLabel} får dem.</p>}
       <ol className="space-y-4">
         {flow.steps.map((step) => (
           <li key={step.nodeId}>

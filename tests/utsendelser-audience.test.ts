@@ -9,6 +9,7 @@ const { prisma, settings } = vi.hoisted(() => ({
     suppression: { findMany: vi.fn() },
     contactList: { findMany: vi.fn(async () => [{ id: 5 }]) },
     contactListMembership: { findMany: vi.fn(async () => [{ listId: 5, contactId: 1 }, { listId: 5, contactId: 6 }]) },
+    utsendelseRecipient: { findMany: vi.fn() },
   },
   settings: { marketing_allow_legitimate_interest: 'true' } as Record<string, string>,
 }));
@@ -38,6 +39,7 @@ beforeEach(() => {
   settings.marketing_allow_legitimate_interest = 'true';
   prisma.segment.findMany.mockResolvedValue([{ id: 2, rules: JSON.stringify({ all: [{ field: 'tags', op: 'contains', value: 'prio-1' }] }) }]);
   prisma.flow.findMany.mockResolvedValue([{ id: 22, isMarketing: true }]);
+  prisma.utsendelseRecipient.findMany.mockResolvedValue([]);
   prisma.suppression.findMany.mockResolvedValue([{ email: 'k3@firma.no' }]);
   prisma.contact.findMany.mockResolvedValue([
     contact(1),
@@ -57,7 +59,7 @@ describe('loadAudience', () => {
   });
 
   it('slettet segment gir ids = null', async () => {
-    expect((await loadAudience(U)).get('borte')).toEqual({ ids: null, reachable: new Set() });
+    expect((await loadAudience(U)).get('borte')).toEqual({ ids: null, reachable: new Set(), excluded: [], movedIn: new Set() });
   });
 
   it('uten B2B berettiget interesse når ingen uten samtykke fram', async () => {
@@ -75,5 +77,39 @@ describe('loadAudience', () => {
   it('laster kontaktene én gang uansett antall grupper', async () => {
     await loadAudience(U);
     expect(prisma.contact.findMany).toHaveBeenCalledTimes(1);
+  });
+
+  it('tatt ut: borte fra gruppen og telles ikke, men vises som tatt ut', async () => {
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: null }]);
+    const a = (await loadAudience(U)).get('p1');
+    expect(a?.ids).toEqual([2, 3, 4, 5]);
+    expect(a?.reachable.has(1)).toBe(false);
+    expect(a?.excluded).toEqual([1]);
+  });
+
+  it('flyttet: ut av den gamle gruppen og inn i den nye', async () => {
+    const two: Utsendelse = {
+      ...U,
+      grupper: [
+        { id: 'p1', navn: 'P1', segmentId: 2, flowId: 22 },
+        { id: 'l', navn: 'L', listId: 5, flowId: 22 },
+      ],
+    };
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 5, groupId: 'l' }, { contactId: 1, groupId: 'l' }]);
+    const a = await loadAudience(two);
+    expect(a.get('p1')?.ids).toEqual([2, 3, 4]);
+    expect(a.get('l')?.ids).toEqual([6, 1, 5]);
+    expect([...(a.get('l')?.movedIn ?? [])].sort()).toEqual([1, 5]);
+    expect(a.get('l')?.excluded).toEqual([]);
+  });
+
+  it('henter valgene for riktig utsendelse', async () => {
+    await loadAudience(U);
+    expect(prisma.utsendelseRecipient.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { utsendelseId: 'u' } }));
+  });
+
+  it('flyttet til en gruppe som er fjernet: tilbake i sin vanlige gruppe', async () => {
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: 'fjernet' }]);
+    expect((await loadAudience(U)).get('p1')?.ids).toEqual([1, 2, 3, 4, 5]);
   });
 });
