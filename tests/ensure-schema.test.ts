@@ -4,7 +4,7 @@ const executeRawUnsafe = vi.hoisted(() => vi.fn());
 vi.mock('@/lib/prisma', () => ({ prisma: { $executeRawUnsafe: executeRawUnsafe } }));
 vi.mock('@/lib/logger', () => ({ default: { error: vi.fn() } }));
 
-import { COURSE_SCHEMA_STATEMENTS, ensureSchema } from '@/lib/ensure-schema';
+import { COURSE_SCHEMA_STATEMENTS, UTSENDELSE_SCHEMA_STATEMENTS, ensureSchema } from '@/lib/ensure-schema';
 
 describe('ensureSchema', () => {
   beforeEach(() => {
@@ -14,15 +14,18 @@ describe('ensureSchema', () => {
   it('runs only idempotent additive statements', async () => {
     executeRawUnsafe.mockResolvedValue(0);
     await ensureSchema();
-    expect(executeRawUnsafe).toHaveBeenCalledTimes(COURSE_SCHEMA_STATEMENTS.length);
+    expect(executeRawUnsafe).toHaveBeenCalledTimes(COURSE_SCHEMA_STATEMENTS.length + UTSENDELSE_SCHEMA_STATEMENTS.length);
     for (const statement of COURSE_SCHEMA_STATEMENTS) {
       expect(statement).toMatch(/^ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS /);
     }
+    for (const statement of UTSENDELSE_SCHEMA_STATEMENTS) {
+      expect(statement).toMatch(/^CREATE (UNIQUE )?(TABLE|INDEX) IF NOT EXISTS /);
+    }
   });
 
-  it('never throws, so a database hiccup cannot stop the app from booting', async () => {
+  it('never throws, and one failing statement does not skip the rest', async () => {
     executeRawUnsafe.mockRejectedValue(new Error('boom'));
     await expect(ensureSchema()).resolves.toBeUndefined();
-    expect(executeRawUnsafe).toHaveBeenCalledTimes(1);
+    expect(executeRawUnsafe).toHaveBeenCalledTimes(COURSE_SCHEMA_STATEMENTS.length + UTSENDELSE_SCHEMA_STATEMENTS.length);
   });
 });

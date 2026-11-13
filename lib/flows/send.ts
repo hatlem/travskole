@@ -338,10 +338,17 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     const courseCtx = await resolveCourseMergeContext(input.registrationId);
     if (courseCtx) mergeData = { ...mergeData, ...courseCtx };
   }
-  const subject = replaceMergeTagsInSubject(input.subject, mergeData);
-  const renderedBody = renderFlowEmailBody(input.bodyHtml, mergeData);
+  // Egen tekst skrevet for akkurat denne mottakeren vinner over e-postens felles tekst (og KI).
+  const override = await prisma.flowMessageOverride.findUnique({
+    where: { nodeId_contactId: { nodeId: input.nodeId, contactId: input.contactId } },
+    select: { subject: true, bodyHtml: true },
+  });
+  const subject = replaceMergeTagsInSubject(override?.subject ?? input.subject, mergeData);
+  const renderedBody = renderFlowEmailBody(override?.bodyHtml ?? input.bodyHtml, mergeData);
 
-  const ai = await resolveAiBody(input, renderedBody, subject, contact.name);
+  const ai: AiBodyResolution = override
+    ? { kind: 'send', body: renderedBody, aiPersonalized: false }
+    : await resolveAiBody(input, renderedBody, subject, contact.name);
   if (ai.kind === 'pending_review') return ai;
   if (ai.kind === 'skip') return 'skipped_review';
   if (reviewFirst) {

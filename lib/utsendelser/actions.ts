@@ -125,6 +125,31 @@ export async function sendGroup(utsendelse: Utsendelse, gruppeId: string): Promi
   }
 }
 
+/** Sender e-post 1 (og resten av rekken) til én person i gruppen. Samme regler og lås som for hele gruppen. */
+export async function sendOne(utsendelse: Utsendelse, gruppeId: string, contactId: number): Promise<void> {
+  const gruppe = utsendelse.grupper.find((g) => g.id === gruppeId);
+  if (!gruppe) throw new UtsendelseError('Fant ikke gruppen.', 404);
+
+  await validateAndActivate(gruppe.flowId);
+  if (!(await acquireSendLock(gruppe.flowId))) {
+    throw new UtsendelseError('En utsending pågår allerede. Vent litt og prøv igjen.');
+  }
+  try {
+    const current = await prisma.flow.findUnique({ where: { id: gruppe.flowId }, select: { status: true } });
+    if (current?.status !== 'active') throw new UtsendelseError('Utsendelsen er satt på pause eller arkivert. Last siden på nytt.');
+    const audience = (await loadAudience(utsendelse, [gruppe.id])).get(gruppe.id);
+    if (!audience?.ids?.includes(contactId)) throw new UtsendelseError('Personen er ikke lenger i denne gruppen. Last siden på nytt.');
+    if (!audience.reachable.has(contactId)) throw new UtsendelseError('Personen kan ikke få e-post (har meldt seg av eller mangler adresse).');
+    const previous = await prisma.flowEnrollment.count({ where: { flowId: gruppe.flowId, contactId } });
+    if (previous > 0) throw new UtsendelseError('Personen har allerede fått denne utsendelsen.');
+
+    const summary = await enrollContacts(gruppe.flowId, [contactId]);
+    if (summary.enrolled !== 1) throw new UtsendelseError('Kunne ikke sende til personen. Sjekk at adressen er riktig.');
+  } finally {
+    await releaseSendLock(gruppe.flowId).catch(() => {});
+  }
+}
+
 /** Pause stopper alle e-poster i utsendelsen; fortsett starter dem igjen. Utkast røres ikke. */
 export async function setPaused(utsendelse: Utsendelse, paused: boolean): Promise<number> {
   const flowIds = utsendelse.flyter.map((f) => f.flowId);

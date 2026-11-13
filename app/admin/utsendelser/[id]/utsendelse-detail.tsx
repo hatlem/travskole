@@ -86,7 +86,6 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
         lists={options.lists}
         segments={options.segments}
         paused={isPaused}
-        sendWindow={firstFlow?.sendWindow ?? ''}
       />
 
       <section aria-labelledby="emails-title" className="mb-12">

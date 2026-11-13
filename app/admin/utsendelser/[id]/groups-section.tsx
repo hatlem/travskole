@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/admin/Button';
+import { Button, ButtonLink } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import type { GroupView } from '@/lib/utsendelser/overview';
 import { formatCount } from '../status';
@@ -22,41 +22,20 @@ interface Props {
   lists: SourceOption[];
   segments: SourceOption[];
   paused: boolean;
-  sendWindow: string;
-}
-
-interface SendResult {
-  sent: number;
-  skippedSuppressed: number;
-  skippedNoConsent: number;
-  skippedMissing: number;
 }
 
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
-function sendMessage(r: SendResult): string {
-  const skipped = r.skippedSuppressed + r.skippedNoConsent + r.skippedMissing;
-  const base = r.sent === 0 ? 'Ingen nye å sende til.' : `Sendt til ${formatCount(r.sent)}. E-post 1 går ut innenfor sendetiden.`;
-  return skipped > 0 ? `${base} ${formatCount(skipped)} hoppet over (meldt av eller mangler adresse).` : base;
-}
-
 const inputCls = 'w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm';
 const labelCls = 'mb-1 block text-xs font-medium text-gray-600';
 
-export function GroupsSection({ utsendelseId, groups, flows, lists, segments, paused, sendWindow }: Props) {
+export function GroupsSection({ utsendelseId, groups, flows, lists, segments, paused }: Props) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
-  const [confirmSend, setConfirmSend] = useState<SerializedGroup | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<SerializedGroup | null>(null);
   const [renaming, setRenaming] = useState<{ id: string; navn: string } | null>(null);
   const [adding, setAdding] = useState(false);
   const [newGroup, setNewGroup] = useState({ navn: '', kilde: '', flowId: flows[0]?.flowId ?? 0 });
-
-  async function confirmAndSend() {
-    if (!confirmSend) return;
-    const ok = await run('POST', '/send', { gruppeId: confirmSend.id }, (data) => sendMessage(data as unknown as SendResult));
-    if (ok) setConfirmSend(null);
-  }
 
   async function addGroup() {
     const [type, id] = newGroup.kilde.split(':');
@@ -161,11 +140,19 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
                     </p>
                   )}
                   {g.remaining > 0 ? (
-                    <Button className="mt-1" variant={g.sent > 0 ? 'secondary' : 'primary'} disabled={!sendable} onClick={() => setConfirmSend(g)}>
-                      {g.sent > 0 ? `Send til ${formatCount(g.remaining)} nye` : 'Send nå'}
-                    </Button>
+                    sendable ? (
+                      <ButtonLink className="mt-1" variant={g.sent > 0 ? 'secondary' : 'primary'} href={`/admin/utsendelser/${utsendelseId}/${g.id}`}>
+                        {g.sent > 0 ? `Send til ${formatCount(g.remaining)} nye …` : 'Send …'}
+                      </ButtonLink>
+                    ) : (
+                      <Button className="mt-1" disabled>Send …</Button>
+                    )
                   ) : (
-                    g.sent === 0 && !g.missingSegment && <p className="text-sm text-gray-500">Ingen å sende til</p>
+                    !g.missingSegment && (
+                      <Link href={`/admin/utsendelser/${utsendelseId}/${g.id}?modus=en`} className="mt-1 inline-block text-sm font-medium text-bjerke-blue hover:underline">
+                        {g.sent > 0 ? 'Se mottakerne' : 'Ingen å sende til'}
+                      </Link>
+                    )
                   )}
                 </div>
               </li>
@@ -213,23 +200,6 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
         <Button className="mt-4" variant="secondary" onClick={() => setAdding(true)}>+ Legg til mottakere</Button>
       )}
 
-      <ConfirmModal
-        open={confirmSend !== null}
-        variant="info"
-        title={confirmSend ? `Sende til «${confirmSend.navn}»?` : ''}
-        message={
-          confirmSend && (
-            <>
-              <strong>{formatCount(confirmSend.remaining)}</strong> {confirmSend.remaining === 1 ? 'person får' : 'personer får'} e-post 1.
-              {sendWindow ? ` E-postene går ut ${sendWindow}.` : ''} Resten av e-postene kommer automatisk etterpå. Du kan sette utsendelsen på pause når som helst.
-            </>
-          )
-        }
-        confirmLabel="Send nå"
-        loading={busy}
-        onConfirm={confirmAndSend}
-        onCancel={() => setConfirmSend(null)}
-      />
       <ConfirmModal
         open={confirmRemove !== null}
         title={confirmRemove ? `Fjerne «${confirmRemove.navn}»?` : ''}

@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 const { prisma } = vi.hoisted(() => {
   const prisma = {
     flow: { findUnique: vi.fn() },
+    flowMessageOverride: { count: vi.fn(async () => 0) },
     flowNode: { findMany: vi.fn(), deleteMany: vi.fn(async () => ({})), create: vi.fn() },
     flowEdge: { deleteMany: vi.fn(async () => ({})), create: vi.fn() },
     $transaction: vi.fn(),
@@ -67,5 +68,12 @@ describe('PUT /api/admin/crm/flows/[id]/graph', () => {
     prisma.flowNode.findMany.mockResolvedValue([{ id: 7, config: JSON.stringify({ bodyHtml: '<p>gammel</p>' }) }]);
     await put([{ id: 7, type: 'email', config: { bodyHtml: '<p>ny</p><img src="x" onerror="y()">' } }]);
     expect(savedBody(0)).toBe('<p>ny</p><img>');
+  });
+
+  it('nekter å bytte ut nodene når noen mottakere har egen tekst', async () => {
+    prisma.flowMessageOverride.count.mockResolvedValueOnce(2);
+    const res = await put([{ tempId: 'a', type: 'email', config: { subject: 'Hei', bodyHtml: '<p>x</p>' } }]);
+    expect(res.status).toBe(409);
+    expect(prisma.flowNode.deleteMany).not.toHaveBeenCalled();
   });
 });
