@@ -688,6 +688,7 @@ model MessageSend {
 
   @@index([contactId, sentAt])
   @@index([messageId])
+  @@index([status, createdAt])
   @@map("message_sends")
 }
 

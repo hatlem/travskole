@@ -14,12 +14,13 @@ export default async function UtsendelsePage({ params }: { params: Promise<{ id:
   const utsendelse = await getUtsendelse(id);
   if (!utsendelse) notFound();
 
-  const [view, session, senders, lists, segments] = await Promise.all([
+  const [view, session, senders, lists, segments, testOthers] = await Promise.all([
     loadUtsendelseView(utsendelse),
     getServerSession(),
     prisma.senderIdentity.findMany({ where: { active: true }, orderBy: { displayName: 'asc' }, select: { id: true, displayName: true, email: true } }),
     prisma.contactList.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
     prisma.segment.findMany({ orderBy: { name: 'asc' }, select: { id: true, name: true } }),
+    testRecipients(),
   ]);
 
   return (
@@ -32,7 +33,7 @@ export default async function UtsendelsePage({ params }: { params: Promise<{ id:
           replies: view.replies.map((r) => ({ ...r, repliedAt: r.repliedAt.toISOString() })),
         }}
         myEmail={session?.user.email ?? ''}
-        testOthers={await testRecipients(session?.user.email ?? '')}
+        testOthers={testOthers}
         options={{
           senders: senders.map((s) => ({ id: s.id, label: `${s.displayName} <${s.email}>` })),
           lists,

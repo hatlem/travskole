@@ -21,10 +21,11 @@ export default async function SendGroupPage({
   const group = utsendelse?.grupper.find((g) => g.id === gruppe);
   if (!utsendelse || !group) notFound();
 
-  const [view, rows, session] = await Promise.all([
+  const [view, rows, session, testOthers] = await Promise.all([
     loadUtsendelseView(utsendelse),
     loadRecipientList(utsendelse, group.id),
     getServerSession(),
+    testRecipients(),
   ]);
   const flow = view.flows.find((f) => f.flowId === group.flowId);
   const groupView = view.groups.find((g) => g.id === group.id);
@@ -50,7 +51,7 @@ export default async function SendGroupPage({
         paused={view.status === 'pause'}
         rows={rows}
         myEmail={session?.user.email ?? ''}
-        testOthers={await testRecipients(session?.user.email ?? '')}
+        testOthers={testOthers}
         initialMode={sp.modus === 'en' ? 'en' : 'alle'}
       />
     </>

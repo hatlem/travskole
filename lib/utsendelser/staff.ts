@@ -6,7 +6,7 @@ export interface TestRecipient {
   label: string;
 }
 
-export async function testRecipients(myEmail: string): Promise<TestRecipient[]> {
+export async function testRecipients(): Promise<TestRecipient[]> {
   const [users, identities] = await Promise.all([
     prisma.user.findMany({
       where: { role: { in: ['admin', 'superadmin'] }, deactivatedAt: null },
@@ -16,7 +16,5 @@ export async function testRecipients(myEmail: string): Promise<TestRecipient[]> 
     prisma.senderIdentity.findMany({ select: { email: true, displayName: true } }),
   ]);
   const names = new Map(identities.map((i) => [i.email.toLowerCase(), i.displayName]));
-  return users
-    .filter((u) => u.email.toLowerCase() !== myEmail.toLowerCase())
-    .map((u) => ({ email: u.email, label: names.get(u.email.toLowerCase()) ?? u.email }));
+  return users.map((u) => ({ email: u.email, label: names.get(u.email.toLowerCase()) ?? u.email }));
 }

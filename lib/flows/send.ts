@@ -30,7 +30,7 @@ import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
 import { sendDeferral, type SendWindow } from './send-window';
-import { isThrottleError, rateDeferral, THROTTLE_RETRY_MS } from './send-rate';
+import { isThrottleError, rateDeferral, THROTTLE_GIVE_UP_MS, THROTTLE_RETRY_MS } from './send-rate';
 import { renderFlowEmailBody } from './email-html';
 
 /**
@@ -56,7 +56,6 @@ export interface PendingReviewResult {
   resumeAt: Date;
 }
 
-/** Utenfor sendetiden — runneren parkerer enrollmentet på noden til `resumeAt`. */
 /** Ikke sendt nå: utenfor sendetiden, eller over farten leverandøren tåler. Prøv igjen ved resumeAt. */
 export interface OutsideSendWindowResult {
   kind: 'outside_window' | 'throttled';
@@ -479,8 +478,19 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         nodeId: input.nodeId,
         error: error instanceof Error ? error.message : String(error),
       });
-      await prisma.messageSend.delete({ where: { id: messageSendId } }).catch(() => {});
-      return { kind: 'throttled', resumeAt: new Date((input.now ?? new Date()).getTime() + THROTTLE_RETRY_MS) };
+      // Raden blir et synlig «throttled»-spor og slipper plassen (dedupeKey), så neste forsøk kan sende.
+      await prisma.messageSend.update({
+        where: { id: messageSendId },
+        data: { status: 'throttled', dedupeKey: null, trackingToken: null },
+      });
+      const now = input.now ?? new Date();
+      const first = await prisma.messageSend.findFirst({
+        where: { enrollmentId: input.enrollmentId, nodeId: input.nodeId, status: 'throttled' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      if (first && now.getTime() - first.createdAt.getTime() >= THROTTLE_GIVE_UP_MS) return 'failed';
+      return { kind: 'throttled', resumeAt: new Date(now.getTime() + THROTTLE_RETRY_MS) };
     }
     logger.error('Flow email send failed', {
       enrollmentId: input.enrollmentId,

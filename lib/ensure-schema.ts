@@ -40,6 +40,8 @@ export const UTSENDELSE_SCHEMA_STATEMENTS = [
   'ALTER TABLE "utsendelse_recipients" ADD COLUMN IF NOT EXISTS "excluded" BOOLEAN NOT NULL DEFAULT false',
   // Første versjon lagret «tatt ut» som group_id = null. Slike rader finnes ikke ellers, så dette er trygt å kjøre hver gang.
   'UPDATE "utsendelse_recipients" SET "excluded" = true WHERE "group_id" IS NULL AND "excluded" = false',
+  // Sendetaket teller nylig sendte e-poster.
+  'CREATE INDEX IF NOT EXISTS "message_sends_status_created_at_idx" ON "message_sends"("status", "created_at")',
 ];
 
 /** Idempotent DDL ved oppstart (prod-databasen er stengt utenfra). Én feil stopper ikke resten. */

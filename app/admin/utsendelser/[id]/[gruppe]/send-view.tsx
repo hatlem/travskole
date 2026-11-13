@@ -229,7 +229,6 @@ function GroupCompose({
                 others={testOthers}
                 contactId={flow.sampleContactId}
                 ignoreOverride
-                before={async () => !dirty || saveAll()}
               />
             )}
             {!canSend && group.remaining === 0 && <span className="text-sm text-gray-600">Alle i gruppen har fått e-posten.</span>}

@@ -34,9 +34,10 @@ export function TestSendButton({ flowId, nodeId, myEmail, others, contactId, ign
   const { containerRef, triggerRef } = usePopoverDismiss<HTMLDivElement>(open, close);
 
   async function send(toEmail: string) {
-    if (before && !(await before())) return;
+    if (sending) return;
     setSending(true);
     try {
+      if (before && !(await before())) return;
       const res = await fetch(`/api/admin/crm/flows/${flowId}/test-send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -56,6 +57,7 @@ export function TestSendButton({ flowId, nodeId, myEmail, others, contactId, ign
   }
 
   const otherValid = EMAIL.test(other.trim());
+  const colleagues = others.filter((o) => o.email.toLowerCase() !== myEmail.toLowerCase());
 
   return (
     <div className="relative inline-flex">
@@ -92,9 +94,9 @@ export function TestSendButton({ flowId, nodeId, myEmail, others, contactId, ign
           className="absolute bottom-full left-0 z-30 mb-2 w-72 rounded-xl border border-gray-200 bg-white p-3 shadow-lg"
         >
           <p className="mb-2 text-xs font-medium uppercase tracking-wide text-gray-500">Send test til</p>
-          {others.length > 0 && (
+          {colleagues.length > 0 && (
             <ul className="mb-2 max-h-48 overflow-y-auto">
-              {others.map((o) => (
+              {colleagues.map((o) => (
                 <li key={o.email}>
                   <button
                     type="button"
@@ -120,7 +122,7 @@ export function TestSendButton({ flowId, nodeId, myEmail, others, contactId, ign
             <input
               id={`test-${nodeId}`}
               type="email"
-              autoFocus={others.length === 0}
+              autoFocus={colleagues.length === 0}
               placeholder="Annen e-post"
               value={other}
               onChange={(e) => setOther(e.target.value)}

@@ -27,6 +27,7 @@ import { findReview } from '@/lib/ai/review';
 import { isExactSendWindowParking, type SendWindow } from './send-window';
 import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
 import { STOP_REASON_NO_CONSENT, STOP_REASON_SUPPRESSED } from './enrollment-status';
+import { rateBlockedUntil } from './send-rate';
 
 export const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
@@ -556,6 +557,7 @@ export interface FlowDrainResult extends FlowBatchResult {
 export async function drainFlowBatches(
   budgetMs: number = DRAIN_BUDGET_MS,
   clock: () => Date = () => new Date(),
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
 ): Promise<FlowDrainResult> {
   const total: FlowDrainResult = { processed: 0, sent: 0, failed: 0, completed: 0, batches: 0 };
   const startedAt = clock().getTime();
@@ -564,18 +566,29 @@ export async function drainFlowBatches(
   for (;;) {
     const now = clock();
     const claimed = await claimDueEnrollmentIds(now);
-    if (claimed.length === 0) break;
-    const result = await processClaimed(claimed, now);
-    total.processed += result.processed;
-    total.sent += result.sent;
-    total.failed += result.failed;
-    total.completed += result.completed;
-    total.batches++;
-
-    const finishedAt = clock().getTime();
-    slowestMs = Math.max(slowestMs, finishedAt - now.getTime());
-    if (claimed.length < BATCH_SIZE) break;
-    if (finishedAt - startedAt + slowestMs > budgetMs) break;
+    let finishedAt = now.getTime();
+    if (claimed.length > 0) {
+      const result = await processClaimed(claimed, now);
+      total.processed += result.processed;
+      total.sent += result.sent;
+      total.failed += result.failed;
+      total.completed += result.completed;
+      total.batches++;
+      finishedAt = clock().getTime();
+      slowestMs = Math.max(slowestMs, finishedAt - now.getTime());
+    }
+    const elapsed = finishedAt - startedAt;
+    if (claimed.length === BATCH_SIZE) {
+      if (elapsed + slowestMs > budgetMs) break;
+      continue;
+    }
+    // Køen er tom for nå, men noen venter på sendetaket: vent til det slipper hvis budsjettet holder.
+    const waitMs = rateBlockedUntil() - finishedAt;
+    if (total.batches > 0 && waitMs > 0 && elapsed + waitMs + slowestMs <= budgetMs) {
+      await sleep(waitMs);
+      continue;
+    }
+    break;
   }
   return total;
 }
