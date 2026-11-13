@@ -26,7 +26,7 @@ export async function DELETE(
 
   const identity = await prisma.senderIdentity.findUnique({
     where: { id: identityId },
-    select: { id: true, email: true, _count: { select: { messageSends: true } } },
+    select: { id: true, email: true, _count: { select: { messageSends: { where: { status: 'sent' } } } } },
   });
   if (!identity) {
     return NextResponse.json({ error: 'Ikke funnet' }, { status: 404 });

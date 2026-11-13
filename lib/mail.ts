@@ -1,4 +1,7 @@
 import nodemailer from 'nodemailer';
+import { Readable } from 'stream';
+import SMTPConnection from 'nodemailer/lib/smtp-connection';
+import MailComposer from 'nodemailer/lib/mail-composer';
 import { getSetting, getSettings, SETTING_DEFAULTS } from '@/lib/settings';
 import { makeT } from '@/lib/strings';
 import logger from '@/lib/logger';
@@ -47,19 +50,23 @@ async function getSiteName() {
   return getSetting('site_name');
 }
 
-function getTransporter() {
-  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    return null;
-  }
-  return nodemailer.createTransport({
+/** Korte tidsgrenser: en hengende sending skal aldri vare lenger enn runnerens lease. */
+const SMTP_TIMEOUTS = { connectionTimeout: 30_000, greetingTimeout: 30_000, socketTimeout: 60_000 };
+
+function smtpConfig() {
+  if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) return null;
+  return {
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT) || 587,
     secure: (process.env.SMTP_PORT || '587') === '465',
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    ...SMTP_TIMEOUTS,
+  };
+}
+
+function getTransporter() {
+  const config = smtpConfig();
+  return config ? nodemailer.createTransport(config) : null;
 }
 
 async function sendMail(to: string, subject: string, html: string) {
@@ -109,20 +116,28 @@ interface SendMailAsInput {
 }
 
 /**
- * Same transporter/formatting as `sendMail`, but with a caller-specified
- * sender address (flow sends use one of the verified sender identities)
- * and optional raw headers (e.g. `List-Unsubscribe`).
+ * Feil fra sendMailAs. `mayHaveBeenDelivered` er sann når forbindelsen brøt etter at selve
+ * e-posten begynte å gå til serveren, uten at serveren svarte. Da kan den være levert, og
+ * den skal aldri sendes på nytt automatisk (ellers kan mottakeren få den to ganger).
+ */
+export type MailSendError = Error & { code?: string; responseCode?: number; mayHaveBeenDelivered: boolean };
+
+/**
+ * Same formatting as `sendMail`, but with a caller-specified sender address (flow sends use one
+ * of the verified sender identities) and optional raw headers (e.g. `List-Unsubscribe`).
+ * Sends over a single SMTP connection so we know whether a failure happened before or after
+ * the message itself started going out.
  */
 export async function sendMailAs(input: SendMailAsInput): Promise<{ messageId: string | null }> {
-  const transporter = getTransporter();
-  if (!transporter) {
+  const config = smtpConfig();
+  if (!config) {
     logger.warn('SMTP not configured — skipping email', { to: input.to, subject: input.subject });
     return { messageId: null };
   }
   const fullHtml = /<html[\s>]/i.test(input.html)
     ? input.html
     : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>${input.html}</body></html>`;
-  const info = await transporter.sendMail({
+  const message = new MailComposer({
     from: input.from,
     replyTo: input.replyTo,
     to: input.to,
@@ -130,8 +145,50 @@ export async function sendMailAs(input: SendMailAsInput): Promise<{ messageId: s
     html: fullHtml,
     text: htmlToText(input.html),
     headers: input.headers,
+  }).compile();
+  const raw = await message.build();
+  await deliver(config, message.getEnvelope(), raw);
+  return { messageId: message.messageId() };
+}
+
+type SmtpConfig = NonNullable<ReturnType<typeof smtpConfig>>;
+
+function deliver(config: SmtpConfig, envelope: SMTPConnection.Envelope, raw: Buffer): Promise<void> {
+  const { auth, ...options } = config;
+  const connection = new SMTPConnection(options);
+  let dataStarted = false;
+  // Leses først når serveren har sagt «send innholdet» (354), altså etter at avsender og mottaker er godtatt.
+  const body = new Readable({
+    read() {
+      dataStarted = true;
+      this.push(raw);
+      this.push(null);
+    },
   });
-  return { messageId: info.messageId ?? null };
+
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const fail = (error: Error & { code?: string; responseCode?: number }) => {
+      if (settled) return;
+      settled = true;
+      connection.close();
+      // Et svar fra serveren (responseCode) betyr at den ikke tok imot e-posten; et brudd etter 354 er uvisst.
+      reject(Object.assign(error, { mayHaveBeenDelivered: dataStarted && typeof error.responseCode !== 'number' }));
+    };
+    connection.on('error', fail);
+    connection.once('end', () => fail(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ECONNECTION' })));
+    connection.connect(() => {
+      connection.login(auth, (loginError) => {
+        if (loginError) return fail(loginError);
+        connection.send(envelope, body, (sendError) => {
+          if (sendError) return fail(sendError);
+          settled = true;
+          connection.quit();
+          resolve();
+        });
+      });
+    });
+  });
 }
 
 type RegistrationEmail = RegistrationEmailData;

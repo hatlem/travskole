@@ -47,7 +47,7 @@ interface Props {
   flow: SendFlow;
   paused: boolean;
   /** Fart i timen (0 = ingen grense) og om leverandøren har bedt oss vente. */
-  pace: { perHour: number; providerPausedUntil: string | null };
+  pace: { perHour: number; providerPausedUntil: string | null; queued: number };
   rows: RecipientRow[];
   myEmail: string;
   testOthers: TestRecipient[];

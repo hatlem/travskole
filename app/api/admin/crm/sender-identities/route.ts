@@ -22,7 +22,7 @@ export async function GET() {
   const [rows, allowedDomains] = await Promise.all([
     prisma.senderIdentity.findMany({
       orderBy: { id: 'asc' },
-      include: { _count: { select: { messageSends: true } } },
+      include: { _count: { select: { messageSends: { where: { status: 'sent' } } } } },
     }),
     getAllowedSenderDomains(),
   ]);

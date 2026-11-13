@@ -27,6 +27,7 @@ interface Props {
   sent: number;
   total: number;
   remaining: number;
+  queued: number;
   perHour: number;
 }
 
@@ -73,7 +74,8 @@ export function SettingsCard(props: Props) {
   }
 
   const windowError = windowFromDraft(window);
-  const duration = paceDuration(props.remaining, props.perHour);
+  const queuedFor = paceDuration(props.queued, props.perHour);
+  const restFor = paceDuration(props.remaining, props.perHour);
 
   if (editing) {
     return (
@@ -149,7 +151,11 @@ export function SettingsCard(props: Props) {
           <dt className="text-gray-600">Fart</dt>
           <dd className="mt-0.5 text-gray-900">
             {props.perHour > 0 ? `Jevnt, ca. ${props.perHour} i timen` : 'Ingen grense'}
-            {duration && <span className="block text-gray-600">Resten tar {duration}</span>}
+            {queuedFor ? (
+              <span className="block text-gray-600">{formatCount(props.queued)} i kø, ferdig om {queuedFor}</span>
+            ) : (
+              restFor && <span className="block text-gray-600">Sender du til resten, tar det {restFor}</span>
+            )}
           </dd>
         </div>
       </dl>

@@ -81,6 +81,7 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
           sent={view.totals.sent}
           total={view.totals.total}
           remaining={view.totals.remaining}
+          queued={view.pace.queued}
           perHour={view.pace.perHour}
         />
       )}

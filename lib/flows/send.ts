@@ -28,7 +28,9 @@ import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
 import { sendDeferral, type SendWindow } from './send-window';
-import { DEFERRED_STATUS, isRetryableSendError, noteProviderPause, rateDeferral } from './send-rate';
+import {
+  classifySendFailure, DEFERRED_STATUS, isAuthFailure, MESSAGE_GIVE_UP_MS, messageRetryDelayMs, noteProviderPause, rateDeferral, RETRY_STATUS,
+} from './send-rate';
 import { renderFlowEmailBody } from './email-html';
 
 /**
@@ -92,7 +94,8 @@ async function outsideWindow(input: SendFlowEmailInput): Promise<OutsideSendWind
   const now = input.now ?? new Date();
   const resumeAt = sendDeferral(now, input.sendWindow ?? null, input.enrollmentId);
   if (resumeAt) return { kind: 'outside_window', resumeAt };
-  const slowDown = await rateDeferral(now);
+  // Kurs- og tjenestemeldinger skal ikke stå i kø bak en kampanje; de venter bare når leverandøren ber om det.
+  const slowDown = await rateDeferral(now, { paced: input.isMarketing });
   return slowDown ? { kind: 'throttled', resumeAt: slowDown } : null;
 }
 
@@ -426,7 +429,13 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         error: error instanceof Error ? error.message : String(error),
       });
       // Databrudd før noe er sendt: slipp plassen og prøv igjen om litt. Ingen pause for de andre.
-      await prisma.messageSend.delete({ where: { id: messageSendId } }).catch(() => {});
+      await prisma.messageSend.delete({ where: { id: messageSendId } }).catch((deleteError) => {
+        // Raden holder da plassen, og mottakeren hoppes over ved neste forsøk. Må ses på.
+        logger.error('Kunne ikke slippe plassen etter databrudd; mottakeren kan bli hoppet over', {
+          enrollmentId: input.enrollmentId, nodeId: input.nodeId, messageSendId,
+          error: deleteError instanceof Error ? deleteError.message : String(deleteError),
+        });
+      });
       return { kind: 'throttled', resumeAt: new Date((input.now ?? new Date()).getTime() + DB_RETRY_MS) };
     }
   }
@@ -468,27 +477,60 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         });
     }
   } catch (error) {
-    // Midlertidig feil (for mange, nede, nettverk, innlogging): aldri gi opp personen.
-    // Raden blir et synlig «deferred»-spor og slipper plassen (dedupeKey); all utsending venter en stund.
-    if (isRetryableSendError(error)) {
-      logger.warn('Flyt-e-post utsatt: leverandøren svarte ikke eller ba oss vente', {
-        enrollmentId: input.enrollmentId,
-        nodeId: input.nodeId,
-        error: error instanceof Error ? error.message : String(error),
+    const failure = classifySendFailure(error);
+    const errorText = error instanceof Error ? error.message : String(error);
+    const at = new Date();
+
+    // Forbindelsen brøt etter at e-posten gikk: den er trolig levert. Aldri send på nytt.
+    if (failure === 'maybe_delivered') {
+      logger.warn('Flyt-e-post: forbindelsen brøt etter sending, regnes som sendt', {
+        enrollmentId: input.enrollmentId, nodeId: input.nodeId, contactId: input.contactId, error: errorText,
       });
+      await logFlowEmailActivity(input, subject);
+      return 'sent';
+    }
+
+    // Leverandøren er travel, nede eller avviser kontoen vår: alt venter, og personen gis aldri opp.
+    if (failure === 'provider') {
+      const log = isAuthFailure(error) ? logger.error : logger.warn;
+      log('Flyt-e-post utsatt: leverandøren svarte ikke eller ba oss vente', {
+        enrollmentId: input.enrollmentId, nodeId: input.nodeId, auth: isAuthFailure(error), error: errorText,
+      });
+      // Raden blir et synlig spor og slipper plassen (dedupeKey). Tiden er feiltidspunktet, så pausen blir hel.
       await prisma.messageSend.update({
         where: { id: messageSendId },
-        data: { status: DEFERRED_STATUS, dedupeKey: null, trackingToken: null },
+        data: { status: DEFERRED_STATUS, dedupeKey: null, trackingToken: null, createdAt: at, sentAt: at },
       });
-      return { kind: 'throttled', resumeAt: noteProviderPause(input.now ?? new Date()) };
+      return { kind: 'throttled', resumeAt: noteProviderPause(at) };
     }
+
+    // Midlertidig avvisning av akkurat denne e-posten: prøv igjen senere, uten å stoppe de andre.
+    if (failure === 'message') {
+      await prisma.messageSend.update({
+        where: { id: messageSendId },
+        data: { status: RETRY_STATUS, dedupeKey: null, trackingToken: null, createdAt: at, sentAt: at },
+      });
+      const earlier = await prisma.messageSend.findMany({
+        where: { enrollmentId: input.enrollmentId, nodeId: input.nodeId, status: RETRY_STATUS },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      const first = earlier[0]?.createdAt ?? at;
+      if (at.getTime() - first.getTime() < MESSAGE_GIVE_UP_MS) {
+        logger.warn('Flyt-e-post utsatt: leverandøren avviste denne e-posten midlertidig', {
+          enrollmentId: input.enrollmentId, nodeId: input.nodeId, attempts: earlier.length, error: errorText,
+        });
+        return { kind: 'throttled', resumeAt: new Date(at.getTime() + messageRetryDelayMs(earlier.length - 1)) };
+      }
+    }
+
     logger.error('Flow email send failed', {
       enrollmentId: input.enrollmentId,
       nodeId: input.nodeId,
       contactId: input.contactId,
-      error: error instanceof Error ? error.message : String(error),
+      error: errorText,
     });
-    // Permanent avvisning av mottakeren (f.eks. ukjent adresse): registrer feilen uten å holde plassen.
+    // Permanent avvisning (f.eks. ukjent adresse), eller samme e-post avvist i et døgn: registrer feilen.
     await recoverFromFailedSend(messageSendId, input, contact.email, subject, finalHtml);
     return 'failed';
   }

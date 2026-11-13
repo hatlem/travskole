@@ -99,6 +99,7 @@ describe('utsendelseStatus', () => {
     expect(utsendelseStatus(['draft'], { sent: 0, remaining: 5 })).toBe('ikke_startet');
     expect(utsendelseStatus(['active'], { sent: 3, remaining: 2 })).toBe('sender');
     expect(utsendelseStatus(['active'], { sent: 5, remaining: 0 })).toBe('ferdig');
+    expect(utsendelseStatus(['active'], { sent: 5, remaining: 0 }, 3)).toBe('sender');
   });
 });
 

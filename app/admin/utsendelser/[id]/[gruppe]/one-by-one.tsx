@@ -18,7 +18,7 @@ interface Props {
   otherGroups: { id: string; navn: string }[];
   flow: SendFlow;
   paused: boolean;
-  pace: { perHour: number; providerPausedUntil: string | null };
+  pace: { perHour: number; providerPausedUntil: string | null; queued: number };
   rows: RecipientRow[];
   myEmail: string;
   testOthers: TestRecipient[];
