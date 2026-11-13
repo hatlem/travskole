@@ -6,6 +6,7 @@ import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
 import type { RecipientDetail, RecipientRow, RecipientStatus } from '@/lib/utsendelser/one-by-one';
 import { formatCount } from '../../status';
+import { paceSentence } from '@/lib/utsendelser/pace';
 import { TestSendButton } from '../test-send-button';
 import type { TestRecipient } from '@/lib/utsendelser/staff';
 import { useUtsendelseAction } from '../use-action';
@@ -17,6 +18,7 @@ interface Props {
   otherGroups: { id: string; navn: string }[];
   flow: SendFlow;
   paused: boolean;
+  pace: { perHour: number; providerPausedUntil: string | null; queued: number };
   rows: RecipientRow[];
   myEmail: string;
   testOthers: TestRecipient[];
@@ -97,7 +99,7 @@ function matchesFilter(row: RecipientRow, filter: Filter) {
   return row.status === filter;
 }
 
-export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows: initialRows, myEmail, testOthers, onBack, onDirtyChange }: Props) {
+export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace, rows: initialRows, myEmail, testOthers, onBack, onDirtyChange }: Props) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [rows, setRows] = useState(initialRows);
   const [filter, setFilter] = useState<Filter>(() => (initialRows.some((r) => r.status === 'ikke') ? 'ikke' : 'alle'));
@@ -491,7 +493,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
         open={confirmRest}
         variant="info"
         title={`Sende til de ${people(counts.left)} som er igjen?`}
-        message={`Alle i «${group.navn}» som ikke har fått e-posten og ikke er tatt ut, får den nå${flow.sendWindow ? ` (${flow.sendWindow})` : ''}. Egne tekster blir brukt.`}
+        message={`Alle i «${group.navn}» som ikke har fått e-posten og ikke er tatt ut, får den nå${flow.sendWindow ? ` (${flow.sendWindow})` : ''}. Egne tekster blir brukt.${paceSentence(counts.left, pace.perHour)}`}
         confirmLabel="Send"
         loading={busy}
         onConfirm={sendRest}

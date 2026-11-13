@@ -8,6 +8,8 @@ import { parseNodeConfig } from '@/lib/flows/graph';
 import { getFlowSendWindowState, saveFlowSendWindowOverride } from '@/lib/flows/send-window-store';
 import { resolveEffectiveSendWindow, sameSendWindow, windowFromDraft, type Weekday } from '@/lib/flows/send-window';
 import { wakeSendWindowParked } from '@/lib/flows/runner';
+import { resetRateState } from '@/lib/flows/send-rate';
+import { PACE_OPTIONS } from './pace';
 import { getUtsendelser, removeUtsendelse, saveUtsendelse, slugify, type Utsendelse, type UtsendelseGruppe } from './config';
 import logger from '@/lib/logger';
 import { acquireSendLock, PLACEHOLDER_MARK, PLACEHOLDER_SUBJECTS, releaseSendLock, UtsendelseError } from './actions';
@@ -131,6 +133,8 @@ export interface SettingsInput {
   beskrivelse?: string;
   senderIdentityId?: number;
   sendetid?: { start: string; end: string; days: Weekday[] };
+  /** E-poster i timen, for alle utsendelser. */
+  fartPerTime?: number;
 }
 
 export async function updateSettings(u: Utsendelse, input: SettingsInput): Promise<Utsendelse> {
@@ -174,6 +178,13 @@ export async function updateSettings(u: Utsendelse, input: SettingsInput): Promi
         });
       }
     }
+  }
+
+  if (input.fartPerTime !== undefined) {
+    if (!(PACE_OPTIONS as readonly number[]).includes(input.fartPerTime)) throw new UtsendelseError('Velg en av fartene i lista.', 400);
+    const value = String(input.fartPerTime);
+    await prisma.setting.upsert({ where: { key: 'email_rate_per_hour' }, create: { key: 'email_rate_per_hour', value }, update: { value } });
+    resetRateState();
   }
 
   if (next.navn !== u.navn || next.beskrivelse !== u.beskrivelse) await saveUtsendelse(next);

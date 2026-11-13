@@ -672,7 +672,7 @@ model MessageSend {
   toEmail          String          @map("to_email")
   subject          String
   bodyHtml         String          @map("body_html")
-  status           String          @default("sent") // sent | failed | skipped_suppressed | skipped_no_consent | test
+  status           String          @default("sent") // sent | failed | deferred | skipped_suppressed | skipped_no_consent | test
   dedupeKey        String?         @unique @map("dedupe_key") // flow:{enrollmentId}:{nodeId}
   sentAt           DateTime        @default(now()) @map("sent_at")
   createdAt        DateTime        @default(now()) @map("created_at")
@@ -689,6 +689,7 @@ model MessageSend {
   @@index([contactId, sentAt])
   @@index([messageId])
   @@index([status, createdAt])
+  @@index([enrollmentId, status])
   @@map("message_sends")
 }
 

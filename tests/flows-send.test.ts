@@ -19,7 +19,7 @@ const { prisma } = vi.hoisted(() => ({
     flowMessageOverride: { findUnique: vi.fn(async (): Promise<{ subject: string; bodyHtml: string } | null> => null) },
     consent: { findUnique: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
-    messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn() },
+    messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     messageLink: { createMany: vi.fn() },
     aiSuggestion: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     deal: { findMany: vi.fn(async () => []) },
@@ -90,32 +90,86 @@ beforeEach(() => {
   prisma.messageSend.update.mockResolvedValue({ id: 100 });
   prisma.messageSend.delete.mockResolvedValue({ id: 100 });
   prisma.messageLink.createMany.mockResolvedValue({ count: 1 });
+  prisma.messageSend.findMany.mockResolvedValue([]);
+  prisma.messageSend.count.mockResolvedValue(0);
 
   mockedSendMailAs.mockResolvedValue({ messageId: null });
   mockedGetLLMProvider.mockReturnValue(null);
 });
 
 describe('sendFlowEmail', () => {
-  it('«for mange» fra leverandøren: prøv igjen senere, uten å gi opp personen', async () => {
-    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('452 4.5.3 Too many recipients'), { responseCode: 452 }));
-    const now = new Date('2026-11-13T12:00:00Z');
-    prisma.messageSend.findFirst.mockResolvedValueOnce({ createdAt: now });
+  it('«for mange» fra leverandøren: utsatt spor, pause for alle, aldri feilet', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('421 4.7.0 Too many requests'), { responseCode: 421, mayHaveBeenDelivered: false }));
 
-    const result = await sendFlowEmail({ ...baseInput, now });
+    const result = await sendFlowEmail({ ...baseInput, now: new Date('2026-11-13T12:00:00Z') });
 
-    expect(result).toEqual({ kind: 'throttled', resumeAt: new Date('2026-11-13T12:10:00Z') });
-    expect(prisma.messageSend.update).toHaveBeenCalledWith({
-      where: { id: 100 },
-      data: { status: 'throttled', dedupeKey: null, trackingToken: null },
-    });
+    expect(result).toEqual(expect.objectContaining({ kind: 'throttled' }));
+    const update = prisma.messageSend.update.mock.calls[0][0];
+    expect(update.data).toMatchObject({ status: 'deferred', dedupeKey: null, trackingToken: null });
+    const pausedFor = (result as { resumeAt: Date }).resumeAt.getTime() - update.data.createdAt.getTime();
+    expect(pausedFor).toBe(10 * 60_000);
     expect(prisma.messageSend.create.mock.calls.filter((c) => c[0].data.status === 'failed')).toHaveLength(0);
   });
 
-  it('gir opp etter tre timer med «for mange»', async () => {
-    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('451 try later'), { responseCode: 451 }));
-    const now = new Date('2026-11-13T15:00:00Z');
-    prisma.messageSend.findFirst.mockResolvedValueOnce({ createdAt: new Date('2026-11-13T11:59:00Z') });
-    expect(await sendFlowEmail({ ...baseInput, now })).toBe('failed');
+  it('nettverksbrudd før sending og innloggingsfeil: prøv igjen, ikke feilet', async () => {
+    for (const error of [
+      Object.assign(new Error('Connection timeout'), { code: 'ETIMEDOUT', mayHaveBeenDelivered: false }),
+      Object.assign(new Error('Invalid login: 535 Authentication failed'), { code: 'EAUTH', responseCode: 535, mayHaveBeenDelivered: false }),
+    ]) {
+      mockedSendMailAs.mockRejectedValueOnce(error);
+      expect(await sendFlowEmail({ ...baseInput, now: new Date('2026-11-13T12:00:00Z') })).toEqual(expect.objectContaining({ kind: 'throttled' }));
+    }
+  });
+
+  it('brudd etter at e-posten gikk: regnes som sendt og sendes aldri på nytt', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ECONNECTION', mayHaveBeenDelivered: true }));
+
+    expect(await sendFlowEmail(baseInput)).toBe('sent');
+    expect(prisma.messageSend.update).not.toHaveBeenCalled();
+    expect(prisma.messageSend.delete).not.toHaveBeenCalled();
+  });
+
+  it('kanskje levert: Message-ID lagres, så et svar kan kobles til e-posten', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('Timeout'), { code: 'ETIMEDOUT', mayHaveBeenDelivered: true, messageId: '<abc@bjerke.no>' }));
+    expect(await sendFlowEmail(baseInput)).toBe('sent');
+    expect(prisma.messageSend.update).toHaveBeenCalledWith({ where: { id: 100 }, data: { messageId: 'abc@bjerke.no' } });
+  });
+
+  it('samme e-post får «vent» gang på gang mens andre går: bare den venter, ingen pause for alle', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('421 4.7.0 Try again later'), { responseCode: 421, mayHaveBeenDelivered: false }));
+    prisma.messageSend.findMany
+      .mockResolvedValueOnce([{ createdAt: new Date(Date.now() - 3_600_000) }, { createdAt: new Date(Date.now() - 1_800_000) }])
+      .mockResolvedValueOnce([{ createdAt: new Date() }]);
+    prisma.messageSend.count.mockResolvedValueOnce(40);
+
+    const result = await sendFlowEmail(baseInput);
+
+    expect(prisma.messageSend.update.mock.calls[0][0].data).toMatchObject({ status: 'retry' });
+    expect(result).toEqual(expect.objectContaining({ kind: 'throttled' }));
+  });
+
+  it('midlertidig avvisning av denne e-posten: ny ventetid som dobles, uten pause for de andre', async () => {
+    const now = new Date();
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('452 4.5.3 Too many recipients'), { responseCode: 452, mayHaveBeenDelivered: false }));
+    prisma.messageSend.findMany.mockResolvedValueOnce([{ createdAt: new Date(now.getTime() - 3_600_000) }, { createdAt: now }]);
+
+    const result = await sendFlowEmail(baseInput);
+
+    expect(prisma.messageSend.update.mock.calls[0][0].data).toMatchObject({ status: 'retry', dedupeKey: null });
+    const delay = (result as { resumeAt: Date }).resumeAt.getTime() - Date.now();
+    expect(delay).toBeGreaterThan(19 * 60_000);
+    expect(delay).toBeLessThanOrEqual(20 * 60_000);
+  });
+
+  it('samme e-post avvist midlertidig i over et døgn: gi opp den ene', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('450 4.2.0 try later'), { responseCode: 450, mayHaveBeenDelivered: false }));
+    prisma.messageSend.findMany.mockResolvedValueOnce([{ createdAt: new Date(Date.now() - 25 * 3_600_000) }, { createdAt: new Date() }]);
+    expect(await sendFlowEmail(baseInput)).toBe('failed');
+  });
+
+  it('ukjent mottaker (5xx) er en permanent feil', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('550 5.1.1 User unknown'), { responseCode: 550, mayHaveBeenDelivered: false }));
+    expect(await sendFlowEmail(baseInput)).toBe('failed');
   });
 
   it('egen tekst for mottakeren sendes i stedet for fellesteksten', async () => {
@@ -243,33 +297,19 @@ describe('sendFlowEmail', () => {
     expect(prisma.messageSend.create).toHaveBeenCalledTimes(1);
   });
 
-  it('5. messageLink.createMany failure (non-P2002): recovers by deleting the dedupe slot and recreating a failed audit row, never sends', async () => {
+  it('5. messageLink.createMany failure (databrudd før sending): slipper plassen og prøver igjen om litt, sender ikke', async () => {
     prisma.messageLink.createMany.mockRejectedValueOnce(new Error('connection reset'));
 
-    const result = await sendFlowEmail(baseInput);
+    const result = await sendFlowEmail({ ...baseInput, now: new Date('2026-11-13T12:00:00Z') });
 
-    expect(result).toBe('failed');
+    expect(result).toEqual({ kind: 'throttled', resumeAt: new Date('2026-11-13T12:02:00Z') });
     expect(mockedSendMailAs).not.toHaveBeenCalled();
-
-    expect(prisma.messageSend.delete).toHaveBeenCalledTimes(1);
     expect(prisma.messageSend.delete).toHaveBeenCalledWith({ where: { id: 100 } });
-
-    expect(prisma.messageSend.create).toHaveBeenCalledTimes(2);
-    const recreateArg = prisma.messageSend.create.mock.calls[1][0];
-    expect(recreateArg.data).toMatchObject({
-      enrollmentId: 1,
-      nodeId: 2,
-      contactId: 3,
-      senderIdentityId: 4,
-      toEmail: 'kari@example.com',
-      status: 'failed',
-    });
-    expect(recreateArg.data).not.toHaveProperty('dedupeKey');
-    expect(recreateArg.data).not.toHaveProperty('trackingToken');
+    expect(prisma.messageSend.create).toHaveBeenCalledTimes(1);
   });
 
-  it('6. sendMailAs failure: recovers via the same delete + failed-recreate path, returns failed', async () => {
-    mockedSendMailAs.mockRejectedValueOnce(new Error('SMTP timeout'));
+  it('6. permanent sendMailAs failure: recovers via delete + failed-recreate, returns failed', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('550 5.1.1 User unknown'), { responseCode: 550 }));
 
     const result = await sendFlowEmail(baseInput);
 

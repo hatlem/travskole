@@ -22,6 +22,7 @@ const { prisma, claims, leases } = vi.hoisted(() => {
         })),
       ),
       update: vi.fn(),
+      findFirst: vi.fn(async () => null as { nextRunAt: Date } | null),
     },
     flowNode: { findMany: vi.fn(async () => []) },
     flowEdge: { findMany: vi.fn(async () => []) },
@@ -33,8 +34,6 @@ const { prisma, claims, leases } = vi.hoisted(() => {
 });
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/flows/send', () => ({ sendFlowEmail: vi.fn() }));
-const { rate } = vi.hoisted(() => ({ rate: { blockedUntil: vi.fn(() => 0) } }));
-vi.mock('@/lib/flows/send-rate', () => ({ rateBlockedUntil: rate.blockedUntil }));
 vi.mock('@/lib/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { BATCH_SIZE, DRAIN_BUDGET_MS, LEASE_MINUTES, drainFlowBatches } from '@/lib/flows/runner';
@@ -55,7 +54,6 @@ beforeEach(() => {
   vi.clearAllMocks();
   claims.length = 0;
   leases.length = 0;
-  rate.blockedUntil.mockReturnValue(0);
 });
 
 describe('drainFlowBatches', () => {
@@ -97,10 +95,10 @@ describe('drainFlowBatches', () => {
     expect(result.processed).toBe(5000);
   });
 
-  it('venter på sendetaket innenfor budsjettet, og sender resten i samme kjøring', async () => {
+  it('venter på neste bolk innenfor budsjettet, og sender den i samme kjøring', async () => {
     const start = Date.parse('2026-10-02T06:00:00Z');
     claims.push(ids(1, 10), ids(11, 10));
-    rate.blockedUntil.mockReturnValueOnce(start + 30_000).mockReturnValue(0);
+    prisma.flowEnrollment.findFirst.mockResolvedValueOnce({ nextRunAt: new Date(start + 30_000) });
     const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
     const result = await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(1_000, start), sleep);
     expect(sleep).toHaveBeenCalledTimes(1);
@@ -108,13 +106,25 @@ describe('drainFlowBatches', () => {
     expect(result.batches).toBe(2);
   });
 
-  it('venter ikke når ventetiden ikke får plass i budsjettet', async () => {
+  it('venter også når første claim var tom (de ventende blir klare sekunder etter at kjøringen startet)', async () => {
     const start = Date.parse('2026-10-02T06:00:00Z');
-    claims.push(ids(1, 10), ids(11, 10));
-    rate.blockedUntil.mockReturnValue(start + 120_000);
+    claims.push([], ids(1, 9));
+    prisma.flowEnrollment.findFirst.mockResolvedValueOnce({ nextRunAt: new Date(start + 6_000) });
     const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
     const result = await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(1_000, start), sleep);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(result.processed).toBe(9);
+  });
+
+  it('venter ikke når neste er for langt unna, eller allerede forfalt men låst av en annen kjøring', async () => {
+    const start = Date.parse('2026-10-02T06:00:00Z');
+    claims.push(ids(1, 10));
+    prisma.flowEnrollment.findFirst.mockResolvedValueOnce({ nextRunAt: new Date(start + 120_000) });
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
+    expect((await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(1_000, start), sleep)).batches).toBe(1);
+    claims.push([]);
+    prisma.flowEnrollment.findFirst.mockResolvedValueOnce({ nextRunAt: new Date(start - 1_000) });
+    await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(1_000, start), sleep);
     expect(sleep).not.toHaveBeenCalled();
-    expect(result.batches).toBe(1);
   });
 });

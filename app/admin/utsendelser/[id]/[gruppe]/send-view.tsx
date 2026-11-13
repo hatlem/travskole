@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { paceSentence } from '@/lib/utsendelser/pace';
+import { ProviderPauseNote } from '../provider-pause-note';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
 import type { RecipientRow } from '@/lib/utsendelser/one-by-one';
 import { formatCount } from '../../status';
@@ -44,11 +46,14 @@ interface Props {
   otherGroups: { id: string; navn: string }[];
   flow: SendFlow;
   paused: boolean;
+  /** Fart i timen (0 = ingen grense) og om leverandøren har bedt oss vente. */
+  pace: { perHour: number; providerPausedUntil: string | null; queued: number };
   rows: RecipientRow[];
   myEmail: string;
   testOthers: TestRecipient[];
   initialMode: 'alle' | 'en';
 }
+
 
 interface SendResult {
   sent: number;
@@ -115,6 +120,7 @@ export function SendView(props: Props) {
           Utsendelsen står på pause. Trykk «Fortsett» på utsendelsen før du sender.
         </p>
       )}
+      {props.pace.providerPausedUntil && !props.paused && <ProviderPauseNote until={props.pace.providerPausedUntil} />}
       {mode === 'en' ? (
         <OneByOne {...props} onBack={() => switchMode('alle')} onDirtyChange={setDirty} />
       ) : (
@@ -129,6 +135,7 @@ function GroupCompose({
   group,
   flow,
   paused,
+  pace,
   myEmail,
   testOthers,
   onOneByOne,
@@ -241,7 +248,7 @@ function GroupCompose({
         open={confirm}
         variant="info"
         title={`Sende til ${people(group.remaining)} i «${group.navn}»?`}
-        message={`E-post 1 går ut ${flow.sendWindow || 'nå'}. Resten av e-postene kommer automatisk etterpå til dem som ikke har svart eller meldt seg av. Du kan sette utsendelsen på pause når som helst.`}
+        message={`E-post 1 går ut ${flow.sendWindow || 'nå'}. Resten av e-postene kommer automatisk etterpå til dem som ikke har svart eller meldt seg av. Du kan sette utsendelsen på pause når som helst.${paceSentence(group.remaining, pace.perHour)}`}
         confirmLabel="Send"
         loading={busy}
         onConfirm={sendAll}

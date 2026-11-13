@@ -1,5 +1,6 @@
 /** Alt utsendelsessiden viser: e-postene slik mottakeren ser dem, og status per gruppe. */
 import { prisma } from '@/lib/prisma';
+import { providerPausedUntil, ratePerHour } from '@/lib/flows/send-rate';
 import { getSetting } from '@/lib/settings';
 import { replaceMergeTagsInSubject } from '@/lib/email-templates';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
@@ -75,6 +76,8 @@ export interface UtsendelseView {
   windowMixed: boolean;
   /** Mottakere som fortsatt venter på flere e-poster – arkivering er stengt til de er ferdige. */
   activeEnrollments: number;
+  /** Fart (e-poster i timen, 0 = ingen grense) og om leverandøren har bedt oss vente (ISO-tid). */
+  pace: { perHour: number; providerPausedUntil: string | null; queued: number };
 }
 
 export interface ReplyView {
@@ -86,10 +89,21 @@ export interface ReplyView {
   repliedAt: Date;
 }
 
-export function utsendelseStatus(flowStatuses: string[], totals: { sent: number; remaining: number }): UtsendelseStatus {
+export function utsendelseStatus(flowStatuses: string[], totals: { sent: number; remaining: number }, queued = 0): UtsendelseStatus {
   if (flowStatuses.some((s) => s === 'paused')) return 'pause';
   if (totals.sent === 0) return 'ikke_startet';
-  return totals.remaining > 0 ? 'sender' : 'ferdig';
+  return totals.remaining > 0 || queued > 0 ? 'sender' : 'ferdig';
+}
+
+/** Påmeldt utsendelsen, men har ikke fått første e-post ennå (står i kø i takten). */
+async function countQueued(flowIds: number[]): Promise<number> {
+  const active = await prisma.flowEnrollment.findMany({ where: { flowId: { in: flowIds }, status: 'active' }, select: { id: true } });
+  if (active.length === 0) return 0;
+  const reached = await prisma.messageSend.groupBy({
+    by: ['enrollmentId'],
+    where: { enrollmentId: { in: active.map((e) => e.id) }, status: 'sent' },
+  });
+  return active.length - reached.length;
 }
 
 async function loadGroups(
@@ -270,17 +284,22 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
   const flows = await Promise.all(utsendelse.flyter.map((f) => loadFlow(utsendelse, f.flowId, f.navn, contactEmail, audience)));
   const presentFlows = flows.filter((f): f is FlowView => f !== null);
   const flowStatus = new Map(presentFlows.map((f) => [f.flowId, f.status]));
-  const [groups, totals, replies, activeEnrollments] = await Promise.all([
+  const now = new Date();
+  const flowIds = utsendelse.flyter.map((f) => f.flowId);
+  const [groups, totals, replies, activeEnrollments, perHour, pausedUntil, queued] = await Promise.all([
     loadGroups(utsendelse, audience, flowStatus),
     dedupedTotals(utsendelse, audience),
     loadReplies(presentFlows),
     prisma.flowEnrollment.count({ where: { flowId: { in: utsendelse.flyter.map((f) => f.flowId) }, status: 'active' } }),
+    ratePerHour(now),
+    providerPausedUntil(now),
+    countQueued(flowIds),
   ]);
   return {
     id: utsendelse.id,
     navn: utsendelse.navn,
     beskrivelse: utsendelse.beskrivelse,
-    status: utsendelseStatus(presentFlows.map((f) => f.status), totals),
+    status: utsendelseStatus(presentFlows.map((f) => f.status), totals, queued),
     flows: presentFlows,
     groups,
     totals,
@@ -288,6 +307,7 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
     senderMixed: new Set(presentFlows.map((f) => f.senderIdentityId)).size > 1,
     windowMixed: new Set(presentFlows.map((f) => JSON.stringify(f.sendWindowDraft))).size > 1,
     activeEnrollments,
+    pace: { perHour, providerPausedUntil: pausedUntil?.toISOString() ?? null, queued },
   };
 }
 
@@ -321,12 +341,12 @@ export async function loadUtsendelseSummary(utsendelse: Utsendelse) {
     loadAudience(utsendelse),
     prisma.flow.findMany({ where: { id: { in: utsendelse.flyter.map((f) => f.flowId) } }, select: { status: true } }),
   ]);
-  const totals = await dedupedTotals(utsendelse, audience);
+  const [totals, queued] = await Promise.all([dedupedTotals(utsendelse, audience), countQueued(utsendelse.flyter.map((f) => f.flowId))]);
   return {
     id: utsendelse.id,
     navn: utsendelse.navn,
     beskrivelse: utsendelse.beskrivelse,
-    status: utsendelseStatus(flows.map((f) => f.status), totals),
+    status: utsendelseStatus(flows.map((f) => f.status), totals, queued),
     totals,
   };
 }
