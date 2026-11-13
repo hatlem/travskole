@@ -31,6 +31,8 @@ import { STOP_REASON_NO_CONSENT, STOP_REASON_SUPPRESSED } from './enrollment-sta
 export const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
 export const LEASE_MINUTES = 10;
+/** En batch bruker høyst halve leasen. */
+const STOP_AFTER_MS = (LEASE_MINUTES * 60_000) / 2;
 /** Tidsbudsjett for én cron-kjøring — godt under Azures ~230 s og langt under leasen. */
 export const DRAIN_BUDGET_MS = 75_000;
 
@@ -504,9 +506,16 @@ async function processClaimed(claimedIds: number[], now: Date): Promise<FlowBatc
   const graphCache = new Map<number, FlowGraph>();
   const segmentRulesById = await loadSegmentRulesById();
   const sendWindows = await loadSendWindowConfig();
+  const startedAt = Date.now();
 
   for (const enrollment of dueEnrollments) {
     if (enrollment.flow.status !== 'active') continue;
+    // Treg leverandør: stopp i god tid før leasen går ut, så en ny kjøring aldri tar de samme samtidig.
+    // Resten beholder leasen og tas av en senere kjøring.
+    if (Date.now() - startedAt > STOP_AFTER_MS) {
+      logger.warn('runFlowBatch: stoppet batchen tidlig for å holde leasen', { left: dueEnrollments.length - result.processed });
+      break;
+    }
 
     result.processed++;
     try {

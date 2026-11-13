@@ -19,7 +19,7 @@ const { prisma } = vi.hoisted(() => ({
     flowMessageOverride: { findUnique: vi.fn(async (): Promise<{ subject: string; bodyHtml: string } | null> => null) },
     consent: { findUnique: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
-    messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn() },
+    messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn(), findMany: vi.fn(), count: vi.fn() },
     messageLink: { createMany: vi.fn() },
     aiSuggestion: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     deal: { findMany: vi.fn(async () => []) },
@@ -90,6 +90,8 @@ beforeEach(() => {
   prisma.messageSend.update.mockResolvedValue({ id: 100 });
   prisma.messageSend.delete.mockResolvedValue({ id: 100 });
   prisma.messageLink.createMany.mockResolvedValue({ count: 1 });
+  prisma.messageSend.findMany.mockResolvedValue([]);
+  prisma.messageSend.count.mockResolvedValue(0);
 
   mockedSendMailAs.mockResolvedValue({ messageId: null });
   mockedGetLLMProvider.mockReturnValue(null);
@@ -125,6 +127,25 @@ describe('sendFlowEmail', () => {
     expect(await sendFlowEmail(baseInput)).toBe('sent');
     expect(prisma.messageSend.update).not.toHaveBeenCalled();
     expect(prisma.messageSend.delete).not.toHaveBeenCalled();
+  });
+
+  it('kanskje levert: Message-ID lagres, så et svar kan kobles til e-posten', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('Timeout'), { code: 'ETIMEDOUT', mayHaveBeenDelivered: true, messageId: '<abc@bjerke.no>' }));
+    expect(await sendFlowEmail(baseInput)).toBe('sent');
+    expect(prisma.messageSend.update).toHaveBeenCalledWith({ where: { id: 100 }, data: { messageId: 'abc@bjerke.no' } });
+  });
+
+  it('samme e-post får «vent» gang på gang mens andre går: bare den venter, ingen pause for alle', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('421 4.7.0 Try again later'), { responseCode: 421, mayHaveBeenDelivered: false }));
+    prisma.messageSend.findMany
+      .mockResolvedValueOnce([{ createdAt: new Date(Date.now() - 3_600_000) }, { createdAt: new Date(Date.now() - 1_800_000) }])
+      .mockResolvedValueOnce([{ createdAt: new Date() }]);
+    prisma.messageSend.count.mockResolvedValueOnce(40);
+
+    const result = await sendFlowEmail(baseInput);
+
+    expect(prisma.messageSend.update.mock.calls[0][0].data).toMatchObject({ status: 'retry' });
+    expect(result).toEqual(expect.objectContaining({ kind: 'throttled' }));
   });
 
   it('midlertidig avvisning av denne e-posten: ny ventetid som dobles, uten pause for de andre', async () => {

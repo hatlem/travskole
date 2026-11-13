@@ -106,6 +106,8 @@ describe('classifySendFailure', () => {
   it('midlertidig avvisning av denne e-posten pauser ikke de andre', () => {
     expect(classifySendFailure(err('452 4.5.3 Too many recipients', { responseCode: 452 }))).toBe('message');
     expect(classifySendFailure(err('450 4.2.0 Mailbox unavailable', { responseCode: 450 }))).toBe('message');
+    expect(classifySendFailure(err('450 4.2.1 Mailbox temporarily unavailable', { responseCode: 450 }))).toBe('message');
+    expect(classifySendFailure(err('451 4.3.0 Temporary local problem', { responseCode: 451 }))).toBe('message');
   });
 
   it('permanent: ukjent mottaker, full postkasse, ukjent feil', () => {

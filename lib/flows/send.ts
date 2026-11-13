@@ -29,7 +29,8 @@ import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
 import { sendDeferral, type SendWindow } from './send-window';
 import {
-  classifySendFailure, DEFERRED_STATUS, isAuthFailure, MESSAGE_GIVE_UP_MS, messageRetryDelayMs, noteProviderPause, rateDeferral, RETRY_STATUS,
+  classifySendFailure, DEFERRED_STATUS, isAuthFailure, MESSAGE_GIVE_UP_MS, messageRetryDelayMs, noteProviderPause, PROVIDER_STRIKES,
+  rateDeferral, RETRY_STATUS, type SendFailure,
 } from './send-rate';
 import { renderFlowEmailBody } from './email-html';
 
@@ -197,6 +198,22 @@ async function logSkippedSend(
       status,
     },
   });
+}
+
+/**
+ * «Vent» fra leverandøren som bare rammer denne e-posten (andre har gått i mellomtiden, flere ganger)
+ * gjelder e-posten, ikke leverandøren. Da venter bare den, så én vanskelig e-post ikke stopper alle.
+ */
+async function confirmProviderFailure(failure: SendFailure, input: SendFlowEmailInput): Promise<SendFailure> {
+  if (failure !== 'provider') return failure;
+  const strikes = await prisma.messageSend.findMany({
+    where: { enrollmentId: input.enrollmentId, nodeId: input.nodeId, status: DEFERRED_STATUS },
+    orderBy: { createdAt: 'asc' },
+    select: { createdAt: true },
+  });
+  if (strikes.length < PROVIDER_STRIKES - 1) return failure;
+  const othersWent = await prisma.messageSend.count({ where: { status: 'sent', createdAt: { gt: strikes[0].createdAt } } });
+  return othersWent > 0 ? 'message' : failure;
 }
 
 /**
@@ -477,15 +494,21 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         });
     }
   } catch (error) {
-    const failure = classifySendFailure(error);
     const errorText = error instanceof Error ? error.message : String(error);
     const at = new Date();
+    const failure = await confirmProviderFailure(classifySendFailure(error), input);
 
     // Forbindelsen brøt etter at e-posten gikk: den er trolig levert. Aldri send på nytt.
     if (failure === 'maybe_delivered') {
       logger.warn('Flyt-e-post: forbindelsen brøt etter sending, regnes som sendt', {
         enrollmentId: input.enrollmentId, nodeId: input.nodeId, contactId: input.contactId, error: errorText,
       });
+      const sentId = (error as { messageId?: unknown }).messageId;
+      if (typeof sentId === 'string') {
+        await prisma.messageSend
+          .update({ where: { id: messageSendId }, data: { messageId: extractMessageIds(sentId)[0] ?? sentId } })
+          .catch(() => {});
+      }
       await logFlowEmailActivity(input, subject);
       return 'sent';
     }

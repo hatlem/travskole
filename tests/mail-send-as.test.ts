@@ -82,6 +82,7 @@ describe('sendMailAs', () => {
   it('brudd etter at e-posten gikk, uten svar: kan være levert, skal ikke sendes igjen', async () => {
     const { error } = await sendWith('close-after-dot');
     expect(error?.mayHaveBeenDelivered).toBe(true);
+    expect(error?.messageId).toMatch(/^<.+@.+>$/);
   });
 
   it('serveren avviser med svar: ikke levert', async () => {

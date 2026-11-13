@@ -119,7 +119,8 @@ export async function rateDeferral(now: Date, { paced = true }: { paced?: boolea
   return null;
 }
 
-const SLOW_DOWN_TEXT = /throttl|rate.?limit|too many (requests|messages|connections)|toomanyrequests|try again later|server busy|temporar/i;
+/** Leverandøren ber oss sende saktere eller er overbelastet (ikke «temporarily unavailable» for én mottaker). */
+const SLOW_DOWN_TEXT = /throttl|rate.?limit|too many (requests|messages|connections)|toomanyrequests|server busy|service (temporarily )?unavailable|try again later/i;
 const RECIPIENT_TEXT = /mailbox|user unknown|no such user|recipient|quota exceeded/i;
 /** Avvisning som gjelder vår konto/avsender hos leverandøren, ikke mottakeren. */
 const OUR_SIDE_TEXT = /authentication (required|failed|unsuccessful)|sender (address )?(is )?(not |un)(authori[sz]ed|verified|permitted)|not authori[sz]ed to send|mail ?from|relay(ing)? (denied|not permitted)|domain (is )?not verified/i;
@@ -147,8 +148,9 @@ export function classifySendFailure(error: unknown): SendFailure {
   const text = [e.message, e.response].filter((v) => typeof v === 'string').join(' ');
   const code = typeof e.responseCode === 'number' ? e.responseCode : null;
   if (code !== null) {
-    if (code === 421 || SLOW_DOWN_TEXT.test(text)) return code < 500 || !RECIPIENT_TEXT.test(text) ? 'provider' : 'permanent';
-    if (OUR_SIDE_5XX.has(code) || (code >= 500 && OUR_SIDE_TEXT.test(text) && !RECIPIENT_TEXT.test(text))) return 'provider';
+    if (RECIPIENT_TEXT.test(text)) return code < 500 ? 'message' : 'permanent';
+    if (code === 421 || SLOW_DOWN_TEXT.test(text)) return 'provider';
+    if (OUR_SIDE_5XX.has(code) || (code >= 500 && OUR_SIDE_TEXT.test(text))) return 'provider';
     if (code >= 400 && code < 500) return 'message';
     return 'permanent';
   }
@@ -170,3 +172,5 @@ export function messageRetryDelayMs(previousAttempts: number): number {
 }
 /** Etter så lang tid med midlertidige avvisninger av samme e-post gir vi opp den ene. */
 export const MESSAGE_GIVE_UP_MS = 24 * 3_600_000;
+/** Har samme e-post fått «vent» så mange ganger mens andre gikk, gjelder det den, ikke leverandøren. */
+export const PROVIDER_STRIKES = 3;

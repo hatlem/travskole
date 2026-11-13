@@ -120,7 +120,7 @@ interface SendMailAsInput {
  * e-posten begynte å gå til serveren, uten at serveren svarte. Da kan den være levert, og
  * den skal aldri sendes på nytt automatisk (ellers kan mottakeren få den to ganger).
  */
-export type MailSendError = Error & { code?: string; responseCode?: number; mayHaveBeenDelivered: boolean };
+export type MailSendError = Error & { code?: string; responseCode?: number; mayHaveBeenDelivered: boolean; messageId?: string };
 
 /**
  * Same formatting as `sendMail`, but with a caller-specified sender address (flow sends use one
@@ -147,8 +147,14 @@ export async function sendMailAs(input: SendMailAsInput): Promise<{ messageId: s
     headers: input.headers,
   }).compile();
   const raw = await message.build();
-  await deliver(config, message.getEnvelope(), raw);
-  return { messageId: message.messageId() };
+  const messageId = message.messageId();
+  try {
+    await deliver(config, message.getEnvelope(), raw);
+  } catch (error) {
+    // Med Message-ID kan et svar på en e-post som kanskje gikk, fortsatt kobles til den.
+    throw Object.assign(error as MailSendError, { messageId });
+  }
+  return { messageId };
 }
 
 type SmtpConfig = NonNullable<ReturnType<typeof smtpConfig>>;
@@ -177,7 +183,8 @@ function deliver(config: SmtpConfig, envelope: SMTPConnection.Envelope, raw: Buf
     };
     connection.on('error', fail);
     connection.once('end', () => fail(Object.assign(new Error('Connection closed unexpectedly'), { code: 'ECONNECTION' })));
-    connection.connect(() => {
+    connection.connect((connectError?: Error) => {
+      if (connectError) return fail(connectError);
       connection.login(auth, (loginError) => {
         if (loginError) return fail(loginError);
         connection.send(envelope, body, (sendError) => {
