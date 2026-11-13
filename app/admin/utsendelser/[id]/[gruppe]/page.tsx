@@ -3,6 +3,7 @@ import { getServerSession } from '@/lib/auth';
 import { getUtsendelse } from '@/lib/utsendelser/config';
 import { loadUtsendelseView } from '@/lib/utsendelser/overview';
 import { loadRecipientList } from '@/lib/utsendelser/one-by-one';
+import { testRecipients } from '@/lib/utsendelser/staff';
 import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { SendView } from './send-view';
 
@@ -49,6 +50,7 @@ export default async function SendGroupPage({
         paused={view.status === 'pause'}
         rows={rows}
         myEmail={session?.user.email ?? ''}
+        testOthers={await testRecipients(session?.user.email ?? '')}
         initialMode={sp.modus === 'en' ? 'en' : 'alle'}
       />
     </>

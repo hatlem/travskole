@@ -13,6 +13,7 @@ import { EmailStepCard } from './email-step-card';
 import { GroupsSection, type SerializedGroup, type SourceOption } from './groups-section';
 import { SettingsCard, type SenderOption } from './settings-card';
 import { useUtsendelseAction } from './use-action';
+import type { TestRecipient } from '@/lib/utsendelser/staff';
 
 type SerializedReply = Omit<ReplyView, 'repliedAt'> & { repliedAt: string };
 export type SerializedView = Omit<UtsendelseView, 'groups' | 'replies'> & { groups: SerializedGroup[]; replies: SerializedReply[] };
@@ -26,7 +27,7 @@ export interface DetailOptions {
 const dateTime = (iso: string) =>
   new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
-export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedView; myEmail: string; options: DetailOptions }) {
+export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view: SerializedView; myEmail: string; testOthers: TestRecipient[]; options: DetailOptions }) {
   const { run, busy } = useUtsendelseAction(view.id);
   const badge = STATUS_BADGE[view.status];
   const isPaused = view.status === 'pause';
@@ -106,11 +107,11 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
                   <span className="hidden text-sm font-normal text-blue-700 group-open:inline">Skjul</span>
                 </summary>
                 <div className="mt-4">
-                  <FlowEmails flow={flow} utsendelseId={view.id} myEmail={myEmail} />
+                  <FlowEmails flow={flow} utsendelseId={view.id} myEmail={myEmail} testOthers={testOthers} />
                 </div>
               </details>
             ) : (
-              <FlowEmails key={flow.flowId} flow={flow} utsendelseId={view.id} myEmail={myEmail} />
+              <FlowEmails key={flow.flowId} flow={flow} utsendelseId={view.id} myEmail={myEmail} testOthers={testOthers} />
             ),
           )}
         </div>
@@ -123,7 +124,7 @@ export function UtsendelseDetail({ view, myEmail, options }: { view: SerializedV
   );
 }
 
-function FlowEmails({ flow, utsendelseId, myEmail }: { flow: FlowView; utsendelseId: string; myEmail: string }) {
+function FlowEmails({ flow, utsendelseId, myEmail, testOthers }: { flow: FlowView; utsendelseId: string; myEmail: string; testOthers: TestRecipient[] }) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [adding, setAdding] = useState(false);
   const [days, setDays] = useState(7);
@@ -141,6 +142,7 @@ function FlowEmails({ flow, utsendelseId, myEmail }: { flow: FlowView; utsendels
               step={step}
               sampleContactId={flow.sampleContactId}
               myEmail={myEmail}
+              testOthers={testOthers}
               canRemove={flow.canChangeSteps && flow.steps.length > 1}
             />
           </li>

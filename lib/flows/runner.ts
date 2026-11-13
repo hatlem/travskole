@@ -344,8 +344,8 @@ async function processEnrollment(
           sendWindow,
           now,
         });
-        if (typeof result === 'object' && result.kind === 'outside_window') {
-          // Utenfor sendetiden: parker PÅ e-post-noden til vinduet åpner.
+        if (typeof result === 'object' && (result.kind === 'outside_window' || result.kind === 'throttled')) {
+          // Utenfor sendetiden eller over farten leverandøren tåler: parker PÅ e-post-noden og prøv igjen.
           // Ingenting er sendt eller reservert, så neste tick prøver på nytt.
           await prisma.flowEnrollment.update({
             where: { id: enrollment.id },

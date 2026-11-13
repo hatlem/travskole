@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { useToast } from '@/components/admin/Toast';
 import type { StepView } from '@/lib/utsendelser/overview';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
 import { formatCount } from '../status';
 import { useUtsendelseAction } from './use-action';
+import { TestSendButton } from './test-send-button';
+import type { TestRecipient } from '@/lib/utsendelser/staff';
 
 interface Props {
   utsendelseId: string;
@@ -15,13 +16,13 @@ interface Props {
   step: StepView;
   sampleContactId: number | null;
   myEmail: string;
+  testOthers: TestRecipient[];
   canRemove: boolean;
 }
 
 const MAX_DAYS = 60;
 
-export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myEmail, canRemove }: Props) {
-  const { toast } = useToast();
+export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myEmail, testOthers, canRemove }: Props) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [editing, setEditing] = useState(false);
   const [editingWait, setEditingWait] = useState(false);
@@ -29,7 +30,6 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
   const [expanded, setExpanded] = useState(step.number === 1);
   const [draft, setDraft] = useState({ subject: step.subject, bodyHtml: step.bodyHtml });
   const [days, setDays] = useState(step.waitDays ?? 7);
-  const [testing, setTesting] = useState(false);
 
   async function save() {
     if (await run('PATCH', '/epost', { flowId, nodeId: step.nodeId, ...draft }, `E-post ${step.number} er lagret.`)) setEditing(false);
@@ -41,22 +41,6 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
 
   async function remove() {
     if (await run('DELETE', '/epost', { flowId, nodeId: step.nodeId }, `E-post ${step.number} er fjernet.`)) setConfirmRemove(false);
-  }
-
-  async function sendTest() {
-    if (!myEmail) return;
-    setTesting(true);
-    try {
-      const res = await fetch(`/api/admin/crm/flows/${flowId}/test-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId: step.nodeId, toEmail: myEmail, ...(sampleContactId && { contactId: sampleContactId }) }),
-      });
-      const data = await res.json().catch(() => ({}));
-      toast(res.ok ? `Test sendt til ${myEmail}.` : data.error ?? 'Kunne ikke sende test.', res.ok ? 'success' : 'error');
-    } finally {
-      setTesting(false);
-    }
   }
 
   const daysValid = Number.isInteger(days) && days >= 1 && days <= MAX_DAYS;
@@ -152,9 +136,7 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
               Endre teksten
             </Button>
             {myEmail && (
-              <Button variant="secondary" size="sm" loading={testing} onClick={sendTest}>
-                Send test til meg
-              </Button>
+              <TestSendButton flowId={flowId} nodeId={step.nodeId} myEmail={myEmail} others={testOthers} contactId={sampleContactId} ignoreOverride />
             )}
             {canRemove && (
               <Button variant="dangerText" size="sm" onClick={() => setConfirmRemove(true)}>

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from '@/lib/auth';
 import { getUtsendelse } from '@/lib/utsendelser/config';
 import { loadUtsendelseView } from '@/lib/utsendelser/overview';
+import { testRecipients } from '@/lib/utsendelser/staff';
 import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { UtsendelseDetail } from './utsendelse-detail';
 
@@ -31,6 +32,7 @@ export default async function UtsendelsePage({ params }: { params: Promise<{ id:
           replies: view.replies.map((r) => ({ ...r, repliedAt: r.repliedAt.toISOString() })),
         }}
         myEmail={session?.user.email ?? ''}
+        testOthers={await testRecipients(session?.user.email ?? '')}
         options={{
           senders: senders.map((s) => ({ id: s.id, label: `${s.displayName} <${s.email}>` })),
           lists,

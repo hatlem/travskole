@@ -20,6 +20,7 @@ const { prisma, settings } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma }));
+vi.mock('@/lib/flows/send-rate', async (orig) => ({ ...(await orig<typeof import('@/lib/flows/send-rate')>()), rateDeferral: vi.fn(async () => null) }));
 vi.mock('@/lib/mail', () => ({ sendMailAs: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getLLMProvider: vi.fn(() => null) }));
 vi.mock('@/lib/flows/course-merge', () => ({ resolveCourseMergeContext: vi.fn() }));

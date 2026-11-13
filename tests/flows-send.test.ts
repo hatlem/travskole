@@ -31,6 +31,7 @@ const { prisma } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma }));
+vi.mock('@/lib/flows/send-rate', async (orig) => ({ ...(await orig<typeof import('@/lib/flows/send-rate')>()), rateDeferral: vi.fn(async () => null) }));
 vi.mock('@/lib/mail', () => ({ sendMailAs: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getLLMProvider: vi.fn(() => null) }));
 vi.mock('@/lib/flows/course-merge', () => ({ resolveCourseMergeContext: vi.fn() }));
@@ -95,6 +96,18 @@ beforeEach(() => {
 });
 
 describe('sendFlowEmail', () => {
+  it('«for mange» fra leverandøren: prøv igjen senere, uten å gi opp personen', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('452 4.5.3 Too many recipients'), { responseCode: 452 }));
+    const now = new Date('2026-11-13T12:00:00Z');
+
+    const result = await sendFlowEmail({ ...baseInput, now });
+
+    expect(result).toEqual({ kind: 'throttled', resumeAt: new Date('2026-11-13T12:10:00Z') });
+    expect(prisma.messageSend.delete).toHaveBeenCalledWith({ where: { id: 100 } });
+    const failedRows = prisma.messageSend.create.mock.calls.filter((c) => c[0].data.status === 'failed');
+    expect(failedRows).toHaveLength(0);
+  });
+
   it('egen tekst for mottakeren sendes i stedet for fellesteksten', async () => {
     prisma.flowMessageOverride.findUnique.mockResolvedValueOnce({ subject: 'Bare til Kari', bodyHtml: '<p>Hei Kari, egen tekst</p>' });
 
