@@ -60,7 +60,7 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
     <section aria-labelledby="send-title" className="mb-12">
       <h2 id="send-title" className="text-lg font-semibold text-gray-900">Mottakere og sending</h2>
       <p className="mt-1 mb-4 text-sm text-gray-600">
-        Trykk «Send nå» på gruppen som skal få e-post 1. Resten av e-postene kommer automatisk. Ingen får samme e-post to ganger.
+        Trykk «Send …» på en gruppe. Der sender du til alle, eller går gjennom én og én. Resten av e-postene kommer automatisk, og ingen får samme e-post to ganger.
       </p>
 
       {groups.length === 0 ? (
