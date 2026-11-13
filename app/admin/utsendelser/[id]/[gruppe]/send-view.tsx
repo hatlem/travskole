@@ -72,12 +72,20 @@ export function SendView(props: Props) {
   // Ulagret tekst: spør før fanen lukkes, og før enhver lenke (meny, brødsmuler, tilbake) tar henne bort.
   useEffect(() => {
     if (!dirty) return;
-    const warnUnload = (e: BeforeUnloadEvent) => e.preventDefault();
+    let leaving = false;
+    const warnUnload = (e: BeforeUnloadEvent) => {
+      if (!leaving) e.preventDefault();
+    };
     const warnLink = (e: MouseEvent) => {
+      // Ny fane, nedlasting o.l. tar henne ikke bort fra siden.
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
       const link = (e.target as Element | null)?.closest?.('a[href]');
-      if (!(link instanceof HTMLAnchorElement) || link.target === '_blank') return;
+      if (!(link instanceof HTMLAnchorElement) || link.hasAttribute('download')) return;
+      if (link.target && link.target !== '_self') return;
       if (link.origin === window.location.origin && link.pathname === window.location.pathname) return;
-      if (!window.confirm('Du har endringer som ikke er lagret. Vil du gå uten å lagre dem?')) {
+      if (window.confirm('Du har endringer som ikke er lagret. Vil du gå uten å lagre dem?')) {
+        leaving = true;
+      } else {
         e.preventDefault();
         e.stopPropagation();
       }

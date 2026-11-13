@@ -42,18 +42,21 @@ const STATUS_PILL: Record<RecipientStatus, { label: string; cls: string } | null
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', timeZone: 'Europe/Oslo' });
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Oslo' });
 
-const JOURNEY_NOTE: Partial<Record<RecipientDetail['journey']['state'], (at: string | null) => string>> = {
-  svarte: (at) => `Svarte${at ? ` ${dateLabel(at)}` : ''} og får ikke flere e-poster.`,
+type Journey = RecipientDetail['journey'];
+const JOURNEY_NOTE: Partial<Record<Journey['state'], (j: Journey) => string>> = {
+  pause: () => 'Utsendelsen står på pause. Resten kommer når du trykker «Fortsett».',
+  svarte: (j) => `Svarte${j.at ? ` ${dateLabel(j.at)}` : ''} og får ikke flere e-poster.`,
   'meldt-av': () => 'Har meldt seg av og får ikke flere e-poster.',
-  stoppet: (at) => `E-postene ble stoppet${at ? ` ${dateLabel(at)}` : ''}.`,
-  ferdig: () => 'Har fått alle e-postene.',
-  feilet: () => 'Sendingen feilet. Sjekk at e-postadressen er riktig.',
+  stoppet: (j) => `E-postene ble stoppet${j.at ? ` ${dateLabel(j.at)}` : ''}.`,
+  ferdig: () => 'Er ferdig med løpet.',
+  feilet: (j) => (j.reason === 'send-failed' ? 'Sendingen feilet. Sjekk at e-postadressen er riktig.' : 'Løpet stoppet på grunn av en feil.'),
 };
 
 /** Hele løpet for personen: hva som er sendt, åpnet og besvart, og når resten kommer. */
 function Journey({ detail }: { detail: RecipientDetail }) {
-  const { state, at } = detail.journey;
-  const note = JOURNEY_NOTE[state]?.(at);
+  const { state } = detail.journey;
+  const note = JOURNEY_NOTE[state]?.(detail.journey);
+  const upcoming = state === 'ikke-startet' || state === 'pagar' || state === 'pause';
   return (
     <div className="flex flex-wrap items-start gap-3 px-5 py-2.5">
       <dt className="w-12 shrink-0 pt-1 text-gray-500">Løpet</dt>
@@ -64,12 +67,12 @@ function Journey({ detail }: { detail: RecipientDetail }) {
               ? `sendt ${dateLabel(e.sentAt)}${e.repliedAt ? ', svarte' : e.openedAt ? ', åpnet' : ''}`
               : e.expectedAt
                 ? `kommer ca. ${dayLabel(e.expectedAt)}`
-                : state === 'ikke-startet'
+                : upcoming && !e.skipped
                   ? e.timing.toLowerCase()
                   : 'sendes ikke';
             const cls = e.sentAt
               ? 'bg-green-50 text-green-900 ring-green-200'
-              : e.expectedAt || state === 'ikke-startet'
+              : upcoming && !e.skipped
                 ? 'bg-white text-gray-800 ring-gray-200'
                 : 'bg-gray-50 text-gray-500 ring-gray-200 line-through';
             return (

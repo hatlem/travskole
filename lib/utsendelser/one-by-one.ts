@@ -36,10 +36,12 @@ export interface RecipientEmail {
   repliedAt: string | null;
   /** Omtrent når e-posten går ut, når personen er i gang og den ikke er sendt ennå. */
   expectedAt: string | null;
+  /** Personen er forbi denne uten at den ble sendt. */
+  skipped: boolean;
 }
 
 /** Hvor personen er i løpet. */
-export type JourneyState = 'ikke-startet' | 'pagar' | 'ferdig' | 'svarte' | 'meldt-av' | 'stoppet' | 'feilet';
+export type JourneyState = 'ikke-startet' | 'pagar' | 'pause' | 'ferdig' | 'svarte' | 'meldt-av' | 'stoppet' | 'feilet';
 
 export interface RecipientDetail {
   id: number;
@@ -47,40 +49,70 @@ export interface RecipientDetail {
   email: string | null;
   roleTitle: string | null;
   org: string | null;
-  journey: { state: JourneyState; at: string | null };
+  journey: { state: JourneyState; at: string | null; reason: string | null };
   emails: RecipientEmail[];
 }
 
 const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
 
+/** Første e-post personen står foran: følger den rette veien fra nåværende node (eller start). null ved forgrening. */
+export function nextEmailNode(
+  nodes: { id: number; type: string }[],
+  edges: { fromNodeId: number; toNodeId: number }[],
+  currentNodeId: number | null,
+): number | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  let id = currentNodeId ?? nodes.find((n) => n.type === 'start')?.id ?? null;
+  for (let hops = 0; id !== null && hops < 100; hops += 1) {
+    const node = byId.get(id);
+    if (!node) return null;
+    if (node.type === 'email') return id;
+    const out = edges.filter((e) => e.fromNodeId === id);
+    if (out.length !== 1) return null;
+    id = out[0].toNodeId;
+  }
+  return null;
+}
+
 /**
  * Løpet for én person ut fra innmeldingen og e-postene som er sendt.
- * Neste e-post går ut ved innmeldingens nextRunAt; de etter den kommer ventetiden senere.
+ * Neste e-post går ut ved innmeldingens nextRunAt (aldri tidligere enn nå); de etter den kommer ventetiden senere.
+ * Ved forgrening eller pause gjettes ingen dato.
  */
 export function journeyFor(
   steps: { nodeId: number; hoursAfterPrevious: number | null }[],
   enrollment: { status: string; nextRunAt: Date; finishedAt: Date | null; failReason: string | null } | null,
   sends: Map<number, { sentAt: Date; openedAt: Date | null; repliedAt: Date | null }>,
-): { journey: RecipientDetail['journey']; expected: Map<number, string> } {
+  opts: { nextNodeId: number | null; paused: boolean; now: Date },
+): { journey: RecipientDetail['journey']; expected: Map<number, string>; skipped: Set<number> } {
   const expected = new Map<number, string>();
+  const skipped = new Set<number>();
   const replied = [...sends.values()].map((s) => s.repliedAt).find((d): d is Date => d !== null) ?? null;
-  if (!enrollment) return { journey: { state: 'ikke-startet', at: null }, expected };
+  if (!enrollment) return { journey: { state: 'ikke-startet', at: null, reason: null }, expected, skipped };
   if (enrollment.status === 'active') {
-    let next: number | null = null;
-    for (const step of steps) {
-      if (sends.has(step.nodeId)) continue;
-      if (next === null) next = enrollment.nextRunAt.getTime();
-      else if (step.hoursAfterPrevious === null) break;
-      else next += step.hoursAfterPrevious * 3_600_000;
-      expected.set(step.nodeId, new Date(next).toISOString());
+    const anchor = steps.findIndex((s) => s.nodeId === opts.nextNodeId);
+    if (anchor >= 0) {
+      steps.slice(0, anchor).forEach((s) => !sends.has(s.nodeId) && skipped.add(s.nodeId));
+      if (!opts.paused) {
+        let next: number | null = null;
+        for (const step of steps.slice(anchor)) {
+          if (sends.has(step.nodeId)) continue;
+          if (step.hoursAfterPrevious === null) break;
+          next = next === null ? Math.max(enrollment.nextRunAt.getTime(), opts.now.getTime()) : next + step.hoursAfterPrevious * 3_600_000;
+          expected.set(step.nodeId, new Date(next).toISOString());
+        }
+      }
     }
-    return { journey: { state: 'pagar', at: null }, expected };
+    return { journey: { state: opts.paused ? 'pause' : 'pagar', at: null, reason: null }, expected, skipped };
   }
-  if (replied) return { journey: { state: 'svarte', at: iso(replied) }, expected };
-  if (enrollment.status === 'completed') return { journey: { state: 'ferdig', at: iso(enrollment.finishedAt) }, expected };
-  if (enrollment.status === 'failed') return { journey: { state: 'feilet', at: iso(enrollment.finishedAt) }, expected };
-  const optedOut = enrollment.failReason === STOP_REASON_SUPPRESSED || enrollment.failReason === STOP_REASON_NO_CONSENT;
-  return { journey: { state: optedOut ? 'meldt-av' : 'stoppet', at: iso(enrollment.finishedAt) }, expected };
+  const at = iso(enrollment.finishedAt);
+  if (enrollment.status === 'failed') return { journey: { state: 'feilet', at, reason: enrollment.failReason }, expected, skipped };
+  if (enrollment.failReason === STOP_REASON_SUPPRESSED || enrollment.failReason === STOP_REASON_NO_CONSENT) {
+    return { journey: { state: 'meldt-av', at, reason: enrollment.failReason }, expected, skipped };
+  }
+  if (replied) return { journey: { state: 'svarte', at: iso(replied), reason: null }, expected, skipped };
+  if (enrollment.status === 'completed') return { journey: { state: 'ferdig', at, reason: null }, expected, skipped };
+  return { journey: { state: 'stoppet', at, reason: enrollment.failReason }, expected, skipped };
 }
 
 function findGroup(utsendelse: Utsendelse, gruppeId: string) {
@@ -96,7 +128,7 @@ async function flowSteps(flowId: number) {
     flow.nodes.map((n) => ({ id: n.id, type: n.type, config: parseNodeConfig(n.config), posY: n.posY })),
     flow.edges,
   );
-  return { status: flow.status, steps };
+  return { status: flow.status, steps, nodes: flow.nodes, edges: flow.edges };
 }
 
 export async function loadRecipientList(utsendelse: Utsendelse, gruppeId: string): Promise<RecipientRow[]> {
@@ -140,7 +172,7 @@ export async function loadRecipientList(utsendelse: Utsendelse, gruppeId: string
 /** E-postene ferdig utfylt for én person: egen tekst der den finnes, ellers fellesteksten. */
 export async function loadRecipient(utsendelse: Utsendelse, gruppeId: string, contactId: number): Promise<RecipientDetail> {
   const group = findGroup(utsendelse, gruppeId);
-  const [contact, { steps }, contactEmail] = await Promise.all([
+  const [contact, { steps, nodes, edges, status: flowStatus }, contactEmail] = await Promise.all([
     prisma.contact.findUnique({
       where: { id: contactId },
       select: { id: true, name: true, email: true, roleTitle: true, customFields: true, organization: { select: { name: true } } },
@@ -159,14 +191,18 @@ export async function loadRecipient(utsendelse: Utsendelse, gruppeId: string, co
     prisma.flowEnrollment.findFirst({
       where: { flowId: group.flowId, contactId },
       orderBy: { id: 'desc' },
-      select: { status: true, nextRunAt: true, finishedAt: true, failReason: true },
+      select: { status: true, nextRunAt: true, finishedAt: true, failReason: true, currentNodeId: true },
     }),
   ]);
   const overrideByNode = new Map(overrides.map((o) => [o.nodeId, o]));
   const sentByNode = new Map(
     sends.flatMap((s) => (s.nodeId === null ? [] : [[s.nodeId, { sentAt: s.createdAt, openedAt: s.openedAt, repliedAt: s.repliedAt }] as const])),
   );
-  const { journey, expected } = journeyFor(steps, enrollment, sentByNode);
+  const { journey, expected, skipped } = journeyFor(steps, enrollment, sentByNode, {
+    nextNodeId: enrollment ? nextEmailNode(nodes, edges, enrollment.currentNodeId) : null,
+    paused: flowStatus === 'paused',
+    now: new Date(),
+  });
   const merge = contactMergeTagData(contact, contactEmail);
 
   return {
@@ -189,6 +225,7 @@ export async function loadRecipient(utsendelse: Utsendelse, gruppeId: string, co
         openedAt: iso(sentByNode.get(s.nodeId)?.openedAt),
         repliedAt: iso(sentByNode.get(s.nodeId)?.repliedAt),
         expectedAt: expected.get(s.nodeId) ?? null,
+        skipped: skipped.has(s.nodeId),
       };
     }),
   };
