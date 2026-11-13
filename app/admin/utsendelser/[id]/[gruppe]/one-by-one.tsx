@@ -40,6 +40,54 @@ const STATUS_PILL: Record<RecipientStatus, { label: string; cls: string } | null
 };
 
 const dateLabel = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', timeZone: 'Europe/Oslo' });
+const dayLabel = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Europe/Oslo' });
+
+type Journey = RecipientDetail['journey'];
+const JOURNEY_NOTE: Partial<Record<Journey['state'], (j: Journey) => string>> = {
+  pause: () => 'Utsendelsen står på pause. Resten kommer når du trykker «Fortsett».',
+  svarte: (j) => `Svarte${j.at ? ` ${dateLabel(j.at)}` : ''} og får ikke flere e-poster.`,
+  'meldt-av': () => 'Har meldt seg av og får ikke flere e-poster.',
+  stoppet: (j) => `E-postene ble stoppet${j.at ? ` ${dateLabel(j.at)}` : ''}.`,
+  ferdig: () => 'Er ferdig med løpet.',
+  feilet: (j) => (j.reason === 'send-failed' ? 'Sendingen feilet. Sjekk at e-postadressen er riktig.' : 'Løpet stoppet på grunn av en feil.'),
+};
+
+/** Hele løpet for personen: hva som er sendt, åpnet og besvart, og når resten kommer. */
+function Journey({ detail }: { detail: RecipientDetail }) {
+  const { state } = detail.journey;
+  const note = JOURNEY_NOTE[state]?.(detail.journey);
+  const upcoming = state === 'ikke-startet' || state === 'pagar' || state === 'pause';
+  return (
+    <div className="flex flex-wrap items-start gap-3 px-5 py-2.5">
+      <dt className="w-12 shrink-0 pt-1 text-gray-500">Løpet</dt>
+      <dd className="min-w-0 flex-1">
+        <ol className="flex flex-wrap gap-1.5">
+          {detail.emails.map((e) => {
+            const label = e.sentAt
+              ? `sendt ${dateLabel(e.sentAt)}${e.repliedAt ? ', svarte' : e.openedAt ? ', åpnet' : ''}`
+              : e.expectedAt
+                ? `kommer ca. ${dayLabel(e.expectedAt)}`
+                : upcoming && !e.skipped
+                  ? e.timing.toLowerCase()
+                  : 'sendes ikke';
+            const cls = e.sentAt
+              ? 'bg-green-50 text-green-900 ring-green-200'
+              : upcoming && !e.skipped
+                ? 'bg-white text-gray-800 ring-gray-200'
+                : 'bg-gray-50 text-gray-500 ring-gray-200 line-through';
+            return (
+              <li key={e.nodeId} className={`rounded-full px-2.5 py-0.5 text-xs ring-1 ${cls}`}>
+                {e.sentAt && <span aria-hidden="true">✓ </span>}
+                <span className="font-medium">E-post {e.number}</span> · {label}
+              </li>
+            );
+          })}
+        </ol>
+        {note && <p className="mt-1.5 text-xs text-gray-600">{note}</p>}
+      </dd>
+    </div>
+  );
+}
 
 function matchesFilter(row: RecipientRow, filter: Filter) {
   if (filter === 'alle') return true;
@@ -342,7 +390,9 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
             <>
               <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 bg-gray-50 px-5 py-3">
                 <StepTabs steps={detail.emails} active={active} onSelect={setActive} marked={(e) => e.edited || isDirty(e.nodeId)} />
-                <span className="text-sm text-gray-500">{email.sentAt ? `Sendt ${dateLabel(email.sentAt)}` : email.timing}</span>
+                <span className="text-sm text-gray-500">
+                  {email.sentAt ? `Sendt ${dateLabel(email.sentAt)}` : email.expectedAt ? `Kommer ca. ${dayLabel(email.expectedAt)}` : email.timing}
+                </span>
               </header>
               <dl className="divide-y divide-gray-100 text-sm">
                 <div className="flex items-center gap-3 px-5 py-2.5">
@@ -356,6 +406,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
                     {(detail.roleTitle || detail.org) && <span className="text-gray-500">{[detail.roleTitle, detail.org].filter(Boolean).join(', ')}</span>}
                   </dd>
                 </div>
+                <Journey detail={detail} />
               </dl>
 
               <div className="border-t border-gray-200 px-5 py-5">

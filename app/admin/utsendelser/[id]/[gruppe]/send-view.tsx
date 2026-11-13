@@ -69,12 +69,33 @@ export function SendView(props: Props) {
   const [mode, setMode] = useState(props.initialMode);
   const [dirty, setDirty] = useState(false);
 
-  // Ulagret tekst: spør før fanen lukkes eller lastes på nytt.
+  // Ulagret tekst: spør før fanen lukkes, og før enhver lenke (meny, brødsmuler, tilbake) tar henne bort.
   useEffect(() => {
     if (!dirty) return;
-    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener('beforeunload', warn);
-    return () => window.removeEventListener('beforeunload', warn);
+    let leaving = false;
+    const warnUnload = (e: BeforeUnloadEvent) => {
+      if (!leaving) e.preventDefault();
+    };
+    const warnLink = (e: MouseEvent) => {
+      // Ny fane, nedlasting o.l. tar henne ikke bort fra siden.
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = (e.target as Element | null)?.closest?.('a[href]');
+      if (!(link instanceof HTMLAnchorElement) || link.hasAttribute('download')) return;
+      if (link.target && link.target !== '_self') return;
+      if (link.origin === window.location.origin && link.pathname === window.location.pathname) return;
+      if (window.confirm('Du har endringer som ikke er lagret. Vil du gå uten å lagre dem?')) {
+        leaving = true;
+      } else {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('beforeunload', warnUnload);
+    document.addEventListener('click', warnLink, true);
+    return () => {
+      window.removeEventListener('beforeunload', warnUnload);
+      document.removeEventListener('click', warnLink, true);
+    };
   }, [dirty]);
 
   function switchMode(next: 'alle' | 'en') {
@@ -84,13 +105,7 @@ export function SendView(props: Props) {
 
   return (
     <div className={mode === 'en' ? '' : 'max-w-5xl'}>
-      <Link
-        href={`/admin/utsendelser/${props.utsendelseId}`}
-        onClick={(e) => {
-          if (dirty && !window.confirm('Du har endringer som ikke er lagret. Vil du gå uten å lagre dem?')) e.preventDefault();
-        }}
-        className="mb-3 inline-block text-sm text-bjerke-blue hover:underline"
-      >
+      <Link href={`/admin/utsendelser/${props.utsendelseId}`} className="mb-3 inline-block text-sm text-bjerke-blue hover:underline">
         ← {props.utsendelseNavn}
       </Link>
       {props.paused && (
