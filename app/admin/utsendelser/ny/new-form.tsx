@@ -100,7 +100,7 @@ export function NewUtsendelseForm({
           </>
         )}
       </div>
-      <p className="text-sm text-gray-600">Utsendelsen starter med én e-post. Du kan legge til flere, og ingenting sendes før du trykker «Send nå».</p>
+      <p className="text-sm text-gray-600">Utsendelsen starter med én e-post. Du kan legge til flere, og ingenting sendes før du trykker «Send».</p>
       <div className="flex gap-3">
         <Button loading={saving} disabled={!navn.trim() || sender === ''} onClick={create}>Lag utsendelse</Button>
         <Button variant="secondary" disabled={saving} onClick={() => router.push('/admin/utsendelser')}>Avbryt</Button>

@@ -9,7 +9,7 @@ const { prisma, mocks } = vi.hoisted(() => {
     contact: { findUnique: vi.fn() },
     messageSend: { count: vi.fn() },
     setting: { create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
-    utsendelseRecipient: { upsert: vi.fn(), deleteMany: vi.fn() },
+    utsendelseRecipient: { upsert: vi.fn(), deleteMany: vi.fn(), updateMany: vi.fn() },
     flowMessageOverride: { upsert: vi.fn(), deleteMany: vi.fn() },
     $transaction: vi.fn(async (ops: unknown[]) => ops),
   };
@@ -86,7 +86,8 @@ describe('ta ut og flytt', () => {
     prisma.flowEnrollment.updateMany.mockResolvedValue({ count: 1 });
     const result = await excludeRecipient(U, 5, 'hilde@bjerke.no');
     expect(prisma.utsendelseRecipient.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      create: { utsendelseId: 'juletrav-2026', contactId: 5, groupId: null, updatedBy: 'hilde@bjerke.no' },
+      create: { utsendelseId: 'juletrav-2026', contactId: 5, excluded: true, updatedBy: 'hilde@bjerke.no' },
+      update: { excluded: true, updatedBy: 'hilde@bjerke.no' },
     }));
     expect(prisma.flowEnrollment.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       where: { flowId: { in: [22, 23] }, contactId: 5, status: 'active' },
@@ -94,14 +95,18 @@ describe('ta ut og flytt', () => {
     expect(result).toEqual({ stopped: 1 });
   });
 
-  it('ta med igjen sletter bare «tatt ut», ikke en flytting', async () => {
-    await includeRecipient(U, 5);
+  it('ta med igjen beholder en flytting', async () => {
+    await includeRecipient(U, 5, 'hilde@bjerke.no');
     expect(prisma.utsendelseRecipient.deleteMany).toHaveBeenCalledWith({ where: { utsendelseId: 'juletrav-2026', contactId: 5, groupId: null } });
+    expect(prisma.utsendelseRecipient.updateMany).toHaveBeenCalledWith({
+      where: { utsendelseId: 'juletrav-2026', contactId: 5, groupId: { not: null } },
+      data: { excluded: false, updatedBy: 'hilde@bjerke.no' },
+    });
   });
 
   it('flytt: lagrer gruppen og fjerner egne tekster fra e-poster personen ikke lenger får', async () => {
     await moveRecipient(U, 5, 'firma', 'hilde@bjerke.no');
-    expect(prisma.utsendelseRecipient.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { groupId: 'firma', updatedBy: 'hilde@bjerke.no' } }));
+    expect(prisma.utsendelseRecipient.upsert).toHaveBeenCalledWith(expect.objectContaining({ update: { groupId: 'firma', excluded: false, updatedBy: 'hilde@bjerke.no' } }));
     expect(prisma.flowMessageOverride.deleteMany).toHaveBeenCalledWith({ where: { contactId: 5, node: { flowId: { in: [22] } } } });
   });
 

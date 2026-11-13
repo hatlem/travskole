@@ -47,13 +47,16 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
       },
     }),
     getSetting('marketing_allow_legitimate_interest'),
-    prisma.utsendelseRecipient.findMany({ where: { utsendelseId: utsendelse.id }, select: { contactId: true, groupId: true } }),
+    prisma.utsendelseRecipient.findMany({ where: { utsendelseId: utsendelse.id }, select: { contactId: true, groupId: true, excluded: true } }),
   ]);
-  /** contactId → gruppen personen er flyttet til, eller null når personen er tatt ut. */
+  // Flyttet til en gruppe som er fjernet = ikke flyttet; «tatt ut» gjelder uansett.
   const groupIds = new Set(utsendelse.grupper.map((g) => g.id));
-  const choices = new Map(
-    choiceRows.filter((r) => r.groupId === null || groupIds.has(r.groupId)).map((r) => [r.contactId, r.groupId]),
-  );
+  const movedTo = new Map<number, string>();
+  const excludedIds = new Set<number>();
+  for (const r of choiceRows) {
+    if (r.groupId && groupIds.has(r.groupId)) movedTo.set(r.contactId, r.groupId);
+    if (r.excluded) excludedIds.add(r.contactId);
+  }
 
   const emails = contacts.map((c) => normalizeEmail(c.email)).filter((e): e is string => !!e);
   const suppressed = new Set(
@@ -89,12 +92,13 @@ export async function loadAudience(utsendelse: Utsendelse, onlyGroupIds?: string
         ),
       );
     }
-    const excluded = members.filter((c) => choices.get(c.id) === null).map((c) => c.id);
-    const movedIn = new Set([...choices].filter(([, groupId]) => groupId === g.id).map(([id]) => id));
-    members = [
-      ...members.filter((c) => !choices.has(c.id)),
+    const movedIn = new Set([...movedTo].filter(([, groupId]) => groupId === g.id).map(([id]) => id));
+    const candidates = [
+      ...members.filter((c) => !movedTo.has(c.id)),
       ...segmentContacts.filter((c) => movedIn.has(c.id)),
     ];
+    const excluded = candidates.filter((c) => excludedIds.has(c.id)).map((c) => c.id);
+    members = candidates.filter((c) => !excludedIds.has(c.id));
     const isMarketing = marketingByFlow.get(g.flowId) ?? true;
     const reachable = new Set(
       members

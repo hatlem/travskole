@@ -19,7 +19,7 @@ describe('ensureSchema', () => {
       expect(statement).toMatch(/^ALTER TABLE "courses" ADD COLUMN IF NOT EXISTS /);
     }
     for (const statement of UTSENDELSE_SCHEMA_STATEMENTS) {
-      expect(statement).toMatch(/^CREATE (UNIQUE )?(TABLE|INDEX) IF NOT EXISTS /);
+      expect(statement).toMatch(/^(CREATE (UNIQUE )?(TABLE|INDEX) IF NOT EXISTS |ALTER TABLE \S+ ADD COLUMN IF NOT EXISTS |UPDATE )/);
     }
   });
 

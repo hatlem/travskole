@@ -38,17 +38,21 @@ export async function excludeRecipient(utsendelse: Utsendelse, contactId: number
   return withFlowLocks(flowIds, async () => {
     await prisma.utsendelseRecipient.upsert({
       where: { utsendelseId_contactId: { utsendelseId: utsendelse.id, contactId } },
-      create: { utsendelseId: utsendelse.id, contactId, groupId: null, updatedBy: by },
-      update: { groupId: null, updatedBy: by },
+      create: { utsendelseId: utsendelse.id, contactId, excluded: true, updatedBy: by },
+      update: { excluded: true, updatedBy: by },
     });
     const stopped = await exitActiveEnrollments({ flowId: { in: flowIds }, contactId });
     return { stopped };
   });
 }
 
-/** Angrer «ta ut». Den som allerede er stoppet midt i rekken, starter ikke opp igjen. */
-export async function includeRecipient(utsendelse: Utsendelse, contactId: number): Promise<void> {
-  await prisma.utsendelseRecipient.deleteMany({ where: { utsendelseId: utsendelse.id, contactId, groupId: null } });
+/** Angrer «ta ut»; en flytting beholdes. Den som allerede er stoppet midt i rekken, starter ikke opp igjen. */
+export async function includeRecipient(utsendelse: Utsendelse, contactId: number, by: string): Promise<void> {
+  const key = { utsendelseId: utsendelse.id, contactId };
+  await prisma.$transaction([
+    prisma.utsendelseRecipient.deleteMany({ where: { ...key, groupId: null } }),
+    prisma.utsendelseRecipient.updateMany({ where: { ...key, groupId: { not: null } }, data: { excluded: false, updatedBy: by } }),
+  ]);
 }
 
 /**
@@ -67,7 +71,7 @@ export async function moveRecipient(utsendelse: Utsendelse, contactId: number, g
       prisma.utsendelseRecipient.upsert({
         where: { utsendelseId_contactId: { utsendelseId: utsendelse.id, contactId } },
         create: { utsendelseId: utsendelse.id, contactId, groupId, updatedBy: by },
-        update: { groupId, updatedBy: by },
+        update: { groupId, excluded: false, updatedBy: by },
       }),
       prisma.flowMessageOverride.deleteMany({
         where: { contactId, node: { flowId: { in: flowIds.filter((id) => id !== group.flowId) } } },
@@ -101,8 +105,9 @@ export async function contactUtsendelser(contactId: number): Promise<ContactUtse
   const result: ContactUtsendelse[] = [];
   for (const u of utsendelser.filter((x) => x.flyter.some((f) => activeFlows.has(f.flowId)))) {
     const audience = await loadAudience(u);
-    const group = u.grupper.find((g) => audience.get(g.id)?.ids?.includes(contactId));
-    const excluded = u.grupper.some((g) => audience.get(g.id)?.excluded.includes(contactId));
+    const excludedFrom = u.grupper.find((g) => audience.get(g.id)?.excluded.includes(contactId));
+    const group = u.grupper.find((g) => audience.get(g.id)?.ids?.includes(contactId)) ?? excludedFrom;
+    const excluded = Boolean(excludedFrom);
     const sent = u.flyter.some((f) => enrolledFlows.has(f.flowId));
     result.push({
       id: u.id,

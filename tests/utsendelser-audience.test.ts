@@ -80,7 +80,7 @@ describe('loadAudience', () => {
   });
 
   it('tatt ut: borte fra gruppen og telles ikke, men vises som tatt ut', async () => {
-    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: null }]);
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: null, excluded: true }]);
     const a = (await loadAudience(U)).get('p1');
     expect(a?.ids).toEqual([2, 3, 4, 5]);
     expect(a?.reachable.has(1)).toBe(false);
@@ -95,7 +95,7 @@ describe('loadAudience', () => {
         { id: 'l', navn: 'L', listId: 5, flowId: 22 },
       ],
     };
-    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 5, groupId: 'l' }, { contactId: 1, groupId: 'l' }]);
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 5, groupId: 'l', excluded: false }, { contactId: 1, groupId: 'l', excluded: false }]);
     const a = await loadAudience(two);
     expect(a.get('p1')?.ids).toEqual([2, 3, 4]);
     expect(a.get('l')?.ids).toEqual([6, 1, 5]);
@@ -109,7 +109,23 @@ describe('loadAudience', () => {
   });
 
   it('flyttet til en gruppe som er fjernet: tilbake i sin vanlige gruppe', async () => {
-    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: 'fjernet' }]);
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 1, groupId: 'fjernet', excluded: false }]);
     expect((await loadAudience(U)).get('p1')?.ids).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('flyttet og så tatt ut: vises som tatt ut i den nye gruppen, ikke i den gamle', async () => {
+    const two: Utsendelse = {
+      ...U,
+      grupper: [
+        { id: 'p1', navn: 'P1', segmentId: 2, flowId: 22 },
+        { id: 'l', navn: 'L', listId: 5, flowId: 22 },
+      ],
+    };
+    prisma.utsendelseRecipient.findMany.mockResolvedValue([{ contactId: 5, groupId: 'l', excluded: true }]);
+    const a = await loadAudience(two);
+    expect(a.get('p1')?.ids).not.toContain(5);
+    expect(a.get('p1')?.excluded).toEqual([]);
+    expect(a.get('l')?.ids).not.toContain(5);
+    expect(a.get('l')?.excluded).toEqual([5]);
   });
 });
