@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import type { GroupView } from '@/lib/utsendelser/overview';
@@ -125,7 +126,17 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
                     {g.beskrivelse ? ` · ${g.beskrivelse}` : ''}
                     {flows.length > 1 && g.flowNavn ? ` · ${g.flowNavn.toLowerCase()}` : ''}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">{g.kilde}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    {g.kilde}
+                    {!g.missingSegment && (
+                      <>
+                        {' · '}
+                        <Link href={g.peopleHref} className="font-medium text-blue-700 underline-offset-2 hover:underline">
+                          Se hvem som er med
+                        </Link>
+                      </>
+                    )}
+                  </p>
                   {g.unreachable > 0 && (
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatCount(g.unreachable)} til kan ikke få e-post (har meldt seg av eller mangler adresse).
