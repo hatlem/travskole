@@ -30,6 +30,7 @@ import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
 import { sendDeferral, type SendWindow } from './send-window';
+import { isThrottleError, rateDeferral, THROTTLE_GIVE_UP_MS, THROTTLE_RETRY_MS } from './send-rate';
 import { renderFlowEmailBody } from './email-html';
 
 /**
@@ -55,9 +56,9 @@ export interface PendingReviewResult {
   resumeAt: Date;
 }
 
-/** Utenfor sendetiden — runneren parkerer enrollmentet på noden til `resumeAt`. */
+/** Ikke sendt nå: utenfor sendetiden, eller over farten leverandøren tåler. Prøv igjen ved resumeAt. */
 export interface OutsideSendWindowResult {
-  kind: 'outside_window';
+  kind: 'outside_window' | 'throttled';
   resumeAt: Date;
 }
 
@@ -89,9 +90,12 @@ export interface SendFlowEmailInput {
   sendWindow?: SendWindow | null;
 }
 
-function outsideWindow(input: SendFlowEmailInput): OutsideSendWindowResult | null {
-  const resumeAt = sendDeferral(input.now ?? new Date(), input.sendWindow ?? null, input.enrollmentId);
-  return resumeAt ? { kind: 'outside_window', resumeAt } : null;
+async function outsideWindow(input: SendFlowEmailInput): Promise<OutsideSendWindowResult | null> {
+  const now = input.now ?? new Date();
+  const resumeAt = sendDeferral(now, input.sendWindow ?? null, input.enrollmentId);
+  if (resumeAt) return { kind: 'outside_window', resumeAt };
+  const slowDown = await rateDeferral(now);
+  return slowDown ? { kind: 'throttled', resumeAt: slowDown } : null;
 }
 
 function dedupeKeyFor(enrollmentId: number, nodeId: number): string {
@@ -294,7 +298,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   // behandle det før vinduet åpner; ellers ventes det før noe annet skjer.
   const reviewFirst = input.isMarketing && input.aiReview === 'approve';
   if (!reviewFirst) {
-    const deferred = outsideWindow(input);
+    const deferred = await outsideWindow(input);
     if (deferred) return deferred;
   }
 
@@ -352,7 +356,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
   if (ai.kind === 'pending_review') return ai;
   if (ai.kind === 'skip') return 'skipped_review';
   if (reviewFirst) {
-    const deferred = outsideWindow(input);
+    const deferred = await outsideWindow(input);
     if (deferred) return deferred;
   }
   // Admin-redigert/KI-tekst kan inneholde flettefelt som ikke var fylt inn.
@@ -467,6 +471,27 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         });
     }
   } catch (error) {
+    // «For mange» fra leverandøren: frigjør plassen og prøv igjen senere, ikke gi opp personen.
+    if (isThrottleError(error)) {
+      logger.warn('Flyt-e-post utsatt: leverandøren ba oss sende saktere', {
+        enrollmentId: input.enrollmentId,
+        nodeId: input.nodeId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      // Raden blir et synlig «throttled»-spor og slipper plassen (dedupeKey), så neste forsøk kan sende.
+      await prisma.messageSend.update({
+        where: { id: messageSendId },
+        data: { status: 'throttled', dedupeKey: null, trackingToken: null },
+      });
+      const now = input.now ?? new Date();
+      const first = await prisma.messageSend.findFirst({
+        where: { enrollmentId: input.enrollmentId, nodeId: input.nodeId, status: 'throttled' },
+        orderBy: { createdAt: 'asc' },
+        select: { createdAt: true },
+      });
+      if (first && now.getTime() - first.createdAt.getTime() >= THROTTLE_GIVE_UP_MS) return 'failed';
+      return { kind: 'throttled', resumeAt: new Date(now.getTime() + THROTTLE_RETRY_MS) };
+    }
     logger.error('Flow email send failed', {
       enrollmentId: input.enrollmentId,
       nodeId: input.nodeId,

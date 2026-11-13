@@ -5,12 +5,13 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { useToast } from '@/components/admin/Toast';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
 import type { RecipientRow } from '@/lib/utsendelser/one-by-one';
 import { formatCount } from '../../status';
 import { useUtsendelseAction } from '../use-action';
 import { OneByOne } from './one-by-one';
+import { TestSendButton } from '../test-send-button';
+import type { TestRecipient } from '@/lib/utsendelser/staff';
 
 export interface SendStep {
   nodeId: number;
@@ -45,6 +46,7 @@ interface Props {
   paused: boolean;
   rows: RecipientRow[];
   myEmail: string;
+  testOthers: TestRecipient[];
   initialMode: 'alle' | 'en';
 }
 
@@ -128,17 +130,16 @@ function GroupCompose({
   flow,
   paused,
   myEmail,
+  testOthers,
   onOneByOne,
   onDirtyChange,
 }: Props & { onOneByOne: () => void; onDirtyChange: (dirty: boolean) => void }) {
   const router = useRouter();
-  const { toast } = useToast();
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [active, setActive] = useState(0);
   const [saved, setSaved] = useState(() => Object.fromEntries(flow.steps.map((s) => [s.nodeId, { subject: s.subject, bodyHtml: s.bodyHtml }])));
   const [drafts, setDrafts] = useState(saved);
   const [confirm, setConfirm] = useState(false);
-  const [testing, setTesting] = useState(false);
 
   const dirtyIds = flow.steps.filter((s) => drafts[s.nodeId].subject !== saved[s.nodeId].subject || drafts[s.nodeId].bodyHtml !== saved[s.nodeId].bodyHtml).map((s) => s.nodeId);
   const dirty = dirtyIds.length > 0;
@@ -164,22 +165,6 @@ function GroupCompose({
     setConfirm(false);
     router.push(`/admin/utsendelser/${utsendelseId}`);
     router.refresh();
-  }
-
-  async function sendTest() {
-    if (dirty && !(await saveAll())) return;
-    setTesting(true);
-    try {
-      const res = await fetch(`/api/admin/crm/flows/${flow.flowId}/test-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId: step.nodeId, toEmail: myEmail, ...(flow.sampleContactId && { contactId: flow.sampleContactId, ignoreOverride: true }) }),
-      });
-      const data = await res.json().catch(() => ({}));
-      toast(res.ok ? `Test av e-post ${step.number} sendt til ${myEmail}.` : data.error ?? 'Kunne ikke sende test.', res.ok ? 'success' : 'error');
-    } finally {
-      setTesting(false);
-    }
   }
 
   const sendLabel = group.sent > 0 ? `Send til ${formatCount(group.remaining)} nye` : `Send til alle ${formatCount(group.remaining)}`;
@@ -237,7 +222,14 @@ function GroupCompose({
             {canSend && <Button onClick={() => setConfirm(true)}>{sendLabel}</Button>}
             <Button variant="secondary" onClick={onOneByOne}>Gå gjennom én og én</Button>
             {myEmail && (
-              <Button variant="secondary" size="sm" loading={testing} onClick={sendTest}>Send test til meg</Button>
+              <TestSendButton
+                flowId={flow.flowId}
+                nodeId={step.nodeId}
+                myEmail={myEmail}
+                others={testOthers}
+                contactId={flow.sampleContactId}
+                ignoreOverride
+              />
             )}
             {!canSend && group.remaining === 0 && <span className="text-sm text-gray-600">Alle i gruppen har fått e-posten.</span>}
           </>

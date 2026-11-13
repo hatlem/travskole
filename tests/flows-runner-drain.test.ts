@@ -33,6 +33,8 @@ const { prisma, claims, leases } = vi.hoisted(() => {
 });
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/flows/send', () => ({ sendFlowEmail: vi.fn() }));
+const { rate } = vi.hoisted(() => ({ rate: { blockedUntil: vi.fn(() => 0) } }));
+vi.mock('@/lib/flows/send-rate', () => ({ rateBlockedUntil: rate.blockedUntil }));
 vi.mock('@/lib/logger', () => ({ default: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 
 import { BATCH_SIZE, DRAIN_BUDGET_MS, LEASE_MINUTES, drainFlowBatches } from '@/lib/flows/runner';
@@ -53,6 +55,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   claims.length = 0;
   leases.length = 0;
+  rate.blockedUntil.mockReturnValue(0);
 });
 
 describe('drainFlowBatches', () => {
@@ -92,5 +95,26 @@ describe('drainFlowBatches', () => {
     const result = await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(200));
     expect(result.batches).toBe(100);
     expect(result.processed).toBe(5000);
+  });
+
+  it('venter på sendetaket innenfor budsjettet, og sender resten i samme kjøring', async () => {
+    const start = Date.parse('2026-10-02T06:00:00Z');
+    claims.push(ids(1, 10), ids(11, 10));
+    rate.blockedUntil.mockReturnValueOnce(start + 30_000).mockReturnValue(0);
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
+    const result = await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(1_000, start), sleep);
+    expect(sleep).toHaveBeenCalledTimes(1);
+    expect(sleep.mock.calls[0][0]).toBeGreaterThan(25_000);
+    expect(result.batches).toBe(2);
+  });
+
+  it('venter ikke når ventetiden ikke får plass i budsjettet', async () => {
+    const start = Date.parse('2026-10-02T06:00:00Z');
+    claims.push(ids(1, 10), ids(11, 10));
+    rate.blockedUntil.mockReturnValue(start + 120_000);
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {});
+    const result = await drainFlowBatches(DRAIN_BUDGET_MS, steppingClock(1_000, start), sleep);
+    expect(sleep).not.toHaveBeenCalled();
+    expect(result.batches).toBe(1);
   });
 });

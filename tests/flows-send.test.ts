@@ -19,7 +19,7 @@ const { prisma } = vi.hoisted(() => ({
     flowMessageOverride: { findUnique: vi.fn(async (): Promise<{ subject: string; bodyHtml: string } | null> => null) },
     consent: { findUnique: vi.fn() },
     senderIdentity: { findUnique: vi.fn() },
-    messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn() },
+    messageSend: { create: vi.fn(), update: vi.fn(), delete: vi.fn(), findFirst: vi.fn() },
     messageLink: { createMany: vi.fn() },
     aiSuggestion: { findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn() },
     deal: { findMany: vi.fn(async () => []) },
@@ -31,6 +31,7 @@ const { prisma } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/prisma', () => ({ prisma }));
+vi.mock('@/lib/flows/send-rate', async (orig) => ({ ...(await orig<typeof import('@/lib/flows/send-rate')>()), rateDeferral: vi.fn(async () => null) }));
 vi.mock('@/lib/mail', () => ({ sendMailAs: vi.fn() }));
 vi.mock('@/lib/ai/provider', () => ({ getLLMProvider: vi.fn(() => null) }));
 vi.mock('@/lib/flows/course-merge', () => ({ resolveCourseMergeContext: vi.fn() }));
@@ -95,6 +96,28 @@ beforeEach(() => {
 });
 
 describe('sendFlowEmail', () => {
+  it('«for mange» fra leverandøren: prøv igjen senere, uten å gi opp personen', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('452 4.5.3 Too many recipients'), { responseCode: 452 }));
+    const now = new Date('2026-11-13T12:00:00Z');
+    prisma.messageSend.findFirst.mockResolvedValueOnce({ createdAt: now });
+
+    const result = await sendFlowEmail({ ...baseInput, now });
+
+    expect(result).toEqual({ kind: 'throttled', resumeAt: new Date('2026-11-13T12:10:00Z') });
+    expect(prisma.messageSend.update).toHaveBeenCalledWith({
+      where: { id: 100 },
+      data: { status: 'throttled', dedupeKey: null, trackingToken: null },
+    });
+    expect(prisma.messageSend.create.mock.calls.filter((c) => c[0].data.status === 'failed')).toHaveLength(0);
+  });
+
+  it('gir opp etter tre timer med «for mange»', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('451 try later'), { responseCode: 451 }));
+    const now = new Date('2026-11-13T15:00:00Z');
+    prisma.messageSend.findFirst.mockResolvedValueOnce({ createdAt: new Date('2026-11-13T11:59:00Z') });
+    expect(await sendFlowEmail({ ...baseInput, now })).toBe('failed');
+  });
+
   it('egen tekst for mottakeren sendes i stedet for fellesteksten', async () => {
     prisma.flowMessageOverride.findUnique.mockResolvedValueOnce({ subject: 'Bare til Kari', bodyHtml: '<p>Hei Kari, egen tekst</p>' });
 

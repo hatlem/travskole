@@ -3,6 +3,7 @@ import { getServerSession } from '@/lib/auth';
 import { getUtsendelse } from '@/lib/utsendelser/config';
 import { loadUtsendelseView } from '@/lib/utsendelser/overview';
 import { loadRecipientList } from '@/lib/utsendelser/one-by-one';
+import { testRecipients } from '@/lib/utsendelser/staff';
 import { BreadcrumbLabel } from '@/components/admin/BreadcrumbLabel';
 import { SendView } from './send-view';
 
@@ -20,10 +21,11 @@ export default async function SendGroupPage({
   const group = utsendelse?.grupper.find((g) => g.id === gruppe);
   if (!utsendelse || !group) notFound();
 
-  const [view, rows, session] = await Promise.all([
+  const [view, rows, session, testOthers] = await Promise.all([
     loadUtsendelseView(utsendelse),
     loadRecipientList(utsendelse, group.id),
     getServerSession(),
+    testRecipients(),
   ]);
   const flow = view.flows.find((f) => f.flowId === group.flowId);
   const groupView = view.groups.find((g) => g.id === group.id);
@@ -49,6 +51,7 @@ export default async function SendGroupPage({
         paused={view.status === 'pause'}
         rows={rows}
         myEmail={session?.user.email ?? ''}
+        testOthers={testOthers}
         initialMode={sp.modus === 'en' ? 'en' : 'alle'}
       />
     </>

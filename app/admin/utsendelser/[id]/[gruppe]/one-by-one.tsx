@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { useToast } from '@/components/admin/Toast';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
 import type { RecipientDetail, RecipientRow, RecipientStatus } from '@/lib/utsendelser/one-by-one';
 import { formatCount } from '../../status';
+import { TestSendButton } from '../test-send-button';
+import type { TestRecipient } from '@/lib/utsendelser/staff';
 import { useUtsendelseAction } from '../use-action';
 import { people, sendResultMessage, StepTabs, type SendFlow, type SendGroup } from './send-view';
 
@@ -18,6 +19,7 @@ interface Props {
   paused: boolean;
   rows: RecipientRow[];
   myEmail: string;
+  testOthers: TestRecipient[];
   onBack: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }
@@ -95,8 +97,7 @@ function matchesFilter(row: RecipientRow, filter: Filter) {
   return row.status === filter;
 }
 
-export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows: initialRows, myEmail, onBack, onDirtyChange }: Props) {
-  const { toast } = useToast();
+export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows: initialRows, myEmail, testOthers, onBack, onDirtyChange }: Props) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [rows, setRows] = useState(initialRows);
   const [filter, setFilter] = useState<Filter>(() => (initialRows.some((r) => r.status === 'ikke') ? 'ikke' : 'alle'));
@@ -111,7 +112,6 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
   const [confirmStop, setConfirmStop] = useState<RecipientRow | null>(null);
   const [confirmRest, setConfirmRest] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [testing, setTesting] = useState(false);
   const requestId = useRef(0);
 
   // Nye rader fra serveren (etter oppdatering) erstatter de lokale.
@@ -263,22 +263,6 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
     const data = await run('POST', '/send', { gruppeId: group.id }, (d) => sendResultMessage(d as never));
     setConfirmRest(false);
     if (data) setRows((rs) => rs.map((r) => (r.status === 'ikke' ? { ...r, status: 'sendt' } : r)));
-  }
-
-  async function sendTest(nodeId: number) {
-    if (!detail || !myEmail || !(await flush())) return;
-    setTesting(true);
-    try {
-      const res = await fetch(`/api/admin/crm/flows/${flow.flowId}/test-send`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ nodeId, toEmail: myEmail, contactId: detail.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      toast(res.ok ? `Test sendt til ${myEmail}, slik ${detail.name} får den.` : data.error ?? 'Kunne ikke sende test.', res.ok ? 'success' : 'error');
-    } finally {
-      setTesting(false);
-    }
   }
 
   const email = detail?.emails[active];
@@ -456,7 +440,15 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, rows:
                 {selected.status === 'ut' && <span className="text-sm text-gray-600">Tatt ut av utsendelsen.</span>}
                 {selected.status === 'kan-ikke' && <span className="text-sm text-gray-600">Har meldt seg av eller mangler adresse, så personen kan ikke få e-post.</span>}
                 {myEmail && !email.sentAt && (
-                  <Button variant="secondary" size="sm" loading={testing} onClick={() => sendTest(email.nodeId)}>Send test til meg</Button>
+                  <TestSendButton
+                    flowId={flow.flowId}
+                    nodeId={email.nodeId}
+                    myEmail={myEmail}
+                    others={testOthers}
+                    contactId={detail.id}
+                    before={flush}
+                    forName={detail.name}
+                  />
                 )}
                 <span className="ml-auto flex gap-2">
                   <Button variant="secondary" size="sm" disabled={busy || visible[0]?.id === selectedId} onClick={() => step(-1)}>← Forrige</Button>
