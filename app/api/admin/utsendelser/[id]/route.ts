@@ -9,9 +9,10 @@ const schema = z.object({
   beskrivelse: z.string().max(500).optional(),
   senderIdentityId: z.number().int().positive().optional(),
   sendetid: z.object({ start: z.string().max(5), end: z.string().max(5), days: z.array(z.enum(WEEKDAYS)).min(1).max(7) }).optional(),
+  fartPerTime: z.number().int().positive().optional(),
 });
 
-/** Navn, beskrivelse, avsender og sendetid for hele utsendelsen. */
+/** Navn, beskrivelse, avsender og sendetid for hele utsendelsen, og farten (felles for alle). */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   return withUtsendelse(request, id, 'update_settings', async ({ utsendelse, body }) => {

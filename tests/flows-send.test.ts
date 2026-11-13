@@ -96,26 +96,34 @@ beforeEach(() => {
 });
 
 describe('sendFlowEmail', () => {
-  it('«for mange» fra leverandøren: prøv igjen senere, uten å gi opp personen', async () => {
+  it('«for mange» fra leverandøren: utsatt spor, pause for alle, aldri feilet', async () => {
     mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('452 4.5.3 Too many recipients'), { responseCode: 452 }));
     const now = new Date('2026-11-13T12:00:00Z');
-    prisma.messageSend.findFirst.mockResolvedValueOnce({ createdAt: now });
 
     const result = await sendFlowEmail({ ...baseInput, now });
 
     expect(result).toEqual({ kind: 'throttled', resumeAt: new Date('2026-11-13T12:10:00Z') });
     expect(prisma.messageSend.update).toHaveBeenCalledWith({
       where: { id: 100 },
-      data: { status: 'throttled', dedupeKey: null, trackingToken: null },
+      data: { status: 'deferred', dedupeKey: null, trackingToken: null },
     });
     expect(prisma.messageSend.create.mock.calls.filter((c) => c[0].data.status === 'failed')).toHaveLength(0);
   });
 
-  it('gir opp etter tre timer med «for mange»', async () => {
-    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('451 try later'), { responseCode: 451 }));
-    const now = new Date('2026-11-13T15:00:00Z');
-    prisma.messageSend.findFirst.mockResolvedValueOnce({ createdAt: new Date('2026-11-13T11:59:00Z') });
-    expect(await sendFlowEmail({ ...baseInput, now })).toBe('failed');
+  it('nettverksbrudd og innloggingsfeil: prøv igjen, ikke feilet', async () => {
+    for (const error of [
+      Object.assign(new Error('Connection timeout'), { code: 'ETIMEDOUT' }),
+      Object.assign(new Error('Invalid login: 535 Authentication failed'), { code: 'EAUTH', responseCode: 535 }),
+    ]) {
+      mockedSendMailAs.mockRejectedValueOnce(error);
+      const result = await sendFlowEmail({ ...baseInput, now: new Date('2026-11-13T12:00:00Z') });
+      expect(result).toEqual(expect.objectContaining({ kind: 'throttled' }));
+    }
+  });
+
+  it('ukjent mottaker (5xx) er en permanent feil', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('550 5.1.1 User unknown'), { responseCode: 550 }));
+    expect(await sendFlowEmail(baseInput)).toBe('failed');
   });
 
   it('egen tekst for mottakeren sendes i stedet for fellesteksten', async () => {
@@ -243,33 +251,19 @@ describe('sendFlowEmail', () => {
     expect(prisma.messageSend.create).toHaveBeenCalledTimes(1);
   });
 
-  it('5. messageLink.createMany failure (non-P2002): recovers by deleting the dedupe slot and recreating a failed audit row, never sends', async () => {
+  it('5. messageLink.createMany failure (databrudd før sending): slipper plassen og prøver igjen om litt, sender ikke', async () => {
     prisma.messageLink.createMany.mockRejectedValueOnce(new Error('connection reset'));
 
-    const result = await sendFlowEmail(baseInput);
+    const result = await sendFlowEmail({ ...baseInput, now: new Date('2026-11-13T12:00:00Z') });
 
-    expect(result).toBe('failed');
+    expect(result).toEqual({ kind: 'throttled', resumeAt: new Date('2026-11-13T12:02:00Z') });
     expect(mockedSendMailAs).not.toHaveBeenCalled();
-
-    expect(prisma.messageSend.delete).toHaveBeenCalledTimes(1);
     expect(prisma.messageSend.delete).toHaveBeenCalledWith({ where: { id: 100 } });
-
-    expect(prisma.messageSend.create).toHaveBeenCalledTimes(2);
-    const recreateArg = prisma.messageSend.create.mock.calls[1][0];
-    expect(recreateArg.data).toMatchObject({
-      enrollmentId: 1,
-      nodeId: 2,
-      contactId: 3,
-      senderIdentityId: 4,
-      toEmail: 'kari@example.com',
-      status: 'failed',
-    });
-    expect(recreateArg.data).not.toHaveProperty('dedupeKey');
-    expect(recreateArg.data).not.toHaveProperty('trackingToken');
+    expect(prisma.messageSend.create).toHaveBeenCalledTimes(1);
   });
 
-  it('6. sendMailAs failure: recovers via the same delete + failed-recreate path, returns failed', async () => {
-    mockedSendMailAs.mockRejectedValueOnce(new Error('SMTP timeout'));
+  it('6. permanent sendMailAs failure: recovers via delete + failed-recreate, returns failed', async () => {
+    mockedSendMailAs.mockRejectedValueOnce(Object.assign(new Error('550 5.1.1 User unknown'), { responseCode: 550 }));
 
     const result = await sendFlowEmail(baseInput);
 

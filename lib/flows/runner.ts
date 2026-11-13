@@ -27,7 +27,6 @@ import { findReview } from '@/lib/ai/review';
 import { isExactSendWindowParking, type SendWindow } from './send-window';
 import { effectiveWindowFor, loadSendWindowConfig } from './send-window-store';
 import { STOP_REASON_NO_CONSENT, STOP_REASON_SUPPRESSED } from './enrollment-status';
-import { rateBlockedUntil } from './send-rate';
 
 export const BATCH_SIZE = 50;
 const MAX_HOPS = 20;
@@ -582,9 +581,14 @@ export async function drainFlowBatches(
       if (elapsed + slowestMs > budgetMs) break;
       continue;
     }
-    // Køen er tom for nå, men noen venter på sendetaket: vent til det slipper hvis budsjettet holder.
-    const waitMs = rateBlockedUntil() - finishedAt;
-    if (total.batches > 0 && waitMs > 0 && elapsed + waitMs + slowestMs <= budgetMs) {
+    // Køen er tom for nå. Blir noen klare innen budsjettet (f.eks. neste bolk i sendetakten), vent på dem.
+    const next = await prisma.flowEnrollment.findFirst({
+      where: { status: 'active' },
+      orderBy: { nextRunAt: 'asc' },
+      select: { nextRunAt: true },
+    });
+    const waitMs = next ? next.nextRunAt.getTime() - finishedAt + 50 : 0;
+    if (waitMs > 50 && elapsed + waitMs + slowestMs <= budgetMs) {
       await sleep(waitMs);
       continue;
     }

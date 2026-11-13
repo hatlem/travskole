@@ -8,13 +8,11 @@
  * already sent (or attempted) this exact enrollment/node pair — we return
  * without sending again. This holds even if a batch runner retries mid-send.
  *
- * Transient-failure recovery: if the actual SMTP send throws (network blip,
- * provider hiccup — as opposed to a P2002 above), the dedupe-keyed row is
- * DELETED and replaced with a fresh row that has NO `dedupeKey`. This keeps
- * the audit trail (a 'failed' MessageSend still exists) while freeing the
- * dedupe slot, so a later manual re-run/reactivation of the enrollment can
- * legitimately resend instead of being permanently blocked by its own
- * failed attempt.
+ * Failure handling: a temporary SMTP failure (throttling, network, auth) never
+ * gives up — the row becomes a 'deferred' trace, all sending pauses, and the
+ * enrollment retries later (see send-rate.ts). Only a permanent rejection of the
+ * recipient (5xx) is recorded as 'failed'; that row has NO `dedupeKey`, so a later
+ * manual re-run/reactivation can legitimately resend.
  */
 
 import crypto from 'crypto';
@@ -30,7 +28,7 @@ import { rewriteHtmlForTracking, injectPixel } from '@/lib/tracking/rewrite';
 import { isMarketingAllowed } from '@/lib/crm/marketing-consent';
 import { getSetting } from '@/lib/settings';
 import { sendDeferral, type SendWindow } from './send-window';
-import { isThrottleError, rateDeferral, THROTTLE_GIVE_UP_MS, THROTTLE_RETRY_MS } from './send-rate';
+import { DEFERRED_STATUS, isRetryableSendError, noteProviderPause, rateDeferral } from './send-rate';
 import { renderFlowEmailBody } from './email-html';
 
 /**
@@ -56,7 +54,7 @@ export interface PendingReviewResult {
   resumeAt: Date;
 }
 
-/** Ikke sendt nå: utenfor sendetiden, eller over farten leverandøren tåler. Prøv igjen ved resumeAt. */
+/** Ikke sendt nå: utenfor sendetiden, over farten, eller leverandøren ba oss vente. Prøv igjen ved resumeAt. */
 export interface OutsideSendWindowResult {
   kind: 'outside_window' | 'throttled';
   resumeAt: Date;
@@ -159,6 +157,9 @@ function unsubscribeFooter(unsubUrl: string): string {
   return `<p style="font-size:12px;color:#6b7280">Du mottar denne e-posten fra Bjerke Travbane. <a href="${unsubUrl}">Meld deg av</a></p>`;
 }
 
+/** Nytt forsøk etter et databrudd før sending. */
+const DB_RETRY_MS = 2 * 60_000;
+
 /** Tjenestemeldinger (kurs/booking) har ingen markedsførings-avmelding. */
 export const SERVICE_FOOTER_TEXT =
   'Du får denne e-posten fordi du er påmeldt/har sendt forespørsel hos Bjerke. Spørsmål? Svar på denne e-posten.';
@@ -200,8 +201,7 @@ async function logSkippedSend(
  * row and replaces it with a fresh audit row that has NO `dedupeKey`/
  * `trackingToken`, so a later manual re-run/reactivation can legitimately
  * resend for this enrollment/node pair instead of being permanently blocked
- * by its own failed attempt. Used by both the SMTP-send failure path and the
- * tracking-link persistence failure path.
+ * by its own failed attempt. Only for permanent SMTP rejections; temporary ones are retried.
  */
 async function recoverFromFailedSend(
   messageSendId: number,
@@ -425,12 +425,9 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         contactId: input.contactId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // A createMany failure here (DB timeout, connection blip, deadlock)
-      // must not leave a 'sent' row squatting the dedupe slot with no
-      // tracking links and no email actually sent — recover exactly like a
-      // failed SMTP send would.
-      await recoverFromFailedSend(messageSendId, input, contact.email, subject, finalHtml);
-      return 'failed';
+      // Databrudd før noe er sendt: slipp plassen og prøv igjen om litt. Ingen pause for de andre.
+      await prisma.messageSend.delete({ where: { id: messageSendId } }).catch(() => {});
+      return { kind: 'throttled', resumeAt: new Date((input.now ?? new Date()).getTime() + DB_RETRY_MS) };
     }
   }
 
@@ -471,26 +468,19 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
         });
     }
   } catch (error) {
-    // «For mange» fra leverandøren: frigjør plassen og prøv igjen senere, ikke gi opp personen.
-    if (isThrottleError(error)) {
-      logger.warn('Flyt-e-post utsatt: leverandøren ba oss sende saktere', {
+    // Midlertidig feil (for mange, nede, nettverk, innlogging): aldri gi opp personen.
+    // Raden blir et synlig «deferred»-spor og slipper plassen (dedupeKey); all utsending venter en stund.
+    if (isRetryableSendError(error)) {
+      logger.warn('Flyt-e-post utsatt: leverandøren svarte ikke eller ba oss vente', {
         enrollmentId: input.enrollmentId,
         nodeId: input.nodeId,
         error: error instanceof Error ? error.message : String(error),
       });
-      // Raden blir et synlig «throttled»-spor og slipper plassen (dedupeKey), så neste forsøk kan sende.
       await prisma.messageSend.update({
         where: { id: messageSendId },
-        data: { status: 'throttled', dedupeKey: null, trackingToken: null },
+        data: { status: DEFERRED_STATUS, dedupeKey: null, trackingToken: null },
       });
-      const now = input.now ?? new Date();
-      const first = await prisma.messageSend.findFirst({
-        where: { enrollmentId: input.enrollmentId, nodeId: input.nodeId, status: 'throttled' },
-        orderBy: { createdAt: 'asc' },
-        select: { createdAt: true },
-      });
-      if (first && now.getTime() - first.createdAt.getTime() >= THROTTLE_GIVE_UP_MS) return 'failed';
-      return { kind: 'throttled', resumeAt: new Date(now.getTime() + THROTTLE_RETRY_MS) };
+      return { kind: 'throttled', resumeAt: noteProviderPause(input.now ?? new Date()) };
     }
     logger.error('Flow email send failed', {
       enrollmentId: input.enrollmentId,
@@ -498,11 +488,7 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       contactId: input.contactId,
       error: error instanceof Error ? error.message : String(error),
     });
-    // Transient SMTP failures (network blip, provider hiccup) must not
-    // permanently occupy the dedupe slot: delete the row that reserved
-    // `dedupeKey` and record a fresh audit row WITHOUT one, so a later
-    // manual re-run/reactivation can legitimately resend for this
-    // enrollment/node pair instead of being told "already_sent" forever.
+    // Permanent avvisning av mottakeren (f.eks. ukjent adresse): registrer feilen uten å holde plassen.
     await recoverFromFailedSend(messageSendId, input, contact.email, subject, finalHtml);
     return 'failed';
   }

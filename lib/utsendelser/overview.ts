@@ -1,5 +1,6 @@
 /** Alt utsendelsessiden viser: e-postene slik mottakeren ser dem, og status per gruppe. */
 import { prisma } from '@/lib/prisma';
+import { providerPausedUntil, ratePerHour } from '@/lib/flows/send-rate';
 import { getSetting } from '@/lib/settings';
 import { replaceMergeTagsInSubject } from '@/lib/email-templates';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
@@ -75,6 +76,8 @@ export interface UtsendelseView {
   windowMixed: boolean;
   /** Mottakere som fortsatt venter på flere e-poster – arkivering er stengt til de er ferdige. */
   activeEnrollments: number;
+  /** Fart (e-poster i timen, 0 = ingen grense) og om leverandøren har bedt oss vente (ISO-tid). */
+  pace: { perHour: number; providerPausedUntil: string | null };
 }
 
 export interface ReplyView {
@@ -270,11 +273,14 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
   const flows = await Promise.all(utsendelse.flyter.map((f) => loadFlow(utsendelse, f.flowId, f.navn, contactEmail, audience)));
   const presentFlows = flows.filter((f): f is FlowView => f !== null);
   const flowStatus = new Map(presentFlows.map((f) => [f.flowId, f.status]));
-  const [groups, totals, replies, activeEnrollments] = await Promise.all([
+  const now = new Date();
+  const [groups, totals, replies, activeEnrollments, perHour, pausedUntil] = await Promise.all([
     loadGroups(utsendelse, audience, flowStatus),
     dedupedTotals(utsendelse, audience),
     loadReplies(presentFlows),
     prisma.flowEnrollment.count({ where: { flowId: { in: utsendelse.flyter.map((f) => f.flowId) }, status: 'active' } }),
+    ratePerHour(now),
+    providerPausedUntil(now),
   ]);
   return {
     id: utsendelse.id,
@@ -288,6 +294,7 @@ export async function loadUtsendelseView(utsendelse: Utsendelse): Promise<Utsend
     senderMixed: new Set(presentFlows.map((f) => f.senderIdentityId)).size > 1,
     windowMixed: new Set(presentFlows.map((f) => JSON.stringify(f.sendWindowDraft))).size > 1,
     activeEnrollments,
+    pace: { perHour, providerPausedUntil: pausedUntil?.toISOString() ?? null },
   };
 }
 

@@ -5,6 +5,7 @@ import { Button } from '@/components/admin/Button';
 import { SendWindowFields } from '@/components/admin/SendWindowFields';
 import { windowFromDraft, type SendWindowDraft } from '@/lib/flows/send-window';
 import { formatCount } from '../status';
+import { PACE_OPTIONS, paceDuration } from '@/lib/utsendelser/pace';
 import { useUtsendelseAction } from './use-action';
 
 export interface SenderOption {
@@ -25,6 +26,8 @@ interface Props {
   senders: SenderOption[];
   sent: number;
   total: number;
+  remaining: number;
+  perHour: number;
 }
 
 const inputCls = 'w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm';
@@ -40,6 +43,7 @@ export function SettingsCard(props: Props) {
   const [sender, setSender] = useState<number | ''>(initialSender);
   const [window, setWindow] = useState<SendWindowDraft>(props.sendWindowDraft);
   const [windowTouched, setWindowTouched] = useState(false);
+  const [pace, setPace] = useState(props.perHour);
 
   function open() {
     setNavn(props.navn);
@@ -47,6 +51,7 @@ export function SettingsCard(props: Props) {
     setSender(initialSender);
     setWindow(props.sendWindowDraft);
     setWindowTouched(false);
+    setPace(props.perHour);
     setEditing(true);
   }
 
@@ -56,6 +61,7 @@ export function SettingsCard(props: Props) {
     ...(beskrivelse.trim() !== (props.beskrivelse ?? '') && { beskrivelse }),
     ...(sender !== '' && sender !== initialSender && { senderIdentityId: sender }),
     ...(windowTouched && JSON.stringify(window) !== JSON.stringify(props.sendWindowDraft) && { sendetid: window }),
+    ...(pace !== props.perHour && { fartPerTime: pace }),
   };
 
   async function save() {
@@ -67,6 +73,7 @@ export function SettingsCard(props: Props) {
   }
 
   const windowError = windowFromDraft(window);
+  const duration = paceDuration(props.remaining, props.perHour);
 
   if (editing) {
     return (
@@ -101,6 +108,18 @@ export function SettingsCard(props: Props) {
             showError
           />
         </div>
+        <div>
+          <label htmlFor="u-fart" className={labelCls}>Fart (gjelder alle utsendelser)</label>
+          <select id="u-fart" className={inputCls} value={pace} onChange={(e) => setPace(Number(e.target.value))}>
+            {!(PACE_OPTIONS as readonly number[]).includes(props.perHour) && (
+              <option value={props.perHour}>{props.perHour > 0 ? `${props.perHour} i timen` : 'Ingen grense'}</option>
+            )}
+            {PACE_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n} i timen{n === 100 ? ' (anbefalt)' : ''}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-gray-600">E-postene går ut litt av litt, ikke alle på en gang. Det er tryggere mot spamfiltre, og svarene kommer jevnt.</p>
+        </div>
         <div className="flex gap-3">
           <Button loading={busy} disabled={!navn.trim() || (windowTouched && !windowError.ok)} onClick={save}>Lagre</Button>
           <Button variant="secondary" disabled={busy} onClick={() => setEditing(false)}>Avbryt</Button>
@@ -111,7 +130,7 @@ export function SettingsCard(props: Props) {
 
   return (
     <section aria-label="Oversikt" className="mb-10 rounded-xl border border-gray-200 bg-white px-5 py-4">
-      <dl className="grid gap-3 text-sm sm:grid-cols-3">
+      <dl className="grid gap-3 text-sm sm:grid-cols-4">
         <div>
           <dt className="text-gray-600">Sendt til</dt>
           <dd className="mt-0.5 text-lg font-semibold text-gray-900">
@@ -126,8 +145,15 @@ export function SettingsCard(props: Props) {
           <dt className="text-gray-600">E-postene går ut</dt>
           <dd className="mt-0.5 text-gray-900">{props.windowMixed ? 'Varierer' : props.sendWindow || 'Når som helst'}</dd>
         </div>
+        <div>
+          <dt className="text-gray-600">Fart</dt>
+          <dd className="mt-0.5 text-gray-900">
+            {props.perHour > 0 ? `Jevnt, ca. ${props.perHour} i timen` : 'Ingen grense'}
+            {duration && <span className="block text-gray-600">Resten tar {duration}</span>}
+          </dd>
+        </div>
       </dl>
-      <Button className="mt-3" variant="secondary" size="sm" onClick={open}>Endre navn, avsender eller tidspunkt</Button>
+      <Button className="mt-3" variant="secondary" size="sm" onClick={open}>Endre navn, avsender, tidspunkt eller fart</Button>
     </section>
   );
 }

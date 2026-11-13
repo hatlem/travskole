@@ -12,6 +12,7 @@ import { STATUS_BADGE } from '../status';
 import { EmailStepCard } from './email-step-card';
 import { GroupsSection, type SerializedGroup, type SourceOption } from './groups-section';
 import { SettingsCard, type SenderOption } from './settings-card';
+import { ProviderPauseNote } from './provider-pause-note';
 import { useUtsendelseAction } from './use-action';
 import type { TestRecipient } from '@/lib/utsendelser/staff';
 
@@ -63,6 +64,8 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
         </p>
       )}
 
+      {view.pace.providerPausedUntil && !isPaused && <ProviderPauseNote until={view.pace.providerPausedUntil} />}
+
       {firstFlow && (
         <SettingsCard
           utsendelseId={view.id}
@@ -77,6 +80,8 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
           senders={options.senders}
           sent={view.totals.sent}
           total={view.totals.total}
+          remaining={view.totals.remaining}
+          perHour={view.pace.perHour}
         />
       )}
 

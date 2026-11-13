@@ -154,6 +154,7 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'tracking_allowed_origins',
   'send_window',
   'flow_send_window_',
+  'email_rate_',
 ];
 
 export function toClientSettings(settings: SiteSettings): SiteSettings {

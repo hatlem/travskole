@@ -49,6 +49,7 @@ export default async function SendGroupPage({
           steps: flow.steps.map((s) => ({ nodeId: s.nodeId, number: s.number, timing: s.timing, subject: s.subject, bodyHtml: s.bodyHtml })),
         }}
         paused={view.status === 'pause'}
+        pace={view.pace}
         rows={rows}
         myEmail={session?.user.email ?? ''}
         testOthers={testOthers}
