@@ -5,6 +5,7 @@ import { replaceMergeTagsInSubject } from '@/lib/email-templates';
 import { isEmptyEmailBody, renderFlowEmailBody, sanitizeEmailNodeConfig } from '@/lib/flows/email-html';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { contactMergeTagData } from '@/lib/flows/send';
+import { STOP_REASON_NO_CONSENT, STOP_REASON_SUPPRESSED } from '@/lib/flows/enrollment-status';
 import { loadAudience } from './audience';
 import { UtsendelseError } from './actions';
 import type { Utsendelse } from './config';
@@ -31,7 +32,14 @@ export interface RecipientEmail {
   bodyHtml: string;
   edited: boolean;
   sentAt: string | null;
+  openedAt: string | null;
+  repliedAt: string | null;
+  /** Omtrent når e-posten går ut, når personen er i gang og den ikke er sendt ennå. */
+  expectedAt: string | null;
 }
+
+/** Hvor personen er i løpet. */
+export type JourneyState = 'ikke-startet' | 'pagar' | 'ferdig' | 'svarte' | 'meldt-av' | 'stoppet' | 'feilet';
 
 export interface RecipientDetail {
   id: number;
@@ -39,7 +47,40 @@ export interface RecipientDetail {
   email: string | null;
   roleTitle: string | null;
   org: string | null;
+  journey: { state: JourneyState; at: string | null };
   emails: RecipientEmail[];
+}
+
+const iso = (d: Date | null | undefined) => (d ? d.toISOString() : null);
+
+/**
+ * Løpet for én person ut fra innmeldingen og e-postene som er sendt.
+ * Neste e-post går ut ved innmeldingens nextRunAt; de etter den kommer ventetiden senere.
+ */
+export function journeyFor(
+  steps: { nodeId: number; hoursAfterPrevious: number | null }[],
+  enrollment: { status: string; nextRunAt: Date; finishedAt: Date | null; failReason: string | null } | null,
+  sends: Map<number, { sentAt: Date; openedAt: Date | null; repliedAt: Date | null }>,
+): { journey: RecipientDetail['journey']; expected: Map<number, string> } {
+  const expected = new Map<number, string>();
+  const replied = [...sends.values()].map((s) => s.repliedAt).find((d): d is Date => d !== null) ?? null;
+  if (!enrollment) return { journey: { state: 'ikke-startet', at: null }, expected };
+  if (enrollment.status === 'active') {
+    let next: number | null = null;
+    for (const step of steps) {
+      if (sends.has(step.nodeId)) continue;
+      if (next === null) next = enrollment.nextRunAt.getTime();
+      else if (step.hoursAfterPrevious === null) break;
+      else next += step.hoursAfterPrevious * 3_600_000;
+      expected.set(step.nodeId, new Date(next).toISOString());
+    }
+    return { journey: { state: 'pagar', at: null }, expected };
+  }
+  if (replied) return { journey: { state: 'svarte', at: iso(replied) }, expected };
+  if (enrollment.status === 'completed') return { journey: { state: 'ferdig', at: iso(enrollment.finishedAt) }, expected };
+  if (enrollment.status === 'failed') return { journey: { state: 'feilet', at: iso(enrollment.finishedAt) }, expected };
+  const optedOut = enrollment.failReason === STOP_REASON_SUPPRESSED || enrollment.failReason === STOP_REASON_NO_CONSENT;
+  return { journey: { state: optedOut ? 'meldt-av' : 'stoppet', at: iso(enrollment.finishedAt) }, expected };
 }
 
 function findGroup(utsendelse: Utsendelse, gruppeId: string) {
@@ -109,12 +150,23 @@ export async function loadRecipient(utsendelse: Utsendelse, gruppeId: string, co
   ]);
   if (!contact) throw new UtsendelseError('Fant ikke kontakten.', 404);
   const nodeIds = steps.map((s) => s.nodeId);
-  const [overrides, sends] = await Promise.all([
+  const [overrides, sends, enrollment] = await Promise.all([
     prisma.flowMessageOverride.findMany({ where: { contactId, nodeId: { in: nodeIds } }, select: { nodeId: true, subject: true, bodyHtml: true } }),
-    prisma.messageSend.findMany({ where: { contactId, nodeId: { in: nodeIds }, status: 'sent' }, select: { nodeId: true, createdAt: true } }),
+    prisma.messageSend.findMany({
+      where: { contactId, nodeId: { in: nodeIds }, status: 'sent' },
+      select: { nodeId: true, createdAt: true, openedAt: true, repliedAt: true },
+    }),
+    prisma.flowEnrollment.findFirst({
+      where: { flowId: group.flowId, contactId },
+      orderBy: { id: 'desc' },
+      select: { status: true, nextRunAt: true, finishedAt: true, failReason: true },
+    }),
   ]);
   const overrideByNode = new Map(overrides.map((o) => [o.nodeId, o]));
-  const sentByNode = new Map(sends.map((s) => [s.nodeId, s.createdAt.toISOString()]));
+  const sentByNode = new Map(
+    sends.flatMap((s) => (s.nodeId === null ? [] : [[s.nodeId, { sentAt: s.createdAt, openedAt: s.openedAt, repliedAt: s.repliedAt }] as const])),
+  );
+  const { journey, expected } = journeyFor(steps, enrollment, sentByNode);
   const merge = contactMergeTagData(contact, contactEmail);
 
   return {
@@ -123,6 +175,7 @@ export async function loadRecipient(utsendelse: Utsendelse, gruppeId: string, co
     email: contact.email,
     roleTitle: contact.roleTitle,
     org: contact.organization?.name ?? null,
+    journey,
     emails: steps.map((s) => {
       const own = overrideByNode.get(s.nodeId);
       return {
@@ -132,7 +185,10 @@ export async function loadRecipient(utsendelse: Utsendelse, gruppeId: string, co
         subject: replaceMergeTagsInSubject(own?.subject ?? s.subject, merge),
         bodyHtml: renderFlowEmailBody(own?.bodyHtml ?? s.bodyHtml, merge),
         edited: Boolean(own),
-        sentAt: sentByNode.get(s.nodeId) ?? null,
+        sentAt: iso(sentByNode.get(s.nodeId)?.sentAt),
+        openedAt: iso(sentByNode.get(s.nodeId)?.openedAt),
+        repliedAt: iso(sentByNode.get(s.nodeId)?.repliedAt),
+        expectedAt: expected.get(s.nodeId) ?? null,
       };
     }),
   };
