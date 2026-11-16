@@ -12,10 +12,12 @@ import { adminDocumentTitle } from '@/lib/admin-title';
 import { CRM_GROUPS, CRM_ROOT, findCrmLocation, groupHref, matchesPath } from '@/lib/admin-nav';
 import { FeedbackWidget } from '@/components/FeedbackWidget';
 import { LinkPending } from '@/components/admin/LinkPending';
+import { REPLIES_CHANGED } from '@/components/admin/replies/ReplyList';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6' },
   { href: '/admin/utsendelser', label: 'Utsendelser', icon: 'M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z' },
+  { href: '/admin/svar', label: 'Svar', icon: 'M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z' },
   { href: '/admin/courses', label: 'Kurs', icon: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' },
   { href: '/admin/registrations', label: 'Påmeldinger', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01' },
   { href: '/admin/users', label: 'Brukere', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' },
@@ -43,6 +45,7 @@ export function AdminShell({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [breadcrumbOverrides, setBreadcrumbLabel] = useBreadcrumbOverrides();
+  const openReplies = useOpenReplies(pathname);
 
   // Lar global CSS plassere tredjeparts-widgets (cookie-merket) annerledes i admin.
   useEffect(() => {
@@ -140,7 +143,12 @@ export function AdminShell({
                   <path strokeLinecap="round" strokeLinejoin="round" d={item.icon} />
                 </svg>
                 {item.label}
-                <LinkPending className="ml-auto h-3.5 w-3.5" />
+                {item.href === '/admin/svar' && openReplies > 0 && (
+                  <span className="ml-auto rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white" aria-label={`${openReplies} må svares`}>
+                    {openReplies}
+                  </span>
+                )}
+                <LinkPending className={item.href === '/admin/svar' && openReplies > 0 ? 'h-3.5 w-3.5' : 'ml-auto h-3.5 w-3.5'} />
               </Link>
               {item.href === CRM_ROOT && inCrm && (
                 <ul aria-label="CRM-områder" className="mt-1 mb-2 ml-6 pl-3 border-l border-white/20 space-y-0.5">
@@ -349,4 +357,26 @@ export function AdminShell({
       </div>
     </ToastProvider>
   );
+}
+
+/** Hvor mange svar som må svares (tallet ved «Svar» i menyen). Hentes ved sidebytte, hvert minutt og når et svar behandles. */
+function useOpenReplies(pathname: string): number {
+  const [count, setCount] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    const load = () =>
+      fetch('/api/admin/svar?antall=1', { cache: 'no-store' })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((d: { open?: number } | null) => { if (alive && typeof d?.open === 'number') setCount(d.open); })
+        .catch(() => {});
+    load();
+    const timer = setInterval(load, 60_000);
+    window.addEventListener(REPLIES_CHANGED, load);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      window.removeEventListener(REPLIES_CHANGED, load);
+    };
+  }, [pathname]);
+  return count;
 }

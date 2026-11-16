@@ -316,6 +316,7 @@ model Contact {
   messageSends         MessageSend[]
   messageOverrides     FlowMessageOverride[]
   utsendelseRecipients UtsendelseRecipient[]
+  inboundReplies       InboundReply[]
 
   @@index([organizationId])
   @@index([stage])
@@ -753,4 +754,38 @@ model UtsendelseRecipient {
   @@id([utsendelseId, contactId])
   @@index([contactId])
   @@map("utsendelse_recipients")
+}
+
+/// Svar fra kontakter på e-poster vi har sendt (lest fra fellespostboksen). Ett svar = én melding.
+model InboundReply {
+  id                Int       @id @default(autoincrement())
+  contactId         Int       @map("contact_id")
+  contact           Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  /// E-posten det ble svart på (message_sends.id).
+  repliedToSendId   Int?      @map("replied_to_send_id")
+  /// Flyten samtalen hører til (for «Svar» på utsendelsen), også for svar på svar.
+  flowId            Int?      @map("flow_id")
+  fromEmail         String    @map("from_email")
+  fromName          String?   @map("from_name")
+  subject           String
+  /// Bare det nye i svaret (uten sitert historikk), ren tekst.
+  bodyText          String    @map("body_text")
+  internetMessageId String?   @unique @map("internet_message_id")
+  /// References-headeren fra svaret, så vårt svar havner i samme tråd.
+  references        String?
+  receivedAt        DateTime  @map("received_at")
+  status            String    @default("open") // open | answered | no_reply
+  handledAt         DateTime? @map("handled_at")
+  handledBy         String?   @map("handled_by")
+  /// Vårt svar (message_sends.id), når det ble sendt herfra.
+  answerSendId      Int?      @map("answer_send_id")
+  taskId            Int?      @map("task_id")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, receivedAt])
+  @@index([contactId])
+  @@index([flowId])
+  @@index([answerSendId])
+  @@map("inbound_replies")
 }

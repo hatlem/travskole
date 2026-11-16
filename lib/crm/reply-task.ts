@@ -61,20 +61,21 @@ async function findStaffUserIdById(id: number | null | undefined): Promise<numbe
  * Tildeling: avsenderidentitetens bruker → kontaktens eier → bedriftens eier →
  * standardmottaker fra innstillinger → ingen. Kalleren sørger for idempotens.
  */
-export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: string | null): Promise<void> {
+/** Returnerer oppgavens id, eller null når ingen oppgave ble laget. */
+export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: string | null): Promise<number | null> {
   try {
     const [enabled, defaultAssignee, dueDays] = await Promise.all([
       getSetting('reply_create_task'),
       getSetting('reply_task_default_assignee'),
       getSetting('reply_task_due_days'),
     ]);
-    if (enabled !== 'true') return;
+    if (enabled !== 'true') return null;
 
     const contact = await prisma.contact.findUnique({
       where: { id: send.contactId },
       select: { name: true, organizationId: true, ownerId: true, organization: { select: { ownerId: true } } },
     });
-    if (!contact) return;
+    if (!contact) return null;
 
     let flowName: string | null = null;
     if (send.enrollmentId != null) {
@@ -101,7 +102,7 @@ export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: stri
       (await findStaffUserIdByEmail(defaultAssignee));
     const topic = inboundSubject?.trim() || send.subject.trim() || flowName || '';
 
-    await prisma.task.create({
+    const task = await prisma.task.create({
       data: {
         title: replyTaskTitle(contact.name, topic),
         contactId: send.contactId,
@@ -109,12 +110,15 @@ export async function createReplyTask(send: ReplyTaskSend, inboundSubject?: stri
         assigneeId,
         dueAt: replyTaskDueAt(new Date(), dueDays),
       },
+      select: { id: true },
     });
+    return task.id;
   } catch (error) {
     // Oppgaven er et hjelpemiddel — svar-registreringen skal aldri velte på den.
     logger.error('Kunne ikke opprette oppgave for e-postsvar', {
       messageSendId: send.id,
       error: error instanceof Error ? error.message : String(error),
     });
+    return null;
   }
 }

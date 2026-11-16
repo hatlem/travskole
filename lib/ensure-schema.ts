@@ -46,9 +46,40 @@ export const UTSENDELSE_SCHEMA_STATEMENTS = [
   'CREATE INDEX IF NOT EXISTS "message_sends_enrollment_id_status_idx" ON "message_sends"("enrollment_id", "status")',
 ];
 
+/** Svar fra kontakter, lest fra fellespostboksen, som kan besvares i CRM. */
+export const REPLY_SCHEMA_STATEMENTS = [
+  `CREATE TABLE IF NOT EXISTS "inbound_replies" (
+    "id" SERIAL NOT NULL,
+    "contact_id" INTEGER NOT NULL,
+    "replied_to_send_id" INTEGER,
+    "flow_id" INTEGER,
+    "from_email" TEXT NOT NULL,
+    "from_name" TEXT,
+    "subject" TEXT NOT NULL,
+    "body_text" TEXT NOT NULL,
+    "internet_message_id" TEXT,
+    "references" TEXT,
+    "received_at" TIMESTAMP(3) NOT NULL,
+    "status" TEXT NOT NULL DEFAULT 'open',
+    "handled_at" TIMESTAMP(3),
+    "handled_by" TEXT,
+    "answer_send_id" INTEGER,
+    "task_id" INTEGER,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "inbound_replies_pkey" PRIMARY KEY ("id"),
+    CONSTRAINT "inbound_replies_contact_id_fkey" FOREIGN KEY ("contact_id") REFERENCES "contacts"("id") ON DELETE CASCADE ON UPDATE CASCADE
+  )`,
+  'CREATE UNIQUE INDEX IF NOT EXISTS "inbound_replies_internet_message_id_key" ON "inbound_replies"("internet_message_id")',
+  'CREATE INDEX IF NOT EXISTS "inbound_replies_status_received_at_idx" ON "inbound_replies"("status", "received_at")',
+  'CREATE INDEX IF NOT EXISTS "inbound_replies_contact_id_idx" ON "inbound_replies"("contact_id")',
+  'CREATE INDEX IF NOT EXISTS "inbound_replies_flow_id_idx" ON "inbound_replies"("flow_id")',
+  'CREATE INDEX IF NOT EXISTS "inbound_replies_answer_send_id_idx" ON "inbound_replies"("answer_send_id")',
+];
+
 /** Idempotent DDL ved oppstart (prod-databasen er stengt utenfra). Én feil stopper ikke resten. */
 export async function ensureSchema(): Promise<void> {
-  for (const statement of [...COURSE_SCHEMA_STATEMENTS, ...UTSENDELSE_SCHEMA_STATEMENTS]) {
+  for (const statement of [...COURSE_SCHEMA_STATEMENTS, ...UTSENDELSE_SCHEMA_STATEMENTS, ...REPLY_SCHEMA_STATEMENTS]) {
     try {
       await prisma.$executeRawUnsafe(statement);
     } catch (error) {

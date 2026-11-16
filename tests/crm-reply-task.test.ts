@@ -159,7 +159,7 @@ describe('createReplyTask', () => {
 
   it('swallows errors so reply tracking is never broken', async () => {
     prisma.task.create.mockRejectedValue(new Error('db down'));
-    await expect(createReplyTask(SEND)).resolves.toBeUndefined();
+    await expect(createReplyTask(SEND)).resolves.toBeNull();
   });
 });
 
