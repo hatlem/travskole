@@ -83,35 +83,37 @@ export async function searchSentRecipients(utsendelse: Utsendelse, query: string
 }
 
 /**
- * Personen svarte avsenderen direkte: siste sendte e-post merkes som besvart (vises under «Svar»),
- * og resten av e-postene stoppes. Det lages ingen svar-oppgave, for avsenderen har allerede svaret.
+ * Personen svarte avsenderen direkte: resten av e-postene stoppes, og siste sendte e-post merkes som besvart
+ * (vises under «Svar»). Det lages ingen svar-oppgave, for avsenderen har allerede svaret.
  */
 export async function markRepliedDirectly(utsendelse: Utsendelse, contactId: number, by: string): Promise<{ stopped: number }> {
   const flowIds = flowIdsOf(utsendelse);
-  const enrollments = await prisma.flowEnrollment.findMany({ where: { flowId: { in: flowIds }, contactId }, select: { id: true } });
-  const latest = enrollments.length === 0 ? null : await prisma.messageSend.findFirst({
+  const enrollments = await prisma.flowEnrollment.findMany({ where: { flowId: { in: flowIds }, contactId }, select: { id: true, flowId: true } });
+  if (enrollments.length === 0) throw new UtsendelseError('Personen er ikke med i utsendelsen ennå.', 404);
+
+  // Stopp først (under sendelåsen), så ingen ny e-post rekker å gå ut før vi ser hvilken som er den siste.
+  const result = await excludeRecipient(utsendelse, contactId, by);
+
+  const latest = await prisma.messageSend.findFirst({
     where: { contactId, status: 'sent', enrollmentId: { in: enrollments.map((e) => e.id) } },
     orderBy: { sentAt: 'desc' },
     select: { id: true, enrollmentId: true, repliedAt: true },
   });
-  if (!latest) throw new UtsendelseError('Personen har ikke fått noen e-post fra utsendelsen ennå.', 404);
+  if (!latest || latest.repliedAt !== null) return result;
 
-  const result = await excludeRecipient(utsendelse, contactId, by);
-
-  if (latest.repliedAt === null) {
-    const { count } = await prisma.messageSend.updateMany({ where: { id: latest.id, repliedAt: null }, data: { repliedAt: new Date() } });
-    if (count > 0) {
-      await emitEvent({
-        type: 'email.replied',
-        source: 'server',
-        contactId,
-        meta: { messageSendId: latest.id, enrollmentId: latest.enrollmentId, kilde: 'direkte', registrertAv: by },
-        // Samme nøkkel som når systemet ser svaret selv, så det aldri telles to ganger.
-        dedupeKey: `reply:${latest.id}`,
-      }).catch((error) => {
-        logger.warn('Kunne ikke registrere direkte svar som hendelse', { contactId, error: error instanceof Error ? error.message : String(error) });
-      });
-    }
+  const { count } = await prisma.messageSend.updateMany({ where: { id: latest.id, repliedAt: null }, data: { repliedAt: new Date() } });
+  if (count > 0) {
+    const flowId = enrollments.find((e) => e.id === latest.enrollmentId)?.flowId;
+    await emitEvent({
+      type: 'email.replied',
+      source: 'server',
+      contactId,
+      meta: { messageSendId: latest.id, enrollmentId: latest.enrollmentId, ...(flowId != null && { flowId }), kilde: 'direkte', registrertAv: by },
+      // Samme nøkkel som når systemet ser svaret selv, så det aldri telles to ganger.
+      dedupeKey: `reply:${latest.id}`,
+    }).catch((error) => {
+      logger.warn('Kunne ikke registrere direkte svar som hendelse', { contactId, error: error instanceof Error ? error.message : String(error) });
+    });
   }
   return result;
 }

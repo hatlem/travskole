@@ -32,6 +32,7 @@ export function DirectReply({ utsendelseId }: { utsendelseId: string }) {
     const controller = new AbortController();
     const timer = setTimeout(async () => {
       setLoading(true);
+      setFailed(false);
       try {
         const res = await fetch(`/api/admin/utsendelser/${utsendelseId}/svar-direkte?sok=${encodeURIComponent(term)}`, { signal: controller.signal });
         if (!res.ok) throw new Error(String(res.status));

@@ -132,7 +132,6 @@ export const DEFAULT_TRIGGER_TYPES = [
   { type: 'after_end', offsetDays: 1 },
 ] as const;
 
-/** `signOff: false` når innholdet har sin egen hilsen (flyt-e-poster). */
 /**
  * Omslag for markedsførings-e-poster: ser ut som en vanlig e-post skrevet av en person.
  * Hvit bakgrunn, venstrejustert, ingen boks eller farger rundt teksten.
@@ -149,6 +148,7 @@ export function wrapPlainEmailHtml(body: string): string {
 </html>`;
 }
 
+/** `signOff: false` når innholdet har sin egen hilsen (flyt-e-poster). */
 export function wrapEmailHtml(body: string, siteName: string, { signOff = true }: { signOff?: boolean } = {}): string {
   const closing = signOff
     ? `

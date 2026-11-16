@@ -68,18 +68,18 @@ describe('searchSentRecipients', () => {
 
 describe('markRepliedDirectly', () => {
   it('stopper resten og merker siste e-post som besvart, uten egen svar-oppgave', async () => {
-    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 9 }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 9, flowId: 22 }]);
     prisma.messageSend.findFirst.mockResolvedValue({ id: 77, enrollmentId: 9, repliedAt: null });
     prisma.messageSend.updateMany.mockResolvedValue({ count: 1 });
 
     expect(await markRepliedDirectly(U, 5, 'hilde@bjerke.no')).toEqual({ stopped: 1 });
     expect(excludeRecipient).toHaveBeenCalledWith(U, 5, 'hilde@bjerke.no');
     expect(prisma.messageSend.updateMany).toHaveBeenCalledWith({ where: { id: 77, repliedAt: null }, data: { repliedAt: expect.any(Date) } });
-    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'email.replied', contactId: 5, dedupeKey: 'reply:77' }));
+    expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'email.replied', contactId: 5, dedupeKey: 'reply:77', meta: expect.objectContaining({ flowId: 22 }) }));
   });
 
   it('teller ikke svaret på nytt når systemet alt har sett det', async () => {
-    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 9 }]);
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 9, flowId: 22 }]);
     prisma.messageSend.findFirst.mockResolvedValue({ id: 77, enrollmentId: 9, repliedAt: new Date() });
     await markRepliedDirectly(U, 5, 'h');
     expect(prisma.messageSend.updateMany).not.toHaveBeenCalled();
@@ -87,7 +87,24 @@ describe('markRepliedDirectly', () => {
     expect(excludeRecipient).toHaveBeenCalled();
   });
 
-  it('nekter når personen ikke har fått noe fra utsendelsen', async () => {
+  it('stopper også den som er med, men ikke har fått noe ennå', async () => {
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 9, flowId: 22 }]);
+    prisma.messageSend.findFirst.mockResolvedValue(null);
+    expect(await markRepliedDirectly(U, 5, 'h')).toEqual({ stopped: 1 });
+    expect(excludeRecipient).toHaveBeenCalled();
+    expect(prisma.messageSend.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('stopper før siste e-post finnes, så en e-post som går ut i mellomtiden blir den som merkes', async () => {
+    const order: string[] = [];
+    prisma.flowEnrollment.findMany.mockResolvedValue([{ id: 9, flowId: 22 }]);
+    excludeRecipient.mockImplementationOnce(async () => { order.push('stopp'); return { stopped: 1 }; });
+    prisma.messageSend.findFirst.mockImplementationOnce(async () => { order.push('finn'); return null; });
+    await markRepliedDirectly(U, 5, 'h');
+    expect(order).toEqual(['stopp', 'finn']);
+  });
+
+  it('nekter når personen ikke er med i utsendelsen', async () => {
     prisma.flowEnrollment.findMany.mockResolvedValue([]);
     await expect(markRepliedDirectly(U, 5, 'h')).rejects.toMatchObject({ status: 404 });
     expect(excludeRecipient).not.toHaveBeenCalled();
