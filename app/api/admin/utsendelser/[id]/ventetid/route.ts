@@ -10,6 +10,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   return withUtsendelse(request, id, 'edit_wait', async ({ utsendelse, body }) => {
     const parsed = schema.safeParse(body);
     if (!parsed.success) invalid();
-    await setWaitBefore(utsendelse, parsed.data.flowId, parsed.data.nodeId, parsed.data.days);
+    return setWaitBefore(utsendelse, parsed.data.flowId, parsed.data.nodeId, parsed.data.days);
   });
 }

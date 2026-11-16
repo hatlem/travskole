@@ -5,7 +5,7 @@ import { EmptyState } from '@/components/admin/EmptyState';
 import { ButtonLink } from '@/components/admin/Button';
 import { getUtsendelser } from '@/lib/utsendelser/config';
 import { loadUtsendelseSummary } from '@/lib/utsendelser/overview';
-import { STATUS_BADGE, formatCount } from './status';
+import { STATUS_BADGE, formatCount, sentAt } from './status';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,7 +35,9 @@ export default async function UtsendelserPage() {
                     <p className="font-semibold text-gray-900">{s.navn}</p>
                     {s.beskrivelse && <p className="mt-0.5 text-sm text-gray-600">{s.beskrivelse}</p>}
                     <p className="mt-1 text-sm text-gray-700">
-                      Sendt til {formatCount(s.totals.sent)} av {formatCount(s.totals.sent + s.totals.remaining)}
+                      {s.totals.delivered > 0
+                        ? <>E-post 1 sendt til {formatCount(s.totals.delivered)} av {formatCount(s.totals.total)}{s.lastSentAt ? ` · sist ${sentAt(s.lastSentAt)}` : ''}</>
+                        : s.totals.sent > 0 ? <>Startet, venter på sendetiden</> : <>Ikke sendt ennå · {formatCount(s.totals.total)} mottakere</>}
                     </p>
                   </div>
                   <div className="flex shrink-0 items-center gap-3">

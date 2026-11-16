@@ -3,6 +3,8 @@ import { getUtsendelser } from './config';
 import { loadUtsendelseSummary } from './overview';
 
 const count = (n: number) => n.toLocaleString('nb-NO');
+const when = (iso: string) =>
+  new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
 const CACHE_MS = 60_000;
 let cache: { at: number; items: AttentionItem[] } | null = null;
@@ -19,7 +21,7 @@ async function computeItems(): Promise<AttentionItem[]> {
   try {
     const summaries = await Promise.all((await getUtsendelser()).map(loadUtsendelseSummary));
     return summaries
-      .filter((s) => s.totals.remaining > 0 || s.status === 'pause')
+      .filter((s) => s.totals.remaining > 0 || s.status === 'pause' || s.status === 'sender')
       .map((s) => ({
         id: `utsendelse-${s.id}`,
         href: `/admin/utsendelser/${s.id}`,
@@ -30,7 +32,7 @@ async function computeItems(): Promise<AttentionItem[]> {
             ? `${s.navn} står på pause`
             : s.totals.sent === 0
               ? `${s.navn} er klar til å sendes (${count(s.totals.remaining)} mottakere)`
-              : `${s.navn}: ${count(s.totals.remaining)} har ikke fått e-post ennå`,
+              : `${s.navn}: e-post 1 sendt til ${count(s.totals.delivered)} av ${count(s.totals.total)}${s.lastSentAt ? `, sist ${when(s.lastSentAt)}` : ''}`,
       }));
   } catch {
     return [];

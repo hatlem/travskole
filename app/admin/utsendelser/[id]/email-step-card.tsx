@@ -5,7 +5,7 @@ import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import type { StepView } from '@/lib/utsendelser/overview';
 import { EmailBodyEditor } from '@/app/admin/crm/flyter/[id]/email-body-editor';
-import { formatCount } from '../status';
+import { formatCount, sentRange } from '../status';
 import { useUtsendelseAction } from './use-action';
 import { TestSendButton } from './test-send-button';
 import type { TestRecipient } from '@/lib/utsendelser/staff';
@@ -68,7 +68,13 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
   }
 
   async function saveWait() {
-    if (await run('PATCH', '/ventetid', { flowId, nodeId: step.nodeId, days }, 'Ventetiden er endret.')) setEditingWait(false);
+    const message = (data: Record<string, unknown>) => {
+      const moved = typeof data.moved === 'number' ? data.moved : 0;
+      return moved > 0
+        ? `Ventetiden er endret. ${formatCount(moved)} som venter på e-post ${step.number}, har fått ny dato.`
+        : 'Ventetiden er endret.';
+    };
+    if (await run('PATCH', '/ventetid', { flowId, nodeId: step.nodeId, days }, message)) setEditingWait(false);
   }
 
   async function remove() {
@@ -121,7 +127,7 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
         </div>
         {step.sent > 0 && (
           <p className="text-sm text-gray-700">
-            Sendt {formatCount(step.sent)} · åpnet {formatCount(step.opened)} · klikket {formatCount(step.clicked)} · svar {formatCount(step.replied)}
+            Sendt til {formatCount(step.sent)} · {sentRange(step.firstSentAt, step.lastSentAt)} · åpnet {formatCount(step.opened)} · klikket {formatCount(step.clicked)} · svar {formatCount(step.replied)}
           </p>
         )}
       </header>

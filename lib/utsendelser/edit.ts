@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { getFlowSendWindowState, saveFlowSendWindowOverride } from '@/lib/flows/send-window-store';
 import { resolveEffectiveSendWindow, sameSendWindow, windowFromDraft, type Weekday } from '@/lib/flows/send-window';
-import { wakeSendWindowParked } from '@/lib/flows/runner';
+import { LEASE_MINUTES, wakeSendWindowParked } from '@/lib/flows/runner';
 import { resetRateState } from '@/lib/flows/send-rate';
 import { PACE_OPTIONS } from './pace';
 import { getUtsendelser, removeUtsendelse, saveUtsendelse, slugify, type Utsendelse, type UtsendelseGruppe } from './config';
@@ -192,7 +192,18 @@ export async function updateSettings(u: Utsendelse, input: SettingsInput): Promi
 }
 
 /** Ventetiden før en e-post (ikke den første). Gjelder de som ikke har kommet dit ennå. */
-export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: number, days: number): Promise<void> {
+/** Hvor mye datoen flyttes for dem som venter, når ventetiden endres fra `old` til `days` hele dager. */
+export function waitShiftMs(old: { days?: unknown; hours?: unknown }, days: number): number {
+  const oldHours = (typeof old.days === 'number' ? old.days : 0) * 24 + (typeof old.hours === 'number' ? old.hours : 0);
+  return (days * 24 - oldHours) * 3_600_000;
+}
+
+/**
+ * Endrer ventetiden før en e-post. Gjelder også dem som alt venter på akkurat denne e-posten:
+ * datoen deres flyttes like mye (aldri tilbake i tid; er den passert, går e-posten ut innenfor sendetiden).
+ * De som er rett i ferd med å få den (innen leasevinduet), røres ikke. Returnerer hvor mange som fikk ny dato.
+ */
+export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: number, days: number): Promise<{ moved: number }> {
   assertOwnFlow(u, flowId);
   if (!Number.isInteger(days) || days < 1 || days > MAX_WAIT_DAYS) {
     throw new UtsendelseError(`Velg mellom 1 og ${MAX_WAIT_DAYS} dager.`, 400);
@@ -202,10 +213,22 @@ export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: 
   const waits = await prisma.flowNode.findMany({ where: { flowId, type: 'wait', id: { in: incoming.map((e) => e.fromNodeId) } } });
   if (incoming.length !== 1 || waits.length !== 1) throw new UtsendelseError('Denne e-posten har ingen ventetid å endre her.', 400);
   const wait = waits[0];
-  await prisma.flowNode.update({
-    where: { id: wait.id },
-    data: { config: JSON.stringify({ ...parseNodeConfig(wait.config), days, hours: 0 }) },
-  });
+  const config = parseNodeConfig(wait.config);
+  const shiftMs = waitShiftMs(config, days);
+  const saveConfig = prisma.flowNode.update({ where: { id: wait.id }, data: { config: JSON.stringify({ ...config, days, hours: 0 }) } });
+  if (shiftMs === 0) {
+    await saveConfig;
+    return { moved: 0 };
+  }
+  const [, moved] = await prisma.$transaction([
+    saveConfig,
+    prisma.$executeRaw`
+      UPDATE flow_enrollments
+      SET next_run_at = GREATEST(NOW(), next_run_at + ${shiftMs} * INTERVAL '1 millisecond'), updated_at = NOW()
+      WHERE flow_id = ${flowId} AND status = 'active' AND current_node_id = ${emailNodeId}
+        AND next_run_at > NOW() + ${LEASE_MINUTES} * INTERVAL '1 minute'`,
+  ]);
+  return { moved: Number(moved) };
 }
 
 /** Legger til en e-post sist, før noen er sendt til. Bare for rette flyter (én slutt, ingen forgreninger). */

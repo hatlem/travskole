@@ -26,12 +26,13 @@ interface Props {
   onDirtyChange: (dirty: boolean) => void;
 }
 
-type Filter = 'ikke' | 'alle' | 'sendt' | 'ut';
+type Filter = 'ikke' | 'alle' | 'venter' | 'sendt' | 'ut';
 type Draft = { subject: string; bodyHtml: string };
 
 const FILTERS: { id: Filter; label: string }[] = [
   { id: 'ikke', label: 'Ikke sendt' },
   { id: 'alle', label: 'Alle' },
+  { id: 'venter', label: 'Venter' },
   { id: 'sendt', label: 'Sendt' },
   { id: 'ut', label: 'Tatt ut' },
 ];
@@ -93,10 +94,21 @@ function Journey({ detail }: { detail: RecipientDetail }) {
   );
 }
 
+/** Startet, men e-post 1 har ikke gått ut ennå (venter på farten eller sendetiden). */
+const isWaiting = (row: RecipientRow) => row.status === 'sendt' && !row.sentAt;
+
 function matchesFilter(row: RecipientRow, filter: Filter) {
   if (filter === 'alle') return true;
-  if (filter === 'ikke') return row.status === 'ikke';
+  if (filter === 'venter') return isWaiting(row);
+  if (filter === 'sendt') return row.status === 'sendt' && !!row.sentAt;
   return row.status === filter;
+}
+
+function pillFor(row: RecipientRow): { label: string; cls: string } | null {
+  if (row.status !== 'sendt') return STATUS_PILL[row.status];
+  return row.sentAt
+    ? { label: `Sendt ${dateLabel(row.sentAt)}`, cls: 'bg-green-100 text-green-800' }
+    : { label: 'Venter på tur', cls: 'bg-blue-100 text-blue-900' };
 }
 
 export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace, rows: initialRows, myEmail, testOthers, onBack, onDirtyChange }: Props) {
@@ -129,7 +141,8 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
   }, [rows, filter, query]);
 
   const counts = useMemo(() => ({
-    sent: rows.filter((r) => r.status === 'sendt').length,
+    sent: rows.filter((r) => r.status === 'sendt' && r.sentAt).length,
+    waiting: rows.filter(isWaiting).length,
     out: rows.filter((r) => r.status === 'ut').length,
     left: rows.filter((r) => r.status === 'ikke').length,
   }), [rows]);
@@ -276,7 +289,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
         <button type="button" onClick={async () => { if (await flush()) onBack(); }} className="text-sm text-bjerke-blue hover:underline">← Tilbake til e-posten</button>
         <h1 className="text-xl font-bold text-gray-900">{group.navn}: én og én</h1>
         <span className="rounded-full bg-gray-100 px-3 py-0.5 text-sm text-gray-700 tabular-nums">
-          {formatCount(counts.sent)} sendt · {formatCount(counts.out)} tatt ut · {formatCount(counts.left)} igjen
+          {formatCount(counts.sent)} sendt{counts.waiting > 0 ? ` · ${formatCount(counts.waiting)} venter på tur` : ''} · {formatCount(counts.out)} tatt ut · {formatCount(counts.left)} igjen
         </span>
         {counts.left > 0 && canSendNow && (
           <Button className="ml-auto" variant="secondary" onClick={() => setConfirmRest(true)}>
@@ -316,7 +329,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
             {visible.length === 0 && <li className="px-4 py-8 text-center text-gray-500">Ingen her.</li>}
             {visible.map((row) => {
               const isSelected = row.id === selectedId;
-              const pill = STATUS_PILL[row.status];
+              const pill = pillFor(row);
               return (
                 <li key={row.id} className={`group relative ${isSelected ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
                   <button type="button" onClick={() => select(row.id)} aria-current={isSelected} className="block w-full px-4 py-2.5 pr-20 text-left">
@@ -435,7 +448,11 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
                 )}
                 {selected.status === 'sendt' && (
                   <>
-                    <span className="text-sm text-gray-600">E-post 1 er sendt. De neste kommer av seg selv.</span>
+                    <span className="text-sm text-gray-600">
+                      {selected.sentAt
+                        ? `E-post 1 ble sendt ${dateLabel(selected.sentAt)}. De neste kommer av seg selv.`
+                        : 'Venter på tur. E-post 1 går ut innenfor sendetiden, så kommer de neste av seg selv.'}
+                    </span>
                     {detail.emails.some((e) => !e.sentAt && isDirty(e.nodeId)) && <Button loading={busy} onClick={flush}>Lagre endringen</Button>}
                   </>
                 )}
@@ -474,7 +491,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
             if (!ok) return;
             setAdding(false);
             setFilter('alle');
-            setRows((rs) => [...rs, { id: contact.id, name: contact.name, email: contact.email, org: contact.org, status: 'ikke', edited: false, movedIn: true }]);
+            setRows((rs) => [...rs, { id: contact.id, name: contact.name, email: contact.email, org: contact.org, status: 'ikke', sentAt: null, edited: false, movedIn: true }]);
             open(contact.id);
           }}
         />

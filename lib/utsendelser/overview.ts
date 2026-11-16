@@ -25,6 +25,9 @@ export interface StepView extends EmailStep {
   opened: number;
   clicked: number;
   replied: number;
+  /** Når den første og siste av denne e-posten gikk ut (ISO). */
+  firstSentAt: string | null;
+  lastSentAt: string | null;
 }
 
 export interface FlowView {
@@ -60,8 +63,15 @@ export interface GroupView {
   remaining: number;
   /** Mangler e-post, har meldt seg av eller mangler grunnlag for markedsføring. */
   unreachable: number;
+  /** Når gruppen ble startet (første og siste gang noen ble satt i kø). */
   firstSentAt: Date | null;
   lastSentAt: Date | null;
+  /** Har faktisk fått e-post 1. */
+  delivered: number;
+  /** Startet, men venter på tur (sendes etter farten og innenfor sendetiden). */
+  waiting: number;
+  /** Når den siste e-posten til gruppen gikk ut (ISO). */
+  lastDeliveredAt: string | null;
 }
 
 export interface UtsendelseView {
@@ -71,7 +81,8 @@ export interface UtsendelseView {
   status: UtsendelseStatus;
   flows: FlowView[];
   groups: GroupView[];
-  totals: { total: number; sent: number; remaining: number };
+  /** sent = startet (satt i kø), delivered = har fått e-post 1. */
+  totals: { total: number; sent: number; remaining: number; delivered: number };
   replies: ReplyView[];
   /** Flytene har ulik avsender / sendetid – vises som «varierer» og endres bare hvis brukeren velger noe nytt. */
   senderMixed: boolean;
@@ -124,17 +135,32 @@ async function loadGroups(
       };
       const members = audience.get(g.id);
       if (!members?.ids) {
-        return { ...base, missingSegment: true, total: 0, sent: 0, remaining: 0, unreachable: 0, firstSentAt: null, lastSentAt: null };
+        return {
+          ...base, missingSegment: true, total: 0, sent: 0, remaining: 0, unreachable: 0,
+          firstSentAt: null, lastSentAt: null, delivered: 0, waiting: 0, lastDeliveredAt: null,
+        };
       }
       const ids = members.ids;
       const enrollments = ids.length
         ? await prisma.flowEnrollment.findMany({
             where: { flowId: g.flowId, contactId: { in: ids } },
-            select: { contactId: true, createdAt: true },
+            select: { id: true, contactId: true, createdAt: true, status: true },
           })
         : [];
       const enrolled = new Set(enrollments.map((e) => e.contactId));
       const times = enrollments.map((e) => e.createdAt.getTime());
+      const reached = enrollments.length
+        ? await prisma.messageSend.groupBy({
+            by: ['enrollmentId'],
+            where: { enrollmentId: { in: enrollments.map((e) => e.id) }, status: 'sent' },
+            _max: { sentAt: true },
+          })
+        : [];
+      const reachedIds = new Set(reached.map((r) => r.enrollmentId));
+      const lastDelivered = reached.reduce<number | null>((max, r) => {
+        const t = r._max.sentAt?.getTime() ?? null;
+        return t !== null && (max === null || t > max) ? t : max;
+      }, null);
       return {
         ...base,
         missingSegment: false,
@@ -144,6 +170,9 @@ async function loadGroups(
         unreachable: ids.filter((id) => !members.reachable.has(id) && !enrolled.has(id)).length,
         firstSentAt: times.length ? new Date(Math.min(...times)) : null,
         lastSentAt: times.length ? new Date(Math.max(...times)) : null,
+        delivered: new Set(enrollments.filter((e) => reachedIds.has(e.id)).map((e) => e.contactId)).size,
+        waiting: enrollments.filter((e) => e.status === 'active' && !reachedIds.has(e.id)).length,
+        lastDeliveredAt: lastDelivered !== null ? new Date(lastDelivered).toISOString() : null,
       };
     }),
   );
@@ -170,6 +199,7 @@ async function sourceLabels(utsendelse: Utsendelse): Promise<Map<string, string>
 async function dedupedTotals(utsendelse: Utsendelse, audience: Map<string, GroupAudience>) {
   let sent = 0;
   let remaining = 0;
+  let delivered = 0;
   for (const { flowId } of utsendelse.flyter) {
     const all = new Set<number>();
     const reachable = new Set<number>();
@@ -179,13 +209,19 @@ async function dedupedTotals(utsendelse: Utsendelse, audience: Map<string, Group
       a?.reachable.forEach((id) => reachable.add(id));
     }
     if (all.size === 0) continue;
-    const enrolled = new Set(
-      (await prisma.flowEnrollment.findMany({ where: { flowId, contactId: { in: [...all] } }, select: { contactId: true } })).map((e) => e.contactId),
-    );
+    const rows = await prisma.flowEnrollment.findMany({ where: { flowId, contactId: { in: [...all] } }, select: { id: true, contactId: true } });
+    const enrolled = new Set(rows.map((e) => e.contactId));
+    const reached = rows.length
+      ? new Set((await prisma.messageSend.groupBy({
+          by: ['enrollmentId'],
+          where: { enrollmentId: { in: rows.map((e) => e.id) }, status: 'sent' },
+        })).map((r) => r.enrollmentId))
+      : new Set<number | null>();
     sent += enrolled.size;
+    delivered += new Set(rows.filter((e) => reached.has(e.id)).map((e) => e.contactId)).size;
     remaining += [...reachable].filter((id) => !enrolled.has(id)).length;
   }
-  return { total: sent + remaining, sent, remaining };
+  return { total: sent + remaining, sent, remaining, delivered };
 }
 
 async function sampleContact(utsendelse: Utsendelse, flowId: number, audience: Map<string, GroupAudience>) {
@@ -202,18 +238,24 @@ async function sampleContact(utsendelse: Utsendelse, flowId: number, audience: M
   return null;
 }
 
+interface StepStats { sent: number; opened: number; clicked: number; replied: number; firstSentAt: string | null; lastSentAt: string | null }
+const emptyStats = (): StepStats => ({ sent: 0, opened: 0, clicked: 0, replied: 0, firstSentAt: null, lastSentAt: null });
+
 async function stepStats(nodeIds: number[]) {
   const rows = nodeIds.length
     ? await prisma.messageSend.findMany({
         where: { nodeId: { in: nodeIds }, status: 'sent' },
-        select: { nodeId: true, openedAt: true, firstClickedAt: true, repliedAt: true },
+        select: { nodeId: true, sentAt: true, openedAt: true, firstClickedAt: true, repliedAt: true },
       })
     : [];
-  const stats = new Map<number, { sent: number; opened: number; clicked: number; replied: number }>();
+  const stats = new Map<number, StepStats>();
   for (const r of rows) {
     if (r.nodeId == null) continue;
-    const s = stats.get(r.nodeId) ?? { sent: 0, opened: 0, clicked: 0, replied: 0 };
+    const s = stats.get(r.nodeId) ?? emptyStats();
     s.sent += 1;
+    const at = r.sentAt.toISOString();
+    if (!s.firstSentAt || at < s.firstSentAt) s.firstSentAt = at;
+    if (!s.lastSentAt || at > s.lastSentAt) s.lastSentAt = at;
     if (r.openedAt) s.opened += 1;
     if (r.firstClickedAt) s.clicked += 1;
     if (r.repliedAt) s.replied += 1;
@@ -273,7 +315,7 @@ async function loadFlow(
       waitDays: s.number > 1 && s.hoursAfterPrevious !== null && s.hoursAfterPrevious > 0 && s.hoursAfterPrevious % 24 === 0 ? s.hoursAfterPrevious / 24 : null,
       previewSubject: mergeData ? replaceMergeTagsInSubject(s.subject, mergeData) : s.subject,
       previewHtml: mergeData ? renderFlowEmailBody(s.bodyHtml, mergeData) : renderFlowEmailBody(s.bodyHtml, { ...emptyMerge(contactEmail), feltPlassholder: true }),
-      ...(stats.get(s.nodeId) ?? { sent: 0, opened: 0, clicked: 0, replied: 0 }),
+      ...(stats.get(s.nodeId) ?? emptyStats()),
     })),
   };
 }
@@ -344,12 +386,23 @@ export async function loadUtsendelseSummary(utsendelse: Utsendelse) {
     loadAudience(utsendelse),
     prisma.flow.findMany({ where: { id: { in: utsendelse.flyter.map((f) => f.flowId) } }, select: { status: true } }),
   ]);
-  const [totals, queued] = await Promise.all([dedupedTotals(utsendelse, audience), countQueued(utsendelse.flyter.map((f) => f.flowId))]);
+  const flowIds = utsendelse.flyter.map((f) => f.flowId);
+  const [totals, queued, last] = await Promise.all([
+    dedupedTotals(utsendelse, audience),
+    countQueued(flowIds),
+    prisma.messageSend.findFirst({
+      where: { status: 'sent', enrollmentId: { not: null }, nodeId: { in: (await prisma.flowNode.findMany({ where: { flowId: { in: flowIds }, type: 'email' }, select: { id: true } })).map((n) => n.id) } },
+      orderBy: { sentAt: 'desc' },
+      select: { sentAt: true },
+    }),
+  ]);
   return {
     id: utsendelse.id,
     navn: utsendelse.navn,
     beskrivelse: utsendelse.beskrivelse,
     status: utsendelseStatus(flows.map((f) => f.status), totals, queued),
     totals,
+    /** Når den siste e-posten fra utsendelsen gikk ut (ISO). */
+    lastSentAt: last?.sentAt.toISOString() ?? null,
   };
 }
