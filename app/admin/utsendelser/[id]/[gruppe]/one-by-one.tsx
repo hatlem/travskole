@@ -95,7 +95,7 @@ function Journey({ detail }: { detail: RecipientDetail }) {
 }
 
 /** Startet, men e-post 1 har ikke gått ut ennå (venter på farten eller sendetiden). */
-const isWaiting = (row: RecipientRow) => row.status === 'sendt' && !row.sentAt;
+const isWaiting = (row: RecipientRow) => row.status === 'sendt' && !row.sentAt && !row.stoppedBeforeFirst;
 
 function matchesFilter(row: RecipientRow, filter: Filter) {
   if (filter === 'alle') return true;
@@ -106,9 +106,9 @@ function matchesFilter(row: RecipientRow, filter: Filter) {
 
 function pillFor(row: RecipientRow): { label: string; cls: string } | null {
   if (row.status !== 'sendt') return STATUS_PILL[row.status];
-  return row.sentAt
-    ? { label: `Sendt ${dateLabel(row.sentAt)}`, cls: 'bg-green-100 text-green-800' }
-    : { label: 'Venter på tur', cls: 'bg-blue-100 text-blue-900' };
+  if (row.sentAt) return { label: `Sendt ${dateLabel(row.sentAt)}`, cls: 'bg-green-100 text-green-800' };
+  if (row.stoppedBeforeFirst) return { label: 'Stoppet', cls: 'bg-gray-200 text-gray-700' };
+  return { label: 'Venter på tur', cls: 'bg-blue-100 text-blue-900' };
 }
 
 export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace, rows: initialRows, myEmail, testOthers, onBack, onDirtyChange }: Props) {
@@ -451,7 +451,9 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
                     <span className="text-sm text-gray-600">
                       {selected.sentAt
                         ? `E-post 1 ble sendt ${dateLabel(selected.sentAt)}. De neste kommer av seg selv.`
-                        : 'Venter på tur. E-post 1 går ut innenfor sendetiden, så kommer de neste av seg selv.'}
+                        : selected.stoppedBeforeFirst
+                          ? 'Ble stoppet før e-post 1 gikk ut.'
+                          : 'Venter på tur. E-post 1 går ut innenfor sendetiden, så kommer de neste av seg selv.'}
                     </span>
                     {detail.emails.some((e) => !e.sentAt && isDirty(e.nodeId)) && <Button loading={busy} onClick={flush}>Lagre endringen</Button>}
                   </>
@@ -491,7 +493,7 @@ export function OneByOne({ utsendelseId, group, otherGroups, flow, paused, pace,
             if (!ok) return;
             setAdding(false);
             setFilter('alle');
-            setRows((rs) => [...rs, { id: contact.id, name: contact.name, email: contact.email, org: contact.org, status: 'ikke', sentAt: null, edited: false, movedIn: true }]);
+            setRows((rs) => [...rs, { id: contact.id, name: contact.name, email: contact.email, org: contact.org, status: 'ikke', sentAt: null, stoppedBeforeFirst: false, edited: false, movedIn: true }]);
             open(contact.id);
           }}
         />

@@ -201,6 +201,7 @@ export function waitShiftMs(old: { days?: unknown; hours?: unknown }, days: numb
 /**
  * Endrer ventetiden før en e-post. Gjelder også dem som alt venter på akkurat denne e-posten:
  * datoen deres flyttes like mye (aldri tilbake i tid; er den passert, går e-posten ut innenfor sendetiden).
+ * Den som alt er parkert til neste sendetid, flyttes fra det tidspunktet; runneren parkerer på nytt om nødvendig.
  * De som er rett i ferd med å få den (innen leasevinduet), røres ikke. Returnerer hvor mange som fikk ny dato.
  */
 export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: number, days: number): Promise<{ moved: number }> {
@@ -220,13 +221,21 @@ export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: 
     await saveConfig;
     return { moved: 0 };
   }
+  // Tidspunktene bindes fra JS (kolonnene er uten tidssone). Venter noen på godkjenning av et KI-utkast,
+  // røres de ikke: godkjenningen vekker dem på nøyaktig det tidspunktet de står parkert til.
+  const now = new Date();
+  const notBefore = new Date(now.getTime() + LEASE_MINUTES * 60_000);
   const [, moved] = await prisma.$transaction([
     saveConfig,
     prisma.$executeRaw`
-      UPDATE flow_enrollments
-      SET next_run_at = GREATEST(NOW(), next_run_at + ${shiftMs} * INTERVAL '1 millisecond'), updated_at = NOW()
-      WHERE flow_id = ${flowId} AND status = 'active' AND current_node_id = ${emailNodeId}
-        AND next_run_at > NOW() + ${LEASE_MINUTES} * INTERVAL '1 minute'`,
+      UPDATE flow_enrollments fe
+      SET next_run_at = GREATEST(${now}::timestamp, fe.next_run_at + ${shiftMs} * INTERVAL '1 millisecond'), updated_at = ${now}::timestamp
+      WHERE fe.flow_id = ${flowId} AND fe.status = 'active' AND fe.current_node_id = ${emailNodeId}
+        AND fe.next_run_at > ${notBefore}::timestamp
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_suggestions s
+          WHERE s.status = 'pending' AND s.dedupe_key = 'review:' || fe.id || ':' || ${emailNodeId}
+        )`,
   ]);
   return { moved: Number(moved) };
 }

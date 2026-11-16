@@ -138,9 +138,13 @@ describe('setWaitBefore', () => {
     prisma.flowNode.findMany.mockResolvedValue([{ id: 5, config: JSON.stringify({ days: 11 }) }]);
     await setWaitBefore(U, 22, 6, 7);
     const [sql, ...values] = prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
-    expect(sql.join('?')).toMatch(/GREATEST\(NOW\(\), next_run_at \+/);
-    expect(sql.join('?')).toMatch(/status = 'active' AND current_node_id = /);
-    expect(values).toEqual([-4 * 24 * 3_600_000, 22, 6, 10]);
+    expect(sql.join('?')).toMatch(/GREATEST\(\?::timestamp, fe\.next_run_at \+/);
+    expect(sql.join('?')).toMatch(/fe\.status = 'active' AND fe\.current_node_id = /);
+    expect(sql.join('?')).toMatch(/NOT EXISTS/);
+    const [now, shift, , flowId, nodeId, notBefore, reviewNode] = values as [Date, number, Date, number, number, Date, number];
+    expect(shift).toBe(-4 * 24 * 3_600_000);
+    expect([flowId, nodeId, reviewNode]).toEqual([22, 6, 6]);
+    expect(notBefore.getTime() - now.getTime()).toBe(10 * 60_000);
   });
 
   it('samme ventetid flytter ingen', async () => {

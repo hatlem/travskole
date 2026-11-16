@@ -387,11 +387,12 @@ export async function loadUtsendelseSummary(utsendelse: Utsendelse) {
     prisma.flow.findMany({ where: { id: { in: utsendelse.flyter.map((f) => f.flowId) } }, select: { status: true } }),
   ]);
   const flowIds = utsendelse.flyter.map((f) => f.flowId);
+  const emailNodeIds = (await prisma.flowNode.findMany({ where: { flowId: { in: flowIds }, type: 'email' }, select: { id: true } })).map((n) => n.id);
   const [totals, queued, last] = await Promise.all([
     dedupedTotals(utsendelse, audience),
     countQueued(flowIds),
     prisma.messageSend.findFirst({
-      where: { status: 'sent', enrollmentId: { not: null }, nodeId: { in: (await prisma.flowNode.findMany({ where: { flowId: { in: flowIds }, type: 'email' }, select: { id: true } })).map((n) => n.id) } },
+      where: { status: 'sent', enrollmentId: { not: null }, nodeId: { in: emailNodeIds } },
       orderBy: { sentAt: 'desc' },
       select: { sentAt: true },
     }),
