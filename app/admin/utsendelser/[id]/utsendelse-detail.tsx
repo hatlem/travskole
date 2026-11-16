@@ -15,6 +15,7 @@ import { GroupsSection, type SerializedGroup, type SourceOption } from './groups
 import { SettingsCard, type SenderOption } from './settings-card';
 import { ProviderPauseNote } from './provider-pause-note';
 import { useUtsendelseAction } from './use-action';
+import { DirectReply } from './direct-reply';
 import type { TestRecipient } from '@/lib/utsendelser/staff';
 
 type SerializedReply = Omit<ReplyView, 'repliedAt'> & { repliedAt: string };
@@ -141,7 +142,7 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
         </div>
       </section>
 
-      <Replies replies={view.replies} />
+      <Replies utsendelseId={view.id} replies={view.replies} />
 
       <ArchiveSection utsendelseId={view.id} activeEnrollments={view.activeEnrollments} />
     </div>
@@ -208,7 +209,7 @@ function FlowEmails({ flow, utsendelseId, myEmail, testOthers }: { flow: FlowVie
   );
 }
 
-function Replies({ replies }: { replies: SerializedReply[] }) {
+function Replies({ utsendelseId, replies }: { utsendelseId: string; replies: SerializedReply[] }) {
   return (
     <section aria-labelledby="replies-title">
       <h2 id="replies-title" className="text-lg font-semibold text-gray-900">Svar</h2>
@@ -236,6 +237,7 @@ function Replies({ replies }: { replies: SerializedReply[] }) {
           ))}
         </ul>
       )}
+      <DirectReply utsendelseId={utsendelseId} />
     </section>
   );
 }

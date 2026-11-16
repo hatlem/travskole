@@ -57,6 +57,17 @@ describe('POST /api/admin/crm/flows/[id]/test-send', () => {
     expect(html).toContain('<p>Hei Test Testesen,<br>velkommen</p><p>Hilsen</p>');
   });
 
+  it('markedsføring: samme omslag og svar-adresse som den ekte utsendelsen', async () => {
+    prisma.flow.findUnique.mockResolvedValue({ id: 1, isMarketing: true });
+    prisma.flowNode.findUnique.mockResolvedValue({
+      id: 5, flowId: 1, type: 'email', config: JSON.stringify({ subject: 'Hei', bodyHtml: '<p>Hei</p>', senderIdentityId: 2 }),
+    });
+    expect((await send()).status).toBe(200);
+    const mail = vi.mocked(sendMailAs).mock.calls[0][0];
+    expect(mail.replyTo).toBe('registrering@bjerke.no');
+    expect(mail.html).not.toContain('#f4f4f4');
+  });
+
   it('bruker valgt kontakts flettedata (fornavn, egne felt) i stedet for testverdier', async () => {
     prisma.flowNode.findUnique.mockResolvedValue({
       id: 5,

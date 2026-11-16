@@ -3,13 +3,13 @@ import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { sendMailAs } from '@/lib/mail';
-import { replaceMergeTagsInSubject, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { replaceMergeTagsInSubject, wrapEmailHtml, wrapPlainEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { renderFlowEmailBody } from '@/lib/flows/email-html';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { logActivity } from '@/lib/activity';
 import { getSetting } from '@/lib/settings';
-import { contactMergeTagData } from '@/lib/flows/send';
+import { contactMergeTagData, REPLY_MAILBOX } from '@/lib/flows/send';
 import logger from '@/lib/logger';
 import { getLLMProvider } from '@/lib/ai/provider';
 import { previewPersonalization } from '@/lib/ai/preview';
@@ -194,7 +194,10 @@ export async function POST(
       }
     }
   }
-  const html = wrapEmailHtml(testBanner(aiNote) + renderedBody, identity.displayName, { signOff: false });
+  // Samme omslag som den ekte utsendelsen, så testen viser hvordan e-posten faktisk ser ut.
+  const html = flow.isMarketing
+    ? wrapPlainEmailHtml(testBanner(aiNote) + renderedBody)
+    : wrapEmailHtml(testBanner(aiNote) + renderedBody, identity.displayName, { signOff: false });
 
   const testContactId = await ensureTestSendContactId();
 
@@ -215,7 +218,8 @@ export async function POST(
   try {
     await sendMailAs({
       from: { name: identity.displayName, address: identity.email },
-      replyTo: identity.email,
+      // Som i den ekte utsendelsen: svar går til fellespostboksen.
+      replyTo: REPLY_MAILBOX,
       to: toEmail,
       subject: renderedSubject,
       html,

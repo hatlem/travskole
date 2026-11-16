@@ -19,7 +19,7 @@ import crypto from 'crypto';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { sendMailAs } from '@/lib/mail';
-import { customFieldKey, replaceMergeTagsInSubject, wrapEmailHtml, type MergeTagData } from '@/lib/email-templates';
+import { customFieldKey, replaceMergeTagsInSubject, wrapEmailHtml, wrapPlainEmailHtml, type MergeTagData } from '@/lib/email-templates';
 import { signUnsubscribeToken } from './unsubscribe-token';
 import { resolveCourseMergeContext } from './course-merge';
 import { normalizeEmail } from '@/lib/crm/normalize';
@@ -394,7 +394,9 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
     };
   }
   // Flyt-malene eier sin egen hilsen — omslaget legger ikke til en til.
-  const html = wrapEmailHtml(personalizedBody + footer, identity.displayName, { signOff: false });
+  const html = input.isMarketing
+    ? wrapPlainEmailHtml(personalizedBody + footer)
+    : wrapEmailHtml(personalizedBody + footer, identity.displayName, { signOff: false });
 
   const baseUrl = getBaseUrl();
   let finalHtml = html;
