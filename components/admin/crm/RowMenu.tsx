@@ -12,10 +12,12 @@ interface RowMenuProps {
   label: string;
   items: RowMenuItem[];
   disabled?: boolean;
+  /** Vis bare «⋯» på knappen (der «Mer» tar for mye plass). */
+  compact?: boolean;
 }
 
 /** «Mer»-meny for sjeldnere radhandlinger. Escape/klikk utenfor lukker, piltaster flytter fokus. */
-export function RowMenu({ label, items, disabled = false }: RowMenuProps) {
+export function RowMenu({ label, items, disabled = false, compact = false }: RowMenuProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -109,7 +111,7 @@ export function RowMenu({ label, items, disabled = false }: RowMenuProps) {
         aria-label={label}
         className="inline-flex h-9 min-w-9 items-center justify-center rounded-md border border-gray-300 bg-white px-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue focus-visible:ring-offset-2 disabled:opacity-50"
       >
-        <span aria-hidden="true">Mer ▾</span>
+        <span aria-hidden="true">{compact ? '⋯' : 'Mer ▾'}</span>
       </button>
       {open && position && (
         <div

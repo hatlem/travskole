@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button } from '@/components/admin/Button';
+import { PencilIcon } from '@/components/admin/InlineText';
 import { SendWindowFields } from '@/components/admin/SendWindowFields';
 import { windowFromDraft, type SendWindowDraft } from '@/lib/flows/send-window';
 import { formatCount } from '../status';
@@ -15,8 +16,6 @@ export interface SenderOption {
 
 interface Props {
   utsendelseId: string;
-  navn: string;
-  beskrivelse?: string;
   senderIdentityId: number | null;
   senderName: string | null;
   sendWindow: string;
@@ -31,135 +30,177 @@ interface Props {
   perHour: number;
 }
 
-const inputCls = 'w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm';
-const labelCls = 'mb-1 block text-xs font-medium text-gray-600';
+type Field = 'sender' | 'window' | 'pace';
 
-/** Oversikt øverst på siden, med «Endre» for navn, avsender og når e-postene går ut. */
+const selectCls = 'w-full rounded-md border border-bjerke-blue px-2 py-1 text-sm ring-2 ring-bjerke-blue/20 disabled:opacity-60';
+
+/** Oversikt øverst på siden. Avsender, sendetid og fart endres hver for seg, der de står. */
 export function SettingsCard(props: Props) {
   const { run, busy } = useUtsendelseAction(props.utsendelseId);
-  const [editing, setEditing] = useState(false);
-  const [navn, setNavn] = useState(props.navn);
-  const [beskrivelse, setBeskrivelse] = useState(props.beskrivelse ?? '');
-  const initialSender = props.senderMixed ? '' : (props.senderIdentityId ?? '');
-  const [sender, setSender] = useState<number | ''>(initialSender);
+  const [editing, setEditing] = useState<Field | null>(null);
   const [window, setWindow] = useState<SendWindowDraft>(props.sendWindowDraft);
-  const [windowTouched, setWindowTouched] = useState(false);
-  const [pace, setPace] = useState(props.perHour);
+  const selectRef = useRef<HTMLSelectElement>(null);
 
-  function open() {
-    setNavn(props.navn);
-    setBeskrivelse(props.beskrivelse ?? '');
-    setSender(initialSender);
-    setWindow(props.sendWindowDraft);
-    setWindowTouched(false);
-    setPace(props.perHour);
-    setEditing(true);
-  }
-
-  // Bare det brukeren faktisk har endret sendes, så et nytt navn aldri overskriver avsender eller sendetid.
-  const changes = {
-    ...(navn.trim() !== props.navn && { navn }),
-    ...(beskrivelse.trim() !== (props.beskrivelse ?? '') && { beskrivelse }),
-    ...(sender !== '' && sender !== initialSender && { senderIdentityId: sender }),
-    ...(windowTouched && JSON.stringify(window) !== JSON.stringify(props.sendWindowDraft) && { sendetid: window }),
-    ...(pace !== props.perHour && { fartPerTime: pace }),
-  };
-
-  async function save() {
-    if (Object.keys(changes).length === 0) {
-      setEditing(false);
-      return;
+  // Åpne lista med en gang (ett klikk, ikke to), så piltaster blar i lista i stedet for å lagre hvert valg.
+  useEffect(() => {
+    if (editing !== 'sender' && editing !== 'pace') return;
+    const select = selectRef.current;
+    select?.focus();
+    try {
+      select?.showPicker?.();
+    } catch {
+      // Nettlesere uten showPicker for select: lista står i fokus og åpnes med klikk.
     }
-    if (await run('PATCH', '', changes, 'Endringene er lagret.')) setEditing(false);
+  }, [editing]);
+
+  function edit(field: Field) {
+    if (field === 'window') setWindow(props.sendWindowDraft);
+    setEditing(field);
   }
 
-  const windowError = windowFromDraft(window);
+  async function save(changes: Record<string, unknown>, message: string) {
+    if (await run('PATCH', '', changes, message)) setEditing(null);
+  }
+
+  const windowCheck = windowFromDraft(window);
+  const windowChanged = JSON.stringify(window) !== JSON.stringify(props.sendWindowDraft);
   const queuedFor = paceDuration(props.queued, props.perHour);
   const restFor = paceDuration(props.remaining, props.perHour);
-
-  if (editing) {
-    return (
-      <section aria-label="Innstillinger" className="mb-10 space-y-4 rounded-xl border border-gray-200 bg-white px-5 py-4">
-        <div>
-          <label htmlFor="u-navn" className={labelCls}>Navn</label>
-          <input id="u-navn" className={inputCls} value={navn} maxLength={120} onChange={(e) => setNavn(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="u-beskrivelse" className={labelCls}>Kort beskrivelse (valgfritt)</label>
-          <input id="u-beskrivelse" className={inputCls} value={beskrivelse} maxLength={500} onChange={(e) => setBeskrivelse(e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="u-avsender" className={labelCls}>Avsender (gjelder alle e-postene)</label>
-          <select id="u-avsender" className={inputCls} value={sender} onChange={(e) => setSender(e.target.value ? Number(e.target.value) : '')}>
-            <option value="">{props.senderMixed ? 'Varierer – velg for å bruke én for alle' : 'Velg avsender …'}</option>
-            {props.senders.map((s) => (
-              <option key={s.id} value={s.id}>{s.label}</option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <p className={labelCls}>Når e-postene kan gå ut{props.windowMixed ? ' (varierer nå – endrer du, gjelder det alle)' : ''}</p>
-          <SendWindowFields
-            idPrefix="u-sendetid"
-            value={window}
-            onChange={(w) => {
-              setWindow(w);
-              setWindowTouched(true);
-            }}
-            disabled={busy}
-            showError
-          />
-        </div>
-        <div>
-          <label htmlFor="u-fart" className={labelCls}>Fart (gjelder alle utsendelser)</label>
-          <select id="u-fart" className={inputCls} value={pace} onChange={(e) => setPace(Number(e.target.value))}>
-            {!(PACE_OPTIONS as readonly number[]).includes(props.perHour) && (
-              <option value={props.perHour}>{props.perHour > 0 ? `${props.perHour} i timen` : 'Ingen grense'}</option>
-            )}
-            {PACE_OPTIONS.map((n) => (
-              <option key={n} value={n}>{n} i timen{n === 100 ? ' (anbefalt)' : ''}</option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-gray-600">E-postene går ut litt av litt, ikke alle på en gang. Det er tryggere mot spamfiltre, og svarene kommer jevnt.</p>
-        </div>
-        <div className="flex gap-3">
-          <Button loading={busy} disabled={!navn.trim() || (windowTouched && !windowError.ok)} onClick={save}>Lagre</Button>
-          <Button variant="secondary" disabled={busy} onClick={() => setEditing(false)}>Avbryt</Button>
-        </div>
-      </section>
-    );
-  }
+  const closeOnEscape = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') setEditing(null);
+  };
 
   return (
     <section aria-label="Oversikt" className="mb-10 rounded-xl border border-gray-200 bg-white px-5 py-4">
-      <dl className="grid gap-3 text-sm sm:grid-cols-4">
+      <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
         <div>
           <dt className="text-gray-600">Sendt til</dt>
           <dd className="mt-0.5 text-lg font-semibold text-gray-900">
             {formatCount(props.sent)} <span className="text-sm font-normal text-gray-600">av {formatCount(props.total)}</span>
           </dd>
         </div>
+
         <div>
           <dt className="text-gray-600">Avsender</dt>
-          <dd className="mt-0.5 text-gray-900">{props.senderMixed ? 'Varierer' : props.senderName ?? 'Ikke valgt'}</dd>
+          <dd className="mt-0.5 text-gray-900">
+            {editing === 'sender' ? (
+              <select
+                ref={selectRef}
+                aria-label="Avsender (gjelder alle e-postene)"
+                className={selectCls}
+                disabled={busy}
+                value={props.senderMixed ? '' : (props.senderIdentityId ?? '')}
+                onKeyDown={closeOnEscape}
+                onBlur={() => !busy && setEditing(null)}
+                onChange={(e) => {
+                  const s = props.senders.find((o) => o.id === Number(e.target.value));
+                  if (s) void save({ senderIdentityId: s.id }, `Avsender er nå ${s.label}.`);
+                }}
+              >
+                <option value="" disabled>{props.senderMixed ? 'Varierer – velg én for alle' : 'Velg avsender …'}</option>
+                {props.senders.map((s) => (
+                  <option key={s.id} value={s.id}>{s.label}</option>
+                ))}
+              </select>
+            ) : (
+              <Editable label="avsender" onEdit={() => edit('sender')}>
+                {props.senderMixed ? 'Varierer' : props.senderName ?? 'Ikke valgt'}
+              </Editable>
+            )}
+          </dd>
         </div>
+
         <div>
           <dt className="text-gray-600">E-postene går ut</dt>
-          <dd className="mt-0.5 text-gray-900">{props.windowMixed ? 'Varierer' : props.sendWindow || 'Når som helst'}</dd>
+          <dd className="mt-0.5 text-gray-900">
+            <Editable label="når e-postene går ut" active={editing === 'window'} onEdit={() => (editing === 'window' ? setEditing(null) : edit('window'))}>
+              {props.windowMixed ? 'Varierer' : props.sendWindow || 'Når som helst'}
+            </Editable>
+          </dd>
         </div>
+
         <div>
           <dt className="text-gray-600">Fart</dt>
           <dd className="mt-0.5 text-gray-900">
-            {props.perHour > 0 ? `Jevnt, ca. ${props.perHour} i timen` : 'Ingen grense'}
-            {queuedFor ? (
-              <span className="block text-gray-600">{formatCount(props.queued)} i kø, ferdig om {queuedFor}</span>
+            {editing === 'pace' ? (
+              <>
+                <select
+                  ref={selectRef}
+                  aria-label="Fart (gjelder alle utsendelser)"
+                  className={selectCls}
+                  disabled={busy}
+                  value={props.perHour}
+                  onKeyDown={closeOnEscape}
+                  onBlur={() => !busy && setEditing(null)}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    void save({ fartPerTime: n }, `Farten er nå ca. ${n} i timen.`);
+                  }}
+                >
+                  {!(PACE_OPTIONS as readonly number[]).includes(props.perHour) && (
+                    <option value={props.perHour} disabled>{props.perHour > 0 ? `${props.perHour} i timen` : 'Ingen grense'}</option>
+                  )}
+                  {PACE_OPTIONS.map((n) => (
+                    <option key={n} value={n}>{n} i timen{n === 100 ? ' (anbefalt)' : ''}</option>
+                  ))}
+                </select>
+                <span className="mt-1 block text-xs text-gray-600">Gjelder alle utsendelser. Litt av litt er tryggere mot spamfiltre.</span>
+              </>
             ) : (
-              restFor && <span className="block text-gray-600">Sender du til resten, tar det {restFor}</span>
+              <>
+                <Editable label="fart" onEdit={() => edit('pace')}>
+                  {props.perHour > 0 ? `Jevnt, ca. ${props.perHour} i timen` : 'Ingen grense'}
+                </Editable>
+                {queuedFor ? (
+                  <span className="block text-gray-600">{formatCount(props.queued)} i kø, ferdig om {queuedFor}</span>
+                ) : (
+                  restFor && <span className="block text-gray-600">Sender du til resten, tar det {restFor}</span>
+                )}
+              </>
             )}
           </dd>
         </div>
       </dl>
-      <Button className="mt-3" variant="secondary" size="sm" onClick={open}>Endre navn, avsender, tidspunkt eller fart</Button>
+
+      {editing === 'window' && (
+        <div
+          role="group"
+          aria-label="Når e-postene kan gå ut"
+          className="mt-4 space-y-3 border-t border-gray-100 pt-4"
+          onKeyDown={closeOnEscape}
+        >
+          {props.windowMixed && <p className="text-xs text-gray-600">Sendetiden varierer nå. Lagrer du, gjelder den nye alle e-postene.</p>}
+          <SendWindowFields idPrefix="u-sendetid" value={window} onChange={setWindow} disabled={busy} showError />
+          <div className="flex gap-3">
+            <Button
+              size="sm"
+              loading={busy}
+              disabled={!windowCheck.ok || (!windowChanged && !props.windowMixed)}
+              onClick={() => save({ sendetid: window }, 'Sendetiden er lagret.')}
+            >
+              Lagre
+            </Button>
+            <Button size="sm" variant="secondary" disabled={busy} onClick={() => setEditing(null)}>Avbryt</Button>
+          </div>
+        </div>
+      )}
     </section>
+  );
+}
+
+/** Verdien er selve knappen: klikk på den (eller blyanten) for å endre. */
+function Editable({ label, active = false, onEdit, children }: { label: string; active?: boolean; onEdit: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onEdit}
+      aria-expanded={active || undefined}
+      title={`Endre ${label}`}
+      className={`group -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue ${active ? 'bg-blue-50' : ''}`}
+    >
+      <span className="min-w-0 break-words">{children}</span>
+      <span className="sr-only">, endre {label}</span>
+      <PencilIcon className="h-3.5 w-3.5" />
+    </button>
   );
 }

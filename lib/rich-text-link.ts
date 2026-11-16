@@ -2,7 +2,7 @@
 
 export type LinkInput = { ok: true; href: string } | { ok: false; error: string };
 
-const INTERNAL_PATH_RE = /^\/(?!\/)\S*$/;
+const INTERNAL_PATH_RE = /^\/(?![/\\])\S*$/;
 const ANCHOR_RE = /^#\S+$/;
 const MERGE_TAG_RE = /^\{\{[a-z_]+\}\}$/;
 // Flettefelt som fylles med en e-postadresse må bli mailto:, ellers blir lenken død.
@@ -31,4 +31,11 @@ export function parseLinkInput(raw: string): LinkInput {
   } catch {
     return { ok: false, error: 'Sjekk nettadressen, f.eks. https://bjerke.no.' };
   }
+}
+
+/** Adressen en lagret lenke kan åpnes på fra editoren, eller null (flettefelt, ankre og andre protokoller). */
+export function linkOpenHref(href: string): string | null {
+  if (/^(https?:|mailto:|tel:)/i.test(href)) return href;
+  if (/^\/(?![/\\])/.test(href)) return href;
+  return null;
 }

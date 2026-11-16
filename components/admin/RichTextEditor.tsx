@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import { useEditor, EditorContent, type Editor } from '@tiptap/react';
+import { useEditor, useEditorState, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { Button } from '@/components/admin/Button';
-import { parseLinkInput } from '@/lib/rich-text-link';
+import { linkOpenHref, parseLinkInput } from '@/lib/rich-text-link';
 
 interface RichTextEditorProps {
   /** Start-HTML (settes én gang ved montering) */
@@ -110,35 +110,75 @@ function LinkBar({ editor, onClose }: { editor: Editor; onClose: () => void }) {
   );
 }
 
+/** Står markøren i en lenke, vises den her med Endre og Fjern (som å trykke «Lenke»). */
+function LinkPreview({ editor, href, onEdit }: { editor: Editor; href: string; onEdit: () => void }) {
+  const openable = linkOpenHref(href);
+  return (
+    <div role="group" aria-label="Lenke" className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-gray-200 bg-white px-3 py-2 text-sm">
+      <span className="text-gray-600">Lenke:</span>
+      {openable ? (
+        <a href={openable} target="_blank" rel="noopener noreferrer" title="Åpne lenken i ny fane" className="min-w-0 max-w-full truncate font-medium text-bjerke-blue-light underline-offset-2 hover:underline sm:max-w-md">
+          {href}
+        </a>
+      ) : (
+        <span className="min-w-0 max-w-full truncate font-medium text-gray-900 sm:max-w-md">{href}</span>
+      )}
+      <span className="ml-auto flex gap-2">
+        <Button size="sm" variant="secondary" onClick={onEdit}>Endre</Button>
+        <Button size="sm" variant="link" onClick={() => editor.chain().focus().extendMarkRange('link').unsetLink().run()}>Fjern lenke</Button>
+      </span>
+    </div>
+  );
+}
+
 function Toolbar({ editor }: { editor: Editor }) {
   const [linkOpen, setLinkOpen] = useState(false);
+  // Les tilstanden ved hver endring, ellers henger knappene etter når markøren flyttes.
+  const state = useEditorState({
+    editor,
+    selector: ({ editor: e }) => ({
+      h2: e.isActive('heading', { level: 2 }),
+      h3: e.isActive('heading', { level: 3 }),
+      bold: e.isActive('bold'),
+      italic: e.isActive('italic'),
+      bulletList: e.isActive('bulletList'),
+      orderedList: e.isActive('orderedList'),
+      linkHref: e.isActive('link') ? ((e.getAttributes('link').href as string | undefined) ?? null) : null,
+      canUndo: e.can().undo(),
+      canRedo: e.can().redo(),
+    }),
+  });
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-1 border-b border-gray-200 bg-gray-50 p-2">
-        <ToolbarButton title="Overskrift 2" active={editor.isActive('heading', { level: 2 })}
+        <ToolbarButton title="Overskrift 2" active={state.h2}
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}>H2</ToolbarButton>
-        <ToolbarButton title="Overskrift 3" active={editor.isActive('heading', { level: 3 })}
+        <ToolbarButton title="Overskrift 3" active={state.h3}
           onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}>H3</ToolbarButton>
         <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
-        <ToolbarButton title="Fet" active={editor.isActive('bold')}
+        <ToolbarButton title="Fet" active={state.bold}
           onClick={() => editor.chain().focus().toggleBold().run()}><strong>B</strong></ToolbarButton>
-        <ToolbarButton title="Kursiv" active={editor.isActive('italic')}
+        <ToolbarButton title="Kursiv" active={state.italic}
           onClick={() => editor.chain().focus().toggleItalic().run()}><em>I</em></ToolbarButton>
         <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
-        <ToolbarButton title="Punktliste" active={editor.isActive('bulletList')}
+        <ToolbarButton title="Punktliste" active={state.bulletList}
           onClick={() => editor.chain().focus().toggleBulletList().run()}>• Liste</ToolbarButton>
-        <ToolbarButton title="Nummerert liste" active={editor.isActive('orderedList')}
+        <ToolbarButton title="Nummerert liste" active={state.orderedList}
           onClick={() => editor.chain().focus().toggleOrderedList().run()}>1. Liste</ToolbarButton>
         <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
-        <ToolbarButton title="Lenke" active={editor.isActive('link') || linkOpen} onClick={() => setLinkOpen((o) => !o)}>Lenke</ToolbarButton>
+        <ToolbarButton title="Lenke" active={!!state.linkHref || linkOpen} onClick={() => setLinkOpen((o) => !o)}>Lenke</ToolbarButton>
         <span className="mx-1 w-px h-5 bg-gray-300" aria-hidden="true" />
-        <ToolbarButton title="Angre" disabled={!editor.can().undo()}
+        <ToolbarButton title="Angre" disabled={!state.canUndo}
           onClick={() => editor.chain().focus().undo().run()}>↶</ToolbarButton>
-        <ToolbarButton title="Gjør om" disabled={!editor.can().redo()}
+        <ToolbarButton title="Gjør om" disabled={!state.canRedo}
           onClick={() => editor.chain().focus().redo().run()}>↷</ToolbarButton>
       </div>
-      {linkOpen && <LinkBar editor={editor} onClose={() => setLinkOpen(false)} />}
+      {linkOpen ? (
+        <LinkBar editor={editor} onClose={() => setLinkOpen(false)} />
+      ) : (
+        state.linkHref && <LinkPreview editor={editor} href={state.linkHref} onEdit={() => setLinkOpen(true)} />
+      )}
     </>
   );
 }

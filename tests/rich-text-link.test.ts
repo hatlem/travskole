@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseLinkInput } from '@/lib/rich-text-link';
+import { linkOpenHref, parseLinkInput } from '@/lib/rich-text-link';
 
 describe('parseLinkInput', () => {
   it('accepts web addresses and adds https:// when missing', () => {
@@ -32,5 +32,26 @@ describe('parseLinkInput', () => {
     expect(parseLinkInput('javascript:alert(1)').ok).toBe(false);
     expect(parseLinkInput('ftp://bjerke.no').ok).toBe(false);
     expect(parseLinkInput('bjerke').ok).toBe(false);
+  });
+});
+
+describe('linkOpenHref', () => {
+  it('åpner vanlige adresser, e-post, telefon og interne stier', () => {
+    for (const href of ['https://bjerke.no/jul', 'http://x.no', 'mailto:a@b.no', 'tel:+4722', '/vilkar']) {
+      expect(linkOpenHref(href)).toBe(href);
+    }
+  });
+  it('åpner ikke flettefelt, ankre eller farlige protokoller', () => {
+    for (const href of ['{{avmeldingslenke}}', '#svar', 'javascript:alert(1)', '//evil.no']) {
+      expect(linkOpenHref(href)).toBeNull();
+    }
+  });
+});
+
+describe('skråstrek-triks', () => {
+  it('godtar ikke /\\vert som intern sti (nettleseren gjør den til //vert)', () => {
+    expect(linkOpenHref('/\\evil.no')).toBeNull();
+    const parsed = parseLinkInput('/\\evil.no');
+    expect(parsed.ok && parsed.href).not.toBe('/\\evil.no');
   });
 });
