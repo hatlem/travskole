@@ -30,6 +30,8 @@ export interface SendFlow {
   sendWindow: string;
   sampleContactId: number | null;
   steps: SendStep[];
+  /** E-poster kan legges til så lenge ingen har fått noen ennå. */
+  canChangeSteps: boolean;
 }
 
 export interface SendGroup {
@@ -147,21 +149,25 @@ function GroupCompose({
   const [saved, setSaved] = useState(() => Object.fromEntries(flow.steps.map((s) => [s.nodeId, { subject: s.subject, bodyHtml: s.bodyHtml }])));
   const [drafts, setDrafts] = useState(saved);
   const [confirm, setConfirm] = useState(false);
+  // En e-post som legges til etter at siden åpnet, har ingen lagret tekst i tilstanden ennå.
+  const fromServer = Object.fromEntries(flow.steps.map((s) => [s.nodeId, { subject: s.subject, bodyHtml: s.bodyHtml }]));
+  const savedAll = { ...fromServer, ...saved };
+  const draftsAll = { ...savedAll, ...drafts };
 
-  const dirtyIds = flow.steps.filter((s) => drafts[s.nodeId].subject !== saved[s.nodeId].subject || drafts[s.nodeId].bodyHtml !== saved[s.nodeId].bodyHtml).map((s) => s.nodeId);
+  const dirtyIds = flow.steps.filter((s) => draftsAll[s.nodeId].subject !== savedAll[s.nodeId].subject || draftsAll[s.nodeId].bodyHtml !== savedAll[s.nodeId].bodyHtml).map((s) => s.nodeId);
   const dirty = dirtyIds.length > 0;
   useEffect(() => onDirtyChange(dirty), [dirty, onDirtyChange]);
 
-  const step = flow.steps[active];
+  const step = flow.steps[Math.min(active, flow.steps.length - 1)];
   if (!step) return <p className="text-gray-600">Utsendelsen har ingen e-poster ennå.</p>;
-  const draft = drafts[step.nodeId];
+  const draft = draftsAll[step.nodeId];
   const canSend = group.remaining > 0 && !paused && flow.status !== 'archived';
 
   async function saveAll() {
     for (const nodeId of dirtyIds) {
-      const ok = await run('PATCH', '/epost', { flowId: flow.flowId, nodeId, ...drafts[nodeId] }, 'Teksten er lagret.', { refresh: false });
+      const ok = await run('PATCH', '/epost', { flowId: flow.flowId, nodeId, ...draftsAll[nodeId] }, 'Teksten er lagret.', { refresh: false });
       if (!ok) return false;
-      setSaved((s) => ({ ...s, [nodeId]: drafts[nodeId] }));
+      setSaved((s) => ({ ...s, [nodeId]: draftsAll[nodeId] }));
     }
     return true;
   }
@@ -180,7 +186,17 @@ function GroupCompose({
     <article className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm" aria-labelledby="compose-title">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 bg-gray-50 px-5 py-3">
         <h1 id="compose-title" className="font-semibold text-gray-900">Ny e-post til {group.navn}</h1>
-        <StepTabs steps={flow.steps} active={active} onSelect={setActive} marked={(s) => dirtyIds.includes(s.nodeId)} />
+        <div className="flex flex-wrap items-center gap-1">
+          <StepTabs steps={flow.steps} active={Math.min(active, flow.steps.length - 1)} onSelect={setActive} marked={(s) => dirtyIds.includes(s.nodeId)} />
+          {flow.canChangeSteps && (
+            <AddEmailButton
+              utsendelseId={utsendelseId}
+              flowId={flow.flowId}
+              after={flow.steps.length}
+              onAdded={() => setActive(flow.steps.length)}
+            />
+          )}
+        </div>
       </header>
 
       <dl className="divide-y divide-gray-100 text-sm">
@@ -210,7 +226,7 @@ function GroupCompose({
           bodyHtml={draft.bodyHtml}
           anchorMode="contact"
           disabled={busy}
-          onChange={(patch) => setDrafts((d) => ({ ...d, [step.nodeId]: { ...d[step.nodeId], ...patch } }))}
+          onChange={(patch) => setDrafts((d) => ({ ...d, [step.nodeId]: { ...(d[step.nodeId] ?? draftsAll[step.nodeId]), ...patch } }))}
         />
         <p className="mt-3 text-xs text-gray-500">
           Flettefeltene fylles inn for hver mottaker. Endringer gjelder alle som ikke har fått e-posten ennå. Vil du skrive til én person, bruk «Gå gjennom én og én».
@@ -221,7 +237,7 @@ function GroupCompose({
         {dirty ? (
           <>
             <Button loading={busy} onClick={saveAll}>Lagre teksten</Button>
-            <Button variant="secondary" disabled={busy} onClick={() => setDrafts(saved)}>Angre endringene</Button>
+            <Button variant="secondary" disabled={busy} onClick={() => setDrafts(savedAll)}>Angre endringene</Button>
             <span className="text-sm text-gray-600">Lagre før du sender.</span>
           </>
         ) : (
@@ -285,6 +301,53 @@ export function StepTabs<T extends { nodeId: number; number: number }>({
           {marked?.(s) && <span className="ml-1 text-amber-600" aria-label="endret">•</span>}
         </button>
       ))}
+    </div>
+  );
+}
+
+/** «+ Ny e-post» etter den siste: velg hvor mange dager etter, så legges den til sist i rekken. */
+function AddEmailButton({ utsendelseId, flowId, after, onAdded }: { utsendelseId: string; flowId: number; after: number; onAdded: () => void }) {
+  const { run, busy } = useUtsendelseAction(utsendelseId);
+  const [open, setOpen] = useState(false);
+  const [days, setDays] = useState(7);
+  const valid = Number.isInteger(days) && days >= 1 && days <= 60;
+
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} className="rounded-md px-3 py-1 text-sm font-medium text-bjerke-blue hover:bg-white">
+        + Ny e-post
+      </button>
+    );
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-1 text-sm text-gray-700 ring-1 ring-gray-200">
+      <label htmlFor={`ny-epost-${flowId}`}>Sendes</label>
+      <input
+        id={`ny-epost-${flowId}`}
+        type="number"
+        min={1}
+        max={60}
+        autoFocus
+        value={Number.isFinite(days) ? days : ''}
+        onChange={(e) => setDays(Number(e.target.value))}
+        onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+        className="w-14 rounded-md border border-gray-300 px-2 py-0.5 text-sm tabular-nums"
+      />
+      <span>dager etter e-post {after}</span>
+      <Button
+        size="sm"
+        loading={busy}
+        disabled={!valid}
+        onClick={async () => {
+          if (await run('POST', '/epost', { flowId, days }, 'E-posten er lagt til. Skriv teksten i den nye e-posten.')) {
+            setOpen(false);
+            onAdded();
+          }
+        }}
+      >
+        Legg til
+      </Button>
+      <Button size="sm" variant="link" disabled={busy} onClick={() => setOpen(false)}>Avbryt</Button>
     </div>
   );
 }

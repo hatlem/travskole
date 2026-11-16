@@ -46,6 +46,7 @@ export default async function SendGroupPage({
           senderName: flow.senderName,
           sendWindow: flow.sendWindow,
           sampleContactId: flow.sampleContactId,
+          canChangeSteps: flow.canChangeSteps,
           steps: flow.steps.map((s) => ({ nodeId: s.nodeId, number: s.number, timing: s.timing, subject: s.subject, bodyHtml: s.bodyHtml })),
         }}
         paused={view.status === 'pause'}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import type { StepView } from '@/lib/utsendelser/overview';
@@ -27,9 +27,41 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
   const [editing, setEditing] = useState(false);
   const [editingWait, setEditingWait] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
-  const [expanded, setExpanded] = useState(step.number === 1);
   const [draft, setDraft] = useState({ subject: step.subject, bodyHtml: step.bodyHtml });
   const [days, setDays] = useState(step.waitDays ?? 7);
+  const [focusOn, setFocusOn] = useState<'subject' | 'body'>('body');
+  const cardRef = useRef<HTMLElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // Lenkene i forhåndsvisningen skal ikke kunne åpnes eller nås med Tab (teksten skal fortsatt kunne markeres).
+  useEffect(() => {
+    previewRef.current?.querySelectorAll('a').forEach((a) => a.setAttribute('tabindex', '-1'));
+  }, [step.previewHtml, editing]);
+
+  function startEditing(target: 'subject' | 'body') {
+    setDraft({ subject: step.subject, bodyHtml: step.bodyHtml });
+    setFocusOn(target);
+    setEditing(true);
+  }
+
+  // Sett markøren der hun klikket: i emnet, eller i teksten når editoren er lastet.
+  useEffect(() => {
+    if (!editing) return;
+    const card = cardRef.current;
+    if (focusOn === 'subject') {
+      card?.querySelector<HTMLInputElement>('#email-subject')?.focus();
+      return;
+    }
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      const body = card?.querySelector<HTMLElement>('.ProseMirror');
+      if (body || ++tries > 20) {
+        body?.focus();
+        window.clearInterval(timer);
+      }
+    }, 50);
+    return () => window.clearInterval(timer);
+  }, [editing, focusOn]);
 
   async function save() {
     if (await run('PATCH', '/epost', { flowId, nodeId: step.nodeId, ...draft }, `E-post ${step.number} er lagret.`)) setEditing(false);
@@ -46,7 +78,7 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
   const daysValid = Number.isInteger(days) && days >= 1 && days <= MAX_DAYS;
 
   return (
-    <article className="rounded-xl border border-gray-200 bg-white" aria-labelledby={`step-${step.nodeId}`}>
+    <article ref={cardRef} className="rounded-xl border border-gray-200 bg-white" aria-labelledby={`step-${step.nodeId}`}>
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-100 px-5 py-3">
         <div>
           <h4 id={`step-${step.nodeId}`} className="font-semibold text-gray-900">E-post {step.number}</h4>
@@ -96,6 +128,9 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
 
       {editing ? (
         <div className="space-y-4 px-5 py-4">
+          <p className="rounded-md bg-blue-50 px-3 py-2 text-sm text-blue-900">
+            Dette er felles tekst for alle som får e-post {step.number}. Flettefelt som {'{{fornavn}}'} byttes ut med hver mottakers egen verdi.
+          </p>
           <EmailBodyEditor
             subject={draft.subject}
             bodyHtml={draft.bodyHtml}
@@ -112,29 +147,35 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
       ) : (
         <div className="px-5 py-4">
           <p className="text-sm text-gray-600">Emne</p>
-          <p className="font-medium text-gray-900">{step.previewSubject}</p>
-          <div className="relative mt-3">
+          <button
+            type="button"
+            title="Klikk for å endre emnet og teksten"
+            aria-label={`Endre emne og tekst i e-post ${step.number}: ${step.previewSubject}`}
+            onClick={() => startEditing('subject')}
+            className="-mx-2 block rounded-md px-2 py-0.5 text-left font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
+          >
+            {step.previewSubject}
+          </button>
+          {/* Klikk i teksten åpner redigering (emnet over er knappen for tastatur). Lenkene er døde her. */}
+          <div
+            title="Klikk for å endre teksten"
+            onClick={() => {
+              if (window.getSelection()?.toString()) return; // markerer tekst for å kopiere
+              startEditing('body');
+            }}
+            className="-mx-2 mt-2 cursor-text rounded-md px-2 py-1 hover:bg-gray-50"
+          >
             <div
-              className={`prose prose-sm prose-a:text-bjerke-blue max-w-none text-gray-800 ${expanded ? '' : 'max-h-28 overflow-hidden'}`}
+              ref={previewRef}
+              className="prose prose-sm prose-a:text-bjerke-blue max-w-none text-gray-800 [&_a]:pointer-events-none"
               // Innholdet er sanitert i renderFlowEmailBody (DOMPurify).
               dangerouslySetInnerHTML={{ __html: step.previewHtml }}
             />
-            {!expanded && <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-white" />}
           </div>
+          <p className="mt-1 text-xs text-gray-500">
+            {sampleContactId !== null ? 'Vist slik én mottaker ser den. ' : ''}Klikk på emnet eller teksten for å endre den for alle.
+          </p>
           <div className="mt-4 flex flex-wrap gap-3">
-            <Button variant="secondary" size="sm" onClick={() => setExpanded((v) => !v)}>
-              {expanded ? 'Vis mindre' : 'Vis hele e-posten'}
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => {
-                setDraft({ subject: step.subject, bodyHtml: step.bodyHtml });
-                setEditing(true);
-              }}
-            >
-              Endre teksten
-            </Button>
             {myEmail && (
               <TestSendButton flowId={flowId} nodeId={step.nodeId} myEmail={myEmail} others={testOthers} contactId={sampleContactId} ignoreOverride />
             )}
