@@ -86,7 +86,7 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
         <SettingsCard
           utsendelseId={view.id}
           senderIdentityId={firstFlow.senderIdentityId}
-          senderName={firstFlow.senderName}
+          sender={firstFlow.sender}
           sendWindow={firstFlow.sendWindow}
           sendWindowDraft={firstFlow.sendWindowDraft}
           senderMixed={view.senderMixed}

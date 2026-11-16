@@ -17,7 +17,7 @@ export interface SenderOption {
 interface Props {
   utsendelseId: string;
   senderIdentityId: number | null;
-  senderName: string | null;
+  sender: { name: string; email: string } | null;
   sendWindow: string;
   sendWindowDraft: SendWindowDraft;
   senderMixed: boolean;
@@ -104,7 +104,7 @@ export function SettingsCard(props: Props) {
               </select>
             ) : (
               <Editable label="avsender" onEdit={() => edit('sender')}>
-                {props.senderMixed ? 'Varierer' : <SenderLabel label={props.senderName} />}
+                {props.senderMixed ? 'Varierer' : <SenderLabel sender={props.sender} />}
               </Editable>
             )}
           </dd>
@@ -188,15 +188,13 @@ export function SettingsCard(props: Props) {
   );
 }
 
-/** «Navn <adresse>» som navn med adressen liten under, så adressen ikke brekker midt i. */
-function SenderLabel({ label }: { label: string | null }) {
-  if (!label) return <>Ikke valgt</>;
-  const match = /^(.*?)\s*<([^>]+)>$/.exec(label);
-  if (!match) return <>{label}</>;
+/** Navnet, med adressen liten under, så adressen ikke brekker midt i. */
+function SenderLabel({ sender }: { sender: { name: string; email: string } | null }) {
+  if (!sender) return <>Ikke valgt</>;
   return (
     <>
-      <span className="block">{match[1]}</span>
-      <span className="block text-xs text-gray-500">{match[2]}</span>
+      {sender.name && <span className="block">{sender.name}</span>}
+      <span className={sender.name ? 'block text-xs text-gray-500' : 'block'}>{sender.email}</span>
     </>
   );
 }

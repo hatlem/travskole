@@ -32,6 +32,8 @@ export interface FlowView {
   navn: string;
   status: string;
   senderName: string | null;
+  /** Avsenderen hver for seg (for visning med adressen på egen linje). */
+  sender: { name: string; email: string } | null;
   senderIdentityId: number | null;
   sendWindow: string;
   sendWindowDraft: { start: string; end: string; days: Weekday[] };
@@ -258,6 +260,7 @@ async function loadFlow(
     navn,
     status: flow.status,
     senderName: sender ? `${sender.displayName} <${sender.email}>` : null,
+    sender: sender ? { name: sender.displayName, email: sender.email } : null,
     senderIdentityId: firstSender ?? null,
     sendWindow: sendWindow ? describeSendWindow(sendWindow.effective) : '',
     sendWindowDraft: { start: formatTime(w.startHour, w.startMinute), end: formatTime(w.endHour, w.endMinute), days: [...w.days] },

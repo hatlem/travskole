@@ -127,7 +127,8 @@ export function InlineText({
           title={`Endre ${label.toLowerCase()}`}
           className="rounded p-0.5 hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
         >
-          <PencilIcon className="h-4 w-4" />
+          {/* Uten mus finnes ingen peking, så her (der teksten selv er en lenke) vises blyanten alltid. */}
+          <PencilIcon className="h-4 w-4 [@media(hover:none)]:opacity-100" />
           <span className="sr-only">Endre {label.toLowerCase()}</span>
         </button>
       </span>
@@ -152,7 +153,7 @@ export function InlineText({
 /** Blyanten som dukker opp når man peker på noe som kan endres der det står. */
 export function PencilIcon({ className = 'h-4 w-4' }: { className?: string }) {
   return (
-    <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className={`shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100 ${className}`}>
+    <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className={`shrink-0 text-gray-400 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 ${className}`}>
       <path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-.793.793-2.828-2.828.793-.793ZM11.379 5.793 3 14.172V17h2.828l8.38-8.379-2.83-2.828Z" />
     </svg>
   );
