@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { PageHeader } from '@/components/admin/PageHeader';
+import { InlineText } from '@/components/admin/InlineText';
 import { Badge } from '@/components/admin/StatusBadge';
 import { Button } from '@/components/admin/Button';
 import type { FlowView, ReplyView, UtsendelseView } from '@/lib/utsendelser/overview';
@@ -38,8 +39,23 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
   return (
     <div className="max-w-4xl">
       <PageHeader
-        title={view.navn}
-        description={view.beskrivelse}
+        title={
+          <InlineText
+            label="Navn på utsendelsen"
+            value={view.navn}
+            onSave={async (navn) => !!(await run('PATCH', '', { navn }, 'Navnet er endret.'))}
+          />
+        }
+        description={
+          <InlineText
+            label="Kort beskrivelse"
+            value={view.beskrivelse ?? ''}
+            placeholder="Legg til en kort beskrivelse"
+            maxLength={500}
+            required={false}
+            onSave={async (beskrivelse) => !!(await run('PATCH', '', { beskrivelse }, 'Beskrivelsen er lagret.'))}
+          />
+        }
         actions={
           <div className="flex items-center gap-3">
             <Badge className={badge.className}>{badge.label}</Badge>
@@ -69,8 +85,6 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
       {firstFlow && (
         <SettingsCard
           utsendelseId={view.id}
-          navn={view.navn}
-          beskrivelse={view.beskrivelse}
           senderIdentityId={firstFlow.senderIdentityId}
           senderName={firstFlow.senderName}
           sendWindow={firstFlow.sendWindow}
@@ -92,12 +106,15 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
         flows={view.flows.map((f) => ({ flowId: f.flowId, navn: f.navn }))}
         lists={options.lists}
         segments={options.segments}
-        paused={isPaused}
       />
 
       <section aria-labelledby="emails-title" className="mb-12">
         <h2 id="emails-title" className="text-lg font-semibold text-gray-900">E-postene</h2>
-        <p className="mt-1 mb-4 text-sm text-gray-600">Slik ser e-postene ut for mottakeren. Du kan endre teksten og ventetiden når som helst.</p>
+        <p className="mt-1 mb-4 max-w-2xl text-sm text-gray-600">
+          Slik ser e-postene ut for mottakeren. Endrer du tekst eller ventetid, gjelder det alle som ikke har fått akkurat den e-posten ennå.
+          E-poster som er sendt, endres ikke, og egen tekst du har skrevet til én mottaker, beholdes.
+          {view.flows.length > 1 && ' Hver rekke under har egne e-poster, så en endring gjelder bare gruppene som får den rekken.'}
+        </p>
         <div className="space-y-6">
           {view.flows.map((flow, i) =>
             view.flows.length > 1 ? (

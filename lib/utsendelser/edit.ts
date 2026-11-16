@@ -301,10 +301,23 @@ export async function addGroup(u: Utsendelse, source: GroupSource & { flowId?: n
   return next;
 }
 
-export async function renameGroup(u: Utsendelse, gruppeId: string, navn: string): Promise<Utsendelse> {
-  if (!navn.trim()) throw new UtsendelseError('Gi gruppen et navn.', 400);
+/** Nytt navn og/eller beskrivelse på en gruppe. Tom beskrivelse fjerner den. */
+export async function updateGroup(u: Utsendelse, gruppeId: string, input: { navn?: string; beskrivelse?: string }): Promise<Utsendelse> {
+  if (input.navn !== undefined && !input.navn.trim()) throw new UtsendelseError('Gi gruppen et navn.', 400);
   if (!u.grupper.some((g) => g.id === gruppeId)) throw new UtsendelseError('Fant ikke gruppen.', 404);
-  const next: Utsendelse = { ...u, grupper: u.grupper.map((g) => (g.id === gruppeId ? { ...g, navn: navn.trim().slice(0, 120) } : g)) };
+  const next: Utsendelse = {
+    ...u,
+    grupper: u.grupper.map((g) => {
+      if (g.id !== gruppeId) return g;
+      const updated = { ...g, ...(input.navn !== undefined && { navn: input.navn.trim().slice(0, 120) }) };
+      if (input.beskrivelse === undefined) return updated;
+      const beskrivelse = input.beskrivelse.trim().slice(0, 300);
+      if (beskrivelse) return { ...updated, beskrivelse };
+      const rest = { ...updated };
+      delete rest.beskrivelse;
+      return rest;
+    }),
+  };
   await saveUtsendelse(next);
   return next;
 }

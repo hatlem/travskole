@@ -29,7 +29,7 @@ const { saveOverride, getState } = vi.hoisted(() => ({ saveOverride: vi.fn(), ge
 vi.mock('@/lib/flows/send-window-store', () => ({ saveFlowSendWindowOverride: saveOverride, getFlowSendWindowState: getState }));
 
 import {
-  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, renameGroup, setWaitBefore, updateSettings,
+  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, setWaitBefore, updateGroup, updateSettings,
 } from '@/lib/utsendelser/edit';
 import { slugify, type Utsendelse } from '@/lib/utsendelser/config';
 
@@ -227,8 +227,14 @@ describe('grupper', () => {
     const added = await addGroup(U, { navn: 'Kunder', listId: 5 });
     expect(added.grupper.at(-1)).toEqual({ id: 'kunder', navn: 'Kunder', flowId: 22, listId: 5 });
 
-    const renamed = await renameGroup(U, 'prio-1', 'Viktigste');
+    const renamed = await updateGroup(U, 'prio-1', { navn: ' Viktigste ' });
     expect(renamed.grupper[0].navn).toBe('Viktigste');
+
+    const described = await updateGroup(U, 'prio-1', { beskrivelse: ' HR og daglige ledere ' });
+    expect(described.grupper[0]).toMatchObject({ navn: U.grupper[0].navn, beskrivelse: 'HR og daglige ledere' });
+    const cleared = await updateGroup(described, 'prio-1', { beskrivelse: '' });
+    expect(cleared.grupper[0]).not.toHaveProperty('beskrivelse');
+    await expect(updateGroup(U, 'prio-1', { navn: '  ' })).rejects.toMatchObject({ status: 400 });
 
     const removed = await removeGroup(U, 'prio-1');
     expect(removed.grupper).toEqual([]);

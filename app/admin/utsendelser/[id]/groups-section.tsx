@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { Button, ButtonLink } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
+import { InlineText } from '@/components/admin/InlineText';
+import { RowMenu } from '@/components/admin/crm/RowMenu';
 import type { GroupView } from '@/lib/utsendelser/overview';
 import { formatCount } from '../status';
 import { useUtsendelseAction } from './use-action';
@@ -21,7 +23,6 @@ interface Props {
   flows: { flowId: number; navn: string }[];
   lists: SourceOption[];
   segments: SourceOption[];
-  paused: boolean;
 }
 
 const dateTime = (iso: string) =>
@@ -30,10 +31,10 @@ const dateTime = (iso: string) =>
 const inputCls = 'w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm';
 const labelCls = 'mb-1 block text-xs font-medium text-gray-600';
 
-export function GroupsSection({ utsendelseId, groups, flows, lists, segments, paused }: Props) {
+export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: Props) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [confirmRemove, setConfirmRemove] = useState<SerializedGroup | null>(null);
-  const [renaming, setRenaming] = useState<{ id: string; navn: string } | null>(null);
+  const [editing, setEditing] = useState<{ id: string; field: 'navn' | 'beskrivelse' } | null>(null);
   const [adding, setAdding] = useState(false);
   const [newGroup, setNewGroup] = useState({ navn: '', kilde: '', flowId: flows[0]?.flowId ?? 0 });
 
@@ -60,7 +61,7 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
     <section aria-labelledby="send-title" className="mb-12">
       <h2 id="send-title" className="text-lg font-semibold text-gray-900">Mottakere og sending</h2>
       <p className="mt-1 mb-4 text-sm text-gray-600">
-        Trykk «Send …» på en gruppe. Der sender du til alle, eller går gjennom én og én. Resten av e-postene kommer automatisk, og ingen får samme e-post to ganger.
+        Trykk på en gruppe eller «Åpne» for å se hvem som er med. Ingenting sendes før du velger å sende og bekrefter der. Resten av e-postene kommer automatisk, og ingen får samme e-post to ganger.
       </p>
 
       {groups.length === 0 ? (
@@ -71,67 +72,56 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
         <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
           {groups.map((g) => {
             const people = g.sent + g.remaining;
-            const sendable = !paused && (g.flowStatus === 'draft' || g.flowStatus === 'active');
+            const href = `/admin/utsendelser/${utsendelseId}/${g.id}`;
+            const editingName = editing?.id === g.id && editing.field === 'navn';
+            const editingDesc = editing?.id === g.id && editing.field === 'beskrivelse';
+            const saveGroup = async (changes: { navn?: string; beskrivelse?: string }, message: string) =>
+              !!(await run('PATCH', '/grupper', { gruppeId: g.id, ...changes }, message));
             return (
               <li key={g.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
-                  {renaming?.id === g.id ? (
-                    <div className="flex flex-wrap items-center gap-2">
-                      <label htmlFor={`rename-${g.id}`} className="sr-only">Nytt navn</label>
-                      <input
-                        id={`rename-${g.id}`}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-sm"
-                        value={renaming.navn}
-                        maxLength={120}
-                        onChange={(e) => setRenaming({ id: g.id, navn: e.target.value })}
+                  <p className="font-medium text-gray-900">
+                    {editingName ? (
+                      <InlineText
+                        label={`Navn på gruppen ${g.navn}`}
+                        value={g.navn}
+                        initiallyEditing
+                        onClose={() => setEditing(null)}
+                        onSave={(navn) => saveGroup({ navn }, 'Navnet er endret.')}
                       />
-                      <Button
-                        size="sm"
-                        loading={busy}
-                        disabled={!renaming.navn.trim()}
-                        onClick={async () => {
-                          if (await run('PATCH', '/grupper', { gruppeId: g.id, navn: renaming.navn }, 'Navnet er endret.')) setRenaming(null);
-                        }}
-                      >
-                        Lagre
-                      </Button>
-                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => setRenaming(null)}>Avbryt</Button>
-                    </div>
-                  ) : (
-                    <p className="font-medium text-gray-900">{g.navn}</p>
+                    ) : g.missingSegment ? (
+                      g.navn
+                    ) : (
+                      <Link href={`${href}?modus=en`} title="Se hvem som er med" className="underline-offset-2 hover:text-bjerke-blue hover:underline">
+                        {g.navn}
+                      </Link>
+                    )}
+                  </p>
+                  {(g.beskrivelse || editingDesc) && (
+                    <p className="mt-0.5 text-sm text-gray-700">
+                      <InlineText
+                        label={`Beskrivelse av gruppen ${g.navn}`}
+                        value={g.beskrivelse ?? ''}
+                        placeholder="Kort beskrivelse"
+                        maxLength={300}
+                        required={false}
+                        initiallyEditing={editingDesc}
+                        onClose={() => setEditing(null)}
+                        onSave={(beskrivelse) => saveGroup({ beskrivelse }, 'Beskrivelsen er lagret.')}
+                      />
+                    </p>
                   )}
                   <p className="mt-0.5 text-sm text-gray-600">
                     {formatCount(people)} {people === 1 ? 'person' : 'personer'}
-                    {g.beskrivelse ? ` · ${g.beskrivelse}` : ''}
-                    {flows.length > 1 && g.flowNavn ? ` · ${g.flowNavn.toLowerCase()}` : ''}
+                    {flows.length > 1 && g.flowNavn && <> · får e-postene «{g.flowNavn}»</>}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">
-                    {g.kilde}
-                    {!g.missingSegment && (
-                      <>
-                        {' · '}
-                        <Link href={`/admin/utsendelser/${utsendelseId}/${g.id}?modus=en`} className="font-medium text-blue-700 underline-offset-2 hover:underline">
-                          Se hvem som er med
-                        </Link>
-                      </>
-                    )}
-                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">{g.kilde}</p>
                   {g.unreachable > 0 && (
                     <p className="mt-0.5 text-xs text-gray-500">
                       {formatCount(g.unreachable)} til kan ikke få e-post (har meldt seg av eller mangler adresse).
                     </p>
                   )}
                   {g.missingSegment && <p className="mt-0.5 text-sm text-red-700">Lista eller segmentet finnes ikke lenger.</p>}
-                  {renaming?.id !== g.id && (
-                    <div className="mt-1 flex gap-3 text-xs">
-                      <button type="button" className="text-bjerke-blue hover:underline" onClick={() => setRenaming({ id: g.id, navn: g.navn })}>
-                        Gi nytt navn
-                      </button>
-                      <button type="button" className="text-red-700 hover:underline" onClick={() => setConfirmRemove(g)}>
-                        Fjern gruppen
-                      </button>
-                    </div>
-                  )}
                 </div>
                 <div className="shrink-0 sm:text-right">
                   {g.sent > 0 && g.lastSentAt && (
@@ -139,21 +129,25 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments, pa
                       <span aria-hidden="true">✓ </span>Sendt til {formatCount(g.sent)} · {dateTime(g.lastSentAt)}
                     </p>
                   )}
-                  {g.remaining > 0 ? (
-                    sendable ? (
-                      <ButtonLink className="mt-1" variant={g.sent > 0 ? 'secondary' : 'primary'} href={`/admin/utsendelser/${utsendelseId}/${g.id}`}>
-                        {g.sent > 0 ? `Send til ${formatCount(g.remaining)} nye …` : 'Send …'}
-                      </ButtonLink>
-                    ) : (
-                      <Button className="mt-1" disabled>Send …</Button>
-                    )
-                  ) : (
-                    !g.missingSegment && (
-                      <Link href={`/admin/utsendelser/${utsendelseId}/${g.id}?modus=en`} className="mt-1 inline-block text-sm font-medium text-bjerke-blue hover:underline">
-                        {g.sent > 0 ? 'Se mottakerne' : 'Ingen å sende til'}
-                      </Link>
-                    )
+                  {g.sent > 0 && g.remaining > 0 && (
+                    <p className="text-sm text-gray-600">{formatCount(g.remaining)} har ikke fått den ennå</p>
                   )}
+                  <div className="mt-1 flex items-center gap-2 sm:justify-end">
+                    {g.missingSegment ? (
+                      <Button variant="secondary" disabled>Åpne</Button>
+                    ) : (
+                      <ButtonLink variant="secondary" href={g.remaining > 0 ? href : `${href}?modus=en`}>Åpne</ButtonLink>
+                    )}
+                    <RowMenu
+                      compact
+                      label={`Flere valg for ${g.navn}`}
+                      items={[
+                        { label: 'Endre navn', onSelect: () => setEditing({ id: g.id, field: 'navn' }) },
+                        { label: g.beskrivelse ? 'Endre beskrivelse' : 'Legg til beskrivelse', onSelect: () => setEditing({ id: g.id, field: 'beskrivelse' }) },
+                        { label: 'Fjern gruppen', danger: true, onSelect: () => setConfirmRemove(g) },
+                      ]}
+                    />
+                  </div>
                 </div>
               </li>
             );

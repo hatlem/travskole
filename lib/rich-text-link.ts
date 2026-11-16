@@ -32,3 +32,10 @@ export function parseLinkInput(raw: string): LinkInput {
     return { ok: false, error: 'Sjekk nettadressen, f.eks. https://bjerke.no.' };
   }
 }
+
+/** Adressen en lagret lenke kan åpnes på fra editoren, eller null (flettefelt, ankre og andre protokoller). */
+export function linkOpenHref(href: string): string | null {
+  if (/^(https?:|mailto:|tel:)/i.test(href)) return href;
+  if (/^\/(?!\/)/.test(href)) return href;
+  return null;
+}
