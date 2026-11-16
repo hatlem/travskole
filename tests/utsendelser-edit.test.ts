@@ -19,7 +19,7 @@ const { prisma, store } = vi.hoisted(() => {
       flowNode: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn((a: unknown) => a), deleteMany: vi.fn((a: unknown) => a) },
       flowEdge: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn((a: unknown) => a), create: vi.fn((a: unknown) => a) },
       setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
-      $executeRaw: vi.fn(async (..._args: unknown[]) => 3),
+      $executeRaw: vi.fn(async (...args: unknown[]) => (args.length ? 3 : 0)),
     },
     store: { saved: null as unknown },
   };
@@ -30,7 +30,7 @@ const { saveOverride, getState } = vi.hoisted(() => ({ saveOverride: vi.fn(), ge
 vi.mock('@/lib/flows/send-window-store', () => ({ saveFlowSendWindowOverride: saveOverride, getFlowSendWindowState: getState }));
 
 import {
-  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, setWaitBefore, updateGroup, updateSettings, waitShiftMs,
+  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, setStartAfter, setWaitBefore, updateGroup, updateSettings, waitShiftMs,
 } from '@/lib/utsendelser/edit';
 import { slugify, type Utsendelse } from '@/lib/utsendelser/config';
 
@@ -297,5 +297,30 @@ describe('archiveUtsendelse', () => {
     prisma.setting.updateMany.mockResolvedValue({ count: 0 });
     await expect(archiveUtsendelse(U)).rejects.toThrow(/pågår/);
     expect(prisma.flow.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('setStartAfter', () => {
+  const two: Utsendelse = { ...U, grupper: [...U.grupper, { id: 'prio-2', navn: 'Prioritet 2', segmentId: 3, flowId: 22 }] };
+
+  it('lagrer og fjerner «start etter»', async () => {
+    const set = await setStartAfter(two, 'prio-2', 'prio-1');
+    expect(set.grupper[1].startEtter).toBe('prio-1');
+    const cleared = await setStartAfter(set, 'prio-2', null);
+    expect(cleared.grupper[1]).not.toHaveProperty('startEtter');
+  });
+
+  it('nekter seg selv, ukjent gruppe og ring', async () => {
+    await expect(setStartAfter(two, 'prio-2', 'prio-2')).rejects.toMatchObject({ status: 400 });
+    await expect(setStartAfter(two, 'prio-2', 'finnes-ikke')).rejects.toMatchObject({ status: 404 });
+    const chained = { ...two, grupper: [{ ...two.grupper[0], startEtter: 'prio-2' }, two.grupper[1]] };
+    await expect(setStartAfter(chained, 'prio-2', 'prio-1')).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('fjerner man gruppen, venter ingen på den lenger', async () => {
+    const chained = { ...two, grupper: [two.grupper[0], { ...two.grupper[1], startEtter: 'prio-1' }] };
+    prisma.setting.findUnique.mockResolvedValue({ value: JSON.stringify([chained]) });
+    const next = await removeGroup(chained, 'prio-1');
+    expect(next.grupper).toEqual([{ id: 'prio-2', navn: 'Prioritet 2', segmentId: 3, flowId: 22 }]);
   });
 });
