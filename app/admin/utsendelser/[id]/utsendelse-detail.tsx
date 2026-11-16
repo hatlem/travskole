@@ -94,6 +94,7 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
           windowMixed={view.windowMixed}
           senders={options.senders}
           sent={view.totals.sent}
+          delivered={view.totals.delivered}
           total={view.totals.total}
           remaining={view.totals.remaining}
           queued={view.pace.queued}
@@ -113,7 +114,7 @@ export function UtsendelseDetail({ view, myEmail, testOthers, options }: { view:
         <h2 id="emails-title" className="text-lg font-semibold text-gray-900">E-postene</h2>
         <p className="mt-1 mb-4 max-w-2xl text-sm text-gray-600">
           Slik ser e-postene ut for mottakeren. Endrer du teksten, gjelder det alle som ikke har fått akkurat den e-posten ennå.
-          Endrer du ventetiden, gjelder den nye fra neste gang noen går videre. De som alt venter, beholder datoen de har fått.
+          Endrer du ventetiden, flyttes datoen også for dem som venter på den e-posten. Det som er sendt, endres ikke.
           E-poster som er sendt, endres ikke, og egen tekst du har skrevet til én mottaker, beholdes.
           {view.flows.length > 1 && ' Hver rekke under har egne e-poster, så en endring gjelder bare gruppene som får den rekken.'}
         </p>

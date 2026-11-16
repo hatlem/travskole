@@ -19,17 +19,18 @@ const { prisma, store } = vi.hoisted(() => {
       flowNode: { findMany: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn(), count: vi.fn(), update: vi.fn((a: unknown) => a), deleteMany: vi.fn((a: unknown) => a) },
       flowEdge: { findMany: vi.fn(), findFirst: vi.fn(), deleteMany: vi.fn((a: unknown) => a), create: vi.fn((a: unknown) => a) },
       setting: { findUnique: vi.fn(), upsert: vi.fn(), create: vi.fn(), updateMany: vi.fn(), deleteMany: vi.fn() },
+      $executeRaw: vi.fn(async (..._args: unknown[]) => 3),
     },
     store: { saved: null as unknown },
   };
 });
 vi.mock('@/lib/prisma', () => ({ prisma }));
-vi.mock('@/lib/flows/runner', () => ({ wakeSendWindowParked: vi.fn(async () => 0) }));
+vi.mock('@/lib/flows/runner', () => ({ LEASE_MINUTES: 10, wakeSendWindowParked: vi.fn(async () => 0) }));
 const { saveOverride, getState } = vi.hoisted(() => ({ saveOverride: vi.fn(), getState: vi.fn() }));
 vi.mock('@/lib/flows/send-window-store', () => ({ saveFlowSendWindowOverride: saveOverride, getFlowSendWindowState: getState }));
 
 import {
-  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, setWaitBefore, updateGroup, updateSettings,
+  addGroup, appendEmail, archiveUtsendelse, createUtsendelse, removeEmail, removeGroup, setWaitBefore, updateGroup, updateSettings, waitShiftMs,
 } from '@/lib/utsendelser/edit';
 import { slugify, type Utsendelse } from '@/lib/utsendelser/config';
 
@@ -128,8 +129,34 @@ describe('setWaitBefore', () => {
   it('endrer ventetiden før e-posten', async () => {
     prisma.flowEdge.findMany.mockResolvedValue([{ fromNodeId: 5 }]);
     prisma.flowNode.findMany.mockResolvedValue([{ id: 5, config: JSON.stringify({ days: 13 }) }]);
-    await setWaitBefore(U, 22, 6, 11);
+    expect(await setWaitBefore(U, 22, 6, 11)).toEqual({ moved: 3 });
     expect(prisma.flowNode.update).toHaveBeenCalledWith({ where: { id: 5 }, data: { config: JSON.stringify({ days: 11, hours: 0 }) } });
+  });
+
+  it('flytter datoen for dem som venter på akkurat denne e-posten, like mye som endringen', async () => {
+    prisma.flowEdge.findMany.mockResolvedValue([{ fromNodeId: 5 }]);
+    prisma.flowNode.findMany.mockResolvedValue([{ id: 5, config: JSON.stringify({ days: 11 }) }]);
+    await setWaitBefore(U, 22, 6, 7);
+    const [sql, ...values] = prisma.$executeRaw.mock.calls[0] as [TemplateStringsArray, ...unknown[]];
+    expect(sql.join('?')).toMatch(/GREATEST\(\?::timestamp, fe\.next_run_at \+/);
+    expect(sql.join('?')).toMatch(/fe\.status = 'active' AND fe\.current_node_id = /);
+    expect(sql.join('?')).toMatch(/NOT EXISTS/);
+    const [now, shift, , flowId, nodeId, notBefore, reviewNode] = values as [Date, number, Date, number, number, Date, number];
+    expect(shift).toBe(-4 * 24 * 3_600_000);
+    expect([flowId, nodeId, reviewNode]).toEqual([22, 6, 6]);
+    expect(notBefore.getTime() - now.getTime()).toBe(10 * 60_000);
+  });
+
+  it('samme ventetid flytter ingen', async () => {
+    prisma.flowEdge.findMany.mockResolvedValue([{ fromNodeId: 5 }]);
+    prisma.flowNode.findMany.mockResolvedValue([{ id: 5, config: JSON.stringify({ days: 7, hours: 0 }) }]);
+    expect(await setWaitBefore(U, 22, 6, 7)).toEqual({ moved: 0 });
+    expect(prisma.$executeRaw).not.toHaveBeenCalled();
+  });
+
+  it('waitShiftMs regner med timer i den gamle ventetiden', () => {
+    expect(waitShiftMs({ days: 1, hours: 12 }, 2)).toBe(12 * 3_600_000);
+    expect(waitShiftMs({}, 1)).toBe(24 * 3_600_000);
   });
 
   it('første e-post har ingen ventetid; ugyldige dager avvises', async () => {

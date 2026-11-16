@@ -125,11 +125,22 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
                   {g.missingSegment && <p className="mt-0.5 text-sm text-red-700">Lista eller segmentet finnes ikke lenger.</p>}
                 </div>
                 <div className="shrink-0 sm:text-right">
-                  {g.sent > 0 && g.lastSentAt && (
+                  {g.waiting > 0 ? (
+                    <>
+                      <p className="text-sm text-blue-900">
+                        Sender nå{g.firstSentAt ? ` · startet ${dateTime(g.firstSentAt)}` : ''}
+                      </p>
+                      <p className="text-sm text-gray-700">
+                        E-post 1 sendt til {formatCount(g.delivered)} av {formatCount(g.sent)}
+                        {g.lastDeliveredAt ? ` · sist ${dateTime(g.lastDeliveredAt)}` : ''}
+                      </p>
+                      <p className="text-sm text-gray-600">{formatCount(g.waiting)} venter på tur</p>
+                    </>
+                  ) : g.delivered > 0 && g.lastDeliveredAt ? (
                     <p className="text-sm text-green-800">
-                      <span aria-hidden="true">✓ </span>Sendt til {formatCount(g.sent)} · {dateTime(g.lastSentAt)}
+                      <span aria-hidden="true">✓ </span>E-post 1 sendt til {formatCount(g.delivered)} · {dateTime(g.lastDeliveredAt)}
                     </p>
-                  )}
+                  ) : null}
                   {g.sent > 0 && g.remaining > 0 && (
                     <p className="text-sm text-gray-600">{formatCount(g.remaining)} har ikke fått den ennå</p>
                   )}

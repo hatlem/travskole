@@ -24,6 +24,7 @@ interface Props {
   windowMixed: boolean;
   senders: SenderOption[];
   sent: number;
+  delivered: number;
   total: number;
   remaining: number;
   queued: number;
@@ -74,9 +75,9 @@ export function SettingsCard(props: Props) {
     <section aria-label="Oversikt" className="mb-10 rounded-xl border border-gray-200 bg-white px-5 py-4">
       <dl className="grid gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
         <div>
-          <dt className="text-gray-600">Sendt til</dt>
+          <dt className="text-gray-600">Har fått e-post 1</dt>
           <dd className="mt-0.5 text-lg font-semibold text-gray-900">
-            {formatCount(props.sent)} <span className="text-sm font-normal text-gray-600">av {formatCount(props.total)}</span>
+            {formatCount(props.delivered)} <span className="text-sm font-normal text-gray-600">av {formatCount(props.total)}</span>
           </dd>
         </div>
 

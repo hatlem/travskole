@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 import { parseNodeConfig } from '@/lib/flows/graph';
 import { getFlowSendWindowState, saveFlowSendWindowOverride } from '@/lib/flows/send-window-store';
 import { resolveEffectiveSendWindow, sameSendWindow, windowFromDraft, type Weekday } from '@/lib/flows/send-window';
-import { wakeSendWindowParked } from '@/lib/flows/runner';
+import { LEASE_MINUTES, wakeSendWindowParked } from '@/lib/flows/runner';
 import { resetRateState } from '@/lib/flows/send-rate';
 import { PACE_OPTIONS } from './pace';
 import { getUtsendelser, removeUtsendelse, saveUtsendelse, slugify, type Utsendelse, type UtsendelseGruppe } from './config';
@@ -192,7 +192,19 @@ export async function updateSettings(u: Utsendelse, input: SettingsInput): Promi
 }
 
 /** Ventetiden før en e-post (ikke den første). Gjelder de som ikke har kommet dit ennå. */
-export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: number, days: number): Promise<void> {
+/** Hvor mye datoen flyttes for dem som venter, når ventetiden endres fra `old` til `days` hele dager. */
+export function waitShiftMs(old: { days?: unknown; hours?: unknown }, days: number): number {
+  const oldHours = (typeof old.days === 'number' ? old.days : 0) * 24 + (typeof old.hours === 'number' ? old.hours : 0);
+  return (days * 24 - oldHours) * 3_600_000;
+}
+
+/**
+ * Endrer ventetiden før en e-post. Gjelder også dem som alt venter på akkurat denne e-posten:
+ * datoen deres flyttes like mye (aldri tilbake i tid; er den passert, går e-posten ut innenfor sendetiden).
+ * Den som alt er parkert til neste sendetid, flyttes fra det tidspunktet; runneren parkerer på nytt om nødvendig.
+ * De som er rett i ferd med å få den (innen leasevinduet), røres ikke. Returnerer hvor mange som fikk ny dato.
+ */
+export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: number, days: number): Promise<{ moved: number }> {
   assertOwnFlow(u, flowId);
   if (!Number.isInteger(days) || days < 1 || days > MAX_WAIT_DAYS) {
     throw new UtsendelseError(`Velg mellom 1 og ${MAX_WAIT_DAYS} dager.`, 400);
@@ -202,10 +214,30 @@ export async function setWaitBefore(u: Utsendelse, flowId: number, emailNodeId: 
   const waits = await prisma.flowNode.findMany({ where: { flowId, type: 'wait', id: { in: incoming.map((e) => e.fromNodeId) } } });
   if (incoming.length !== 1 || waits.length !== 1) throw new UtsendelseError('Denne e-posten har ingen ventetid å endre her.', 400);
   const wait = waits[0];
-  await prisma.flowNode.update({
-    where: { id: wait.id },
-    data: { config: JSON.stringify({ ...parseNodeConfig(wait.config), days, hours: 0 }) },
-  });
+  const config = parseNodeConfig(wait.config);
+  const shiftMs = waitShiftMs(config, days);
+  const saveConfig = prisma.flowNode.update({ where: { id: wait.id }, data: { config: JSON.stringify({ ...config, days, hours: 0 }) } });
+  if (shiftMs === 0) {
+    await saveConfig;
+    return { moved: 0 };
+  }
+  // Tidspunktene bindes fra JS (kolonnene er uten tidssone). Venter noen på godkjenning av et KI-utkast,
+  // røres de ikke: godkjenningen vekker dem på nøyaktig det tidspunktet de står parkert til.
+  const now = new Date();
+  const notBefore = new Date(now.getTime() + LEASE_MINUTES * 60_000);
+  const [, moved] = await prisma.$transaction([
+    saveConfig,
+    prisma.$executeRaw`
+      UPDATE flow_enrollments fe
+      SET next_run_at = GREATEST(${now}::timestamp, fe.next_run_at + ${shiftMs} * INTERVAL '1 millisecond'), updated_at = ${now}::timestamp
+      WHERE fe.flow_id = ${flowId} AND fe.status = 'active' AND fe.current_node_id = ${emailNodeId}
+        AND fe.next_run_at > ${notBefore}::timestamp
+        AND NOT EXISTS (
+          SELECT 1 FROM ai_suggestions s
+          WHERE s.status = 'pending' AND s.dedupe_key = 'review:' || fe.id || ':' || ${emailNodeId}
+        )`,
+  ]);
+  return { moved: Number(moved) };
 }
 
 /** Legger til en e-post sist, før noen er sendt til. Bare for rette flyter (én slutt, ingen forgreninger). */

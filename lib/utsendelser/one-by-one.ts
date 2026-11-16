@@ -11,7 +11,10 @@ import { UtsendelseError } from './actions';
 import type { Utsendelse } from './config';
 import { emailSteps, stepTimingLabel } from './steps';
 
-/** ikke = ikke sendt ennå, sendt = har fått e-post 1, ut = tatt ut, kan-ikke = meldt av eller mangler adresse. */
+/**
+ * ikke = ikke startet, sendt = startet (se sentAt for om e-post 1 faktisk er sendt), ut = tatt ut,
+ * kan-ikke = meldt av eller mangler adresse.
+ */
 export type RecipientStatus = 'ikke' | 'sendt' | 'ut' | 'kan-ikke';
 
 export interface RecipientRow {
@@ -20,6 +23,10 @@ export interface RecipientRow {
   email: string | null;
   org: string | null;
   status: RecipientStatus;
+  /** Når e-post 1 gikk ut (ISO). null = venter på tur, stoppet før e-post 1, eller ikke startet. */
+  sentAt: string | null;
+  /** Startet, men løpet er avsluttet uten at e-post 1 gikk ut (f.eks. mangler samtykke). */
+  stoppedBeforeFirst: boolean;
   edited: boolean;
   movedIn: boolean;
 }
@@ -141,7 +148,7 @@ export async function loadRecipientList(utsendelse: Utsendelse, gruppeId: string
       where: { id: { in: allIds } },
       select: { id: true, name: true, email: true, organization: { select: { name: true } } },
     }),
-    prisma.flowEnrollment.findMany({ where: { flowId: group.flowId, contactId: { in: allIds } }, select: { contactId: true } }),
+    prisma.flowEnrollment.findMany({ where: { flowId: group.flowId, contactId: { in: allIds } }, select: { id: true, contactId: true, status: true } }),
     prisma.flowMessageOverride.findMany({
       where: { contactId: { in: allIds }, node: { flowId: group.flowId } },
       select: { contactId: true },
@@ -149,6 +156,21 @@ export async function loadRecipientList(utsendelse: Utsendelse, gruppeId: string
   ]);
   const byId = new Map(contacts.map((c) => [c.id, c]));
   const enrolledIds = new Set(enrolled.map((e) => e.contactId));
+  const firstSends = enrolled.length
+    ? await prisma.messageSend.groupBy({
+        by: ['enrollmentId'],
+        where: { enrollmentId: { in: enrolled.map((e) => e.id) }, status: 'sent' },
+        _min: { sentAt: true },
+      })
+    : [];
+  const firstSentByEnrollment = new Map(firstSends.map((r) => [r.enrollmentId, r._min.sentAt]));
+  const sentAtByContact = new Map<number, string>();
+  const activeContacts = new Set<number>();
+  for (const e of enrolled) {
+    const at = firstSentByEnrollment.get(e.id);
+    if (at) sentAtByContact.set(e.contactId, at.toISOString());
+    if (e.status === 'active') activeContacts.add(e.contactId);
+  }
   const editedIds = new Set(edited.map((e) => e.contactId));
   const excludedIds = new Set(audience.excluded);
 
@@ -164,6 +186,8 @@ export async function loadRecipientList(utsendelse: Utsendelse, gruppeId: string
           : 'kan-ikke';
     return [{
       id, name: c.name, email: c.email, org: c.organization?.name ?? null, status,
+      sentAt: sentAtByContact.get(id) ?? null,
+      stoppedBeforeFirst: enrolledIds.has(id) && !sentAtByContact.has(id) && !activeContacts.has(id),
       edited: editedIds.has(id), movedIn: audience.movedIn.has(id),
     }];
   });

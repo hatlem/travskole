@@ -8,3 +8,18 @@ export const STATUS_BADGE: Record<UtsendelseStatus, { label: string; className: 
 };
 
 export const formatCount = (n: number) => n.toLocaleString('nb-NO');
+
+const OSLO = 'Europe/Oslo';
+const dayOf = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', timeZone: OSLO });
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString('nb-NO', { hour: '2-digit', minute: '2-digit', timeZone: OSLO });
+
+/** «16. november kl. 14:41» */
+export const sentAt = (iso: string) => `${dayOf(iso)} kl. ${timeOf(iso)}`;
+
+/** «16. november kl. 14:41–18:30», eller to datoer når det gikk over flere dager. */
+export function sentRange(first: string | null, last: string | null): string {
+  if (!first || !last) return first ? sentAt(first) : last ? sentAt(last) : '';
+  if (first === last) return sentAt(first);
+  if (dayOf(first) === dayOf(last)) return `${dayOf(first)} kl. ${timeOf(first)}–${timeOf(last)}`;
+  return `${sentAt(first)} – ${sentAt(last)}`;
+}
