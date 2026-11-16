@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Button } from '@/components/admin/Button';
 import { PencilIcon } from '@/components/admin/InlineText';
 import { SendWindowFields } from '@/components/admin/SendWindowFields';
@@ -39,6 +39,19 @@ export function SettingsCard(props: Props) {
   const { run, busy } = useUtsendelseAction(props.utsendelseId);
   const [editing, setEditing] = useState<Field | null>(null);
   const [window, setWindow] = useState<SendWindowDraft>(props.sendWindowDraft);
+  const selectRef = useRef<HTMLSelectElement>(null);
+
+  // Åpne lista med en gang (ett klikk, ikke to), så piltaster blar i lista i stedet for å lagre hvert valg.
+  useEffect(() => {
+    if (editing !== 'sender' && editing !== 'pace') return;
+    const select = selectRef.current;
+    select?.focus();
+    try {
+      select?.showPicker?.();
+    } catch {
+      // Nettlesere uten showPicker for select: lista står i fokus og åpnes med klikk.
+    }
+  }, [editing]);
 
   function edit(field: Field) {
     if (field === 'window') setWindow(props.sendWindowDraft);
@@ -72,8 +85,8 @@ export function SettingsCard(props: Props) {
           <dd className="mt-0.5 text-gray-900">
             {editing === 'sender' ? (
               <select
+                ref={selectRef}
                 aria-label="Avsender (gjelder alle e-postene)"
-                autoFocus
                 className={selectCls}
                 disabled={busy}
                 value={props.senderMixed ? '' : (props.senderIdentityId ?? '')}
@@ -112,8 +125,8 @@ export function SettingsCard(props: Props) {
             {editing === 'pace' ? (
               <>
                 <select
+                  ref={selectRef}
                   aria-label="Fart (gjelder alle utsendelser)"
-                  autoFocus
                   className={selectCls}
                   disabled={busy}
                   value={props.perHour}

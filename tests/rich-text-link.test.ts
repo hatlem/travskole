@@ -47,3 +47,11 @@ describe('linkOpenHref', () => {
     }
   });
 });
+
+describe('skråstrek-triks', () => {
+  it('godtar ikke /\\vert som intern sti (nettleseren gjør den til //vert)', () => {
+    expect(linkOpenHref('/\\evil.no')).toBeNull();
+    const parsed = parseLinkInput('/\\evil.no');
+    expect(parsed.ok && parsed.href).not.toBe('/\\evil.no');
+  });
+});

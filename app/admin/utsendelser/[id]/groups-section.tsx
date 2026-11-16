@@ -1,10 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { Button, ButtonLink } from '@/components/admin/Button';
 import { ConfirmModal } from '@/components/admin/ConfirmModal';
-import { InlineText } from '@/components/admin/InlineText';
+import { InlineText, type InlineTextHandle } from '@/components/admin/InlineText';
 import { RowMenu } from '@/components/admin/crm/RowMenu';
 import type { GroupView } from '@/lib/utsendelser/overview';
 import { formatCount } from '../status';
@@ -34,7 +34,12 @@ const labelCls = 'mb-1 block text-xs font-medium text-gray-600';
 export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: Props) {
   const { run, busy } = useUtsendelseAction(utsendelseId);
   const [confirmRemove, setConfirmRemove] = useState<SerializedGroup | null>(null);
-  const [editing, setEditing] = useState<{ id: string; field: 'navn' | 'beskrivelse' } | null>(null);
+  // Åpnes fra ⋯-menyen; feltene står alltid på siden, så lagret verdi og fokus beholdes.
+  const handles = useRef(new Map<string, InlineTextHandle>());
+  const setHandle = (key: string, handle: InlineTextHandle | null) => {
+    if (handle) handles.current.set(key, handle);
+    else handles.current.delete(key);
+  };
   const [adding, setAdding] = useState(false);
   const [newGroup, setNewGroup] = useState({ navn: '', kilde: '', flowId: flows[0]?.flowId ?? 0 });
 
@@ -73,44 +78,40 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
           {groups.map((g) => {
             const people = g.sent + g.remaining;
             const href = `/admin/utsendelser/${utsendelseId}/${g.id}`;
-            const editingName = editing?.id === g.id && editing.field === 'navn';
-            const editingDesc = editing?.id === g.id && editing.field === 'beskrivelse';
             const saveGroup = async (changes: { navn?: string; beskrivelse?: string }, message: string) =>
               !!(await run('PATCH', '/grupper', { gruppeId: g.id, ...changes }, message));
             return (
               <li key={g.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0">
                   <p className="font-medium text-gray-900">
-                    {editingName ? (
-                      <InlineText
-                        label={`Navn på gruppen ${g.navn}`}
-                        value={g.navn}
-                        initiallyEditing
-                        onClose={() => setEditing(null)}
-                        onSave={(navn) => saveGroup({ navn }, 'Navnet er endret.')}
-                      />
-                    ) : g.missingSegment ? (
-                      g.navn
-                    ) : (
-                      <Link href={`${href}?modus=en`} title="Se hvem som er med" className="underline-offset-2 hover:text-bjerke-blue hover:underline">
-                        {g.navn}
-                      </Link>
-                    )}
+                    <InlineText
+                      ref={(h) => setHandle(`navn:${g.id}`, h)}
+                      label="Navn på gruppen"
+                      value={g.navn}
+                      onSave={(navn) => saveGroup({ navn }, 'Navnet er endret.')}
+                      renderView={(navn) =>
+                        g.missingSegment ? (
+                          navn
+                        ) : (
+                          <Link href={`${href}?modus=en`} title="Se hvem som er med" className="underline-offset-2 hover:text-bjerke-blue hover:underline">
+                            {navn}
+                          </Link>
+                        )
+                      }
+                    />
                   </p>
-                  {(g.beskrivelse || editingDesc) && (
-                    <p className="mt-0.5 text-sm text-gray-700">
-                      <InlineText
-                        label={`Beskrivelse av gruppen ${g.navn}`}
-                        value={g.beskrivelse ?? ''}
-                        placeholder="Kort beskrivelse"
-                        maxLength={300}
-                        required={false}
-                        initiallyEditing={editingDesc}
-                        onClose={() => setEditing(null)}
-                        onSave={(beskrivelse) => saveGroup({ beskrivelse }, 'Beskrivelsen er lagret.')}
-                      />
-                    </p>
-                  )}
+                  <p className="mt-0.5 text-sm text-gray-700 empty:hidden">
+                    <InlineText
+                      ref={(h) => setHandle(`beskrivelse:${g.id}`, h)}
+                      label="Beskrivelse av gruppen"
+                      value={g.beskrivelse ?? ''}
+                      placeholder="Kort beskrivelse"
+                      maxLength={300}
+                      required={false}
+                      hideWhenEmpty
+                      onSave={(beskrivelse) => saveGroup({ beskrivelse }, 'Beskrivelsen er lagret.')}
+                    />
+                  </p>
                   <p className="mt-0.5 text-sm text-gray-600">
                     {formatCount(people)} {people === 1 ? 'person' : 'personer'}
                     {flows.length > 1 && g.flowNavn && <> · får e-postene «{g.flowNavn}»</>}
@@ -136,14 +137,14 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
                     {g.missingSegment ? (
                       <Button variant="secondary" disabled>Åpne</Button>
                     ) : (
-                      <ButtonLink variant="secondary" href={g.remaining > 0 ? href : `${href}?modus=en`}>Åpne</ButtonLink>
+                      <ButtonLink variant={g.remaining > 0 && g.sent === 0 ? 'primary' : 'secondary'} href={g.remaining > 0 ? href : `${href}?modus=en`}>Åpne</ButtonLink>
                     )}
                     <RowMenu
                       compact
                       label={`Flere valg for ${g.navn}`}
                       items={[
-                        { label: 'Endre navn', onSelect: () => setEditing({ id: g.id, field: 'navn' }) },
-                        { label: g.beskrivelse ? 'Endre beskrivelse' : 'Legg til beskrivelse', onSelect: () => setEditing({ id: g.id, field: 'beskrivelse' }) },
+                        { label: 'Endre navn', onSelect: () => handles.current.get(`navn:${g.id}`)?.edit() },
+                        { label: g.beskrivelse ? 'Endre beskrivelse' : 'Legg til beskrivelse', onSelect: () => handles.current.get(`beskrivelse:${g.id}`)?.edit() },
                         { label: 'Fjern gruppen', danger: true, onSelect: () => setConfirmRemove(g) },
                       ]}
                     />
