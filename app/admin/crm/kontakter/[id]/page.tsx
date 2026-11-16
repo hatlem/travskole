@@ -20,6 +20,7 @@ import { AddToFlow } from '@/components/admin/crm/AddToFlow';
 import { enrollmentStatusLabel } from '@/lib/flows/enrollment-status';
 import { ContactLists, type ContactListMembershipRow } from '@/components/admin/crm/ContactLists';
 import { ContactUtsendelser } from '@/components/admin/crm/ContactUtsendelser';
+import { ReplyList } from '@/components/admin/replies/ReplyList';
 import { ContactSegments } from '@/components/admin/crm/ContactSegments';
 import { ContactEditForm } from '@/components/admin/crm/ContactEditForm';
 import { OrganizationLinker } from '@/components/admin/crm/OrganizationLinker';
@@ -606,6 +607,15 @@ export default function KontaktDetaljPage({ params }: { params: Promise<{ id: st
                 onEnrolled={load}
               />
             </div>
+          </section>
+
+          <section aria-labelledby="kontakt-svar">
+            <h2 id="kontakt-svar" className="font-semibold mb-3">E-postsvar</h2>
+            <ReplyList
+              query={`kontakt=${contactId}`}
+              showContact={false}
+              empty={<p className="text-sm text-gray-500">Har ikke svart på noen e-post fra oss.</p>}
+            />
           </section>
 
           <section>

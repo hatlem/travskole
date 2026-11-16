@@ -3,9 +3,11 @@
 // Tynt IO-lag — DB-feil kastes videre til kallende rute/poller.
 
 import { prisma } from '@/lib/prisma';
+import logger from '@/lib/logger';
 import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { createReplyTask } from '@/lib/crm/reply-task';
+import { storeInboundReply } from '@/lib/replies/store';
 import { parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 import { flowBranchesOnReply, latestTrackedSendQuery, replyConditionPending } from '@/lib/flows/reply-branch';
 
@@ -62,10 +64,18 @@ export async function recordClick(token: string, idx: number): Promise<string | 
   return link.url;
 }
 
-export async function recordReply(
-  matchedMessageId: string,
-  inbound: { subject?: string | null } = {},
-): Promise<void> {
+/** Selve svaret, når det er lest fra postboksen (lagres så det kan besvares i CRM). */
+export interface InboundDetails {
+  subject?: string | null;
+  fromEmail?: string | null;
+  fromName?: string | null;
+  body?: string | null;
+  internetMessageId?: string | null;
+  references?: string | null;
+  receivedAt?: Date | null;
+}
+
+export async function recordReply(matchedMessageId: string, inbound: InboundDetails = {}): Promise<void> {
   const send = await prisma.messageSend.findFirst({
     where: { messageId: matchedMessageId },
     orderBy: { sentAt: 'desc' },
@@ -92,12 +102,31 @@ export async function recordReply(
   // samme tråd gir ikke duplikate oppgaver. Oppgaven droppes bare når flyten
   // garantert leser akkurat dette svaret i en «svarte»-betingelse; i tvil
   // lages oppgaven heller enn at svaret blir liggende.
+  let taskId: number | null = null;
   if (firstReply > 0) {
     const flowWillReadReply =
       enrollment !== null && graph !== null && isActive && branchesOnReply &&
       (await isLatestTrackedSend(enrollment.id, send.id)) &&
       replyConditionPending(graph.nodes, graph.edges, send.nodeId, enrollment.currentNodeId);
-    if (!flowWillReadReply) await createReplyTask(send, inbound.subject);
+    if (!flowWillReadReply) taskId = await createReplyTask(send, inbound.subject);
+  }
+
+  if (inbound.fromEmail) {
+    await storeInboundReply({
+      contactId: send.contactId,
+      repliedToSendId: send.id,
+      fromEmail: inbound.fromEmail,
+      fromName: inbound.fromName ?? null,
+      subject: inbound.subject ?? send.subject,
+      body: inbound.body ?? '',
+      internetMessageId: inbound.internetMessageId ?? null,
+      references: inbound.references ?? null,
+      receivedAt: inbound.receivedAt ?? new Date(),
+      taskId,
+    }).catch((error) => {
+      // Svaret er registrert uansett; teksten kan leses i postboksen.
+      logger.error('Kunne ikke lagre svaret', { messageSendId: send.id, error: error instanceof Error ? error.message : String(error) });
+    });
   }
 
   await emitEvent({

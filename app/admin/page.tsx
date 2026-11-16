@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/admin/PageHeader';
 import { ButtonLink, buttonClass } from '@/components/admin/Button';
 import { Badge } from '@/components/admin/StatusBadge';
 import { utsendelseAttentionItems } from '@/lib/utsendelser/attention';
+import { countOpenReplies } from '@/lib/replies/list';
 
 const REG_STATUS: Record<string, { label: string; className: string }> = {
   pending: { label: 'Venter', className: 'bg-amber-100 text-amber-900' },
@@ -54,6 +55,7 @@ export default async function AdminDashboard() {
     totalUsers,
     newUsersThisMonth,
     utsendelseItems,
+    openReplies,
   ] = await Promise.all([
     prisma.course.count(),
     prisma.course.count({ where: { status: 'open' } }),
@@ -90,13 +92,23 @@ export default async function AdminDashboard() {
     prisma.user.count(),
     prisma.user.count({ where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) } } }),
     utsendelseAttentionItems(),
+    countOpenReplies().catch(() => 0),
   ]);
 
   const almostFullCourses = openCoursesWithCount.filter(
     (c) => c.maxParticipants && c._count.registrations / c.maxParticipants > 0.8,
   );
 
-  const attention = [...utsendelseItems, ...buildAttentionItems({
+  const replyItems = openReplies > 0
+    ? [{
+        id: 'svar',
+        title: openReplies === 1 ? '1 svar venter på deg' : `${openReplies} svar venter på deg`,
+        href: '/admin/svar',
+        cta: 'Svar nå',
+        tone: 'urgent' as const,
+      }]
+    : [];
+  const attention = [...replyItems, ...utsendelseItems, ...buildAttentionItems({
     newBookings,
     pendingRegistrations,
     unfinishedPayments: unfinishedRegistrationPayments + unfinishedBookingPayments,

@@ -16,6 +16,7 @@ import { SettingsCard, type SenderOption } from './settings-card';
 import { ProviderPauseNote } from './provider-pause-note';
 import { useUtsendelseAction } from './use-action';
 import { DirectReply } from './direct-reply';
+import { ReplyList } from '@/components/admin/replies/ReplyList';
 import type { TestRecipient } from '@/lib/utsendelser/staff';
 
 type SerializedReply = Omit<ReplyView, 'repliedAt'> & { repliedAt: string };
@@ -211,33 +212,37 @@ function FlowEmails({ flow, utsendelseId, myEmail, testOthers }: { flow: FlowVie
 }
 
 function Replies({ utsendelseId, replies }: { utsendelseId: string; replies: SerializedReply[] }) {
+  // Svar fra før svarene ble lagret (tekst finnes bare i postboksen).
+  const legacy = replies.length > 0 ? (
+    <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+      {replies.map((r) => (
+        <li key={`${r.contactId}-${r.repliedAt}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+          <div className="min-w-0">
+            <p className="font-medium text-gray-900">
+              {r.name}
+              {r.organization ? <span className="font-normal text-gray-600"> · {r.organization}</span> : null}
+            </p>
+            <p className="text-gray-600">
+              {r.email}
+              {r.stepNumber ? ` · svarte på e-post ${r.stepNumber}` : ''} · {dateTime(r.repliedAt)}
+            </p>
+          </div>
+          <Link href={`/admin/crm/kontakter/${r.contactId}`} className="shrink-0 font-medium text-bjerke-blue hover:underline">
+            Åpne kontakten →
+          </Link>
+        </li>
+      ))}
+    </ul>
+  ) : (
+    <p className="rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">Ingen har svart ennå.</p>
+  );
   return (
     <section aria-labelledby="replies-title">
       <h2 id="replies-title" className="text-lg font-semibold text-gray-900">Svar</h2>
-      <p className="mt-1 mb-4 text-sm text-gray-600">Svarene kommer til registrering@bjerke.no. Her ser du hvem som har svart.</p>
-      {replies.length === 0 ? (
-        <p className="rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">Ingen har svart ennå.</p>
-      ) : (
-        <ul className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
-          {replies.map((r) => (
-            <li key={`${r.contactId}-${r.repliedAt}`} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
-              <div className="min-w-0">
-                <p className="font-medium text-gray-900">
-                  {r.name}
-                  {r.organization ? <span className="font-normal text-gray-600"> · {r.organization}</span> : null}
-                </p>
-                <p className="text-gray-600">
-                  {r.email}
-                  {r.stepNumber ? ` · svarte på e-post ${r.stepNumber}` : ''} · {dateTime(r.repliedAt)}
-                </p>
-              </div>
-              <Link href={`/admin/crm/kontakter/${r.contactId}`} className="shrink-0 font-medium text-bjerke-blue hover:underline">
-                Åpne kontakten →
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <p className="mt-1 mb-4 text-sm text-gray-600">
+        Svarene kommer til registrering@bjerke.no og vises her. Svar direkte herfra, eller merk dem som «trenger ikke svar». Alle svar finner du også under «Svar» i menyen.
+      </p>
+      <ReplyList query={`utsendelse=${encodeURIComponent(utsendelseId)}`} showUtsendelse={false} empty={legacy} />
       <DirectReply utsendelseId={utsendelseId} />
     </section>
   );

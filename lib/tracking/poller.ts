@@ -41,6 +41,7 @@ import {
   type InboundMessageLike,
 } from '@/lib/tracking/reply-match';
 import { recordReply, recordBounce } from '@/lib/tracking/apply';
+import { backfillReply, markAnsweredFromMailbox } from '@/lib/replies/store';
 
 /** Env GRAPH_MAILBOXES (hvis satt) overstyrer admin-innstillingen graph_mailboxes. */
 export async function graphMailboxes(): Promise<string[]> {
@@ -98,9 +99,47 @@ interface GraphMessage {
   id?: string;
   receivedDateTime?: string;
   subject?: string;
-  from?: { emailAddress?: { address?: string } };
+  from?: { emailAddress?: { address?: string; name?: string } };
   internetMessageHeaders?: { name: string; value: string }[];
+  internetMessageId?: string;
   body?: { contentType?: string; content?: string };
+  /** Bare det nye i meldingen (uten sitert historikk). */
+  uniqueBody?: { contentType?: string; content?: string };
+}
+
+/** Detaljene om et svar som lagres, så det kan leses og besvares i CRM. */
+function replyDetails(message: GraphMessage, msg: InboundMessageLike) {
+  return {
+    subject: msg.subject,
+    fromEmail: message.from?.emailAddress?.address ?? null,
+    fromName: message.from?.emailAddress?.name ?? null,
+    body: message.uniqueBody?.content?.trim() ? message.uniqueBody.content : (message.body?.content ?? ''),
+    internetMessageId: message.internetMessageId ?? null,
+    references: findHeader(message, 'References'),
+    receivedAt: message.receivedDateTime ? new Date(message.receivedDateTime) : new Date(),
+  };
+}
+
+/** Sendt fra postboksen selv (svar skrevet i Outlook), ikke mottatt. */
+const isFromMailbox = (message: GraphMessage, mailbox: string) =>
+  (message.from?.emailAddress?.address ?? '').trim().toLowerCase() === mailbox.trim().toLowerCase();
+
+const MESSAGE_SELECT = encodeURIComponent('id,internetMessageHeaders,internetMessageId,receivedDateTime,from,subject,body,uniqueBody');
+/** Uten uniqueBody: brukes hvis Graph avviser den på en liste (da ryddes body i stedet). */
+const BASIC_SELECT = encodeURIComponent('id,internetMessageHeaders,internetMessageId,receivedDateTime,from,subject,body');
+/** Ren tekst i body/uniqueBody (lettere å lagre og vise enn HTML). */
+const TEXT_BODY = { Prefer: 'outlook.body-content-type="text"' };
+
+/**
+ * Henter meldinger. Avviser Graph spørringen (400), prøves den en gang til uten uniqueBody,
+ * så svar- og bounce-sporingen aldri stopper på grunn av den.
+ */
+async function fetchMessages(buildUrl: (select: string) => string, token: string): Promise<Response> {
+  const headers = { Authorization: `Bearer ${token}`, ...TEXT_BODY };
+  const res = await fetch(buildUrl(MESSAGE_SELECT), { headers });
+  if (res.status !== 400) return res;
+  logger.warn('Graph avviste uniqueBody; henter uten');
+  return fetch(buildUrl(BASIC_SELECT), { headers });
 }
 
 interface GraphAttachment {
@@ -228,10 +267,10 @@ async function pollOneMailbox(
   const cursor = rawCursor || new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
   const filter = encodeURIComponent(`receivedDateTime gt ${cursor}`);
-  const select = encodeURIComponent('id,internetMessageHeaders,receivedDateTime,from,subject,body');
-  const url = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages?$filter=${filter}&$select=${select}&$orderby=receivedDateTime asc&$top=50`;
-
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetchMessages(
+    (select) => `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages?$filter=${filter}&$select=${select}&$orderby=receivedDateTime asc&$top=50`,
+    token,
+  );
   if (!res.ok) {
     logger.error('Graph meldingshenting feilet', { mailbox, status: res.status });
     return { replies: 0, bounces: 0, scanned: 0 };
@@ -251,9 +290,15 @@ async function pollOneMailbox(
     }
     try {
       const msg = await toInboundMessageLike(message, mailbox, token);
+      if (isFromMailbox(message, mailbox)) {
+        // Svar skrevet i Outlook fra fellespostboksen: det de svarer på, er besvart.
+        const sentAt = message.receivedDateTime ? new Date(message.receivedDateTime) : new Date();
+        await markAnsweredFromMailbox([...(msg.inReplyTo ? [msg.inReplyTo] : []), ...msg.references], mailbox, sentAt);
+        continue;
+      }
       const classification = classifyInboundMessage(msg, knownMessageIds);
       if (classification.kind === 'reply') {
-        await recordReply(classification.matchedMessageId, { subject: msg.subject });
+        await recordReply(classification.matchedMessageId, replyDetails(message, msg));
         replies++;
       } else if (classification.kind === 'bounce') {
         await recordBounce(null, classification.failedRecipient ?? null, classification.hard);
@@ -278,6 +323,45 @@ async function pollOneMailbox(
   return { replies, bounces, scanned };
 }
 
+const BACKFILL_KEY = 'inbound_replies_backfilled';
+const BACKFILL_DAYS = 7;
+
+/**
+ * Én gang: lagrer teksten i svar som kom før svarene ble lagret (de siste dagene). Bare lagring —
+ * oppgaver, stopp og hendelser ble gjort da svaret kom.
+ */
+async function backfillMailbox(mailbox: string, token: string, knownMessageIds: Set<string>): Promise<number> {
+  const since = new Date(Date.now() - BACKFILL_DAYS * 24 * 60 * 60 * 1000).toISOString();
+  const filter = encodeURIComponent(`receivedDateTime gt ${since}`);
+  const first = (select: string) =>
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages?$filter=${filter}&$select=${select}&$orderby=receivedDateTime asc&$top=50`;
+  let url: string | null = null;
+  let stored = 0;
+  for (let page = 0; page < 20; page++) {
+    const next: string | null = url;
+    const res: Response = next
+      ? await fetch(next, { headers: { Authorization: `Bearer ${token}`, ...TEXT_BODY } })
+      : await fetchMessages(first, token);
+    if (!res.ok) throw new Error(`Graph ${res.status}`);
+    const json = (await res.json()) as { value?: GraphMessage[]; '@odata.nextLink'?: string };
+    for (const message of json.value ?? []) {
+      const msg = await toInboundMessageLike(message, mailbox, token);
+      if (isFromMailbox(message, mailbox)) {
+        // Eldste først: svar som alt er besvart i Outlook, merkes som besvart.
+        const sentAt = message.receivedDateTime ? new Date(message.receivedDateTime) : new Date();
+        await markAnsweredFromMailbox([...(msg.inReplyTo ? [msg.inReplyTo] : []), ...msg.references], mailbox, sentAt);
+        continue;
+      }
+      const classification = classifyInboundMessage(msg, knownMessageIds);
+      if (classification.kind !== 'reply') continue;
+      if (await backfillReply(classification.matchedMessageId, replyDetails(message, msg))) stored++;
+    }
+    url = json['@odata.nextLink'] ?? null;
+    if (!url) break;
+  }
+  return stored;
+}
+
 export async function pollMailboxes(): Promise<{ replies: number; bounces: number; scanned: number }> {
   const zero = { replies: 0, bounces: 0, scanned: 0 };
   if (!hasGraphCredentials()) return zero;
@@ -297,6 +381,17 @@ export async function pollMailboxes(): Promise<{ replies: number; bounces: numbe
     for (const send of recentSends) {
       for (const id of extractMessageIds(send.messageId)) {
         knownMessageIds.add(id);
+      }
+    }
+
+    if ((await getSetting(BACKFILL_KEY)) !== 'true') {
+      try {
+        let stored = 0;
+        for (const mailbox of mailboxes) stored += await backfillMailbox(mailbox, token, knownMessageIds);
+        await prisma.setting.upsert({ where: { key: BACKFILL_KEY }, update: { value: 'true' }, create: { key: BACKFILL_KEY, value: 'true' } });
+        logger.info('Tidligere svar lagret', { stored });
+      } catch (error) {
+        logger.error('Kunne ikke lagre tidligere svar (prøver igjen)', { error: error instanceof Error ? error.message : String(error) });
       }
     }
 
