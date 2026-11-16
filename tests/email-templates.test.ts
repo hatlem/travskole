@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { replaceMergeTags, replaceMergeTagsInSubject, wrapEmailHtml, mergeTagsForAnchor, MERGE_TAGS, type MergeTagData } from '@/lib/email-templates';
+import { replaceMergeTags, replaceMergeTagsInSubject, wrapEmailHtml, wrapPlainEmailHtml, mergeTagsForAnchor, MERGE_TAGS, type MergeTagData } from '@/lib/email-templates';
 
 const data: MergeTagData = {
   forelder_navn: 'Kari Nordmann',
@@ -37,6 +37,17 @@ describe('wrapEmailHtml', () => {
     expect(html).toContain('<p>Innhold</p>');
     expect(html).toContain('Bjerke Ponniskole');
     expect(html).toContain('<!DOCTYPE html>');
+  });
+});
+
+describe('wrapPlainEmailHtml', () => {
+  it('ser ut som en vanlig e-post: hvit, uten grå bakgrunn, boks eller hilsen', () => {
+    const html = wrapPlainEmailHtml('<p>Hei</p>');
+    expect(html).toContain('<p>Hei</p>');
+    expect(html).toContain('background:#ffffff');
+    expect(html).not.toContain('#f4f4f4');
+    expect(html).not.toContain('margin:0 auto');
+    expect(html).not.toContain('Med vennlig hilsen');
   });
 });
 
