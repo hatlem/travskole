@@ -10,6 +10,12 @@ import type { GroupView } from '@/lib/utsendelser/overview';
 import { formatCount } from '../status';
 import { useUtsendelseAction } from './use-action';
 
+/** Gruppen over i lista (eller den under, for den første): det naturlige valget for «start etter». */
+function previousGroupId(groups: { id: string }[], id: string): string {
+  const index = groups.findIndex((x) => x.id === id);
+  return (index > 0 ? groups[index - 1] : groups[index + 1])?.id ?? '';
+}
+
 export type SerializedGroup = Omit<GroupView, 'firstSentAt' | 'lastSentAt'> & { firstSentAt: string | null; lastSentAt: string | null };
 
 export interface SourceOption {
@@ -41,6 +47,13 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
     else handles.current.delete(key);
   };
   const [adding, setAdding] = useState(false);
+  const [chainFor, setChainFor] = useState<{ gruppeId: string; startEtter: string } | null>(null);
+  const nameOf = (id: string) => groups.find((x) => x.id === id)?.navn ?? 'en annen gruppe';
+
+  async function saveStartAfter(gruppeId: string, startEtter: string | null) {
+    const message = startEtter ? `Starter av seg selv når «${nameOf(startEtter)}» har fått e-post 1.` : 'Starter ikke av seg selv lenger.';
+    if (await run('PATCH', '/grupper', { gruppeId, startEtter }, message)) setChainFor(null);
+  }
   const [newGroup, setNewGroup] = useState({ navn: '', kilde: '', flowId: flows[0]?.flowId ?? 0 });
 
   async function addGroup() {
@@ -123,6 +136,29 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
                     </p>
                   )}
                   {g.missingSegment && <p className="mt-0.5 text-sm text-red-700">Lista eller segmentet finnes ikke lenger.</p>}
+                  {g.startEtter && g.sent === 0 && chainFor?.gruppeId !== g.id && (
+                    <p className="mt-1 text-sm text-blue-900">
+                      Starter av seg selv når «{nameOf(g.startEtter)}» har fått e-post 1.{' '}
+                      <button type="button" disabled={busy} onClick={() => void saveStartAfter(g.id, null)} className="text-bjerke-blue underline hover:no-underline">
+                        Ikke start av seg selv
+                      </button>
+                    </p>
+                  )}
+                  {chainFor?.gruppeId === g.id && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2" role="group" aria-label={`Når ${g.navn} skal starte`}>
+                      <label htmlFor={`start-etter-${g.id}`} className="text-sm text-gray-700">Start når denne har fått e-post 1:</label>
+                      <select
+                        id={`start-etter-${g.id}`}
+                        className="rounded-md border border-gray-300 px-2 py-1 text-sm"
+                        value={chainFor.startEtter}
+                        onChange={(e) => setChainFor({ gruppeId: g.id, startEtter: e.target.value })}
+                      >
+                        {groups.filter((x) => x.id !== g.id).map((x) => <option key={x.id} value={x.id}>{x.navn}</option>)}
+                      </select>
+                      <Button variant="primary" disabled={busy || !chainFor.startEtter} onClick={() => void saveStartAfter(g.id, chainFor.startEtter)}>Lagre</Button>
+                      <Button variant="secondary" disabled={busy} onClick={() => setChainFor(null)}>Avbryt</Button>
+                    </div>
+                  )}
                 </div>
                 <div className="shrink-0 sm:text-right">
                   {g.waiting > 0 ? (
@@ -156,6 +192,12 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
                       items={[
                         { label: 'Endre navn', onSelect: () => handles.current.get(`navn:${g.id}`)?.edit() },
                         { label: g.beskrivelse ? 'Endre beskrivelse' : 'Legg til beskrivelse', onSelect: () => handles.current.get(`beskrivelse:${g.id}`)?.edit() },
+                        ...(g.sent === 0 && groups.length > 1
+                          ? [{
+                              label: g.startEtter ? 'Endre når den starter' : 'Start etter en annen gruppe',
+                              onSelect: () => setChainFor({ gruppeId: g.id, startEtter: g.startEtter ?? previousGroupId(groups, g.id) }),
+                            }]
+                          : []),
                         { label: 'Fjern gruppen', danger: true, onSelect: () => setConfirmRemove(g) },
                       ]}
                     />

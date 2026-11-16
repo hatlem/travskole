@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { z } from 'zod';
-import { addGroup, removeGroup, updateGroup } from '@/lib/utsendelser/edit';
+import { addGroup, removeGroup, setStartAfter, updateGroup } from '@/lib/utsendelser/edit';
 import { invalid, withUtsendelse } from '@/lib/utsendelser/route-helpers';
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -12,8 +12,14 @@ const addSchema = z.object({
   flowId: z.number().int().positive().optional(),
 });
 const updateSchema = z
-  .object({ gruppeId: z.string().min(1).max(60), navn: z.string().max(120).optional(), beskrivelse: z.string().max(300).optional() })
-  .refine((b) => b.navn !== undefined || b.beskrivelse !== undefined);
+  .object({
+    gruppeId: z.string().min(1).max(60),
+    navn: z.string().max(120).optional(),
+    beskrivelse: z.string().max(300).optional(),
+    /** Gruppe-id å starte etter, eller null for å fjerne. */
+    startEtter: z.string().min(1).max(60).nullable().optional(),
+  })
+  .refine((b) => b.navn !== undefined || b.beskrivelse !== undefined || b.startEtter !== undefined);
 const removeSchema = z.object({ gruppeId: z.string().min(1).max(60) });
 
 export async function POST(request: NextRequest, { params }: Ctx) {
@@ -30,8 +36,9 @@ export async function PATCH(request: NextRequest, { params }: Ctx) {
   return withUtsendelse(request, id, 'update_group', async ({ utsendelse, body }) => {
     const parsed = updateSchema.safeParse(body);
     if (!parsed.success) invalid();
-    const { gruppeId, ...changes } = parsed.data;
-    await updateGroup(utsendelse, gruppeId, changes);
+    const { gruppeId, startEtter, ...changes } = parsed.data;
+    const current = startEtter !== undefined ? await setStartAfter(utsendelse, gruppeId, startEtter) : utsendelse;
+    if (changes.navn !== undefined || changes.beskrivelse !== undefined) await updateGroup(current, gruppeId, changes);
   });
 }
 

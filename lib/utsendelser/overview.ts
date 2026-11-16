@@ -56,6 +56,8 @@ export interface GroupView {
   flowNavn: string;
   flowStatus: string;
   kilde: string;
+  /** Startes av seg selv når denne gruppen (id) har fått e-post 1. */
+  startEtter?: string;
   missingSegment: boolean;
   total: number;
   sent: number;
@@ -132,6 +134,7 @@ async function loadGroups(
         id: g.id, navn: g.navn, beskrivelse: g.beskrivelse, flowId: g.flowId,
         flowNavn: flowNames.get(g.flowId) ?? '', flowStatus: flowStatus.get(g.flowId) ?? 'archived',
         kilde: kilder.get(g.id) ?? '',
+        ...(g.startEtter && { startEtter: g.startEtter }),
       };
       const members = audience.get(g.id);
       if (!members?.ids) {

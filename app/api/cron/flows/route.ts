@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'crypto';
 import { drainFlowBatches } from '@/lib/flows/runner';
 import { pollMailboxes } from '@/lib/tracking/poller';
 import { runAiAnalysis } from '@/lib/ai/analyze-runner';
+import { startChainedGroups } from '@/lib/utsendelser/chain';
 import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -26,6 +27,10 @@ export async function POST(request: NextRequest) {
       return { replies: 0, bounces: 0, scanned: 0 };
     });
     const suggestions = await runAiAnalysis().catch(() => ({ created: 0 }));
+    const chained = await startChainedGroups().catch((error) => {
+      logger.error('«Start etter» feilet', { error: error instanceof Error ? error.message : String(error) });
+      return { started: [] as string[] };
+    });
 
     logger.info('Flows cron batch completed', {
       batches: result.batches,
@@ -35,10 +40,11 @@ export async function POST(request: NextRequest) {
       completed: result.completed,
       poller,
       suggestions,
+      chained,
     });
 
     return NextResponse.json(
-      { ...result, poller, suggestions },
+      { ...result, poller, suggestions, chained },
       { status: result.failed > 0 ? 500 : 200 },
     );
   } catch (error) {

@@ -28,6 +28,8 @@ export const utsendelseSchema = z
             segmentId: z.number().int().positive().optional(),
             listId: z.number().int().positive().optional(),
             flowId: z.number().int().positive(),
+            /** Startes av seg selv når denne gruppen har fått e-post 1 (ingen venter på tur lenger). */
+            startEtter: idSchema.optional(),
           })
           .refine((g) => (g.segmentId === undefined) !== (g.listId === undefined), {
             message: 'En gruppe må være enten en liste eller et segment',
@@ -44,7 +46,23 @@ export const utsendelseSchema = z
     for (const g of u.grupper) {
       if (!flowIds.has(g.flowId)) ctx.addIssue({ code: 'custom', message: `Gruppen «${g.navn}» peker på en flyt som ikke er med` });
     }
+    if (startOrderCycle(u.grupper)) ctx.addIssue({ code: 'custom', message: 'Gruppene venter på hverandre i ring' });
   });
+
+/** Sant hvis «start etter» danner en ring (eller peker på seg selv). En manglende gruppe bryter kjeden. */
+export function startOrderCycle(grupper: { id: string; startEtter?: string }[]): boolean {
+  const after = new Map(grupper.map((g) => [g.id, g.startEtter]));
+  for (const g of grupper) {
+    const seen = new Set<string>([g.id]);
+    let next = g.startEtter;
+    while (next !== undefined) {
+      if (seen.has(next)) return true;
+      seen.add(next);
+      next = after.get(next);
+    }
+  }
+  return false;
+}
 
 export type Utsendelse = z.infer<typeof utsendelseSchema>;
 export type UtsendelseGruppe = Utsendelse['grupper'][number];
