@@ -31,6 +31,12 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
   const [days, setDays] = useState(step.waitDays ?? 7);
   const [focusOn, setFocusOn] = useState<'subject' | 'body'>('body');
   const cardRef = useRef<HTMLElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+
+  // Lenkene i forhåndsvisningen skal ikke kunne åpnes eller nås med Tab (teksten skal fortsatt kunne markeres).
+  useEffect(() => {
+    previewRef.current?.querySelectorAll('a').forEach((a) => a.setAttribute('tabindex', '-1'));
+  }, [step.previewHtml, editing]);
 
   function startEditing(target: 'subject' | 'body') {
     setDraft({ subject: step.subject, bodyHtml: step.bodyHtml });
@@ -143,38 +149,32 @@ export function EmailStepCard({ utsendelseId, flowId, step, sampleContactId, myE
           <p className="text-sm text-gray-600">Emne</p>
           <button
             type="button"
-            title="Klikk for å endre emnet"
+            title="Klikk for å endre emnet og teksten"
+            aria-label={`Endre emne og tekst i e-post ${step.number}: ${step.previewSubject}`}
             onClick={() => startEditing('subject')}
             className="-mx-2 block rounded-md px-2 py-0.5 text-left font-medium text-gray-900 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
           >
             {step.previewSubject}
           </button>
+          {/* Klikk i teksten åpner redigering (emnet over er knappen for tastatur). Lenkene er døde her. */}
           <div
-            role="button"
-            tabIndex={0}
             title="Klikk for å endre teksten"
-            aria-label={`Endre teksten i e-post ${step.number}`}
-            onClick={(e) => {
-              e.preventDefault(); // lenker i forhåndsvisningen skal ikke åpnes herfra
+            onClick={() => {
+              if (window.getSelection()?.toString()) return; // markerer tekst for å kopiere
               startEditing('body');
             }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                startEditing('body');
-              }
-            }}
-            className="-mx-2 mt-2 cursor-text rounded-md px-2 py-1 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue"
+            className="-mx-2 mt-2 cursor-text rounded-md px-2 py-1 hover:bg-gray-50"
           >
             <div
-              className="prose prose-sm prose-a:text-bjerke-blue max-w-none text-gray-800"
+              ref={previewRef}
+              className="prose prose-sm prose-a:text-bjerke-blue max-w-none text-gray-800 [&_a]:pointer-events-none"
               // Innholdet er sanitert i renderFlowEmailBody (DOMPurify).
               dangerouslySetInnerHTML={{ __html: step.previewHtml }}
             />
           </div>
-          {sampleContactId !== null && (
-            <p className="mt-1 text-xs text-gray-500">Vist slik én mottaker ser den. Klikk på teksten for å endre den for alle.</p>
-          )}
+          <p className="mt-1 text-xs text-gray-500">
+            {sampleContactId !== null ? 'Vist slik én mottaker ser den. ' : ''}Klikk på emnet eller teksten for å endre den for alle.
+          </p>
           <div className="mt-4 flex flex-wrap gap-3">
             {myEmail && (
               <TestSendButton flowId={flowId} nodeId={step.nodeId} myEmail={myEmail} others={testOthers} contactId={sampleContactId} ignoreOverride />
