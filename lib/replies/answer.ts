@@ -19,6 +19,8 @@ export class ReplyError extends Error {
 const MAX_TEXT = 20_000;
 /** Plassholder mens svaret sendes; hindrer at et dobbeltklikk sender to ganger. */
 const SENDING_STATUS = 'sending';
+/** Så lenge en plassholder regnes som «sendes nå». */
+const STALE_SENDING_MS = 5 * 60_000;
 
 /** Avsender: den som sendte e-posten det ble svart på, ellers den innloggede (hvis hun er en avsender). */
 async function senderFor(repliedToSendId: number | null, by: string) {
@@ -48,29 +50,28 @@ export async function sendReply(replyId: number, text: string, by: string): Prom
   const subject = replySubject(reply.subject);
   const html = wrapPlainEmailHtml(replyBodyHtml(body, reply));
 
-  let row: { id: number };
-  try {
-    row = await prisma.messageSend.create({
-      data: {
-        contactId: reply.contactId,
-        senderIdentityId: identity.id,
-        toEmail: reply.fromEmail,
-        subject,
-        bodyHtml: html,
-        status: SENDING_STATUS,
-        dedupeKey: `crm-reply:${reply.id}`,
-      },
+  const dedupeKey = `crm-reply:${reply.id}`;
+  const reserve = () =>
+    prisma.messageSend.create({
+      data: { contactId: reply.contactId, senderIdentityId: identity.id, toEmail: reply.fromEmail, subject, bodyHtml: html, status: SENDING_STATUS, dedupeKey },
       select: { id: true },
     });
+  let row: { id: number };
+  try {
+    row = await reserve();
   } catch (error) {
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new ReplyError('Svaret er allerede sendt.', 409);
-    }
-    throw error;
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002')) throw error;
+    // En plassholder som ble liggende etter et krasj (aldri sendt), kan prøves igjen etter en stund.
+    const stale = await prisma.messageSend.deleteMany({
+      where: { dedupeKey, status: SENDING_STATUS, createdAt: { lt: new Date(Date.now() - STALE_SENDING_MS) } },
+    });
+    if (stale.count === 0) throw new ReplyError('Svaret er allerede sendt, eller sendes akkurat nå.', 409);
+    row = await reserve();
   }
 
+  let messageId: string | null;
   try {
-    const { messageId } = await sendMailAs({
+    ({ messageId } = await sendMailAs({
       from: { name: identity.displayName, address: identity.email },
       // Svar på svaret skal også komme til fellespostboksen, så de dukker opp her.
       replyTo: REPLY_MAILBOX,
@@ -78,18 +79,23 @@ export async function sendReply(replyId: number, text: string, by: string): Prom
       subject,
       html,
       headers: threadHeaders(reply.internetMessageId, reply.references),
-    });
-    await prisma.messageSend.update({
-      where: { id: row.id },
-      data: { status: 'sent', sentAt: new Date(), messageId: messageId ? (extractMessageIds(messageId)[0] ?? messageId) : null },
-    });
+    }));
   } catch (error) {
     logger.error('Svar fra CRM kunne ikke sendes', { replyId, error: error instanceof Error ? error.message : String(error) });
     await prisma.messageSend.delete({ where: { id: row.id } }).catch(() => {});
     throw new ReplyError('Kunne ikke sende svaret. Prøv igjen om litt.', 502);
   }
 
-  await closeReply(reply, 'answered', by, new Date(), row.id);
+  // E-posten er sendt: herfra rulles ingenting tilbake (ellers kunne kunden fått den to ganger).
+  try {
+    await prisma.messageSend.update({
+      where: { id: row.id },
+      data: { status: 'sent', sentAt: new Date(), messageId: messageId ? (extractMessageIds(messageId)[0] ?? messageId) : null },
+    });
+    await closeReply(reply, 'answered', by, new Date(), row.id);
+  } catch (error) {
+    logger.error('Svaret er sendt, men kunne ikke merkes som sendt', { replyId, sendId: row.id, error: error instanceof Error ? error.message : String(error) });
+  }
   logActivity({ action: 'reply_sent', entity: 'contact', entityId: reply.contactId, userEmail: by, details: JSON.stringify({ replyId, sendId: row.id }) }).catch(() => {});
   return { sendId: row.id };
 }

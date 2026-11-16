@@ -5,7 +5,7 @@ import { Prisma } from '@prisma/client';
 const { prisma, sendMailAs } = vi.hoisted(() => ({
   prisma: {
     inboundReply: { findUnique: vi.fn(), update: vi.fn(async () => ({})) },
-    messageSend: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(async () => ({})), delete: vi.fn(async () => ({})) },
+    messageSend: { findUnique: vi.fn(), create: vi.fn(), update: vi.fn(async () => ({})), delete: vi.fn(async () => ({})), deleteMany: vi.fn(async () => ({ count: 0 })) },
     senderIdentity: { findUnique: vi.fn(), findFirst: vi.fn() },
     task: { updateMany: vi.fn(async () => ({ count: 1 })) },
   },
@@ -66,6 +66,21 @@ describe('sendReply', () => {
     await expect(sendReply(7, 'Hei', 'h')).rejects.toMatchObject({ status: 502 });
     expect(prisma.messageSend.delete).toHaveBeenCalledWith({ where: { id: 900 } });
     expect(prisma.inboundReply.update).not.toHaveBeenCalled();
+  });
+
+  it('sendt, men databasen svikter etterpå: ingen ny sending, og ingen feil til brukeren', async () => {
+    prisma.messageSend.update.mockRejectedValueOnce(new Error('db'));
+    expect(await sendReply(7, 'Hei', 'h')).toEqual({ sendId: 900 });
+    expect(prisma.messageSend.delete).not.toHaveBeenCalled();
+    expect(sendMailAs).toHaveBeenCalledTimes(1);
+  });
+
+  it('en gammel plassholder etter krasj kan prøves igjen', async () => {
+    prisma.messageSend.create
+      .mockRejectedValueOnce(new Prisma.PrismaClientKnownRequestError('dup', { code: 'P2002', clientVersion: 'x' }))
+      .mockResolvedValueOnce({ id: 901 });
+    prisma.messageSend.deleteMany.mockResolvedValueOnce({ count: 1 });
+    expect(await sendReply(7, 'Hei', 'h')).toEqual({ sendId: 901 });
   });
 
   it('tomt svar og ukjent avsender avvises', async () => {
