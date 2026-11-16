@@ -10,7 +10,7 @@ import { resolveEffectiveSendWindow, sameSendWindow, windowFromDraft, type Weekd
 import { LEASE_MINUTES, wakeSendWindowParked } from '@/lib/flows/runner';
 import { resetRateState } from '@/lib/flows/send-rate';
 import { PACE_OPTIONS } from './pace';
-import { getUtsendelser, removeUtsendelse, saveUtsendelse, slugify, type Utsendelse, type UtsendelseGruppe } from './config';
+import { getUtsendelser, removeUtsendelse, saveUtsendelse, slugify, startOrderCycle, type Utsendelse, type UtsendelseGruppe } from './config';
 import logger from '@/lib/logger';
 import { acquireSendLock, PLACEHOLDER_MARK, PLACEHOLDER_SUBJECTS, releaseSendLock, UtsendelseError } from './actions';
 
@@ -354,10 +354,42 @@ export async function updateGroup(u: Utsendelse, gruppeId: string, input: { navn
   return next;
 }
 
+/**
+ * «Start etter»: gruppen startes av seg selv når `startEtter`-gruppen har fått e-post 1. null fjerner det.
+ * Gruppen må ikke være startet ennå; det gjør man ellers med «Åpne».
+ */
+export async function setStartAfter(u: Utsendelse, gruppeId: string, startEtter: string | null): Promise<Utsendelse> {
+  const group = u.grupper.find((g) => g.id === gruppeId);
+  if (!group) throw new UtsendelseError('Fant ikke gruppen.', 404);
+  if (startEtter !== null) {
+    if (startEtter === gruppeId) throw new UtsendelseError('En gruppe kan ikke vente på seg selv.', 400);
+    if (!u.grupper.some((g) => g.id === startEtter)) throw new UtsendelseError('Fant ikke gruppen den skal vente på.', 404);
+  }
+  const grupper = u.grupper.map((g) => {
+    if (g.id !== gruppeId) return g;
+    const rest = { ...g };
+    delete rest.startEtter;
+    return startEtter === null ? rest : { ...rest, startEtter };
+  });
+  if (startOrderCycle(grupper)) throw new UtsendelseError('Da ville gruppene ventet på hverandre i ring.', 400);
+  const next: Utsendelse = { ...u, grupper };
+  await saveUtsendelse(next);
+  return next;
+}
+
 /** Tar gruppen ut av utsendelsen. De som allerede har fått e-post, fortsetter rekken sin. */
 export async function removeGroup(u: Utsendelse, gruppeId: string): Promise<Utsendelse> {
   if (!u.grupper.some((g) => g.id === gruppeId)) throw new UtsendelseError('Fant ikke gruppen.', 404);
-  const next: Utsendelse = { ...u, grupper: u.grupper.filter((g) => g.id !== gruppeId) };
+  // Grupper som ventet på denne, venter ikke lenger (de startes med «Åpne» som vanlig).
+  const grupper = u.grupper
+    .filter((g) => g.id !== gruppeId)
+    .map((g) => {
+      if (g.startEtter !== gruppeId) return g;
+      const rest = { ...g };
+      delete rest.startEtter;
+      return rest;
+    });
+  const next: Utsendelse = { ...u, grupper };
   await saveUtsendelse(next);
   return next;
 }
