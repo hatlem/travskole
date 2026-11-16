@@ -104,7 +104,7 @@ export function SettingsCard(props: Props) {
               </select>
             ) : (
               <Editable label="avsender" onEdit={() => edit('sender')}>
-                {props.senderMixed ? 'Varierer' : props.senderName ?? 'Ikke valgt'}
+                {props.senderMixed ? 'Varierer' : <SenderLabel label={props.senderName} />}
               </Editable>
             )}
           </dd>
@@ -188,6 +188,19 @@ export function SettingsCard(props: Props) {
   );
 }
 
+/** «Navn <adresse>» som navn med adressen liten under, så adressen ikke brekker midt i. */
+function SenderLabel({ label }: { label: string | null }) {
+  if (!label) return <>Ikke valgt</>;
+  const match = /^(.*?)\s*<([^>]+)>$/.exec(label);
+  if (!match) return <>{label}</>;
+  return (
+    <>
+      <span className="block">{match[1]}</span>
+      <span className="block text-xs text-gray-500">{match[2]}</span>
+    </>
+  );
+}
+
 /** Verdien er selve knappen: klikk på den (eller blyanten) for å endre. */
 function Editable({ label, active = false, onEdit, children }: { label: string; active?: boolean; onEdit: () => void; children: ReactNode }) {
   return (
@@ -196,11 +209,11 @@ function Editable({ label, active = false, onEdit, children }: { label: string; 
       onClick={onEdit}
       aria-expanded={active || undefined}
       title={`Endre ${label}`}
-      className={`group -mx-1.5 inline-flex max-w-full items-center gap-1.5 rounded-md px-1.5 py-0.5 text-left hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue ${active ? 'bg-blue-50' : ''}`}
+      className={`group -mx-1.5 inline-flex max-w-full items-start gap-1.5 rounded-md px-1.5 py-0.5 text-left hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-bjerke-blue ${active ? 'bg-blue-50' : ''}`}
     >
       <span className="min-w-0 break-words">{children}</span>
       <span className="sr-only">, endre {label}</span>
-      <PencilIcon className="h-3.5 w-3.5" />
+      <PencilIcon className="mt-0.5 h-3.5 w-3.5" />
     </button>
   );
 }

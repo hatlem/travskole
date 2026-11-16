@@ -82,7 +82,7 @@ export function GroupsSection({ utsendelseId, groups, flows, lists, segments }: 
               !!(await run('PATCH', '/grupper', { gruppeId: g.id, ...changes }, message));
             return (
               <li key={g.id} className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                <div className="min-w-0">
+                <div className="min-w-0 sm:flex-1">
                   <p className="font-medium text-gray-900">
                     <InlineText
                       ref={(h) => setHandle(`navn:${g.id}`, h)}
