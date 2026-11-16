@@ -18,10 +18,17 @@ export interface GroupProgress {
   pending: number;
 }
 
-/** Forrige gruppe er ferdig med e-post 1, og denne er ikke startet (en delvis startet gruppe røres ikke). */
+/**
+ * Forrige gruppe er sendt til alle (ingen igjen å starte, ingen i kø), og denne er ikke startet.
+ * «Send til én» i forrige gruppe teller ikke som at den er ferdig. En delvis startet gruppe røres ikke.
+ */
 export function readyToStart(previous: GroupProgress, self: GroupProgress): boolean {
-  return previous.enrolled > 0 && previous.waiting === 0 && self.enrolled === 0 && self.pending > 0;
+  return previous.enrolled > 0 && previous.pending === 0 && previous.waiting === 0 && self.enrolled === 0 && self.pending > 0;
 }
+
+const isStopped = (flows: { status: string }[]) => flows.some((f) => f.status === 'paused' || f.status === 'archived');
+const flowStatuses = (u: Utsendelse) =>
+  prisma.flow.findMany({ where: { id: { in: u.flyter.map((f) => f.flowId) } }, select: { status: true } });
 
 async function progress(u: Utsendelse, audience: Map<string, GroupAudience>, groupId: string): Promise<GroupProgress | null> {
   const group = u.grupper.find((g) => g.id === groupId);
@@ -61,33 +68,44 @@ export async function startChainedGroups(now = Date.now()): Promise<{ started: s
   for (const u of await getUtsendelser()) {
     const chained = u.grupper.filter((g) => g.startEtter);
     if (chained.length === 0) continue;
-    // Står utsendelsen på pause, starter ingenting av seg selv.
-    const flows = await prisma.flow.findMany({ where: { id: { in: u.flyter.map((f) => f.flowId) } }, select: { status: true } });
-    if (flows.some((f) => f.status === 'paused' || f.status === 'archived')) continue;
-
-    const ids = [...new Set(chained.flatMap((g) => [g.id, g.startEtter!]))];
-    const audience = await loadAudience(u, ids);
-    for (const g of chained) {
-      const [previous, self] = await Promise.all([progress(u, audience, g.startEtter!), progress(u, audience, g.id)]);
-      if (!previous || !self || !readyToStart(previous, self)) continue;
-      try {
-        const result = await sendGroup(u, g.id);
-        started.push(`${u.id}/${g.id}`);
-        logger.info('Gruppe startet av seg selv', { utsendelse: u.id, gruppe: g.id, etter: g.startEtter, startet: result.sent });
-        logActivity({
-          action: 'auto_start_group',
-          entity: 'utsendelse',
-          userEmail: 'system',
-          details: JSON.stringify({ utsendelse: u.id, gruppe: g.id, etter: g.startEtter, startet: result.sent }),
-        }).catch(() => {});
-      } catch (error) {
-        logger.warn('Kunne ikke starte gruppe av seg selv', {
-          utsendelse: u.id, gruppe: g.id, error: error instanceof Error ? error.message : String(error),
-        });
-      }
+    try {
+      started.push(...(await startReady(u, chained)));
+    } catch (error) {
+      logger.warn('«Start etter» feilet for utsendelsen', { utsendelse: u.id, error: error instanceof Error ? error.message : String(error) });
     }
   }
   return { started };
+}
+
+async function startReady(u: Utsendelse, chained: Utsendelse['grupper']): Promise<string[]> {
+  const started: string[] = [];
+  // Står utsendelsen på pause, starter ingenting av seg selv.
+  if (isStopped(await flowStatuses(u))) return started;
+
+  const ids = [...new Set(chained.flatMap((g) => [g.id, g.startEtter!]))];
+  const audience = await loadAudience(u, ids);
+  for (const g of chained) {
+    const [previous, self] = await Promise.all([progress(u, audience, g.startEtter!), progress(u, audience, g.id)]);
+    if (!previous || !self || !readyToStart(previous, self)) continue;
+    // Sjekk pause en gang til rett før start (kan ha blitt trykket mens vi regnet).
+    if (isStopped(await flowStatuses(u))) return started;
+    try {
+      const result = await sendGroup(u, g.id);
+      started.push(`${u.id}/${g.id}`);
+      logger.info('Gruppe startet av seg selv', { utsendelse: u.id, gruppe: g.id, etter: g.startEtter, startet: result.sent });
+      logActivity({
+        action: 'auto_start_group',
+        entity: 'utsendelse',
+        userEmail: 'system',
+        details: JSON.stringify({ utsendelse: u.id, gruppe: g.id, etter: g.startEtter, startet: result.sent }),
+      }).catch(() => {});
+    } catch (error) {
+      logger.warn('Kunne ikke starte gruppe av seg selv', {
+        utsendelse: u.id, gruppe: g.id, error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return started;
 }
 
 /** Bare for tester. */

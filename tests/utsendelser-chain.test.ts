@@ -58,6 +58,9 @@ describe('readyToStart', () => {
   it('venter mens noen i forrige står i kø', () => {
     expect(readyToStart({ enrolled: 447, waiting: 420, pending: 0 }, { enrolled: 0, waiting: 0, pending: 611 })).toBe(false);
   });
+  it('«send til én» i forrige gruppe er ikke det samme som ferdig', () => {
+    expect(readyToStart({ enrolled: 1, waiting: 0, pending: 446 }, { enrolled: 0, waiting: 0, pending: 611 })).toBe(false);
+  });
   it('forrige ikke startet, eller denne alt startet: ingenting', () => {
     expect(readyToStart({ enrolled: 0, waiting: 0, pending: 447 }, { enrolled: 0, waiting: 0, pending: 611 })).toBe(false);
     expect(readyToStart({ enrolled: 447, waiting: 0, pending: 0 }, { enrolled: 5, waiting: 0, pending: 606 })).toBe(false);
