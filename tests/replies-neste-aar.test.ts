@@ -22,6 +22,17 @@ const { prisma, settings, sendAdminEmail, getUtsendelser, getUtsendelse, createU
       task: { findUnique: vi.fn(async () => null), create: vi.fn(async () => ({ id: 99 })), updateMany: vi.fn(async () => ({ count: 1 })) },
       setting: {
         upsert: vi.fn(async ({ where, create }: { where: { key: string }; create: { value: string } }) => { settings.set(where.key, create.value); return {}; }),
+        // Engangsnøkler: lages bare én gang (P2002 ellers).
+        create: vi.fn(async ({ data }: { data: { key: string; value: string } }) => {
+          if (settings.has(data.key)) {
+            const { Prisma } = await import('@prisma/client');
+            throw new Prisma.PrismaClientKnownRequestError('unique', { code: 'P2002', clientVersion: 'x' });
+          }
+          settings.set(data.key, data.value);
+          return {};
+        }),
+        findUnique: vi.fn(async ({ where }: { where: { key: string } }) => (settings.has(where.key) ? { updatedAt: new Date() } : null)),
+        findMany: vi.fn(async ({ where }: { where: { key: { startsWith: string } } }) => [...settings.keys()].filter((k) => k.startsWith(where.key.startsWith)).map((key) => ({ key }))),
       },
     },
   };
@@ -70,7 +81,7 @@ describe('saveForNextYear', () => {
     expect(prisma.task.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ assigneeId: 42, dueAt: new Date('2027-08-16T06:00:00.000Z') }),
     }));
-    expect(JSON.parse(settings.get('neste_aar_julebord')!)).toMatchObject({ listId: 7, aar: 2027, taskId: 99, utsendelseId: 'julebord-2027' });
+    expect(JSON.parse(settings.get('neste_aar_julebord_2027')!)).toMatchObject({ listId: 7, aar: 2027, taskId: 99, utsendelseId: 'julebord-2027' });
   });
 
   it('lager utkast til neste års utsendelse fra samme avsender, med tekst som må fullføres før start', async () => {
@@ -88,7 +99,6 @@ describe('saveForNextYear', () => {
 
   it('bruker samme liste og oppgave neste gang', async () => {
     await saveForNextYear(1, 'Claude', NOV);
-    prisma.task.findUnique.mockResolvedValue({ id: 99 } as never);
     prisma.inboundReply.findUnique.mockResolvedValue({ ...reply, id: 2, contactId: 6, status: 'answered' });
     await saveForNextYear(2, 'Claude', NOV);
     expect(prisma.contactList.create).toHaveBeenCalledTimes(1);
@@ -164,3 +174,34 @@ describe('oversikt og e-post', () => {
     expect(buildReminderEmail({ navn: '<b>', antall: 1, url: 'https://x/?a=1&b=2', andre: true, utkast: false }).html).toContain('&lt;b&gt;');
   });
 });
+
+describe('flere sesonger og samtidighet', () => {
+  beforeEach(() => {
+    prisma.contactList.findUnique.mockImplementation((async ({ where }: { where: { id: number } }) => ({ id: where.id })) as never);
+  });
+
+  it('svar som spares i juli 2027 lager «Julebord 2028» uten å ta påminnelsene for 2027', async () => {
+    await saveForNextYear(1, 'Claude', NOV);
+    prisma.contactList.create.mockResolvedValueOnce({ id: 8 } as never);
+    await saveForNextYear(1, 'Claude', new Date('2027-07-10T10:00:00Z'));
+    expect(JSON.parse(settings.get('neste_aar_julebord_2028')!)).toMatchObject({ aar: 2028, listId: 8 });
+    vi.clearAllMocks();
+    expect(await sendDueReminders(new Date('2027-08-16T07:00:00Z'))).toEqual({ sent: 1 });
+  });
+
+  it('svar med spørsmål spares, men blir liggende under «Må svares»', async () => {
+    await saveForNextYear(1, 'Claude', NOV, { closeOpen: false });
+    expect(prisma.contactListMembership.createMany).toHaveBeenCalled();
+    expect(prisma.inboundReply.update).not.toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'no_reply' }) }));
+  });
+
+  it('to lagringer samtidig lager én liste, én oppgave og ett utkast', async () => {
+    prisma.inboundReply.findUnique.mockImplementation((async ({ where }: { where: { id: number } }) => ({ ...reply, id: where.id, contactId: where.id + 10 })) as never);
+    await Promise.all([saveForNextYear(1, 'Claude', NOV), saveForNextYear(2, 'hilde@bjerke.no', NOV)]);
+    expect(prisma.contactList.create).toHaveBeenCalledTimes(1);
+    expect(prisma.task.create).toHaveBeenCalledTimes(1);
+    expect(createUtsendelse).toHaveBeenCalledTimes(1);
+    expect(prisma.contactListMembership.createMany).toHaveBeenCalledTimes(2);
+  });
+});
+

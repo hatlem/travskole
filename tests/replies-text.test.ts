@@ -1,6 +1,6 @@
 /** Svar i CRM: rydding av innkommende tekst, emne, HTML og tråd-headere. */
 import { describe, it, expect } from 'vitest';
-import { cleanReplyText, replyBodyHtml, replySubject, textToParagraphs, threadHeaders } from '@/lib/replies/text';
+import { cleanReplyText, replyBodyHtml, replySubject, textToParagraphs, threadHeaders, tidyReplyText } from '@/lib/replies/text';
 import { answerTextFromHtml } from '@/lib/replies/list';
 
 describe('cleanReplyText', () => {
@@ -12,6 +12,13 @@ describe('cleanReplyText', () => {
   });
   it('rydder mellomrom og tomme linjer', () => {
     expect(cleanReplyText('  a b  \n\n\n\nc  ')).toBe('a b\n\nc');
+  });
+});
+
+describe('tidyReplyText', () => {
+  it('fjerner lenkestøy, bilder og Outlook-varsel, men beholder teksten', () => {
+    const raw = "You don't often get email from x@y.no. Learn why this is important<https://aka.ms/LearnAboutSenderIdentification>\nHei!\nwww.alel.no<https://nor01.safelinks.protection.outlook.com/?url=http%3A%2F%2Fwww.alel.no&data=05>\nE-post: k@alel.no<mailto:k@alel.no>\n[cid:image001.png@01DD]\n\n\nMob: 457";
+    expect(tidyReplyText(raw)).toBe('Hei!\nwww.alel.no\nE-post: k@alel.no\n\nMob: 457');
   });
 });
 

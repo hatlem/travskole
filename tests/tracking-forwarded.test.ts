@@ -6,7 +6,8 @@ const { prisma, recordReply, recordBounce, recordLeftCompany } = vi.hoisted(() =
   recordBounce: vi.fn(async () => {}),
   recordLeftCompany: vi.fn(async () => true),
   prisma: {
-    messageSend: { findFirst: vi.fn() },
+    messageSend: { findFirst: vi.fn(), findMany: vi.fn(async () => [] as unknown[]) },
+    flowEnrollment: { findUnique: vi.fn(async () => ({ flow: { isMarketing: true } })) },
     task: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({ id: 1 })) },
   },
 }));
@@ -88,7 +89,7 @@ describe('handleForwardedReply', () => {
   const input = { forwardedBy: 'hilde.apneseth@bjerke.no', subject: 'VS: SV: Julebord som ikke ligner på fjorårets?', text: OUTLOOK, internetMessageId: '<fw@bjerke.no>', receivedAt: new Date('2026-11-17T13:43:00Z') };
 
   it('kunden har fått utsendelsen: registreres som svar fra kunden (stopper og lagres)', async () => {
-    prisma.messageSend.findFirst.mockResolvedValueOnce({ messageId: '<sent-1@bjerke.no>' });
+    prisma.messageSend.findMany.mockResolvedValueOnce([{ messageId: '<sent-1@bjerke.no>', enrollmentId: 4 }]);
     expect(await handleForwardedReply(input)).toBe('reply');
     expect(recordReply).toHaveBeenCalledWith('<sent-1@bjerke.no>', expect.objectContaining({
       fromEmail: 'jesper.larsen@bilia.no', fromName: 'Larsen Jesper', internetMessageId: '<fw@bjerke.no>', receivedAt: new Date('2026-11-17T11:35:00.000Z'),
@@ -96,7 +97,7 @@ describe('handleForwardedReply', () => {
   });
 
   it('ukjent avsender på en utsendelse: oppgave så det ikke blir borte', async () => {
-    prisma.messageSend.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ id: 9 });
+    prisma.messageSend.findFirst.mockResolvedValueOnce({ id: 9 });
     expect(await handleForwardedReply(input)).toBe('unmatched');
     expect(prisma.messageSend.findFirst).toHaveBeenLastCalledWith(expect.objectContaining({ where: expect.objectContaining({ subject: 'Julebord som ikke ligner på fjorårets?' }) }));
     expect(prisma.task.create).toHaveBeenCalled();
@@ -113,8 +114,12 @@ describe('handleForwardedReply', () => {
 describe('autosvar og retur som Hilde videresender', () => {
   const base = { forwardedBy: 'hilde.apneseth@bjerke.no', internetMessageId: '<fw2@bjerke.no>', receivedAt: new Date('2026-11-17T13:43:00Z') };
 
+  beforeEach(() => {
+    prisma.messageSend.findMany.mockImplementation((async (args: { where: { toEmail: { equals: string } } }) =>
+      (['ola@firma.no', 'feil@firma.no'].includes(args.where.toEmail.equals) ? [{ messageId: '<s@bjerke.no>', enrollmentId: 4 }] : [])) as never);
+  });
+
   it('ferie: ingenting skjer, e-postene går som planlagt', async () => {
-    prisma.messageSend.findFirst.mockResolvedValue({ messageId: '<s@bjerke.no>' });
     const text = 'Fra: Ola <ola@firma.no>\nEmne: Automatisk svar: Julebord på Bjerke\n\nJeg er på ferie til 24. november.';
     expect(await handleForwardedReply({ ...base, subject: 'VS: Automatisk svar: Julebord på Bjerke', text })).toBe('ignore');
     expect(recordReply).not.toHaveBeenCalled();
@@ -122,16 +127,13 @@ describe('autosvar og retur som Hilde videresender', () => {
   });
 
   it('har sluttet: adressen sperres', async () => {
-    prisma.messageSend.findFirst.mockResolvedValue({ messageId: '<s@bjerke.no>' });
     const text = 'Fra: Ola <ola@firma.no>\nEmne: Automatisk svar: Julebord på Bjerke\n\nOla har sluttet i Firma AS. Kontakt post@firma.no.';
     expect(await handleForwardedReply({ ...base, subject: 'VS: Automatisk svar: Julebord på Bjerke', text })).toBe('left');
     expect(recordLeftCompany).toHaveBeenCalledWith('<s@bjerke.no>', expect.objectContaining({ fromEmail: 'ola@firma.no' }));
   });
 
-  it('returmelding: adressen vi sendte til, registreres som hard retur', async () => {
-    prisma.messageSend.findFirst.mockImplementation((async (args: { where: { toEmail?: { equals: string } } }) =>
-      (args.where.toEmail?.equals === 'feil@firma.no' ? { messageId: '<s@bjerke.no>' } : null)) as never);
-    const text = 'Fra: Microsoft Outlook <postmaster@firma.onmicrosoft.com>\nEmne: Ikke levert: Julebord på Bjerke\n\nLeveringen til disse mottakerne mislyktes:\nfeil@firma.no\nRemote server returned 550 5.1.10 RESOLVER.ADR.RecipientNotFound\nFra: Hilde Apneseth <hilde.apneseth@bjerke.no>';
+  it('returmelding: bare adressen som feilet registreres (ikke de andre i Til/Kopi)', async () => {
+    const text = 'Fra: Microsoft Outlook <postmaster@firma.onmicrosoft.com>\nEmne: Ikke levert: Julebord på Bjerke\n\nLeveringen til disse mottakerne mislyktes:\nfeil@firma.no\nRemote server returned 550 5.1.10 RESOLVER.ADR.RecipientNotFound\nFra: Hilde Apneseth <hilde.apneseth@bjerke.no>\nTil: feil@firma.no; ola@firma.no\nEmne: Julebord på Bjerke\n\nPris 550 kr';
     expect(await handleForwardedReply({ ...base, subject: 'VS: Ikke levert: Julebord på Bjerke', text })).toBe('bounce');
     expect(recordBounce).toHaveBeenCalledWith(null, 'feil@firma.no', true);
     expect(recordBounce).toHaveBeenCalledTimes(1);
@@ -144,6 +146,26 @@ describe('saysLeftCompany', () => {
     expect(saysLeftCompany('I am no longer with Bilia. Please contact x.')).toBe(true);
     expect(saysLeftCompany('Jeg er på ferie og tilbake mandag.')).toBe(false);
     expect(saysLeftCompany('Jeg er sykmeldt.')).toBe(false);
+  });
+});
+
+describe('retur: midlertidig og for mange adresser', () => {
+  const base = { forwardedBy: 'hilde.apneseth@bjerke.no', internetMessageId: null, receivedAt: new Date(), subject: 'VS: Ikke levert: x' };
+  beforeEach(() => {
+    prisma.messageSend.findMany.mockResolvedValue([{ messageId: '<s@bjerke.no>', enrollmentId: 4 }] as never);
+  });
+  it('4.x.x er midlertidig (ikke sperret)', async () => {
+    await handleForwardedReply({ ...base, text: 'Fra: postmaster <postmaster@x.no>\nEmne: Ikke levert: x\n\nfeil@firma.no\n452 4.2.2 Mailbox full' });
+    expect(recordBounce).toHaveBeenCalledWith(null, 'feil@firma.no', false);
+  });
+  it('flere enn tre adresser i feilmeldingen: tolkes ikke', async () => {
+    const text = 'Fra: postmaster <postmaster@x.no>\nEmne: Ikke levert: x\n\na@a.no b@b.no c@c.no d@d.no 5.1.1';
+    expect(await handleForwardedReply({ ...base, text })).toBe('ignore');
+    expect(recordBounce).not.toHaveBeenCalled();
+  });
+  it('kurs-e-post (ikke markedsføring) teller ikke', async () => {
+    prisma.flowEnrollment.findUnique.mockResolvedValueOnce({ flow: { isMarketing: false } } as never);
+    expect(await handleForwardedReply({ ...base, text: 'Fra: postmaster <postmaster@x.no>\nEmne: Ikke levert: x\n\nfeil@firma.no 5.1.1' })).toBe('ignore');
   });
 });
 

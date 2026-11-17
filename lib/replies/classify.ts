@@ -37,6 +37,8 @@ Velg én kategori:
 - autosvar: Automatisk svar, for eksempel fravær, ferie, sluttet eller ny adresse.
 - annet: Alt annet.
 
+trenger_svar er true når de stiller et spørsmål, ber om noe (pris, tilbud, flere plasser, endring av en bestilling) eller tydelig venter svar. Et vennlig «nei takk» eller «har allerede bestilt» uten spørsmål trenger ikke svar. Har de allerede bestilt hos Bjerke og spør om noe, er kategorien interessert.
+
 sikker skal bare være true når teksten tydelig passer kategorien. begrunnelse er én kort setning på norsk (høyst 15 ord) som forklarer valget for en kollega.
 
 Skriver de at en annen person er riktig kontakt (for eksempel «Jørgen Ellingsen er riktig person, har videresendt til ham»), sett ny_kontakt_navn til personens fulle navn. Sett ny_kontakt_epost bare hvis e-postadressen til den personen står i teksten; ikke gjett adressen. Ellers er begge tomme strenger.
@@ -48,17 +50,20 @@ export const CLASSIFICATION_SCHEMA = {
   properties: {
     kategori: { type: 'string', enum: [...REPLY_CATEGORIES] },
     sikker: { type: 'boolean' },
+    trenger_svar: { type: 'boolean' },
     begrunnelse: { type: 'string' },
     ny_kontakt_navn: { type: 'string' },
     ny_kontakt_epost: { type: 'string' },
   },
-  required: ['kategori', 'sikker', 'begrunnelse', 'ny_kontakt_navn', 'ny_kontakt_epost'],
+  required: ['kategori', 'sikker', 'trenger_svar', 'begrunnelse', 'ny_kontakt_navn', 'ny_kontakt_epost'],
   additionalProperties: false,
 } as const;
 
 const resultSchema = z.object({
   kategori: z.enum(REPLY_CATEGORIES),
   sikker: z.boolean(),
+  // Mangler den, regnes svaret som at det trenger svar (heller vise for mye enn å lukke et spørsmål).
+  trenger_svar: z.boolean().default(true),
   begrunnelse: z.string().trim().max(300),
   ny_kontakt_navn: z.string().trim().max(120).default(''),
   // En adresse som ikke er gyldig, droppes (heller tomt enn feil).
@@ -98,9 +103,12 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
   let checked = 0;
   let saved = 0;
   for (const reply of rows) {
+    // Reserver raden, så to cron-kjøringer samtidig aldri sorterer samme svar.
+    const claim = await prisma.inboundReply.updateMany({ where: { id: reply.id, aiCheckedAt: null }, data: { aiCheckedAt: now } });
+    if (claim.count === 0) continue;
     let result: Classification | null;
     if (!reply.bodyText.trim()) {
-      result = { kategori: 'annet', sikker: false, begrunnelse: 'Svaret har ingen tekst.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
+      result = { kategori: 'annet', sikker: false, trenger_svar: false, begrunnelse: 'Svaret har ingen tekst.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
     } else {
       const text = await provider.generateText(buildClassifyPrompt(reply), {
         system: SYSTEM,
@@ -110,8 +118,11 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
         maxTokens: 2_000,
         timeoutMs: 45_000,
       });
-      if (text === null) break;
-      result = parseClassification(text) ?? { kategori: 'annet', sikker: false, begrunnelse: 'Kunne ikke sortere svaret.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
+      if (text === null) {
+        await prisma.inboundReply.updateMany({ where: { id: reply.id, aiCategory: null }, data: { aiCheckedAt: null } });
+        break;
+      }
+      result = parseClassification(text) ?? { kategori: 'annet', sikker: false, trenger_svar: true, begrunnelse: 'Kunne ikke sortere svaret.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
     }
 
     await prisma.inboundReply.update({
@@ -128,9 +139,10 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
 
     try {
       if (result.sikker && result.kategori === 'neste_aar' && reply.savedListId == null) {
-        await saveForNextYear(reply.id, CLAUDE, now);
+        // Med et spørsmål i svaret blir det liggende under «Må svares», selv om kontakten spares til neste år.
+        await saveForNextYear(reply.id, CLAUDE, now, { closeOpen: !result.trenger_svar });
         saved++;
-      } else if (result.sikker && result.kategori === 'autosvar' && reply.status === 'open') {
+      } else if (result.sikker && !result.trenger_svar && result.kategori === 'autosvar' && reply.status === 'open') {
         await closeReply(reply, 'no_reply', CLAUDE, now);
       }
     } catch (error) {

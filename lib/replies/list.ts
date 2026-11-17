@@ -1,6 +1,7 @@
 /** Svar fra kontakter til visning: «Svar»-siden, utsendelsen og kontakten i CRM. */
 import { prisma } from '@/lib/prisma';
 import { getUtsendelser } from '@/lib/utsendelser/config';
+import { tidyReplyText } from './text';
 import { CATEGORY_LABELS, REPLY_CATEGORIES, type ReplyCategory } from './classify';
 
 export type ReplyStatus = 'open' | 'answered' | 'no_reply';
@@ -92,7 +93,7 @@ export async function listReplies(filter: ReplyFilter): Promise<ReplyItem[]> {
       fromEmail: r.fromEmail,
       fromName: r.fromName,
       subject: r.subject,
-      bodyText: r.bodyText,
+      bodyText: tidyReplyText(r.bodyText),
       receivedAt: r.receivedAt.toISOString(),
       status: r.status as ReplyStatus,
       handledAt: r.handledAt?.toISOString() ?? null,

@@ -14,6 +14,23 @@ const QUOTE_START = [
 
 /** Varsler e-postprogrammet legger inn i teksten. */
 const NOISE = /^(you don't often get email from|du mottar ikke ofte e-post fra|du får ikke ofte e-post fra)/i;
+/** Lenker i vinkelparentes (Outlook skriver dem etter lenketeksten, ofte lange «safelinks») og innebygde bilder. */
+const LINKS = /<(?:https?:|mailto:|tel:|callto:)[^>\s]*>/gi;
+const IMAGES = /\[(?:cid:[^\]]*|image|bilde)\]/gi;
+
+/** Rydder teksten for visning: uten lenkestøy, bildeplassholdere og Outlook-varsler. Trygg å kjøre flere ganger. */
+export function tidyReplyText(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(LINKS, '')
+    .replace(IMAGES, '')
+    .split('\n')
+    .filter((line) => !NOISE.test(line.trim()))
+    .map((line) => line.replace(/\s+$/, ''))
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
 
 /**
  * Det nye i et svar, som ren tekst. Graph gir oftest bare det nye (uniqueBody); ellers kuttes sitert historikk
@@ -28,7 +45,7 @@ export function cleanReplyText(raw: string): string {
     if (trimmed.startsWith('>') || NOISE.test(trimmed)) continue;
     kept.push(line.replace(/\s+$/, ''));
   }
-  return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_BODY);
+  return tidyReplyText(kept.join('\n')).slice(0, MAX_BODY);
 }
 
 export function replySubject(subject: string): string {

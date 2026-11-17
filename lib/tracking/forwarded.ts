@@ -18,7 +18,10 @@ const EMAILS = /[A-Z0-9._%+'-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const BOUNCE_SUBJECT = /^\s*(ikke levert|kan ikke leveres|levering mislyktes|leveringsstatus|undeliverable|undelivered|delivery status notification|delivery has failed|mail delivery (failed|subsystem)|returned mail|failure notice)/i;
 const BOUNCE_SENDER = /^(mailer-daemon|postmaster|microsoftexchange)/i;
 /** Permanent feil (5.x.x) betyr at adressen ikke finnes; 4.x.x er midlertidig. */
-const PERMANENT = /\b5\.\d{1,3}\.\d{1,3}\b|\b55\d\b/;
+const PERMANENT = /\b5\.\d{1,3}\.\d{1,3}\b/;
+/** En returmelding gjelder sjelden mer enn noen få adresser; flere enn dette tolkes ikke. */
+const MAX_BOUNCE_ADDRESSES = 3;
+const CAMPAIGN_WINDOW_DAYS = 60;
 
 export interface ForwardedMessage {
   fromEmail: string;
@@ -100,20 +103,49 @@ export interface ForwardInput {
  * Videresendt svar fra en ansatt. Treffer det en kontakt vi har sendt utsendelse til, behandles det som et
  * svar fra kontakten. Returnerer 'reply', 'unmatched' (ligner på et svar, men vi fant ikke personen) eller 'ignore'.
  */
-/** Siste utsendelses-e-post til adressen (for å koble et videresendt svar til den). */
-const latestCampaignSend = (email: string) =>
-  prisma.messageSend.findFirst({
-    where: { toEmail: { equals: email, mode: 'insensitive' }, status: 'sent', messageId: { not: null }, enrollmentId: { not: null } },
+/** Siste markedsførings-e-post (utsendelse) til adressen de siste 60 dagene. Kurs-e-poster o.l. teller ikke. */
+async function latestCampaignSend(email: string): Promise<{ messageId: string | null } | null> {
+  const sends = await prisma.messageSend.findMany({
+    where: {
+      toEmail: { equals: email, mode: 'insensitive' },
+      status: 'sent',
+      messageId: { not: null },
+      enrollmentId: { not: null },
+      sentAt: { gte: new Date(Date.now() - CAMPAIGN_WINDOW_DAYS * 24 * 60 * 60_000) },
+    },
     orderBy: { sentAt: 'desc' },
-    select: { messageId: true },
+    take: 5,
+    select: { messageId: true, enrollmentId: true },
   });
+  for (const send of sends) {
+    const enrollment = await prisma.flowEnrollment.findUnique({ where: { id: send.enrollmentId! }, select: { flow: { select: { isMarketing: true } } } });
+    if (enrollment?.flow.isMarketing) return { messageId: send.messageId };
+  }
+  return null;
+}
 
-/** Videresendt returmelding: adressene i teksten som vi har sendt utsendelse til, registreres som retur. */
+/**
+ * Selve feilmeldingen i en videresendt returmelding: teksten etter videresendingens header-blokk og før den
+ * opprinnelige e-postens headere (der Til/Kopi kan liste mange adresser som ikke feilet).
+ */
+export function bounceSection(text: string): string {
+  const afterForward = parseForwarded(text)?.body ?? text;
+  const lines = afterForward.replace(/\r\n?/g, '\n').split('\n');
+  const end = lines.findIndex((line) => HEADER_LINE.test(line));
+  return (end < 0 ? lines : lines.slice(0, end)).join('\n');
+}
+
+/** Videresendt returmelding: adressen(e) som feilet og som har fått utsendelsen, registreres som retur. */
 async function handleForwardedBounce(input: ForwardInput): Promise<number> {
   const staffDomain = input.forwardedBy.toLowerCase().split('@')[1] ?? '';
-  const emails = [...new Set((input.text.match(EMAILS) ?? []).map((e) => e.toLowerCase()))]
+  const section = bounceSection(input.text);
+  const emails = [...new Set((section.match(EMAILS) ?? []).map((e) => e.toLowerCase()))]
     .filter((e) => !e.endsWith(`@${staffDomain}`) && !BOUNCE_SENDER.test(e));
-  const hard = PERMANENT.test(input.text);
+  if (emails.length === 0 || emails.length > MAX_BOUNCE_ADDRESSES) {
+    logger.warn('Videresendt returmelding ble ikke tolket', { addresses: emails.length });
+    return 0;
+  }
+  const hard = PERMANENT.test(section);
   let found = 0;
   for (const email of emails) {
     if (!(await latestCampaignSend(email))) continue;

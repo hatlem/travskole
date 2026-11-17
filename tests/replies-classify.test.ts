@@ -8,7 +8,7 @@ const { prisma, generateText, saveForNextYear, closeReply, provider } = vi.hoist
     provider: { current: { generateText } as { generateText: typeof generateText } | null },
     saveForNextYear: vi.fn(async () => ({ navn: 'Julebord 2027' })),
     closeReply: vi.fn(async () => {}),
-    prisma: { inboundReply: { findMany: vi.fn(), update: vi.fn(async () => ({})) } },
+    prisma: { inboundReply: { findMany: vi.fn(), update: vi.fn(async () => ({})), updateMany: vi.fn(async () => ({ count: 1 })) } },
   };
 });
 vi.mock('@/lib/prisma', () => ({ prisma }));
@@ -20,8 +20,8 @@ import { buildClassifyPrompt, classifyPendingReplies, parseClassification } from
 
 const NOW = new Date('2026-11-17T10:00:00Z');
 const row = (id: number, extra: Record<string, unknown> = {}) => ({ id, subject: 'SV: Julebord', bodyText: 'Hyggelig, men vi har allerede bestilt.', status: 'open', taskId: null, savedListId: null, ...extra });
-const answer = (kategori: string, sikker = true, extra: Record<string, string> = {}) =>
-  JSON.stringify({ kategori, sikker, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '', ...extra });
+const answer = (kategori: string, sikker = true, extra: Record<string, string | boolean> = {}) =>
+  JSON.stringify({ kategori, sikker, trenger_svar: false, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '', ...extra });
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -30,7 +30,7 @@ beforeEach(() => {
 
 describe('parseClassification', () => {
   it('godtar gyldig JSON og avviser alt annet', () => {
-    expect(parseClassification(answer('neste_aar'))).toEqual({ kategori: 'neste_aar', sikker: true, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '' });
+    expect(parseClassification(answer('neste_aar'))).toEqual({ kategori: 'neste_aar', sikker: true, trenger_svar: false, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '' });
     expect(parseClassification(answer('annet', true, { ny_kontakt_navn: 'Jørgen Ellingsen', ny_kontakt_epost: 'ikke-en-adresse' }))?.ny_kontakt_epost).toBe('');
     expect(parseClassification('```json\n' + answer('nei') + '\n```')?.kategori).toBe('nei');
     expect(parseClassification(JSON.stringify({ kategori: 'kanskje', sikker: true, begrunnelse: '' }))).toBeNull();
@@ -60,7 +60,7 @@ describe('classifyPendingReplies', () => {
     expect(opts).toMatchObject({ model: 'claude-opus-5-5', effort: 'low' });
     expect(opts.jsonSchema.properties.kategori.enum).toContain('neste_aar');
     expect(prisma.inboundReply.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { aiCategory: 'neste_aar', aiReason: 'Har bestilt julebord i år.', aiCheckedAt: NOW, aiContactName: null, aiContactEmail: null } });
-    expect(saveForNextYear).toHaveBeenCalledWith(1, 'Claude', NOW);
+    expect(saveForNextYear).toHaveBeenCalledWith(1, 'Claude', NOW, { closeOpen: true });
   });
 
   it('lagrer ny kontaktperson fra svaret', async () => {
@@ -70,6 +70,20 @@ describe('classifyPendingReplies', () => {
     expect(prisma.inboundReply.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ aiContactName: 'Jørgen Ellingsen', aiContactEmail: 'jorgen.ellingsen@bilia.no' }),
     }));
+  });
+
+  it('«har bestilt» med spørsmål spares, men lukkes ikke', async () => {
+    prisma.inboundReply.findMany.mockResolvedValue([row(1)]);
+    generateText.mockResolvedValue(answer('neste_aar', true, { trenger_svar: true }));
+    await classifyPendingReplies(NOW);
+    expect(saveForNextYear).toHaveBeenCalledWith(1, 'Claude', NOW, { closeOpen: false });
+  });
+
+  it('en annen kjøring har allerede tatt svaret: hoppes over', async () => {
+    prisma.inboundReply.findMany.mockResolvedValue([row(1)]);
+    prisma.inboundReply.updateMany.mockResolvedValueOnce({ count: 0 });
+    expect(await classifyPendingReplies(NOW)).toEqual({ checked: 0, saved: 0 });
+    expect(generateText).not.toHaveBeenCalled();
   });
 
   it('usikker sortering gjør ingenting automatisk', async () => {

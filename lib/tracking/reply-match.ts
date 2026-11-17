@@ -111,7 +111,7 @@ export function matchKnownMessageId(msg: Pick<InboundMessageLike, 'inReplyTo' | 
 }
 
 /** Autosvar som sier at personen har sluttet (ikke ferie/sykdom): adressen er ikke lenger riktig. */
-const LEFT_COMPANY = /(har sluttet|sluttet (i|hos|som)|ikke lenger (ansatt|i jobb|i selskapet|i firmaet|i bedriften|aktiv)|jobber ikke lenger|har fratrådt|har gått av med pensjon|no longer (work|employed|with|at)|is no longer (with|at|part of)|has left (the|our)|left the company)/i;
+const LEFT_COMPANY = /\b(har sluttet|sluttet (i|hos|som)|ikke lenger (ansatt|i jobb|i selskapet|i firmaet|i bedriften|aktiv)|jobber ikke lenger|har fratrådt|har gått av med pensjon|no longer (work|employed|with|at)|is no longer (with|at|part of)|has left (the|our)|left the company)/i;
 
 export function saysLeftCompany(text: string): boolean {
   return LEFT_COMPANY.test(text);

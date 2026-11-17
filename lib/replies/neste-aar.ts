@@ -2,6 +2,7 @@
  * «Spar til neste år»: bedrifter som svarer at de allerede har bestilt julebord, legges i en egen liste
  * («Julebord 2027»). Hilde får en oppgave og e-post i august, så hun kan sende dem tilbud i september.
  */
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
 import { getSetting } from '@/lib/settings';
 import { sendAdminEmail } from '@/lib/mail';
@@ -15,7 +16,11 @@ import logger from '@/lib/logger';
 import { closeReply } from './store';
 import { ReplyError } from './answer';
 
-const SETTING_KEY = 'neste_aar_julebord';
+/** Én innstilling per sesong, så en ny sesong aldri overskriver påminnelsene for den forrige. */
+const KEY_PREFIX = 'neste_aar_julebord_';
+const configKey = (aar: number) => `${KEY_PREFIX}${aar}`;
+/** Hvor lenge en påbegynt opprettelse regnes som «pågår» før en annen kan ta over (etter et krasj). */
+const CLAIM_STALE_MS = 60_000;
 
 export interface NextYearConfig {
   listId: number;
@@ -73,23 +78,61 @@ export function parseConfig(raw: string): NextYearConfig | null {
   }
 }
 
-async function readConfig(): Promise<NextYearConfig | null> {
-  const config = parseConfig(await getSetting(SETTING_KEY));
-  // Lista kan være slettet i CRM; da starter vi på nytt.
+async function readConfig(aar: number): Promise<NextYearConfig | null> {
+  const config = parseConfig(await getSetting(configKey(aar)));
+  // Lista kan være slettet i CRM; da regnes sesongen som ikke startet.
   if (config && !(await prisma.contactList.findUnique({ where: { id: config.listId }, select: { id: true } }))) return null;
   return config;
 }
 
 async function writeConfig(config: NextYearConfig): Promise<void> {
+  const key = configKey(config.aar);
   const value = JSON.stringify(config);
-  await prisma.setting.upsert({ where: { key: SETTING_KEY }, create: { key: SETTING_KEY, value }, update: { value } });
+  await prisma.setting.upsert({ where: { key }, create: { key, value }, update: { value } });
 }
 
-/** Lista for kommende sesong (lages første gang noen spares). En ny sesong gir ny liste. */
+/** Endrer bare de gitte feltene, ut fra det som er lagret nå (så samtidige endringer ikke overskriver hverandre). */
+async function patchConfig(aar: number, patch: (current: NextYearConfig) => Partial<NextYearConfig>): Promise<NextYearConfig | null> {
+  const current = parseConfig(await getSetting(configKey(aar)));
+  if (!current) return null;
+  const next = { ...current, ...patch(current) };
+  await writeConfig(next);
+  return next;
+}
+
+const isUniqueViolation = (error: unknown) => error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+
+/** Tar en engangs-«nøkkel» (en innstilling som bare kan lages én gang). False hvis noen andre har den. */
+async function claim(key: string): Promise<boolean> {
+  try {
+    await prisma.setting.create({ data: { key, value: new Date().toISOString() } });
+    return true;
+  } catch (error) {
+    if (isUniqueViolation(error)) return false;
+    throw error;
+  }
+}
+
+/** Lista for kommende sesong (lages første gang noen spares). Samtidige forsøk lager aldri to lister. */
 async function ensureConfig(now: Date): Promise<NextYearConfig> {
   const aar = nextSeasonYear(now);
-  const current = await readConfig();
-  if (current && current.aar === aar) return current;
+  const current = await readConfig(aar);
+  if (current) return current;
+
+  const key = configKey(aar);
+  const existing = await prisma.setting.findUnique({ where: { key }, select: { updatedAt: true } });
+  const stale = existing != null && Date.now() - existing.updatedAt.getTime() > CLAIM_STALE_MS;
+  if (existing && !stale) {
+    // En annen forespørsel lager den akkurat nå: vent litt på den.
+    for (let i = 0; i < 10; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const ready = await readConfig(aar);
+      if (ready) return ready;
+    }
+    throw new ReplyError('Prøv igjen om litt.', 409);
+  }
+  if (!existing && !(await claim(key))) return ensureConfig(now);
+
   const navn = listName(aar);
   const list = (await prisma.contactList.findFirst({ where: { name: navn }, select: { id: true } }))
     ?? (await prisma.contactList.create({ data: { name: navn }, select: { id: true } }));
@@ -144,12 +187,13 @@ async function senderIdentityFor(repliedToSendId: number | null, by: string): Pr
 /** Utkast til neste års utsendelse, til lista, med teksten over. Lages én gang per sesong. */
 async function ensureFollowUpDraft(config: NextYearConfig, senderIdentityId: number | null): Promise<void> {
   if (config.utsendelseId != null || senderIdentityId == null) return;
+  if (!(await claim(`${configKey(config.aar)}_utkast`))) return;
   try {
     const utsendelse = await createUtsendelse({ navn: followUpName(config.navn), senderIdentityId, grupper: [{ navn: config.navn, listId: config.listId }] });
     const flowId = utsendelse.flyter[0]?.flowId;
     const node = flowId != null ? await prisma.flowNode.findFirst({ where: { flowId, type: 'email' }, select: { id: true } }) : null;
     if (flowId != null && node) await updateEmailStep(utsendelse, { flowId, nodeId: node.id, ...followUpEmail() });
-    await writeConfig({ ...config, utsendelseId: utsendelse.id });
+    await patchConfig(config.aar, () => ({ utsendelseId: utsendelse.id }));
     config.utsendelseId = utsendelse.id;
   } catch (error) {
     logger.error('Kunne ikke lage utkast til neste års julebord-utsendelse', { error: error instanceof Error ? error.message : String(error) });
@@ -158,7 +202,8 @@ async function ensureFollowUpDraft(config: NextYearConfig, senderIdentityId: num
 
 /** Én oppgave per sesong, med frist ved første påminnelse. */
 async function ensureReminderTask(config: NextYearConfig, ownerId: number | null): Promise<void> {
-  if (config.taskId != null && (await prisma.task.findUnique({ where: { id: config.taskId }, select: { id: true } }))) return;
+  if (config.taskId != null) return;
+  if (!(await claim(`${configKey(config.aar)}_oppgave`))) return;
   const task = await prisma.task.create({
     data: {
       title: `${config.navn}: send julebordtilbud til bedriftene som ba om det i fjor`,
@@ -168,11 +213,11 @@ async function ensureReminderTask(config: NextYearConfig, ownerId: number | null
     select: { id: true },
   });
   config.taskId = task.id;
-  await writeConfig(config);
+  await patchConfig(config.aar, () => ({ taskId: task.id }));
 }
 
 /** Legger kontakten i lista for neste år. Et svar som måtte svares, merkes «trenger ikke svar». */
-export async function saveForNextYear(replyId: number, by: string, now: Date = new Date()): Promise<{ navn: string }> {
+export async function saveForNextYear(replyId: number, by: string, now: Date = new Date(), opts: { closeOpen?: boolean } = {}): Promise<{ navn: string }> {
   const reply = await prisma.inboundReply.findUnique({
     where: { id: replyId },
     select: { id: true, contactId: true, status: true, taskId: true, savedListId: true, repliedToSendId: true },
@@ -183,7 +228,7 @@ export async function saveForNextYear(replyId: number, by: string, now: Date = n
 
   await prisma.contactListMembership.createMany({ data: [{ listId: config.listId, contactId: reply.contactId }], skipDuplicates: true });
   await prisma.inboundReply.update({ where: { id: reply.id }, data: { savedListId: config.listId, savedAt: now, savedBy: by } });
-  if (reply.status === 'open') await closeReply(reply, 'no_reply', by, now);
+  if (reply.status === 'open' && opts.closeOpen !== false) await closeReply(reply, 'no_reply', by, now);
   await ensureReminderTask(config, await ownerFor(reply.repliedToSendId, by));
   await ensureFollowUpDraft(config, await senderIdentityFor(reply.repliedToSendId, by));
   logActivity({ action: 'reply_saved_next_year', entity: 'contact', entityId: reply.contactId, userEmail: by, details: JSON.stringify({ replyId, listId: config.listId }) }).catch(() => {});
@@ -208,8 +253,8 @@ export async function removeFromNextYear(replyId: number, by: string): Promise<v
 
 /** Til «Svar»-siden: hvor mange som er spart, og når Hilde blir minnet på dem. */
 export async function nextYearSummary(now: Date = new Date()): Promise<NextYearSummary> {
-  const config = await readConfig();
-  const aar = config?.aar ?? nextSeasonYear(now);
+  const aar = nextSeasonYear(now);
+  const config = await readConfig(aar);
   const antall = config ? await prisma.contactListMembership.count({ where: { listId: config.listId } }) : 0;
   const utsendelse = config?.utsendelseId ? await getUtsendelse(config.utsendelseId) : null;
   return {
@@ -240,14 +285,23 @@ export function buildReminderEmail(input: { navn: string; antall: number; url: s
 
 /** Fra cron: sender påminnelsene som har forfalt (hver bare én gang). */
 export async function sendDueReminders(now: Date = new Date()): Promise<{ sent: number }> {
-  const config = await readConfig();
-  if (!config) return { sent: 0 };
+  const rows = await prisma.setting.findMany({ where: { key: { startsWith: KEY_PREFIX } }, select: { key: true } });
+  const seasons = rows.map((r) => r.key.slice(KEY_PREFIX.length)).filter((k) => /^\d{4}$/.test(k)).map(Number);
+  let sent = 0;
+  for (const aar of seasons) {
+    const config = await readConfig(aar);
+    if (config) sent += await sendSeasonReminders(config, now);
+  }
+  return { sent };
+}
+
+async function sendSeasonReminders(config: NextYearConfig, now: Date): Promise<number> {
   let sent = 0;
   for (const [index, date] of config.paminnelser.entries()) {
     if (config.sendt.includes(date) || new Date(date) > now) continue;
-    // Merkes først, så en feil aldri gir samme e-post flere ganger.
-    config.sendt = [...config.sendt, date];
-    await writeConfig(config);
+    // Tas og merkes før sending: to samtidige kjøringer kan aldri sende samme påminnelse, og en feil gir aldri to.
+    if (!(await claim(`${configKey(config.aar)}_sendt_${date.slice(0, 10)}`))) continue;
+    await patchConfig(config.aar, (current) => ({ sendt: [...new Set([...current.sendt, date])] }));
 
     const antall = await prisma.contactListMembership.count({ where: { listId: config.listId } });
     if (antall === 0) continue;
@@ -274,5 +328,5 @@ export async function sendDueReminders(now: Date = new Date()): Promise<{ sent: 
       logger.error('Påminnelse om neste års julebord kunne ikke sendes', { to, error: error instanceof Error ? error.message : String(error) });
     }
   }
-  return { sent };
+  return sent;
 }

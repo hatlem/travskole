@@ -44,8 +44,9 @@ import {
   type InboundMessageLike,
 } from '@/lib/tracking/reply-match';
 import { recordReply, recordBounce, recordLeftCompany } from '@/lib/tracking/apply';
-import { backfillReply, markAnsweredFromMailbox } from '@/lib/replies/store';
-import { handleForwardedReply, isForwardSubject } from '@/lib/tracking/forwarded';
+import { backfillReply, closeReply, markAnsweredFromMailbox } from '@/lib/replies/store';
+import { cleanReplyText } from '@/lib/replies/text';
+import { handleForwardedReply, isForwardSubject, parseForwarded } from '@/lib/tracking/forwarded';
 
 /** Env GRAPH_MAILBOXES (hvis satt) overstyrer admin-innstillingen graph_mailboxes. */
 export async function graphMailboxes(): Promise<string[]> {
@@ -130,11 +131,25 @@ const isFromMailbox = (message: GraphMessage, mailbox: string) =>
 
 const domainOf = (email: string) => email.trim().toLowerCase().split('@')[1] ?? '';
 
-/** Videresendt av en ansatt (samme domene som postboksen), f.eks. et svar som havnet i hilde@. */
-const isForwardFromStaff = (message: GraphMessage, mailbox: string) => {
+/** Fra en ansatt (samme domene som postboksen), f.eks. et svar som havnet i hilde@ og er videresendt. Aldri et kundesvar. */
+const isFromStaff = (message: GraphMessage, mailbox: string) => {
   const from = message.from?.emailAddress?.address ?? '';
-  return from.includes('@') && domainOf(from) === domainOf(mailbox) && isForwardSubject(message.subject ?? '');
+  return from.includes('@') && domainOf(from) === domainOf(mailbox);
 };
+
+/**
+ * Sendt fra innsiden av organisasjonen (ikke en forfalsket @bjerke.no-avsender utenfra): Exchange merker interne
+ * meldinger med AuthAs: Internal; eksterne må ha DMARC-pass for avsenderdomenet.
+ */
+export function isAuthenticatedInternal(headers: { name: string; value: string }[], domain: string): boolean {
+  return headers.some(({ name, value }) => {
+    const key = name.trim().toLowerCase();
+    const val = value.toLowerCase();
+    if (key === 'x-ms-exchange-organization-authas') return val.trim() === 'internal';
+    if (key === 'authentication-results') return val.includes('dmarc=pass') && val.includes(`header.from=${domain}`);
+    return false;
+  });
+}
 
 const MESSAGE_SELECT = encodeURIComponent('id,internetMessageHeaders,internetMessageId,receivedDateTime,from,subject,body,uniqueBody');
 /** Uten uniqueBody: brukes hvis Graph avviser den på en liste (da ryddes body i stedet). */
@@ -308,16 +323,31 @@ async function pollOneMailbox(
         await markAnsweredFromMailbox([...(msg.inReplyTo ? [msg.inReplyTo] : []), ...msg.references], mailbox, sentAt);
         continue;
       }
-      if (!msg.isDsn && isForwardFromStaff(message, mailbox)) {
+      if (!msg.isDsn && isFromStaff(message, mailbox)) {
+        const sentAt = message.receivedDateTime ? new Date(message.receivedDateTime) : new Date();
+        if (!isAuthenticatedInternal(message.internetMessageHeaders ?? [], domainOf(mailbox))) {
+          // Kan være forfalsket: ingenting skjer med kundene, men en oppgave sørger for at det ikke blir borte.
+          const from = message.from?.emailAddress?.address ?? '';
+          logger.warn('E-post fra ansatt-domenet kunne ikke bekreftes som intern', { from, headers: (message.internetMessageHeaders ?? []).map((h) => h.name).slice(0, 60) });
+          const title = `Sjekk e-post fra ${from} i registrering@: «${(message.subject ?? '').slice(0, 80)}»`.slice(0, 200);
+          if (!(await prisma.task.findFirst({ where: { title, status: 'open' }, select: { id: true } }))) {
+            await prisma.task.create({ data: { title, dueAt: sentAt } });
+          }
+          continue;
+        }
         const result = await handleForwardedReply({
           forwardedBy: message.from?.emailAddress?.address ?? '',
           subject: message.subject ?? '',
           text: message.body?.content ?? '',
           internetMessageId: message.internetMessageId ?? null,
-          receivedAt: message.receivedDateTime ? new Date(message.receivedDateTime) : new Date(),
+          receivedAt: sentAt,
         });
         if (result === 'reply') replies++;
         if (result === 'bounce') bounces++;
+        // Et vanlig svar fra en ansatt med fellespostboksen på kopi: det de svarte på, er besvart.
+        if (result === 'ignore' && !isForwardSubject(message.subject ?? '')) {
+          await markAnsweredFromMailbox([...(msg.inReplyTo ? [msg.inReplyTo] : []), ...msg.references], message.from?.emailAddress?.address ?? mailbox, sentAt);
+        }
         continue;
       }
       if (!msg.isDsn && isAutoReply(msg)) {
@@ -355,6 +385,45 @@ async function pollOneMailbox(
 }
 
 const BACKFILL_KEY = 'inbound_replies_backfilled';
+const FORWARD_REPAIR_KEY = 'inbound_replies_forwards_repaired';
+
+/**
+ * Én gang: svar som ble lagret fra en ansatt (videresendt fra hilde@ før videresending ble forstått) får riktig
+ * avsender og tekst fra den videresendte meldingen. Kan de ikke tolkes, merkes de «trenger ikke svar».
+ */
+async function repairStaffReplies(mailbox: string, token: string): Promise<number> {
+  const domain = domainOf(mailbox);
+  const rows = await prisma.inboundReply.findMany({
+    where: { fromEmail: { endsWith: `@${domain}` }, internetMessageId: { not: null } },
+    select: { id: true, internetMessageId: true, status: true, taskId: true },
+  });
+  let repaired = 0;
+  for (const row of rows) {
+    const filter = encodeURIComponent(`internetMessageId eq '${row.internetMessageId!.replace(/'/g, "''")}'`);
+    const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/messages?$filter=${filter}&$select=subject,body,receivedDateTime`, {
+      headers: { Authorization: `Bearer ${token}`, ...TEXT_BODY },
+    });
+    if (!res.ok) throw new Error(`Graph ${res.status}`);
+    const message = ((await res.json()) as { value?: GraphMessage[] }).value?.[0];
+    const forwarded = message ? parseForwarded(message.body?.content ?? '') : null;
+    if (forwarded && domainOf(forwarded.fromEmail) !== domain) {
+      await prisma.inboundReply.update({
+        where: { id: row.id },
+        data: {
+          fromEmail: forwarded.fromEmail,
+          fromName: forwarded.fromName,
+          bodyText: cleanReplyText(forwarded.body),
+          ...(forwarded.subject && { subject: forwarded.subject.slice(0, 500) }),
+          ...(forwarded.sentAt && { receivedAt: forwarded.sentAt }),
+        },
+      });
+      repaired++;
+    } else if (row.status === 'open') {
+      await closeReply(row, 'no_reply', 'Systemet (melding fra ansatt)');
+    }
+  }
+  return repaired;
+}
 const BACKFILL_DAYS = 7;
 
 /**
@@ -423,6 +492,17 @@ export async function pollMailboxes(): Promise<{ replies: number; bounces: numbe
         logger.info('Tidligere svar lagret', { stored });
       } catch (error) {
         logger.error('Kunne ikke lagre tidligere svar (prøver igjen)', { error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+
+    if ((await getSetting(FORWARD_REPAIR_KEY)) !== 'true') {
+      try {
+        let repaired = 0;
+        for (const mailbox of mailboxes) repaired += await repairStaffReplies(mailbox, token);
+        await prisma.setting.upsert({ where: { key: FORWARD_REPAIR_KEY }, update: { value: 'true' }, create: { key: FORWARD_REPAIR_KEY, value: 'true' } });
+        logger.info('Videresendte svar rettet', { repaired });
+      } catch (error) {
+        logger.error('Kunne ikke rette videresendte svar (prøver igjen)', { error: error instanceof Error ? error.message : String(error) });
       }
     }
 
