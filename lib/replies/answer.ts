@@ -75,6 +75,7 @@ export async function sendReply(replyId: number, text: string, by: string): Prom
       from: { name: identity.displayName, address: identity.email },
       // Svar på svaret skal også komme til fellespostboksen, så de dukker opp her.
       replyTo: REPLY_MAILBOX,
+      returnPath: REPLY_MAILBOX,
       to: reply.fromEmail,
       subject,
       html,

@@ -12,6 +12,9 @@ const QUOTE_START = [
   /^(From|Fra):\s.+/i,
 ];
 
+/** Varsler e-postprogrammet legger inn i teksten. */
+const NOISE = /^(you don't often get email from|du mottar ikke ofte e-post fra|du får ikke ofte e-post fra)/i;
+
 /**
  * Det nye i et svar, som ren tekst. Graph gir oftest bare det nye (uniqueBody); ellers kuttes sitert historikk
  * (linjer som «Den … skrev:», «From:» eller «>»-sitater) bort.
@@ -22,7 +25,7 @@ export function cleanReplyText(raw: string): string {
   for (const line of lines) {
     const trimmed = line.trim();
     if (QUOTE_START.some((re) => re.test(trimmed))) break;
-    if (trimmed.startsWith('>')) continue;
+    if (trimmed.startsWith('>') || NOISE.test(trimmed)) continue;
     kept.push(line.replace(/\s+$/, ''));
   }
   return kept.join('\n').replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_BODY);

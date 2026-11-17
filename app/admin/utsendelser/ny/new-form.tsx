@@ -18,17 +18,22 @@ export function NewUtsendelseForm({
   defaultSenderId,
   lists,
   segments,
+  initialNavn = '',
+  initialListId = null,
 }: {
   senders: { id: number; label: string }[];
   defaultSenderId: number | null;
   lists: Option[];
   segments: Option[];
+  /** Fra lenken i påminnelsen om neste års julebord. */
+  initialNavn?: string;
+  initialListId?: number | null;
 }) {
   const router = useRouter();
   const { toast } = useToast();
-  const [navn, setNavn] = useState('');
+  const [navn, setNavn] = useState(initialNavn);
   const [sender, setSender] = useState<number | ''>(defaultSenderId ?? (senders.length === 1 ? senders[0].id : ''));
-  const [kilder, setKilder] = useState<string[]>([]);
+  const [kilder, setKilder] = useState<string[]>(() => (initialListId != null && lists.some((l) => l.id === initialListId) ? [`liste:${initialListId}`] : []));
   const [saving, setSaving] = useState(false);
 
   const toggle = (value: string) => setKilder((k) => (k.includes(value) ? k.filter((x) => x !== value) : [...k, value]));

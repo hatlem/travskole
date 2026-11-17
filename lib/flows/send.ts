@@ -467,6 +467,8 @@ export async function sendFlowEmail(input: SendFlowEmailInput): Promise<SendFlow
       // postboks (registrering@) i stedet for alle syv avsenderpostboksene —
       // minste-privilegium avtalt med DNT/Basefarm 2026-08-19.
       replyTo: REPLY_MAILBOX,
+      // Fravær-svar og returmeldinger går til konvoluttavsenderen, så de havner også i fellespostboksen.
+      returnPath: REPLY_MAILBOX,
       to: contact.email,
       subject,
       html: finalHtml,

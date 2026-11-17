@@ -220,6 +220,7 @@ export async function POST(
       from: { name: identity.displayName, address: identity.email },
       // Som i den ekte utsendelsen: svar går til fellespostboksen.
       replyTo: REPLY_MAILBOX,
+      returnPath: REPLY_MAILBOX,
       to: toEmail,
       subject: renderedSubject,
       html,

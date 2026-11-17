@@ -507,7 +507,7 @@ model Consent {
 model Suppression {
   id        Int      @id @default(autoincrement())
   email     String   @unique
-  reason    String   @default("unsubscribe") // unsubscribe|bounce|complaint|manual
+  reason    String   @default("unsubscribe") // unsubscribe|bounce|left|complaint|manual
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("suppressions")
@@ -780,6 +780,19 @@ model InboundReply {
   /// Vårt svar (message_sends.id), når det ble sendt herfra.
   answerSendId      Int?      @map("answer_send_id")
   taskId            Int?      @map("task_id")
+  /// Claude sin sortering: neste_aar | interessert | nei | autosvar | annet (null = ikke sjekket).
+  aiCategory        String?   @map("ai_category")
+  aiReason          String?   @map("ai_reason")
+  aiCheckedAt       DateTime? @map("ai_checked_at")
+  /// Claude fant en annen kontaktperson i svaret («Jørgen er riktig person»). E-post bare hvis den står i teksten.
+  aiContactName     String?   @map("ai_contact_name")
+  aiContactEmail    String?   @map("ai_contact_email")
+  /// Kontakten som ble lagt til i CRM fra forslaget.
+  aiContactId       Int?      @map("ai_contact_id")
+  /// Spart til neste sesong («Julebord 2027»): lista kontakten ble lagt i.
+  savedListId       Int?      @map("saved_list_id")
+  savedAt           DateTime? @map("saved_at")
+  savedBy           String?   @map("saved_by")
   createdAt         DateTime  @default(now()) @map("created_at")
   updatedAt         DateTime  @updatedAt @map("updated_at")
 

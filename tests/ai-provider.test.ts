@@ -29,6 +29,14 @@ describe('buildAnthropicRequest', () => {
     expect(body.max_tokens).toBe(1024);
     expect('system' in body).toBe(false);
     expect('temperature' in body).toBe(false);
+    expect('output_config' in body).toBe(false);
+  });
+  it('modell, effort og fast JSON-format per kall', () => {
+    const schema = { type: 'object', properties: {}, additionalProperties: false };
+    const { init } = buildAnthropicRequest('Hei', { model: 'claude-opus-5-5', effort: 'low', jsonSchema: schema }, { apiKey: 'k', model: 'm' });
+    const body = JSON.parse(init.body as string);
+    expect(body.model).toBe('claude-opus-5-5');
+    expect(body.output_config).toEqual({ effort: 'low', format: { type: 'json_schema', schema } });
   });
 });
 

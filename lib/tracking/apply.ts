@@ -219,3 +219,40 @@ export async function recordBounce(
     }
   }
 }
+
+/**
+ * Autosvar om at personen har sluttet: adressen settes på ikke-kontakt-lista («har sluttet»), så e-postene
+ * stopper, og svaret lagres som behandlet, så det synes i CRM (og en ny kontaktperson i teksten kan legges inn).
+ */
+export async function recordLeftCompany(matchedMessageId: string, inbound: InboundDetails): Promise<boolean> {
+  const send = await prisma.messageSend.findFirst({ where: { messageId: matchedMessageId }, orderBy: { sentAt: 'desc' } });
+  if (!send) return false;
+  const email = normalizeEmail(send.toEmail);
+  if (email) {
+    // En eksisterende sperre (f.eks. avmelding) beholder sin grunn.
+    await prisma.suppression.upsert({ where: { email }, create: { email, reason: 'left' }, update: {} });
+  }
+  if (inbound.fromEmail) {
+    try {
+      const id = await storeInboundReply({
+        contactId: send.contactId,
+        repliedToSendId: send.id,
+        fromEmail: inbound.fromEmail,
+        fromName: inbound.fromName ?? null,
+        subject: inbound.subject ?? send.subject,
+        body: inbound.body ?? '',
+        internetMessageId: inbound.internetMessageId ?? null,
+        references: inbound.references ?? null,
+        receivedAt: inbound.receivedAt ?? new Date(),
+      });
+      await prisma.inboundReply.updateMany({
+        where: { id, status: 'open' },
+        data: { status: 'no_reply', handledAt: new Date(), handledBy: 'Systemet (har sluttet)' },
+      });
+    } catch (error) {
+      logger.error('Kunne ikke lagre autosvar om at personen har sluttet', { messageSendId: send.id, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+  return true;
+}
+

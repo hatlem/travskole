@@ -104,6 +104,21 @@ export function extractMessageIds(headerValue: string | null): string[] {
  * The caller is responsible for ensuring knownMessageIds contains already-
  * normalized (bracket-free) ids.
  */
+/** E-posten fra oss meldingen svarer på (In-Reply-To først, så References), hvis vi kjenner den. */
+export function matchKnownMessageId(msg: Pick<InboundMessageLike, 'inReplyTo' | 'references'>, knownMessageIds: Set<string>): string | undefined {
+  const candidates = [...extractMessageIds(msg.inReplyTo), ...msg.references.flatMap((ref) => extractMessageIds(ref))];
+  return candidates.find((candidate) => knownMessageIds.has(candidate));
+}
+
+/** Autosvar som sier at personen har sluttet (ikke ferie/sykdom): adressen er ikke lenger riktig. */
+const LEFT_COMPANY = /(har sluttet|sluttet (i|hos|som)|ikke lenger (ansatt|i jobb|i selskapet|i firmaet|i bedriften|aktiv)|jobber ikke lenger|har fratrådt|har gått av med pensjon|no longer (work|employed|with|at)|is no longer (with|at|part of)|has left (the|our)|left the company)/i;
+
+export function saysLeftCompany(text: string): boolean {
+  return LEFT_COMPANY.test(text);
+}
+
+export { AUTO_REPLY_SUBJECT };
+
 export function classifyInboundMessage(
   msg: InboundMessageLike,
   knownMessageIds: Set<string>,
@@ -119,12 +134,7 @@ export function classifyInboundMessage(
 
   if (isAutoReply(msg)) return { kind: 'ignore' };
 
-  const candidates = [
-    ...extractMessageIds(msg.inReplyTo),
-    ...msg.references.flatMap((ref) => extractMessageIds(ref)),
-  ];
-
-  const matchedMessageId = candidates.find((candidate) => knownMessageIds.has(candidate));
+  const matchedMessageId = matchKnownMessageId(msg, knownMessageIds);
 
   if (matchedMessageId !== undefined) {
     return { kind: 'reply', matchedMessageId };

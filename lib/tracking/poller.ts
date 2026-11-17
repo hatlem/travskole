@@ -38,10 +38,14 @@ import logger from '@/lib/logger';
 import {
   extractMessageIds,
   classifyInboundMessage,
+  isAutoReply,
+  matchKnownMessageId,
+  saysLeftCompany,
   type InboundMessageLike,
 } from '@/lib/tracking/reply-match';
-import { recordReply, recordBounce } from '@/lib/tracking/apply';
+import { recordReply, recordBounce, recordLeftCompany } from '@/lib/tracking/apply';
 import { backfillReply, markAnsweredFromMailbox } from '@/lib/replies/store';
+import { handleForwardedReply, isForwardSubject } from '@/lib/tracking/forwarded';
 
 /** Env GRAPH_MAILBOXES (hvis satt) overstyrer admin-innstillingen graph_mailboxes. */
 export async function graphMailboxes(): Promise<string[]> {
@@ -123,6 +127,14 @@ function replyDetails(message: GraphMessage, msg: InboundMessageLike) {
 /** Sendt fra postboksen selv (svar skrevet i Outlook), ikke mottatt. */
 const isFromMailbox = (message: GraphMessage, mailbox: string) =>
   (message.from?.emailAddress?.address ?? '').trim().toLowerCase() === mailbox.trim().toLowerCase();
+
+const domainOf = (email: string) => email.trim().toLowerCase().split('@')[1] ?? '';
+
+/** Videresendt av en ansatt (samme domene som postboksen), f.eks. et svar som havnet i hilde@. */
+const isForwardFromStaff = (message: GraphMessage, mailbox: string) => {
+  const from = message.from?.emailAddress?.address ?? '';
+  return from.includes('@') && domainOf(from) === domainOf(mailbox) && isForwardSubject(message.subject ?? '');
+};
 
 const MESSAGE_SELECT = encodeURIComponent('id,internetMessageHeaders,internetMessageId,receivedDateTime,from,subject,body,uniqueBody');
 /** Uten uniqueBody: brukes hvis Graph avviser den på en liste (da ryddes body i stedet). */
@@ -294,6 +306,25 @@ async function pollOneMailbox(
         // Svar skrevet i Outlook fra fellespostboksen: det de svarer på, er besvart.
         const sentAt = message.receivedDateTime ? new Date(message.receivedDateTime) : new Date();
         await markAnsweredFromMailbox([...(msg.inReplyTo ? [msg.inReplyTo] : []), ...msg.references], mailbox, sentAt);
+        continue;
+      }
+      if (!msg.isDsn && isForwardFromStaff(message, mailbox)) {
+        const result = await handleForwardedReply({
+          forwardedBy: message.from?.emailAddress?.address ?? '',
+          subject: message.subject ?? '',
+          text: message.body?.content ?? '',
+          internetMessageId: message.internetMessageId ?? null,
+          receivedAt: message.receivedDateTime ? new Date(message.receivedDateTime) : new Date(),
+        });
+        if (result === 'reply') replies++;
+        if (result === 'bounce') bounces++;
+        continue;
+      }
+      if (!msg.isDsn && isAutoReply(msg)) {
+        // Ferie/sykdom: ingenting skjer (e-postene går som planlagt). «Har sluttet»: adressen sperres.
+        const matched = matchKnownMessageId(msg, knownMessageIds);
+        const details = replyDetails(message, msg);
+        if (matched && saysLeftCompany(details.body)) await recordLeftCompany(matched, details);
         continue;
       }
       const classification = classifyInboundMessage(msg, knownMessageIds);

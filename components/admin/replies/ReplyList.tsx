@@ -6,14 +6,19 @@ import { Button } from '@/components/admin/Button';
 import { Badge } from '@/components/admin/StatusBadge';
 import { useToast } from '@/components/admin/Toast';
 import type { ReplyItem } from '@/lib/replies/list';
+import type { NextYearSummary } from '@/lib/replies/neste-aar';
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
-async function fetchReplies(query: string): Promise<ReplyItem[]> {
+const day = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Oslo' });
+
+interface RepliesData { replies: ReplyItem[]; nesteAar: NextYearSummary }
+
+async function fetchReplies(query: string): Promise<RepliesData> {
   const res = await fetch(`/api/admin/svar?status=all${query ? `&${query}` : ''}`, { cache: 'no-store' });
   if (!res.ok) throw new Error(String(res.status));
-  return ((await res.json()) as { replies: ReplyItem[] }).replies;
+  return (await res.json()) as RepliesData;
 }
 
 /** Varsler menyen og dashbordet om at antallet som må svares, er endret. */
@@ -28,16 +33,18 @@ interface Props {
   showUtsendelse?: boolean;
   /** Vises når det ikke finnes noen svar. null = vis ingenting. */
   empty?: ReactNode;
+  /** Vis oversikten over hvem som er spart til neste år (på «Svar»-siden). */
+  showNextYear?: boolean;
 }
 
 /** Svar fra kontakter: de som må svares øverst, så de som er behandlet. Svar, «Trenger ikke svar» eller «Besvart i Outlook». */
-export function ReplyList({ query = '', showContact = true, showUtsendelse = true, empty = null }: Props) {
-  const [replies, setReplies] = useState<ReplyItem[] | null>(null);
+export function ReplyList({ query = '', showContact = true, showUtsendelse = true, empty = null, showNextYear = false }: Props) {
+  const [data, setData] = useState<RepliesData | null>(null);
   const [failed, setFailed] = useState(false);
 
   const refresh = useCallback(() => {
     fetchReplies(query).then(
-      (items) => { setReplies(items); setFailed(false); },
+      (d) => { setData(d); setFailed(false); },
       () => setFailed(true),
     );
   }, [query]);
@@ -45,11 +52,12 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
   useEffect(() => {
     let alive = true;
     fetchReplies(query).then(
-      (items) => { if (alive) { setReplies(items); setFailed(false); } },
+      (d) => { if (alive) { setData(d); setFailed(false); } },
       () => { if (alive) setFailed(true); },
     );
     return () => { alive = false; };
   }, [query]);
+  const replies = data?.replies ?? null;
 
   const changed = useCallback(() => {
     refresh();
@@ -60,15 +68,20 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
   if (!replies) return <p className="text-sm text-gray-500">Henter svar …</p>;
   if (replies.length === 0) return <>{empty}</>;
 
+  const nesteAar = data!.nesteAar;
   const open = replies.filter((r) => r.status === 'open');
   const handled = replies.filter((r) => r.status !== 'open');
+  const card = (r: ReplyItem) => (
+    <ReplyCard key={r.id} reply={r} nextYearName={nesteAar.navn} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />
+  );
   return (
     <div className="space-y-6">
+      {showNextYear && <NextYearPanel summary={nesteAar} />}
       {open.length > 0 && (
         <div>
           <h3 className="mb-2 text-sm font-semibold text-red-800">Må svares ({open.length})</h3>
           <ul className="space-y-3">
-            {open.map((r) => <ReplyCard key={r.id} reply={r} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />)}
+            {open.map(card)}
           </ul>
         </div>
       )}
@@ -77,7 +90,7 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
         <details open={open.length === 0 && handled.length <= 5}>
           <summary className="cursor-pointer text-sm font-semibold text-gray-700">Behandlet ({handled.length})</summary>
           <ul className="mt-2 space-y-3">
-            {handled.map((r) => <ReplyCard key={r.id} reply={r} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />)}
+            {handled.map(card)}
           </ul>
         </details>
       )}
@@ -85,9 +98,105 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
   );
 }
 
+/** Hvem som er spart til neste år, og når Hilde blir minnet på dem. */
+function NextYearPanel({ summary }: { summary: NextYearSummary }) {
+  if (summary.antall === 0) {
+    return (
+      <p className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700">
+        Svarer noen at de allerede har bestilt julebord? Trykk «Spar til {summary.navn}» på svaret. Da får du en påminnelse om dem på e-post {day(summary.paminnelse)}, så du kan sende dem tilbud i september.
+      </p>
+    );
+  }
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-950">
+      <p>
+        <strong>{summary.navn}:</strong> {summary.antall} {summary.antall === 1 ? 'kontakt er spart' : 'kontakter er spart'} til neste år.
+        Du får en påminnelse på e-post {day(summary.paminnelse)}, så du kan sende dem tilbud i september.
+      </p>
+      {summary.utsendelse && (
+        <p className="mt-1">
+          Utsendelsen til dem ligger klar som utkast. Den går ikke av seg selv: i august skriver du inn dato og pris og trykker start.
+        </p>
+      )}
+      <p className="mt-1 flex flex-wrap gap-x-4">
+        {summary.listId != null && (
+          <Link href={`/admin/crm/kontakter?listId=${summary.listId}`} className="text-bjerke-blue hover:underline">Se hvem</Link>
+        )}
+        {summary.utsendelse && (
+          <Link href={`/admin/utsendelser/${summary.utsendelse.id}`} className="text-bjerke-blue hover:underline">Se utkastet</Link>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** «Riktig kontaktperson er …»: én knapp for å legge personen inn i CRM i samme bedrift. */
+function NewContactBox({ reply: r, onChanged }: { reply: ReplyItem; onChanged: () => void }) {
+  const { toast } = useToast();
+  const suggestion = r.newContact!;
+  const nameId = useId();
+  const emailId = useId();
+  const [name, setName] = useState(suggestion.name);
+  const [email, setEmail] = useState(suggestion.email ?? '');
+  const [busy, setBusy] = useState(false);
+
+  if (suggestion.contactId != null) {
+    return (
+      <p className="mt-3 text-sm text-gray-700">
+        Ny kontaktperson lagt til i CRM:{' '}
+        <Link href={`/admin/crm/kontakter/${suggestion.contactId}`} className="text-bjerke-blue hover:underline">{suggestion.name}</Link>
+      </p>
+    );
+  }
+
+  async function add() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/svar/${r.id}/ny-kontakt`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error');
+        return;
+      }
+      toast(data.existed ? `${name} fantes allerede i CRM.` : `${name} er lagt til i CRM.`, 'success');
+      onChanged();
+    } catch {
+      toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const inputCls = 'mt-1 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-bjerke-blue focus:ring-2 focus:ring-bjerke-blue/20';
+  return (
+    <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+      <p className="text-sm text-amber-950">
+        <strong>Ny kontaktperson?</strong> Svaret sier at {suggestion.name} er riktig person{r.organization ? ` i ${r.organization}` : ''}.
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <label htmlFor={nameId} className="text-xs font-medium text-gray-700">Navn</label>
+          <input id={nameId} className={inputCls} value={name} maxLength={120} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor={emailId} className="text-xs font-medium text-gray-700">E-post (hvis du vet den)</label>
+          <input id={emailId} type="email" className={inputCls} value={email} maxLength={254} placeholder="navn@bedrift.no" onChange={(e) => setEmail(e.target.value)} />
+        </div>
+      </div>
+      <div className="mt-2">
+        <Button size="sm" loading={busy} disabled={!name.trim()} onClick={() => void add()}>Legg til i CRM</Button>
+      </div>
+    </div>
+  );
+}
+
 const LONG = 700;
 
-function ReplyCard({ reply: r, showContact, showUtsendelse, onChanged }: { reply: ReplyItem; showContact: boolean; showUtsendelse: boolean; onChanged: () => void }) {
+function ReplyCard({ reply: r, nextYearName, showContact, showUtsendelse, onChanged }: { reply: ReplyItem; nextYearName: string; showContact: boolean; showUtsendelse: boolean; onChanged: () => void }) {
   const { toast } = useToast();
   const textId = useId();
   const [writing, setWriting] = useState(false);
@@ -101,10 +210,14 @@ function ReplyCard({ reply: r, showContact, showUtsendelse, onChanged }: { reply
     if (writing) areaRef.current?.focus();
   }, [writing]);
 
-  async function call(method: 'POST' | 'PATCH', body: unknown, success: string): Promise<boolean> {
+  async function call(method: 'POST' | 'PATCH' | 'DELETE', body: unknown, success: string, path = ''): Promise<boolean> {
     setBusy(true);
     try {
-      const res = await fetch(`/api/admin/svar/${r.id}`, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const res = await fetch(`/api/admin/svar/${r.id}${path}`, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        ...(body !== undefined && { body: JSON.stringify(body) }),
+      });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error');
@@ -166,15 +279,30 @@ function ReplyCard({ reply: r, showContact, showUtsendelse, onChanged }: { reply
         )}
       </div>
 
+      {r.ai && (
+        <p className="mt-2 text-xs text-gray-500">
+          <span className="font-medium text-gray-700">Claude: {r.ai.label}</span>
+          {r.ai.reason ? ` · ${r.ai.reason}` : ''}
+        </p>
+      )}
+
+      {r.newContact && <NewContactBox reply={r} onChanged={onChanged} />}
+
       {r.answer && (
         <div className="mt-3 border-l-2 border-bjerke-blue/40 pl-4">
           <p className="text-xs text-gray-500">Svar fra {r.answer.from || 'oss'} · {when(r.answer.sentAt)}</p>
           <p className="mt-1 whitespace-pre-wrap break-words text-gray-800">{r.answer.text}</p>
         </div>
       )}
-      {!r.answer && r.status !== 'open' && r.handledBy && (
+      {!r.answer && r.status !== 'open' && r.handledBy && !r.saved && (
         <p className="mt-2 text-xs text-gray-500">
           {r.status === 'answered' ? 'Merket som besvart' : 'Merket «trenger ikke svar»'} av {r.handledBy}
+        </p>
+      )}
+      {r.saved && (
+        <p className="mt-2 flex flex-wrap items-center gap-x-3 text-sm text-blue-900">
+          <span>Spart til {r.saved.navn}{r.saved.by ? ` av ${r.saved.by}` : ''}. Du får en påminnelse i august.</span>
+          <Button variant="link" disabled={busy} onClick={() => void call('DELETE', undefined, `Fjernet fra ${r.saved!.navn}.`, '/neste-aar')}>Angre</Button>
         </p>
       )}
 
@@ -211,11 +339,23 @@ function ReplyCard({ reply: r, showContact, showUtsendelse, onChanged }: { reply
             <>
               <Button onClick={() => setWriting(true)}>Svar</Button>
               <Button variant="secondary" disabled={busy} onClick={() => void call('PATCH', { status: 'no_reply' }, 'Merket «trenger ikke svar».')}>Trenger ikke svar</Button>
-              <Button variant="link" disabled={busy} onClick={() => void call('PATCH', { status: 'answered' }, 'Merket som besvart.')}>Har svart i Outlook</Button>
             </>
           )}
+          {!r.saved && (
+            <Button variant="secondary" disabled={busy} onClick={() => void call('POST', undefined, `Spart til ${nextYearName}. Du får en påminnelse i august.`, '/neste-aar')}>
+              Spar til {nextYearName}
+            </Button>
+          )}
+          {r.status === 'open' && (
+            <Button variant="link" disabled={busy} onClick={() => void call('PATCH', { status: 'answered' }, 'Merket som besvart.')}>Har svart i Outlook</Button>
+          )}
           {r.status !== 'open' && !r.answer && (
-            <Button variant="link" disabled={busy} onClick={() => void call('PATCH', { status: 'open' }, 'Flyttet tilbake til «Må svares».')}>Angre</Button>
+            <>
+              <Button variant="link" disabled={busy} onClick={() => setWriting(true)}>Svar likevel</Button>
+              {!r.saved && (
+                <Button variant="link" disabled={busy} onClick={() => void call('PATCH', { status: 'open' }, 'Flyttet tilbake til «Må svares».')}>Angre</Button>
+              )}
+            </>
           )}
         </div>
       )}

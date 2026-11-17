@@ -113,6 +113,11 @@ interface SendMailAsInput {
   subject: string;
   html: string;
   headers?: Record<string, string>;
+  /**
+   * Konvoluttavsender (Return-Path). Fravær-svar og returmeldinger går hit, ikke til From.
+   * Må være en verifisert avsender; avviser serveren den, sendes e-posten med From som konvoluttavsender.
+   */
+  returnPath?: string;
 }
 
 /**
@@ -148,8 +153,21 @@ export async function sendMailAs(input: SendMailAsInput): Promise<{ messageId: s
   }).compile();
   const raw = await message.build();
   const messageId = message.messageId();
+  const envelope = message.getEnvelope();
   try {
-    await deliver(config, message.getEnvelope(), raw);
+    if (input.returnPath) {
+      try {
+        await deliver(config, { ...envelope, from: input.returnPath }, raw);
+      } catch (error) {
+        const e = error as MailSendError;
+        // Avvist konvolutt (før e-posten gikk): prøv én gang til med vanlig avsender.
+        if (e.code !== 'EENVELOPE' || e.mayHaveBeenDelivered) throw error;
+        logger.warn('Konvoluttavsender avvist, sender med From i stedet', { returnPath: input.returnPath, responseCode: e.responseCode });
+        await deliver(config, envelope, raw);
+      }
+    } else {
+      await deliver(config, envelope, raw);
+    }
   } catch (error) {
     // Med Message-ID kan et svar på en e-post som kanskje gikk, fortsatt kobles til den.
     throw Object.assign(error as MailSendError, { messageId });

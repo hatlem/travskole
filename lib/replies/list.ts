@@ -1,6 +1,7 @@
 /** Svar fra kontakter til visning: «Svar»-siden, utsendelsen og kontakten i CRM. */
 import { prisma } from '@/lib/prisma';
 import { getUtsendelser } from '@/lib/utsendelser/config';
+import { CATEGORY_LABELS, REPLY_CATEGORIES, type ReplyCategory } from './classify';
 
 export type ReplyStatus = 'open' | 'answered' | 'no_reply';
 
@@ -24,6 +25,12 @@ export interface ReplyItem {
   answer: { text: string; sentAt: string; from: string } | null;
   /** Hvem svaret herfra sendes fra (avsenderen av e-posten de svarte på), hvis kjent. */
   replyFrom: { name: string; email: string } | null;
+  /** Claude sin sortering, når svaret er sjekket. */
+  ai: { category: ReplyCategory; label: string; reason: string | null } | null;
+  /** Spart til neste års julebord. */
+  saved: { navn: string; by: string | null; at: string } | null;
+  /** Annen kontaktperson Claude fant i svaret; contactId når den er lagt inn i CRM. */
+  newContact: { name: string; email: string | null; contactId: number | null } | null;
 }
 
 /** Teksten vi skrev, uten det siterte svaret under (se replyBodyHtml). */
@@ -67,6 +74,9 @@ export async function listReplies(filter: ReplyFilter): Promise<ReplyItem[]> {
       : [],
     getUtsendelser(),
   ]);
+  const listIds = [...new Set(rows.map((r) => r.savedListId).filter((id): id is number => id != null))];
+  const lists = listIds.length ? await prisma.contactList.findMany({ where: { id: { in: listIds } }, select: { id: true, name: true } }) : [];
+  const listName = new Map(lists.map((l) => [l.id, l.name]));
   const sendById = new Map(sends.map((s) => [s.id, s]));
   const utsendelseByFlow = new Map<number, { id: string; navn: string }>();
   for (const u of utsendelser) for (const f of u.flyter) utsendelseByFlow.set(f.flowId, { id: u.id, navn: u.navn });
@@ -93,9 +103,16 @@ export async function listReplies(filter: ReplyFilter): Promise<ReplyItem[]> {
         ? { text: answerTextFromHtml(answer.bodyHtml), sentAt: answer.sentAt.toISOString(), from: answer.senderIdentity?.displayName ?? '' }
         : null,
       replyFrom: original?.senderIdentity?.active ? { name: original.senderIdentity.displayName, email: original.senderIdentity.email } : null,
+      ai: isCategory(r.aiCategory) ? { category: r.aiCategory, label: CATEGORY_LABELS[r.aiCategory], reason: r.aiReason } : null,
+      saved: r.savedListId != null && r.savedAt
+        ? { navn: listName.get(r.savedListId) ?? 'neste år', by: r.savedBy, at: r.savedAt.toISOString() }
+        : null,
+      newContact: r.aiContactName ? { name: r.aiContactName, email: r.aiContactEmail, contactId: r.aiContactId } : null,
     };
   });
 }
+
+const isCategory = (v: string | null): v is ReplyCategory => (REPLY_CATEGORIES as readonly string[]).includes(v ?? '');
 
 export function countOpenReplies(): Promise<number> {
   return prisma.inboundReply.count({ where: { status: 'open' } });

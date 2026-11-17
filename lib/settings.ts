@@ -141,6 +141,7 @@ export async function getSettings(): Promise<SiteSettings> {
 // Interne innstillinger og driftstilstand som aldri skal havne i sidens HTML.
 const SERVER_ONLY_SETTING_PREFIXES = [
   'graph_',
+  'neste_aar_',
   'reply_task_',
   'reply_create_task',
   'task_notify_',
