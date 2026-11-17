@@ -36,6 +36,7 @@ Kontakt: registrering@bjerke.no
 |---|---|---|---|
 | Basefarm Orange | Hosting (App Service) + database (PostgreSQL) | Azure (EU) | Må inngås/bekreftes |
 | Microsoft (Azure Communication Services) | Utgående e-post (SMTP) | Azure (EU) | Må inngås/bekreftes |
+| Anthropic (Claude API) | Sortering av e-postsvar fra bedriftskontakter (svartekst, emne). Bare når `ANTHROPIC_API_KEY` er satt; API-data brukes ikke til trening | USA (SCC/DPF) | Anthropics kommersielle vilkår/DPA, bekreft |
 | Google (Analytics / GA4) | Webanalyse — **kun ved samtykke** via Cookiebot/Consent Mode | EU/USA (SCC/DPF) | Bekreft overføringsgrunnlag |
 
 ## Lagringstid (retensjon)
