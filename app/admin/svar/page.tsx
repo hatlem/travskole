@@ -10,9 +10,9 @@ export default function SvarPage() {
     <div className="max-w-3xl">
       <PageHeader
         title="Svar"
-        description="Svar fra dem som har fått e-post fra oss. Svar herfra, eller merk dem som «trenger ikke svar». De som må svares, ligger øverst."
+        description="Svar fra dem som har fått e-post fra oss. Svar herfra, eller merk dem som «trenger ikke svar». De som må svares, ligger øverst. Har noen svart til din egen e-post? Videresend den til registrering@bjerke.no, så stopper e-postene til dem, og svaret dukker opp her."
       />
-      <ReplyList empty={<p className="rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">Ingen har svart ennå.</p>} />
+      <ReplyList showNextYear empty={<p className="rounded-xl border border-gray-200 bg-white px-5 py-4 text-sm text-gray-600">Ingen har svart ennå.</p>} />
     </div>
   );
 }

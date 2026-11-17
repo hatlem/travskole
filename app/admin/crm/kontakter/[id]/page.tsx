@@ -66,7 +66,7 @@ const LAWFUL_BASIS_LABELS: Record<string, string> = {
 };
 
 const SUPPRESSION_REASONS: Record<string, string> = {
-  unsubscribe: 'meldte seg av', bounce: 'e-posten kom i retur', complaint: 'klaget', manual: 'lagt til for hånd',
+  unsubscribe: 'meldte seg av', bounce: 'e-posten kom i retur', left: 'har sluttet (autosvar)', complaint: 'klaget', manual: 'lagt til for hånd',
 };
 
 const CONSENT_SOURCES: Record<string, string> = {

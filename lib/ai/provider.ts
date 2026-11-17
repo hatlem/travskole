@@ -4,7 +4,18 @@
 import { createAnthropicProvider } from './anthropic';
 import { createOpenAiProvider } from './openai';
 
-export interface LLMGenerateOpts { system?: string; maxTokens?: number; temperature?: number }
+export interface LLMGenerateOpts {
+  system?: string;
+  maxTokens?: number;
+  temperature?: number;
+  /** Bare Anthropic: annen modell enn standard for dette kallet. */
+  model?: string;
+  /** Bare Anthropic: hvor grundig modellen tenker (output_config.effort). */
+  effort?: 'low' | 'medium' | 'high';
+  /** Bare Anthropic: svaret må være JSON etter dette skjemaet (output_config.format). */
+  jsonSchema?: Record<string, unknown>;
+  timeoutMs?: number;
+}
 export interface LLMProvider {
   generateText(prompt: string, opts?: LLMGenerateOpts): Promise<string | null>;
 }

@@ -11,12 +11,16 @@ export function buildAnthropicRequest(
   prompt: string, opts: LLMGenerateOpts, config: AnthropicConfig,
 ): { url: string; init: RequestInit } {
   const body: Record<string, unknown> = {
-    model: config.model,
+    model: opts.model ?? config.model,
     max_tokens: opts.maxTokens ?? 1024,
     messages: [{ role: 'user', content: prompt }],
   };
   if (opts.system !== undefined) body.system = opts.system;
   if (opts.temperature !== undefined) body.temperature = opts.temperature;
+  const outputConfig: Record<string, unknown> = {};
+  if (opts.effort !== undefined) outputConfig.effort = opts.effort;
+  if (opts.jsonSchema !== undefined) outputConfig.format = { type: 'json_schema', schema: opts.jsonSchema };
+  if (Object.keys(outputConfig).length > 0) body.output_config = outputConfig;
   return {
     url: 'https://api.anthropic.com/v1/messages',
     init: {
@@ -47,7 +51,7 @@ export function createAnthropicProvider(config: AnthropicConfig, fetchFn: typeof
     async generateText(prompt, opts = {}) {
       try {
         const { url, init } = buildAnthropicRequest(prompt, opts, config);
-        const res = await fetchFn(url, { ...init, signal: AbortSignal.timeout(TIMEOUT_MS) });
+        const res = await fetchFn(url, { ...init, signal: AbortSignal.timeout(opts.timeoutMs ?? TIMEOUT_MS) });
         if (!res.ok) {
           logger.error('Anthropic-kall feilet', { status: res.status });
           return null;

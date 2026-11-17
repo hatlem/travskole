@@ -75,6 +75,15 @@ export const REPLY_SCHEMA_STATEMENTS = [
   'CREATE INDEX IF NOT EXISTS "inbound_replies_contact_id_idx" ON "inbound_replies"("contact_id")',
   'CREATE INDEX IF NOT EXISTS "inbound_replies_flow_id_idx" ON "inbound_replies"("flow_id")',
   'CREATE INDEX IF NOT EXISTS "inbound_replies_answer_send_id_idx" ON "inbound_replies"("answer_send_id")',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_category" TEXT',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_reason" TEXT',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_checked_at" TIMESTAMP(3)',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "saved_list_id" INTEGER',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "saved_at" TIMESTAMP(3)',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "saved_by" TEXT',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_contact_name" TEXT',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_contact_email" TEXT',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_contact_id" INTEGER',
 ];
 
 /** Idempotent DDL ved oppstart (prod-databasen er stengt utenfra). Én feil stopper ikke resten. */

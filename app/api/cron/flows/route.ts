@@ -4,6 +4,8 @@ import { drainFlowBatches } from '@/lib/flows/runner';
 import { pollMailboxes } from '@/lib/tracking/poller';
 import { runAiAnalysis } from '@/lib/ai/analyze-runner';
 import { startChainedGroups } from '@/lib/utsendelser/chain';
+import { classifyPendingReplies } from '@/lib/replies/classify';
+import { sendDueReminders } from '@/lib/replies/neste-aar';
 import logger from '@/lib/logger';
 
 export async function POST(request: NextRequest) {
@@ -31,6 +33,14 @@ export async function POST(request: NextRequest) {
       logger.error('«Start etter» feilet', { error: error instanceof Error ? error.message : String(error) });
       return { started: [] as string[] };
     });
+    const sorted = await classifyPendingReplies().catch((error) => {
+      logger.error('Sortering av svar feilet', { error: error instanceof Error ? error.message : String(error) });
+      return { checked: 0, saved: 0 };
+    });
+    const reminders = await sendDueReminders().catch((error) => {
+      logger.error('Påminnelse om neste års julebord feilet', { error: error instanceof Error ? error.message : String(error) });
+      return { sent: 0 };
+    });
 
     logger.info('Flows cron batch completed', {
       batches: result.batches,
@@ -41,10 +51,12 @@ export async function POST(request: NextRequest) {
       poller,
       suggestions,
       chained,
+      sorted,
+      reminders,
     });
 
     return NextResponse.json(
-      { ...result, poller, suggestions, chained },
+      { ...result, poller, suggestions, chained, sorted, reminders },
       { status: result.failed > 0 ? 500 : 200 },
     );
   } catch (error) {

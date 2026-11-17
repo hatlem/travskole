@@ -23,7 +23,7 @@ function countLabel(n: number): string {
 }
 
 const SUPPRESSION_REASONS: Record<string, string> = {
-  unsubscribe: 'meldte seg av', bounce: 'e-posten kom i retur', complaint: 'klaget', manual: 'lagt til for hånd',
+  unsubscribe: 'meldte seg av', bounce: 'e-posten kom i retur', left: 'har sluttet (autosvar)', complaint: 'klaget', manual: 'lagt til for hånd',
 };
 
 function SectionHeading({ title, description, help }: { title: string; description: string; help?: React.ReactNode }) {
