@@ -169,3 +169,12 @@ describe('retur: midlertidig og for mange adresser', () => {
   });
 });
 
+
+describe('isForwardOrBounceSubject', () => {
+  it('bare videresending og retur går til videresendings-håndteringen, ikke vanlige svar', async () => {
+    const { isForwardOrBounceSubject } = await import('@/lib/tracking/forwarded');
+    expect(isForwardOrBounceSubject('VS: SV: Julebord')).toBe(true);
+    expect(isForwardOrBounceSubject('Ikke levert: Julebord')).toBe(true);
+    expect(isForwardOrBounceSubject('SV: Julebord')).toBe(false);
+  });
+});

@@ -33,6 +33,10 @@ export interface ForwardedMessage {
 
 export const isForwardSubject = (subject: string) => FORWARD_SUBJECT.test(subject);
 
+/** Videresending eller returmelding (det eneste fra en ansatt som kan gjelde en kunde). */
+export const isForwardOrBounceSubject = (subject: string) =>
+  FORWARD_SUBJECT.test(subject) || BOUNCE_SUBJECT.test(baseSubject(subject));
+
 /** Emnet uten «SV:», «VS:» osv., for å kjenne igjen e-posten det gjelder. */
 export const baseSubject = (subject: string) => subject.replace(REPLY_PREFIX, '').trim();
 

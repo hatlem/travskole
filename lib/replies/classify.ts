@@ -85,6 +85,11 @@ export function parseClassification(text: string | null): Classification | null 
   }
 }
 
+/** Ikke sortert ennå, eller reservert av en kjøring som ble avbrutt for mer enn ti minutter siden. */
+const unclassified = (now: Date) => ({
+  OR: [{ aiCheckedAt: null }, { aiCategory: null, aiCheckedAt: { lt: new Date(now.getTime() - 10 * 60_000) } }],
+});
+
 export function isClassifierEnabled(): boolean {
   return getLLMProvider() !== null;
 }
@@ -94,7 +99,7 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
   const provider = getLLMProvider();
   if (!provider) return { checked: 0, saved: 0 };
   const rows = await prisma.inboundReply.findMany({
-    where: { aiCheckedAt: null, receivedAt: { gte: new Date(now.getTime() - MAX_AGE_DAYS * 24 * 60 * 60_000) } },
+    where: { ...unclassified(now), receivedAt: { gte: new Date(now.getTime() - MAX_AGE_DAYS * 24 * 60 * 60_000) } },
     orderBy: { id: 'asc' },
     take: BATCH,
     select: { id: true, subject: true, bodyText: true, status: true, taskId: true, savedListId: true },
@@ -104,7 +109,7 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
   let saved = 0;
   for (const reply of rows) {
     // Reserver raden, så to cron-kjøringer samtidig aldri sorterer samme svar.
-    const claim = await prisma.inboundReply.updateMany({ where: { id: reply.id, aiCheckedAt: null }, data: { aiCheckedAt: now } });
+    const claim = await prisma.inboundReply.updateMany({ where: { id: reply.id, ...unclassified(now) }, data: { aiCheckedAt: now } });
     if (claim.count === 0) continue;
     let result: Classification | null;
     if (!reply.bodyText.trim()) {

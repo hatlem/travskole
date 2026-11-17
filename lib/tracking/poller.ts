@@ -46,7 +46,7 @@ import {
 import { recordReply, recordBounce, recordLeftCompany } from '@/lib/tracking/apply';
 import { backfillReply, closeReply, markAnsweredFromMailbox } from '@/lib/replies/store';
 import { cleanReplyText } from '@/lib/replies/text';
-import { handleForwardedReply, isForwardSubject, parseForwarded } from '@/lib/tracking/forwarded';
+import { handleForwardedReply, isForwardOrBounceSubject, isForwardSubject, parseForwarded } from '@/lib/tracking/forwarded';
 
 /** Env GRAPH_MAILBOXES (hvis satt) overstyrer admin-innstillingen graph_mailboxes. */
 export async function graphMailboxes(): Promise<string[]> {
@@ -139,15 +139,14 @@ const isFromStaff = (message: GraphMessage, mailbox: string) => {
 
 /**
  * Sendt fra innsiden av organisasjonen (ikke en forfalsket @bjerke.no-avsender utenfra): Exchange merker interne
- * meldinger med AuthAs: Internal; eksterne må ha DMARC-pass for avsenderdomenet.
+ * meldinger med AuthAs: Internal.
  */
 export function isAuthenticatedInternal(headers: { name: string; value: string }[], domain: string): boolean {
   return headers.some(({ name, value }) => {
     const key = name.trim().toLowerCase();
     const val = value.toLowerCase();
-    if (key === 'x-ms-exchange-organization-authas') return val.trim() === 'internal';
-    if (key === 'authentication-results') return val.includes('dmarc=pass') && val.includes(`header.from=${domain}`);
-    return false;
+    // Bare Exchange sitt eget stempel: Authentication-Results kan en avsender legge inn selv.
+    return key === 'x-ms-exchange-organization-authas' && val.trim() === 'internal' && domain.length > 0;
   });
 }
 
@@ -335,17 +334,18 @@ async function pollOneMailbox(
           }
           continue;
         }
-        const result = await handleForwardedReply({
-          forwardedBy: message.from?.emailAddress?.address ?? '',
-          subject: message.subject ?? '',
-          text: message.body?.content ?? '',
-          internetMessageId: message.internetMessageId ?? null,
-          receivedAt: sentAt,
-        });
-        if (result === 'reply') replies++;
-        if (result === 'bounce') bounces++;
-        // Et vanlig svar fra en ansatt med fellespostboksen på kopi: det de svarte på, er besvart.
-        if (result === 'ignore' && !isForwardSubject(message.subject ?? '')) {
+        if (isForwardOrBounceSubject(message.subject ?? '')) {
+          const result = await handleForwardedReply({
+            forwardedBy: message.from?.emailAddress?.address ?? '',
+            subject: message.subject ?? '',
+            text: message.body?.content ?? '',
+            internetMessageId: message.internetMessageId ?? null,
+            receivedAt: sentAt,
+          });
+          if (result === 'reply') replies++;
+          if (result === 'bounce') bounces++;
+        } else if (!isAutoReply(msg)) {
+          // Et vanlig svar fra en ansatt med fellespostboksen på kopi: det de svarte på, er besvart.
           await markAnsweredFromMailbox([...(msg.inReplyTo ? [msg.inReplyTo] : []), ...msg.references], message.from?.emailAddress?.address ?? mailbox, sentAt);
         }
         continue;
@@ -405,11 +405,14 @@ async function repairStaffReplies(mailbox: string, token: string): Promise<numbe
     });
     if (!res.ok) throw new Error(`Graph ${res.status}`);
     const message = ((await res.json()) as { value?: GraphMessage[] }).value?.[0];
-    const forwarded = message ? parseForwarded(message.body?.content ?? '') : null;
+    // Bare videresendinger skrives om; et vanlig svar fra en ansatt (med fellespostboksen på kopi) lukkes.
+    const forwarded = message && isForwardSubject(message.subject ?? '') ? parseForwarded(message.body?.content ?? '') : null;
     if (forwarded && domainOf(forwarded.fromEmail) !== domain) {
       await prisma.inboundReply.update({
         where: { id: row.id },
         data: {
+          // Sorteres på nytt ut fra kundens tekst.
+          aiCategory: null, aiReason: null, aiCheckedAt: null, aiContactName: null, aiContactEmail: null,
           fromEmail: forwarded.fromEmail,
           fromName: forwarded.fromName,
           bodyText: cleanReplyText(forwarded.body),
