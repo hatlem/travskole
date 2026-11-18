@@ -38,6 +38,10 @@ export interface InboundMessageLike {
 }
 
 const AUTO_REPLY_SUBJECT = /^\s*(automatisk svar|autosvar|out of office|fraværende|automatic reply|auto-?reply)\b/i;
+/** Merke foran emnet fra e-postfilter, f.eks. «SPF Automatisk svar» eller «[EXT] Out of office». Ikke Re/SV/VS. */
+const SUBJECT_TAG = /^\s*(?!(?:RE|SV|AW|VS|FW|FWD)\b)(?:\[[^\]]{1,20}\]|[A-ZÆØÅ]{2,10}:?)\s+/;
+/** Kvitteringer fra saks-/kundeservicesystemer (Salesforce-tråd, saksnummer). */
+const TICKET_SUBJECT = /\[\s*thread::|\bref:_[0-9a-z]+\.[0-9a-z_]+:ref\b|\b(bekreftelse|kvittering|saksnummer|saksnr|ticket|confirmation)\b.{0,15}?\b[a-z]{0,4}-?\d{5,}\b/i;
 const AUTO_PRECEDENCE = new Set(['auto_reply', 'bulk', 'junk']);
 
 /**
@@ -45,7 +49,8 @@ const AUTO_PRECEDENCE = new Set(['auto_reply', 'bulk', 'junk']);
  * varianter og kjente emneprefikser) er ikke et ekte svar fra kontakten.
  */
 export function isAutoReply(msg: Pick<InboundMessageLike, 'subject' | 'headers'>): boolean {
-  if (AUTO_REPLY_SUBJECT.test(msg.subject)) return true;
+  if (AUTO_REPLY_SUBJECT.test(msg.subject) || AUTO_REPLY_SUBJECT.test(msg.subject.replace(SUBJECT_TAG, ''))) return true;
+  if (TICKET_SUBJECT.test(msg.subject)) return true;
   for (const { name, value } of msg.headers ?? []) {
     const key = name.trim().toLowerCase();
     const val = value.trim().toLowerCase();

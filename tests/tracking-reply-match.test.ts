@@ -250,6 +250,23 @@ describe('autosvar regnes ikke som svar', () => {
     expect(isAutoReply({ subject: 'Re: Takk for automatisk svar', headers: [] })).toBe(false);
   });
 
+  it.each([
+    'SPF Automatisk svar - Julebord som ikke ligner på fjorårets?',
+    '[EXT] Out of office: Kurs',
+    'Julebord som ikke ligner på fjorårets?, Bekreftelse Kc-48609563 [ thread::_j2QXQ2YdmWGy2q9VLsKLWQ:: ]',
+    'Kvittering for henvendelse, saksnummer 2026-123456',
+    'Your case ref:_00D1x2Y3._5004z5A6B7:ref',
+  ])('autosvar fra filtre og saksystemer: «%s»', (subject) => {
+    expect(isAutoReply({ subject, headers: [] })).toBe(true);
+  });
+
+  it.each(['RE: Automatisk svar: Kurs', 'SV: Julebord som ikke ligner på fjorårets?', 'Re: Bekreftelse på julebord', 'Re: Julebord for 25 personer'])(
+    'ekte svar forblir svar: «%s»',
+    (subject) => {
+      expect(isAutoReply({ subject, headers: [] })).toBe(false);
+    },
+  );
+
   it('DSN prioriteres fortsatt foran autosvar-sjekken', () => {
     expect(classifyInboundMessage(baseMsg({ isDsn: true, dsnStatus: '5.1.1', subject: 'Automatic reply' }), known).kind).toBe('bounce');
   });
