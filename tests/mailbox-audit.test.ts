@@ -3,18 +3,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const { prisma, messages, state } = vi.hoisted(() => ({
   messages: { list: [] as Record<string, unknown>[] },
-  state: { active: new Set<number>(), stored: new Set<string>(), contacts: new Map<string, { id: number; name: string }>() },
+  state: { suppressed: new Set<string>(), active: new Set<number>(), stored: new Set<string>(), contacts: new Map<string, { id: number; name: string; email?: string }>() },
   prisma: {
     inboundReply: {
       findUnique: vi.fn(async () => null),
       count: vi.fn(async ({ where }: { where: { internetMessageId: string } }) => (state.stored.has(where.internetMessageId) ? 1 : 0)),
     },
-    messageSend: { findFirst: vi.fn(async () => null) },
+    messageSend: {
+      findFirst: vi.fn(async ({ where }: { where: { messageId: { in: string[] } } }) =>
+        (where.messageId.in.includes('<sent-kari@bjerke.no>') ? { contact: { id: 1, name: 'Kari', email: 'kari@firma.no' } } : null)),
+      findMany: vi.fn(async ({ where }: { where: { toEmail: { equals: string } } }) =>
+        (where.toEmail.equals === 'kari@firma.no' ? [{ messageId: '<sent-kari@bjerke.no>', enrollmentId: 4 }] : [])),
+    },
     contact: {
       findFirst: vi.fn(async ({ where }: { where: { email: { equals: string } } }) => state.contacts.get(where.email.equals.toLowerCase()) ?? null),
     },
-    suppression: { count: vi.fn(async () => 0) },
-    flowEnrollment: { count: vi.fn(async ({ where }: { where: { contactId: number } }) => (state.active.has(where.contactId) ? 1 : 0)) },
+    suppression: { count: vi.fn(async ({ where }: { where: { email: string } }) => (state.suppressed.has(where.email) ? 1 : 0)) },
+    flowEnrollment: { findUnique: vi.fn(async () => ({ flow: { isMarketing: true } })), count: vi.fn(async ({ where }: { where: { contactId: number } }) => (state.active.has(where.contactId) ? 1 : 0)) },
   },
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
@@ -43,6 +48,7 @@ const msg = (from: string, subject: string, body = '', id = `<${Math.random()}@x
 beforeEach(() => {
   vi.clearAllMocks();
   state.active = new Set();
+  state.suppressed = new Set();
   state.stored = new Set();
   state.contacts = new Map([['kari@firma.no', { id: 1, name: 'Kari' }], ['ola@firma.no', { id: 2, name: 'Ola' }]]);
   vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ value: messages.list }), { status: 200 })));
@@ -72,6 +78,19 @@ describe('auditMailboxes', () => {
     expect(result.problems.map((p) => p.contactName)).toEqual(['Ola']);
     expect(result.problems[0].captured).toBe(false);
     expect(result.unknown.map((u) => u.from)).toEqual(['ukjent@annet.no']);
+  });
+
+  it('videresendt returmelding: regnes som retur for adressen vi sendte til; sperret = får ikke e-post', async () => {
+    messages.list = [msg('hilde.apneseth@bjerke.no', 'VS: Julebord som ikke ligner på fjorårets?',
+      'Fra: postmaster@acsemaileu1.onmicrosoft.com\nSendt: 17. november 2026 09:00\nEmne: Ikke levert\n\nKunne ikke leveres til kari@firma.no')];
+    state.active = new Set([1]);
+    let result = await auditMailboxes(30);
+    expect(result.counts.retur).toBe(1);
+    expect(result.problems).toEqual([]);
+    expect(result.notSuppressed).toEqual([expect.objectContaining({ kind: 'retur', contactId: 1, customerEmail: 'kari@firma.no' })]);
+    state.suppressed = new Set(['kari@firma.no']);
+    result = await auditMailboxes(30);
+    expect(result.notSuppressed).toEqual([]);
   });
 
   it('interne e-poster og e-post fra postboksen selv hoppes over', async () => {

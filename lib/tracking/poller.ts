@@ -46,7 +46,7 @@ import {
 import { recordReply, recordBounce, recordLeftCompany } from '@/lib/tracking/apply';
 import { backfillReply, closeReply, markAnsweredFromMailbox } from '@/lib/replies/store';
 import { cleanReplyText } from '@/lib/replies/text';
-import { handleForwardedReply, isForwardOrBounceSubject, isForwardSubject, parseForwarded } from '@/lib/tracking/forwarded';
+import { handleForwardedReply, isForwardOrBounceSubject, isForwardSubject, latestCampaignSend, parseForwarded } from '@/lib/tracking/forwarded';
 
 /** Env GRAPH_MAILBOXES (hvis satt) overstyrer admin-innstillingen graph_mailboxes. */
 export async function graphMailboxes(): Promise<string[]> {
@@ -364,6 +364,14 @@ async function pollOneMailbox(
       } else if (classification.kind === 'bounce') {
         await recordBounce(null, classification.failedRecipient ?? null, classification.hard);
         bounces++;
+      } else if (!msg.isDsn) {
+        // Ny e-post uten trådinformasjon (f.eks. tomt emne, skrevet rett til registrering@) fra en som har fått
+        // utsendelsen nylig: det er et svar.
+        const send = msg.from ? await latestCampaignSend(msg.from) : null;
+        if (send?.messageId) {
+          await recordReply(send.messageId, replyDetails(message, msg));
+          replies++;
+        }
       }
     } catch (error) {
       logger.error('Graph-melding kunne ikke behandles', {
