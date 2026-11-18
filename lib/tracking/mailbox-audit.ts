@@ -65,17 +65,21 @@ async function listMessages(mailbox: string, token: string, since: Date): Promis
 }
 
 /** Kontakten bak meldingen: lagret svar, så tråden (e-posten de svarte på), så avsenderadressen. */
-async function resolveContact(internetMessageId: string | null, threadIds: string[], email: string | null): Promise<{ id: number; name: string } | null> {
+type FoundContact = { id: number; name: string; email: string | null };
+const CONTACT_SELECT = { id: true, name: true, email: true } as const;
+const BOUNCE_SENDER = /^(mailer-daemon|postmaster|microsoftexchange)/i;
+
+async function resolveContact(internetMessageId: string | null, threadIds: string[], email: string | null): Promise<FoundContact | null> {
   if (internetMessageId) {
-    const stored = await prisma.inboundReply.findUnique({ where: { internetMessageId }, select: { contact: { select: { id: true, name: true } } } });
+    const stored = await prisma.inboundReply.findUnique({ where: { internetMessageId }, select: { contact: { select: CONTACT_SELECT } } });
     if (stored) return stored.contact;
   }
   if (threadIds.length) {
-    const send = await prisma.messageSend.findFirst({ where: { messageId: { in: threadIds } }, select: { contact: { select: { id: true, name: true } } } });
+    const send = await prisma.messageSend.findFirst({ where: { messageId: { in: threadIds } }, select: { contact: { select: CONTACT_SELECT } } });
     if (send) return send.contact;
   }
   if (email) {
-    const contact = await prisma.contact.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: { id: true, name: true } });
+    const contact = await prisma.contact.findFirst({ where: { email: { equals: email, mode: 'insensitive' } }, select: CONTACT_SELECT });
     if (contact) return contact;
   }
   return null;
@@ -122,8 +126,9 @@ export async function auditMailboxes(days = 30, now: Date = new Date()): Promise
           counts.intern++;
           continue;
         }
-        kind = 'videresendt';
-        customerEmail = forwarded.fromEmail;
+        // Videresendt returmelding (fra postmaster/mailer-daemon): gjelder adressen vi sendte til.
+        kind = BOUNCE_SENDER.test(forwarded.fromEmail) ? 'retur' : 'videresendt';
+        customerEmail = kind === 'retur' ? null : forwarded.fromEmail;
       } else if (isAutoReply(msg)) {
         kind = saysLeftCompany(body) ? 'sluttet' : 'autosvar';
       } else {
@@ -137,22 +142,25 @@ export async function auditMailboxes(days = 30, now: Date = new Date()): Promise
         kind === 'videresendt' ? [] : threadIds,
         customerEmail,
       );
-      if (!contact && kind === 'videresendt') {
+      if (!contact && isFromStaff(message, mailbox)) {
         // Svarte fra en annen adresse: samme oppslag som polleren gjør (vår siterte e-post, «Til: kunden»).
         const send = await quotedRecipientSend(body, from);
         if (send?.messageId) contact = await resolveContact(null, [send.messageId], null);
       }
+      const targetEmail = contact?.email ?? customerEmail;
+      const suppressed = await isSuppressed(targetEmail);
       const captured = kind === 'svar' && !!message.internetMessageId
         && (await prisma.inboundReply.count({ where: { internetMessageId: message.internetMessageId } })) > 0;
       items.push({
         ...base,
         kind,
-        customerEmail,
+        customerEmail: targetEmail,
         contactId: contact?.id ?? null,
         contactName: contact?.name ?? null,
         captured,
-        stillReceiving: contact ? await hasActiveMarketingEnrollment(contact.id) : false,
-        suppressed: await isSuppressed(customerEmail),
+        // Sperrede adresser får ingen e-post, selv om de fortsatt står i utsendelsen.
+        stillReceiving: contact && !suppressed ? await hasActiveMarketingEnrollment(contact.id) : false,
+        suppressed,
       });
     }
   }

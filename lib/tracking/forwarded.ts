@@ -108,7 +108,7 @@ export interface ForwardInput {
  * svar fra kontakten. Returnerer 'reply', 'unmatched' (ligner på et svar, men vi fant ikke personen) eller 'ignore'.
  */
 /** Siste markedsførings-e-post (utsendelse) til adressen de siste 60 dagene. Kurs-e-poster o.l. teller ikke. */
-async function latestCampaignSend(email: string): Promise<{ messageId: string | null } | null> {
+export async function latestCampaignSend(email: string): Promise<{ messageId: string | null } | null> {
   const sends = await prisma.messageSend.findMany({
     where: {
       toEmail: { equals: email, mode: 'insensitive' },
