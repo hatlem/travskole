@@ -1,6 +1,7 @@
 /**
  * Claude leser nye svar og sorterer dem. «Har bestilt i år» spares automatisk til neste år, og
- * autosvar (fravær o.l.) merkes «trenger ikke svar». Uten API-nøkkel skjer ingenting.
+ * autosvar (fravær o.l.) merkes «trenger ikke svar». Vennlige svar merkes for takk (se thanks.ts).
+ * Uten API-nøkkel skjer ingenting.
  */
 import { z } from 'zod';
 import { prisma } from '@/lib/prisma';
@@ -8,6 +9,8 @@ import { getLLMProvider } from '@/lib/ai/provider';
 import logger from '@/lib/logger';
 import { closeReply } from './store';
 import { saveForNextYear } from './neste-aar';
+import { autoThankIfEnabled, getThanksSettings } from './thanks';
+import { thanksFits } from './thanks-text';
 
 export const REPLY_CATEGORIES = ['neste_aar', 'interessert', 'nei', 'autosvar', 'annet'] as const;
 export type ReplyCategory = (typeof REPLY_CATEGORIES)[number];
@@ -39,6 +42,8 @@ Velg én kategori:
 
 trenger_svar er true når de stiller et spørsmål, ber om noe (pris, tilbud, flere plasser, endring av en bestilling) eller tydelig venter svar. Et vennlig «nei takk» eller «har allerede bestilt» uten spørsmål trenger ikke svar. Har de allerede bestilt hos Bjerke og spør om noe, er kategorien interessert.
 
+takk_passer er true når svaret er vennlig eller positivt, ikke stiller spørsmål, og en kort «takk for hyggelig tilbakemelding» passer som svar. Den er false ved autosvar, avmelding, klage, irritasjon, når de ber om å slippe e-post, og når de vil ha tilbud eller mer informasjon.
+
 sikker skal bare være true når teksten tydelig passer kategorien. begrunnelse er én kort setning på norsk (høyst 15 ord) som forklarer valget for en kollega.
 
 Skriver de at en annen person er riktig kontakt (for eksempel «Jørgen Ellingsen er riktig person, har videresendt til ham»), sett ny_kontakt_navn til personens fulle navn. Sett ny_kontakt_epost bare hvis e-postadressen til den personen står i teksten; ikke gjett adressen. Ellers er begge tomme strenger.
@@ -51,11 +56,12 @@ export const CLASSIFICATION_SCHEMA = {
     kategori: { type: 'string', enum: [...REPLY_CATEGORIES] },
     sikker: { type: 'boolean' },
     trenger_svar: { type: 'boolean' },
+    takk_passer: { type: 'boolean' },
     begrunnelse: { type: 'string' },
     ny_kontakt_navn: { type: 'string' },
     ny_kontakt_epost: { type: 'string' },
   },
-  required: ['kategori', 'sikker', 'trenger_svar', 'begrunnelse', 'ny_kontakt_navn', 'ny_kontakt_epost'],
+  required: ['kategori', 'sikker', 'trenger_svar', 'takk_passer', 'begrunnelse', 'ny_kontakt_navn', 'ny_kontakt_epost'],
   additionalProperties: false,
 } as const;
 
@@ -64,6 +70,8 @@ const resultSchema = z.object({
   sikker: z.boolean(),
   // Mangler den, regnes svaret som at det trenger svar (heller vise for mye enn å lukke et spørsmål).
   trenger_svar: z.boolean().default(true),
+  // Mangler den, sendes ingen takk.
+  takk_passer: z.boolean().default(false),
   begrunnelse: z.string().trim().max(300),
   ny_kontakt_navn: z.string().trim().max(120).default(''),
   // En adresse som ikke er gyldig, droppes (heller tomt enn feil).
@@ -102,8 +110,10 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
     where: { ...unclassified(now), receivedAt: { gte: new Date(now.getTime() - MAX_AGE_DAYS * 24 * 60 * 60_000) } },
     orderBy: { id: 'asc' },
     take: BATCH,
-    select: { id: true, subject: true, bodyText: true, status: true, taskId: true, savedListId: true },
+    select: { id: true, subject: true, bodyText: true, status: true, taskId: true, savedListId: true, receivedAt: true },
   });
+  if (rows.length === 0) return { checked: 0, saved: 0 };
+  const { mode: thanksMode } = await getThanksSettings();
 
   let checked = 0;
   let saved = 0;
@@ -113,7 +123,7 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
     if (claim.count === 0) continue;
     let result: Classification | null;
     if (!reply.bodyText.trim()) {
-      result = { kategori: 'annet', sikker: false, trenger_svar: false, begrunnelse: 'Svaret har ingen tekst.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
+      result = { kategori: 'annet', sikker: false, trenger_svar: false, takk_passer: false, begrunnelse: 'Svaret har ingen tekst.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
     } else {
       const text = await provider.generateText(buildClassifyPrompt(reply), {
         system: SYSTEM,
@@ -127,7 +137,7 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
         await prisma.inboundReply.updateMany({ where: { id: reply.id, aiCategory: null }, data: { aiCheckedAt: null } });
         break;
       }
-      result = parseClassification(text) ?? { kategori: 'annet', sikker: false, trenger_svar: true, begrunnelse: 'Kunne ikke sortere svaret.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
+      result = parseClassification(text) ?? { kategori: 'annet', sikker: false, trenger_svar: true, takk_passer: false, begrunnelse: 'Kunne ikke sortere svaret.', ny_kontakt_navn: '', ny_kontakt_epost: '' };
     }
 
     await prisma.inboundReply.update({
@@ -136,6 +146,7 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
         aiCategory: result.kategori,
         aiReason: result.begrunnelse || null,
         aiCheckedAt: now,
+        aiThanks: thanksFits(result),
         aiContactName: result.ny_kontakt_navn || null,
         aiContactEmail: result.ny_kontakt_navn && result.ny_kontakt_epost ? result.ny_kontakt_epost : null,
       },
@@ -150,6 +161,7 @@ export async function classifyPendingReplies(now: Date = new Date()): Promise<{ 
       } else if (result.sikker && !result.trenger_svar && result.kategori === 'autosvar' && reply.status === 'open') {
         await closeReply(reply, 'no_reply', CLAUDE, now);
       }
+      await autoThankIfEnabled(reply, result, thanksMode, now);
     } catch (error) {
       logger.error('Kunne ikke følge opp sortert svar', { replyId: reply.id, error: error instanceof Error ? error.message : String(error) });
     }

@@ -3,6 +3,7 @@ import { requireAdmin } from '@/lib/auth';
 import { getUtsendelse } from '@/lib/utsendelser/config';
 import { countOpenReplies, listReplies, type ReplyFilter } from '@/lib/replies/list';
 import { nextYearSummary } from '@/lib/replies/neste-aar';
+import { getThanksSettings, thanksQueue } from '@/lib/replies/thanks';
 
 /** Svar fra kontakter: alle, for én kontakt, eller for én utsendelse. `?antall=1` gir bare hvor mange som må svares. */
 export async function GET(request: NextRequest) {
@@ -24,6 +25,8 @@ export async function GET(request: NextRequest) {
     if (!utsendelse) return NextResponse.json({ error: 'Fant ikke utsendelsen.' }, { status: 404 });
     filter.flowIds = utsendelse.flyter.map((f) => f.flowId);
   }
-  const [replies, open, nesteAar] = await Promise.all([listReplies(filter), countOpenReplies(), nextYearSummary()]);
-  return NextResponse.json({ replies, open, nesteAar });
+  const [replies, open, nesteAar, thanksSettings, queue] = await Promise.all([
+    listReplies(filter), countOpenReplies(), nextYearSummary(), getThanksSettings(), thanksQueue(),
+  ]);
+  return NextResponse.json({ replies, open, nesteAar, takk: { ...thanksSettings, venter: queue.length } });
 }

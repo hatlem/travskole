@@ -4,16 +4,19 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import Link from 'next/link';
 import { Button } from '@/components/admin/Button';
 import { Badge } from '@/components/admin/StatusBadge';
+import { ConfirmModal } from '@/components/admin/ConfirmModal';
 import { useToast } from '@/components/admin/Toast';
 import type { ReplyItem } from '@/lib/replies/list';
 import type { NextYearSummary } from '@/lib/replies/neste-aar';
+import { MAX_THANKS_TEXT, greetingName, renderThanks, type ThanksMode } from '@/lib/replies/thanks-text';
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
 
 const day = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Oslo' });
 
-interface RepliesData { replies: ReplyItem[]; nesteAar: NextYearSummary }
+interface ThanksInfo { mode: ThanksMode; text: string; venter: number }
+interface RepliesData { replies: ReplyItem[]; nesteAar: NextYearSummary; takk: ThanksInfo }
 
 async function fetchReplies(query: string): Promise<RepliesData> {
   const res = await fetch(`/api/admin/svar?status=all${query ? `&${query}` : ''}`, { cache: 'no-store' });
@@ -35,10 +38,12 @@ interface Props {
   empty?: ReactNode;
   /** Vis oversikten over hvem som er spart til neste år (på «Svar»-siden). */
   showNextYear?: boolean;
+  /** Vis valget for takk-svar (på «Svar»-siden). */
+  showThanks?: boolean;
 }
 
 /** Svar fra kontakter: de som må svares øverst, så de som er behandlet. Svar, «Trenger ikke svar» eller «Besvart i Outlook». */
-export function ReplyList({ query = '', showContact = true, showUtsendelse = true, empty = null, showNextYear = false }: Props) {
+export function ReplyList({ query = '', showContact = true, showUtsendelse = true, empty = null, showNextYear = false, showThanks = false }: Props) {
   const [data, setData] = useState<RepliesData | null>(null);
   const [failed, setFailed] = useState(false);
 
@@ -66,16 +71,18 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
 
   if (failed && !replies) return <p className="text-sm text-red-700">Fikk ikke hentet svarene. Last siden på nytt.</p>;
   if (!replies) return <p className="text-sm text-gray-500">Henter svar …</p>;
-  if (replies.length === 0) return <>{empty}</>;
+  if (replies.length === 0) return <>{showThanks && <ThanksPanel info={data!.takk} onChanged={changed} />}{empty}</>;
 
   const nesteAar = data!.nesteAar;
+  const takk = data!.takk;
   const open = replies.filter((r) => r.status === 'open');
   const handled = replies.filter((r) => r.status !== 'open');
   const card = (r: ReplyItem) => (
-    <ReplyCard key={r.id} reply={r} nextYearName={nesteAar.navn} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />
+    <ReplyCard key={r.id} reply={r} nextYearName={nesteAar.navn} thanks={takk} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />
   );
   return (
     <div className="space-y-6">
+      {showThanks && <ThanksPanel info={takk} onChanged={changed} />}
       {showNextYear && <NextYearPanel summary={nesteAar} />}
       {open.length > 0 && (
         <div>
@@ -95,6 +102,120 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
         </details>
       )}
     </div>
+  );
+}
+
+const THANKS_CHOICES: { mode: ThanksMode; label: string; help: string }[] = [
+  { mode: 'click', label: 'Ett klikk', help: 'Claude finner de vennlige svarene. Du sender takken med én knapp.' },
+  { mode: 'auto', label: 'Automatisk', help: 'Claude sender takken selv, i ditt navn, når et vennlig svar kommer inn.' },
+  { mode: 'off', label: 'Av', help: 'Ingen takk-knapper.' },
+];
+
+/** Takk-svar på vennlige svar: Hilde velger av, ett klikk eller automatisk, og skriver teksten selv. */
+function ThanksPanel({ info, onChanged }: { info: ThanksInfo; onChanged: () => void }) {
+  const { toast } = useToast();
+  const textId = useId();
+  const groupName = useId();
+  const [mode, setMode] = useState<ThanksMode>(info.mode);
+  const [text, setText] = useState(info.text);
+  const [saving, setSaving] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const [sending, setSending] = useState(false);
+  const dirty = mode !== info.mode || text.trim() !== info.text.trim();
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/svar/takk', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ mode, text }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error'); return; }
+      toast('Lagret.', 'success');
+      onChanged();
+    } catch {
+      toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function sendAll() {
+    setSending(true);
+    try {
+      const res = await fetch('/api/admin/svar/takk', { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error'); return; }
+      const parts = [`Takk sendt til ${data.sent}.`];
+      if (data.failed) parts.push(`${data.failed} feilet, prøv igjen senere.`);
+      if (data.remaining) parts.push(`${data.remaining} gjenstår, trykk igjen.`);
+      toast(parts.join(' '), data.failed ? 'error' : 'success');
+      onChanged();
+    } catch {
+      toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');
+    } finally {
+      setSending(false);
+      setConfirming(false);
+    }
+  }
+
+  return (
+    <details className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm" open={info.venter > 0}>
+      <summary className="cursor-pointer font-semibold text-gray-900">
+        Takk-svar på vennlige svar
+        <span className="ml-2 font-normal text-gray-600">
+          {THANKS_CHOICES.find((c) => c.mode === info.mode)?.label}
+          {info.mode !== 'off' && info.venter > 0 ? ` · ${info.venter} venter på takk` : ''}
+        </span>
+      </summary>
+
+      {info.mode !== 'off' && info.venter > 0 && (
+        <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-green-50 px-3 py-2 text-green-950">
+          <span>{info.venter === 1 ? 'Ett vennlig svar venter' : `${info.venter} vennlige svar venter`} på en takk.</span>
+          <Button size="sm" onClick={() => setConfirming(true)}>Send takk til alle ({info.venter})</Button>
+        </div>
+      )}
+
+      <fieldset className="mt-3">
+        <legend className="font-medium text-gray-900">Hvordan skal takken sendes?</legend>
+        <div className="mt-1 space-y-1">
+          {THANKS_CHOICES.map((c) => (
+            <label key={c.mode} className="flex cursor-pointer items-start gap-2">
+              <input type="radio" name={groupName} className="mt-1" checked={mode === c.mode} onChange={() => setMode(c.mode)} />
+              <span><span className="font-medium">{c.label}</span> <span className="text-gray-600">· {c.help}</span></span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
+      <label htmlFor={textId} className="mt-3 block font-medium text-gray-900">Takketekst</label>
+      <textarea
+        id={textId}
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={3}
+        maxLength={MAX_THANKS_TEXT}
+        className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-bjerke-blue focus:ring-2 focus:ring-bjerke-blue/20"
+      />
+      <p className="mt-1 text-xs text-gray-500">
+        {'{fornavn}'} byttes ut med fornavnet til den som svarte. Takken sendes i samme e-posttråd, fra den som sendte e-posten de svarte på.
+        Svar med spørsmål, autosvar og de som vil vite mer, får aldri takk automatisk.
+      </p>
+      <div className="mt-2">
+        <Button size="sm" loading={saving} disabled={!dirty || !text.trim()} onClick={() => void save()}>Lagre</Button>
+      </div>
+
+      <ConfirmModal
+        open={confirming}
+        title={`Send takk til ${info.venter}?`}
+        message="Hver av dem får dette svaret i samme e-posttråd. Det kan ikke angres."
+        confirmLabel="Send takk"
+        variant="info"
+        loading={sending}
+        onConfirm={() => void sendAll()}
+        onCancel={() => setConfirming(false)}
+      >
+        <p className="mt-3 whitespace-pre-wrap rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-800">{renderThanks(info.text, 'Kari')}</p>
+      </ConfirmModal>
+    </details>
   );
 }
 
@@ -196,7 +317,7 @@ function NewContactBox({ reply: r, onChanged }: { reply: ReplyItem; onChanged: (
 
 const LONG = 700;
 
-function ReplyCard({ reply: r, nextYearName, showContact, showUtsendelse, onChanged }: { reply: ReplyItem; nextYearName: string; showContact: boolean; showUtsendelse: boolean; onChanged: () => void }) {
+function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse, onChanged }: { reply: ReplyItem; nextYearName: string; thanks: ThanksInfo; showContact: boolean; showUtsendelse: boolean; onChanged: () => void }) {
   const { toast } = useToast();
   const textId = useId();
   const [writing, setWriting] = useState(false);
@@ -205,6 +326,8 @@ function ReplyCard({ reply: r, nextYearName, showContact, showUtsendelse, onChan
   const [expanded, setExpanded] = useState(r.bodyText.length <= LONG);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const firstName = (r.fromName ?? r.contactName).split(/\s+/)[0] || r.fromEmail;
+  const canThank = thanks.mode !== 'off' && !r.answer && r.status !== 'answered';
+  const thanksText = renderThanks(thanks.text, greetingName(r.fromName, r.contactName));
 
   useEffect(() => {
     if (writing) areaRef.current?.focus();
@@ -283,6 +406,7 @@ function ReplyCard({ reply: r, nextYearName, showContact, showUtsendelse, onChan
         <p className="mt-2 text-xs text-gray-500">
           <span className="font-medium text-gray-700">Claude: {r.ai.label}</span>
           {r.ai.reason ? ` · ${r.ai.reason}` : ''}
+          {r.thanksFits && canThank ? ' · En kort takk passer' : ''}
         </p>
       )}
 
@@ -335,9 +459,19 @@ function ReplyCard({ reply: r, nextYearName, showContact, showUtsendelse, onChan
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {canThank && (
+            <Button
+              variant={r.thanksFits ? 'primary' : 'secondary'}
+              disabled={busy}
+              title={`Sender: ${thanksText}`}
+              onClick={() => void call('POST', undefined, `Takk sendt til ${firstName}.`, '/takk')}
+            >
+              Send takk
+            </Button>
+          )}
           {r.status === 'open' && (
             <>
-              <Button onClick={() => setWriting(true)}>Svar</Button>
+              <Button variant={canThank && r.thanksFits ? 'secondary' : 'primary'} onClick={() => setWriting(true)}>Svar</Button>
               <Button variant="secondary" disabled={busy} onClick={() => void call('PATCH', { status: 'no_reply' }, 'Merket «trenger ikke svar».')}>Trenger ikke svar</Button>
             </>
           )}

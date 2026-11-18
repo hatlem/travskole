@@ -86,6 +86,9 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   reply_create_task: 'true',
   reply_task_default_assignee: '',
   reply_task_due_days: '1',
+  // Takk-svar på vennlige svar: off | click (ett klikk) | auto (Claude sender selv)
+  reply_thanks_mode: 'click',
+  reply_thanks_text: 'Hei {fornavn}!\n\nTakk for hyggelig tilbakemelding 😊',
   // E-post til den som får en oppgave tildelt av en kollega
   task_notify_assignee: 'true',
   // B2B: send markedsføring til organisasjonskontakter på berettiget interesse
@@ -143,6 +146,7 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'graph_',
   'neste_aar_',
   'reply_task_',
+  'reply_thanks_',
   'reply_create_task',
   'task_notify_',
   'sender_allowed_domains',
