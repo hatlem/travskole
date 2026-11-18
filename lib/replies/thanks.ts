@@ -22,7 +22,9 @@ const AUTO_MAX_AGE_DAYS = 3;
 /** Har kontakten fått svar herfra nylig, sendes ingen ny takk. */
 const RECENT_ANSWER_DAYS = 30;
 /** Høyst så mange per klikk på «Send takk til alle». */
-export const MAX_PER_BATCH = 60;
+export const MAX_PER_BATCH = 30;
+/** Så lenge «Send takk til alle» holder på før den svarer (godt under Azure sin grense på ca. 230 s). */
+const TIME_BUDGET_MS = 90_000;
 
 export interface ThanksSettings {
   mode: ThanksMode;
@@ -54,14 +56,40 @@ const waitingWhere = (now: Date) => ({
   OR: [{ status: 'open' }, { status: 'no_reply', handledBy: CLAUDE }],
 });
 
-/** Kontakter som har fått svar herfra nylig (de skal ikke få en takk i tillegg). */
-async function recentlyAnswered(contactIds: number[], now: Date): Promise<Set<number>> {
-  if (contactIds.length === 0) return new Set();
-  const rows = await prisma.inboundReply.findMany({
-    where: { contactId: { in: contactIds }, answerSendId: { not: null }, handledAt: { gte: new Date(now.getTime() - RECENT_ANSWER_DAYS * 86_400_000) } },
-    select: { contactId: true },
-  });
-  return new Set(rows.map((r) => r.contactId));
+export type BlockReason = 'answered' | 'open_question' | 'suppressed';
+
+const BLOCK_MESSAGES: Record<BlockReason, string> = {
+  answered: 'Kontakten har nettopp fått svar herfra.',
+  open_question: 'Kontakten har et annet svar som venter på svar. Svar på det først.',
+  suppressed: 'Kontakten har meldt seg av e-post fra oss.',
+};
+
+/**
+ * Kontakter som ikke skal få takk nå: fått svar herfra nylig, har et annet åpent svar som ikke er et
+ * takk-svar (et spørsmål, eller ikke sortert ennå), eller står på sperrelista (avmeldt, retur o.l.).
+ */
+export async function blockedContacts(contactIds: number[], now: Date): Promise<Map<number, BlockReason>> {
+  const blocked = new Map<number, BlockReason>();
+  if (contactIds.length === 0) return blocked;
+  const [answered, openOther, contacts] = await Promise.all([
+    prisma.inboundReply.findMany({
+      where: { contactId: { in: contactIds }, answerSendId: { not: null }, handledAt: { gte: new Date(now.getTime() - RECENT_ANSWER_DAYS * 86_400_000) } },
+      select: { contactId: true },
+    }),
+    prisma.inboundReply.findMany({
+      where: { contactId: { in: contactIds }, status: 'open', NOT: { aiThanks: true } },
+      select: { contactId: true },
+    }),
+    prisma.contact.findMany({ where: { id: { in: contactIds } }, select: { id: true, email: true } }),
+  ]);
+  const emails = contacts.map((c) => c.email?.trim().toLowerCase()).filter((e): e is string => !!e);
+  const suppressed = emails.length
+    ? new Set((await prisma.suppression.findMany({ where: { email: { in: emails } }, select: { email: true } })).map((r) => r.email.toLowerCase()))
+    : new Set<string>();
+  for (const c of contacts) if (c.email && suppressed.has(c.email.trim().toLowerCase())) blocked.set(c.id, 'suppressed');
+  for (const r of openOther) if (!blocked.has(r.contactId)) blocked.set(r.contactId, 'open_question');
+  for (const r of answered) if (!blocked.has(r.contactId)) blocked.set(r.contactId, 'answered');
+  return blocked;
 }
 
 /** Svarene som skal få takk, eldste først, høyst én per kontakt. */
@@ -72,50 +100,64 @@ export async function thanksQueue(now: Date = new Date()): Promise<number[]> {
     take: 500,
     select: { id: true, contactId: true },
   });
-  const answered = await recentlyAnswered([...new Set(rows.map((r) => r.contactId))], now);
+  const blocked = await blockedContacts([...new Set(rows.map((r) => r.contactId))], now);
   const seen = new Set<number>();
   const ids: number[] = [];
   for (const r of rows) {
-    if (answered.has(r.contactId) || seen.has(r.contactId)) continue;
+    if (blocked.has(r.contactId) || seen.has(r.contactId)) continue;
     seen.add(r.contactId);
     ids.push(r.id);
   }
   return ids;
 }
 
-/** Sender takketeksten som svar på ett svar, i samme tråd og fra samme avsender som e-posten de svarte på. */
+/**
+ * Sender takketeksten som svar på ett svar, i samme tråd og fra samme avsender som e-posten de svarte på.
+ * Alt sjekkes på nytt rett før sending: en kollega kan ha tatt stilling til svaret i mellomtiden.
+ */
 export async function sendThanks(replyId: number, by: string, now: Date = new Date()): Promise<{ sendId: number }> {
-  const reply = await prisma.inboundReply.findUnique({
-    where: { id: replyId },
-    select: { id: true, contactId: true, status: true, handledBy: true, answerSendId: true, fromName: true, contact: { select: { name: true } } },
+  const { mode, text } = await getThanksSettings();
+  if (mode === 'off') throw new ReplyError('Takk-svar er slått av.', 409);
+  const reply = await prisma.inboundReply.findFirst({
+    where: { id: replyId, ...waitingWhere(now) },
+    select: { id: true, contactId: true, fromName: true, contact: { select: { name: true } } },
   });
-  if (!reply) throw new ReplyError('Fant ikke svaret.', 404);
-  if (reply.answerSendId != null) throw new ReplyError('Dette er allerede besvart herfra.', 409);
-  if (reply.status === 'answered') throw new ReplyError('Dette er allerede besvart.', 409);
-  if ((await recentlyAnswered([reply.contactId], now)).has(reply.contactId)) {
-    throw new ReplyError('Kontakten har nettopp fått svar herfra.', 409);
-  }
-  const { text } = await getThanksSettings();
+  if (!reply) throw new ReplyError('Dette svaret skal ikke ha takk (besvart, behandlet av en kollega eller ikke et vennlig svar).', 409);
+  const reason = (await blockedContacts([reply.contactId], now)).get(reply.contactId);
+  if (reason) throw new ReplyError(BLOCK_MESSAGES[reason], 409);
   const body = renderThanks(text, greetingName(reply.fromName, reply.contact.name));
   if (!body) throw new ReplyError('Skriv en takketekst først.');
   return sendReply(replyId, body, by);
 }
 
-/** «Send takk til alle»: én om gangen, så en feil på én ikke stopper resten. */
-export async function sendThanksToAll(by: string, now: Date = new Date()): Promise<{ sent: number; failed: number; remaining: number }> {
+/**
+ * «Send takk til alle»: én om gangen, innenfor et tidsbudsjett så forespørselen ikke går ut på tid.
+ * Feiler selve sendingen (ikke bare at ett svar ikke skal ha takk), stopper vi, så det kan prøves igjen.
+ */
+export async function sendThanksToAll(by: string, now: Date = new Date()): Promise<{ sent: number; skipped: number; failed: number; remaining: number }> {
   const queue = await thanksQueue(now);
+  const started = Date.now();
   let sent = 0;
+  let skipped = 0;
   let failed = 0;
-  for (const id of queue.slice(0, MAX_PER_BATCH)) {
+  let index = 0;
+  for (; index < Math.min(queue.length, MAX_PER_BATCH); index++) {
+    if (Date.now() - started > TIME_BUDGET_MS) break;
     try {
-      await sendThanks(id, by, now);
+      await sendThanks(queue[index], by, now);
       sent++;
     } catch (error) {
+      if (error instanceof ReplyError && error.status === 409) {
+        skipped++;
+        continue;
+      }
       failed++;
-      logger.warn('Takk kunne ikke sendes', { replyId: id, error: error instanceof Error ? error.message : String(error) });
+      logger.warn('Takk kunne ikke sendes, stopper', { replyId: queue[index], error: error instanceof Error ? error.message : String(error) });
+      index++;
+      break;
     }
   }
-  return { sent, failed, remaining: Math.max(0, queue.length - MAX_PER_BATCH) };
+  return { sent, skipped, failed, remaining: Math.max(0, queue.length - index) };
 }
 
 /** Fra sorteringen: i automatisk modus sendes takken med en gang på ferske svar. */

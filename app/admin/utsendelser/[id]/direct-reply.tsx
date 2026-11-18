@@ -59,7 +59,7 @@ export function DirectReply({ utsendelseId }: { utsendelseId: string }) {
   }
 
   return (
-    <div className="mt-6 rounded-xl border border-gray-200 bg-white px-5 py-4">
+    <div id="svart-direkte" className="mt-6 scroll-mt-6 rounded-xl border border-gray-200 bg-white px-5 py-4">
       <label htmlFor={inputId} className="block font-medium text-gray-900">Har noen svart deg direkte?</label>
       <p className="mt-1 text-sm text-gray-600">
         Svar som kommer rett til deg, ser ikke systemet. Søk opp personen og stopp resten av e-postene, så får de ikke flere.

@@ -4,6 +4,7 @@ import { getUtsendelse } from '@/lib/utsendelser/config';
 import { countOpenReplies, listReplies, type ReplyFilter } from '@/lib/replies/list';
 import { nextYearSummary } from '@/lib/replies/neste-aar';
 import { getThanksSettings, thanksQueue } from '@/lib/replies/thanks';
+import { isClassifierEnabled } from '@/lib/replies/classify';
 
 /** Svar fra kontakter: alle, for én kontakt, eller for én utsendelse. `?antall=1` gir bare hvor mange som må svares. */
 export async function GET(request: NextRequest) {
@@ -28,5 +29,5 @@ export async function GET(request: NextRequest) {
   const [replies, open, nesteAar, thanksSettings, queue] = await Promise.all([
     listReplies(filter), countOpenReplies(), nextYearSummary(), getThanksSettings(), thanksQueue(),
   ]);
-  return NextResponse.json({ replies, open, nesteAar, takk: { ...thanksSettings, venter: queue.length } });
+  return NextResponse.json({ replies, open, nesteAar, takk: { ...thanksSettings, venter: queue.length, aiEnabled: isClassifierEnabled() } });
 }

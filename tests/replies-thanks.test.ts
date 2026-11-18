@@ -1,18 +1,39 @@
-/** Takk-svar: tekst, hvem som venter, sperrer mot dobbel takk, og automatisk modus. */
+/** Takk-svar: tekst, hvem som venter, sperrer mot feil takk, og automatisk modus. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { prisma, sendReply, settings } = vi.hoisted(() => ({
-  prisma: {
-    inboundReply: { findMany: vi.fn(), findUnique: vi.fn() },
-    setting: { upsert: vi.fn(async () => ({})) },
-    $transaction: vi.fn(async (ops: unknown[]) => ops),
-  },
-  sendReply: vi.fn(async () => ({ sendId: 900 })),
-  settings: { values: {} as Record<string, string> },
-}));
+type Row = { id: number; contactId: number };
+const { prisma, sendReply, settings, db } = vi.hoisted(() => {
+  const db = {
+    waiting: [] as { id: number; contactId: number }[],
+    answered: [] as number[],
+    openOther: [] as number[],
+    suppressed: [] as string[],
+    reply: { id: 7, contactId: 5, fromName: 'Mona B. Birkely', contact: { name: 'Mona Birkely' } } as Record<string, unknown> | null,
+  };
+  return {
+    db,
+    settings: { values: {} as Record<string, string> },
+    sendReply: vi.fn(async () => ({ sendId: 900 })),
+    prisma: {
+      inboundReply: {
+        findMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+          if (where.aiThanks === true) return db.waiting;
+          if (where.answerSendId) return db.answered.map((contactId) => ({ contactId }));
+          if (where.NOT) return db.openOther.map((contactId) => ({ contactId }));
+          return [];
+        }),
+        findFirst: vi.fn(async () => db.reply),
+      },
+      contact: { findMany: vi.fn(async ({ where }: { where: { id: { in: number[] } } }) => where.id.in.map((id) => ({ id, email: `k${id}@firma.no` }))) },
+      suppression: { findMany: vi.fn(async () => db.suppressed.map((email) => ({ email }))) },
+      setting: { upsert: vi.fn(async () => ({})) },
+      $transaction: vi.fn(async (ops: unknown[]) => ops),
+    },
+  };
+});
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/settings', () => ({ getSetting: async (key: string) => settings.values[key] ?? '' }));
-vi.mock('@/lib/replies/answer', async () => {
+vi.mock('@/lib/replies/answer', () => {
   class ReplyError extends Error {
     constructor(message: string, readonly status = 400) { super(message); }
   }
@@ -26,13 +47,17 @@ import {
 
 const NOW = new Date('2026-11-18T10:00:00Z');
 const FITS = { kategori: 'neste_aar', sikker: true, trenger_svar: false, takk_passer: true } as const;
-const REPLY = { id: 7, contactId: 5, status: 'no_reply', handledBy: 'Claude', answerSendId: null, fromName: 'Mona B. Birkely', contact: { name: 'Mona Birkely' } };
 
 beforeEach(() => {
   vi.clearAllMocks();
+  prisma.inboundReply.findFirst.mockReset().mockImplementation(async () => db.reply);
+  sendReply.mockReset().mockImplementation(async () => ({ sendId: 900 }));
   settings.values = { reply_thanks_mode: 'click', reply_thanks_text: 'Hei {fornavn}!\n\nTakk for hyggelig tilbakemelding 😊' };
-  prisma.inboundReply.findMany.mockResolvedValue([]);
-  prisma.inboundReply.findUnique.mockResolvedValue(REPLY);
+  db.waiting = [];
+  db.answered = [];
+  db.openOther = [];
+  db.suppressed = [];
+  db.reply = { id: 7, contactId: 5, fromName: 'Mona B. Birkely', contact: { name: 'Mona Birkely' } };
 });
 
 describe('takketeksten', () => {
@@ -66,10 +91,11 @@ describe('thanksFits', () => {
 });
 
 describe('thanksQueue', () => {
-  it('én per kontakt, og ingen som nylig har fått svar herfra', async () => {
-    prisma.inboundReply.findMany
-      .mockResolvedValueOnce([{ id: 1, contactId: 10 }, { id: 2, contactId: 10 }, { id: 3, contactId: 11 }, { id: 4, contactId: 12 }])
-      .mockResolvedValueOnce([{ contactId: 12 }]);
+  it('én per kontakt; ikke de som nylig har fått svar, har et åpent spørsmål eller er avmeldt', async () => {
+    db.waiting = [{ id: 1, contactId: 10 }, { id: 2, contactId: 10 }, { id: 3, contactId: 11 }, { id: 4, contactId: 12 }, { id: 5, contactId: 13 }, { id: 6, contactId: 14 }] satisfies Row[];
+    db.answered = [12];
+    db.openOther = [13];
+    db.suppressed = ['k14@firma.no'];
     expect(await thanksQueue(NOW)).toEqual([1, 3]);
     const where = (prisma.inboundReply.findMany.mock.calls[0] as unknown as [{ where: Record<string, unknown> }])[0].where;
     expect(where).toMatchObject({ aiThanks: true, answerSendId: null, OR: [{ status: 'open' }, { status: 'no_reply', handledBy: 'Claude' }] });
@@ -77,35 +103,50 @@ describe('thanksQueue', () => {
 });
 
 describe('sendThanks', () => {
-  it('sender teksten med fornavn i samme tråd', async () => {
+  it('sender teksten med fornavn i samme tråd, og sjekker på nytt at svaret fortsatt venter', async () => {
     expect(await sendThanks(7, 'hilde.apneseth@bjerke.no', NOW)).toEqual({ sendId: 900 });
     expect(sendReply).toHaveBeenCalledWith(7, 'Hei Mona!\n\nTakk for hyggelig tilbakemelding 😊', 'hilde.apneseth@bjerke.no');
+    expect(prisma.inboundReply.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: 7, aiThanks: true, answerSendId: null }) }));
   });
 
-  it('aldri to ganger, og aldri når det er besvart et annet sted', async () => {
-    prisma.inboundReply.findUnique.mockResolvedValueOnce({ ...REPLY, answerSendId: 3 });
+  it('sender ikke når svaret ikke venter lenger, kontakten er sperret, eller takk er slått av', async () => {
+    db.reply = null;
     await expect(sendThanks(7, 'x', NOW)).rejects.toMatchObject({ status: 409 });
-    prisma.inboundReply.findUnique.mockResolvedValueOnce({ ...REPLY, status: 'answered' });
-    await expect(sendThanks(7, 'x', NOW)).rejects.toMatchObject({ status: 409 });
-    prisma.inboundReply.findMany.mockResolvedValueOnce([{ contactId: 5 }]);
-    await expect(sendThanks(7, 'x', NOW)).rejects.toMatchObject({ status: 409 });
+    db.reply = { id: 7, contactId: 5, fromName: null, contact: { name: 'Mona' } };
+    db.openOther = [5];
+    await expect(sendThanks(7, 'x', NOW)).rejects.toThrow('venter på svar');
+    db.openOther = [];
+    db.suppressed = ['k5@firma.no'];
+    await expect(sendThanks(7, 'x', NOW)).rejects.toThrow('meldt seg av');
+    db.suppressed = [];
+    settings.values.reply_thanks_mode = 'off';
+    await expect(sendThanks(7, 'x', NOW)).rejects.toThrow('slått av');
     expect(sendReply).not.toHaveBeenCalled();
   });
 });
 
 describe('sendThanksToAll', () => {
-  it('fortsetter etter en feil og teller', async () => {
-    prisma.inboundReply.findMany
-      .mockResolvedValueOnce([{ id: 1, contactId: 10 }, { id: 2, contactId: 11 }])
-      .mockResolvedValue([]);
+  it('hopper over dem som ikke skal ha takk, og stopper ved en ekte sendefeil', async () => {
+    db.waiting = [{ id: 1, contactId: 10 }, { id: 2, contactId: 11 }, { id: 3, contactId: 12 }];
+    prisma.inboundReply.findFirst
+      .mockResolvedValueOnce({ id: 1, contactId: 10, fromName: 'A', contact: { name: 'A' } })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 3, contactId: 12, fromName: 'C', contact: { name: 'C' } });
     sendReply.mockRejectedValueOnce(new Error('SMTP nede'));
-    expect(await sendThanksToAll('hilde@bjerke.no', NOW)).toEqual({ sent: 1, failed: 1, remaining: 0 });
-    expect(sendReply).toHaveBeenCalledTimes(2);
+    expect(await sendThanksToAll('hilde@bjerke.no', NOW)).toEqual({ sent: 0, skipped: 0, failed: 1, remaining: 2 });
+
+    prisma.inboundReply.findFirst.mockReset();
+    prisma.inboundReply.findFirst
+      .mockResolvedValueOnce({ id: 1, contactId: 10, fromName: 'A', contact: { name: 'A' } })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 3, contactId: 12, fromName: 'C', contact: { name: 'C' } });
+    expect(await sendThanksToAll('hilde@bjerke.no', NOW)).toEqual({ sent: 2, skipped: 1, failed: 0, remaining: 0 });
   });
 });
 
 describe('autoThankIfEnabled', () => {
   it('sender bare i automatisk modus, på ferske svar der takk passer', async () => {
+    settings.values.reply_thanks_mode = 'auto';
     const fresh = { id: 7, receivedAt: NOW };
     expect(await autoThankIfEnabled(fresh, FITS, 'click', NOW)).toBe(false);
     expect(await autoThankIfEnabled(fresh, { ...FITS, trenger_svar: true }, 'auto', NOW)).toBe(false);
@@ -115,8 +156,9 @@ describe('autoThankIfEnabled', () => {
     expect(sendReply).toHaveBeenCalledWith(7, expect.stringContaining('Hei Mona!'), 'Claude');
   });
 
-  it('allerede besvart er ikke en feil', async () => {
-    prisma.inboundReply.findUnique.mockResolvedValueOnce({ ...REPLY, answerSendId: 3 });
+  it('sperret eller allerede besvart er ikke en feil', async () => {
+    settings.values.reply_thanks_mode = 'auto';
+    db.reply = null;
     expect(await autoThankIfEnabled({ id: 7, receivedAt: NOW }, FITS, 'auto', NOW)).toBe(false);
   });
 });

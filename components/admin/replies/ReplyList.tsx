@@ -15,7 +15,7 @@ const when = (iso: string) =>
 
 const day = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Oslo' });
 
-interface ThanksInfo { mode: ThanksMode; text: string; venter: number }
+interface ThanksInfo { mode: ThanksMode; text: string; venter: number; aiEnabled: boolean }
 interface RepliesData { replies: ReplyItem[]; nesteAar: NextYearSummary; takk: ThanksInfo }
 
 async function fetchReplies(query: string): Promise<RepliesData> {
@@ -107,7 +107,7 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
 
 const THANKS_CHOICES: { mode: ThanksMode; label: string; help: string }[] = [
   { mode: 'click', label: 'Ett klikk', help: 'Claude finner de vennlige svarene. Du sender takken med én knapp.' },
-  { mode: 'auto', label: 'Automatisk', help: 'Claude sender takken selv, i ditt navn, når et vennlig svar kommer inn.' },
+  { mode: 'auto', label: 'Automatisk', help: 'Claude sender takken selv når et vennlig svar kommer inn, fra den som sendte e-posten de svarte på.' },
   { mode: 'off', label: 'Av', help: 'Ingen takk-knapper.' },
 ];
 
@@ -145,8 +145,9 @@ function ThanksPanel({ info, onChanged }: { info: ThanksInfo; onChanged: () => v
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error'); return; }
       const parts = [`Takk sendt til ${data.sent}.`];
-      if (data.failed) parts.push(`${data.failed} feilet, prøv igjen senere.`);
-      if (data.remaining) parts.push(`${data.remaining} gjenstår, trykk igjen.`);
+      if (data.skipped) parts.push(`${data.skipped} hoppet over (besvart eller har et spørsmål).`);
+      if (data.failed) parts.push('Sendingen stoppet på grunn av en feil. Prøv igjen om litt.');
+      else if (data.remaining) parts.push(`${data.remaining} gjenstår, trykk igjen.`);
       toast(parts.join(' '), data.failed ? 'error' : 'success');
       onChanged();
     } catch {
@@ -166,6 +167,12 @@ function ThanksPanel({ info, onChanged }: { info: ThanksInfo; onChanged: () => v
           {info.mode !== 'off' && info.venter > 0 ? ` · ${info.venter} venter på takk` : ''}
         </span>
       </summary>
+
+      {!info.aiEnabled && info.mode !== 'off' && (
+        <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-amber-950">
+          Claude er ikke slått på ennå, fordi API-nøkkelen mangler. Når den er på plass, finner Claude de vennlige svarene, og takk-knappene dukker opp.
+        </p>
+      )}
 
       {info.mode !== 'off' && info.venter > 0 && (
         <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-green-50 px-3 py-2 text-green-950">
@@ -326,7 +333,7 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
   const [expanded, setExpanded] = useState(r.bodyText.length <= LONG);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const firstName = (r.fromName ?? r.contactName).split(/\s+/)[0] || r.fromEmail;
-  const canThank = thanks.mode !== 'off' && !r.answer && r.status !== 'answered';
+  const canThank = thanks.mode !== 'off' && r.thanksFits;
   const thanksText = renderThanks(thanks.text, greetingName(r.fromName, r.contactName));
 
   useEffect(() => {
@@ -406,7 +413,7 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
         <p className="mt-2 text-xs text-gray-500">
           <span className="font-medium text-gray-700">Claude: {r.ai.label}</span>
           {r.ai.reason ? ` · ${r.ai.reason}` : ''}
-          {r.thanksFits && canThank ? ' · En kort takk passer' : ''}
+          {canThank ? ' · En kort takk passer' : ''}
         </p>
       )}
 
@@ -461,7 +468,6 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
           {canThank && (
             <Button
-              variant={r.thanksFits ? 'primary' : 'secondary'}
               disabled={busy}
               title={`Sender: ${thanksText}`}
               onClick={() => void call('POST', undefined, `Takk sendt til ${firstName}.`, '/takk')}
@@ -471,7 +477,7 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
           )}
           {r.status === 'open' && (
             <>
-              <Button variant={canThank && r.thanksFits ? 'secondary' : 'primary'} onClick={() => setWriting(true)}>Svar</Button>
+              <Button variant={canThank ? 'secondary' : 'primary'} onClick={() => setWriting(true)}>Svar</Button>
               <Button variant="secondary" disabled={busy} onClick={() => void call('PATCH', { status: 'no_reply' }, 'Merket «trenger ikke svar».')}>Trenger ikke svar</Button>
             </>
           )}
