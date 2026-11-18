@@ -2,7 +2,7 @@
 import { prisma } from '@/lib/prisma';
 import { getUtsendelser } from '@/lib/utsendelser/config';
 import { tidyReplyText } from './text';
-import { CATEGORY_LABELS, REPLY_CATEGORIES, type ReplyCategory } from './classify';
+import { CATEGORY_LABELS, CLAUDE, REPLY_CATEGORIES, type ReplyCategory } from './classify';
 
 export type ReplyStatus = 'open' | 'answered' | 'no_reply';
 
@@ -28,6 +28,8 @@ export interface ReplyItem {
   replyFrom: { name: string; email: string } | null;
   /** Claude sin sortering, når svaret er sjekket. */
   ai: { category: ReplyCategory; label: string; reason: string | null } | null;
+  /** Claude mener en kort takk passer (og ingen har svart herfra ennå). */
+  thanksFits: boolean;
   /** Spart til neste års julebord. */
   saved: { navn: string; by: string | null; at: string } | null;
   /** Annen kontaktperson Claude fant i svaret; contactId når den er lagt inn i CRM. */
@@ -105,6 +107,7 @@ export async function listReplies(filter: ReplyFilter): Promise<ReplyItem[]> {
         : null,
       replyFrom: original?.senderIdentity?.active ? { name: original.senderIdentity.displayName, email: original.senderIdentity.email } : null,
       ai: isCategory(r.aiCategory) ? { category: r.aiCategory, label: CATEGORY_LABELS[r.aiCategory], reason: r.aiReason } : null,
+      thanksFits: r.aiThanks === true && r.answerSendId == null && (r.status === 'open' || (r.status === 'no_reply' && r.handledBy === CLAUDE)),
       saved: r.savedListId != null && r.savedAt
         ? { navn: listName.get(r.savedListId) ?? 'neste år', by: r.savedBy, at: r.savedAt.toISOString() }
         : null,

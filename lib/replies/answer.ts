@@ -1,7 +1,7 @@
 /** Svare på et svar fra CRM, eller merke det som besvart / trenger ikke svar. */
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
-import { sendMailAs } from '@/lib/mail';
+import { sendMailAs, type MailSendError } from '@/lib/mail';
 import { wrapPlainEmailHtml } from '@/lib/email-templates';
 import { REPLY_MAILBOX } from '@/lib/flows/send';
 import { extractMessageIds } from '@/lib/tracking/reply-match';
@@ -82,9 +82,15 @@ export async function sendReply(replyId: number, text: string, by: string): Prom
       headers: threadHeaders(reply.internetMessageId, reply.references),
     }));
   } catch (error) {
-    logger.error('Svar fra CRM kunne ikke sendes', { replyId, error: error instanceof Error ? error.message : String(error) });
-    await prisma.messageSend.delete({ where: { id: row.id } }).catch(() => {});
-    throw new ReplyError('Kunne ikke sende svaret. Prøv igjen om litt.', 502);
+    const e = error as MailSendError;
+    if (e.mayHaveBeenDelivered !== true) {
+      logger.error('Svar fra CRM kunne ikke sendes', { replyId, error: e instanceof Error ? e.message : String(e) });
+      await prisma.messageSend.delete({ where: { id: row.id } }).catch(() => {});
+      throw new ReplyError('Kunne ikke sende svaret. Prøv igjen om litt.', 502);
+    }
+    // Forbindelsen brøt etter at e-posten gikk: trolig levert. Regnes som sendt, så den aldri går to ganger.
+    logger.warn('Svar fra CRM: forbindelsen brøt etter sending, regnes som sendt', { replyId, error: e.message });
+    messageId = typeof e.messageId === 'string' ? e.messageId : null;
   }
 
   // E-posten er sendt: herfra rulles ingenting tilbake (ellers kunne kunden fått den to ganger).

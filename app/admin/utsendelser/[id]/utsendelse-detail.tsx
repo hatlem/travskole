@@ -242,6 +242,9 @@ function Replies({ utsendelseId, replies }: { utsendelseId: string; replies: Ser
       <p className="mt-1 mb-4 text-sm text-gray-600">
         Svarene kommer til registrering@bjerke.no og vises her. Svar direkte herfra, eller merk dem som «trenger ikke svar». Alle svar finner du også under «Svar» i menyen.
       </p>
+      <p className="mb-4 text-sm">
+        <a href="#svart-direkte" className="font-medium text-bjerke-blue hover:underline">Har noen svart deg direkte? Stopp e-postene til dem her ↓</a>
+      </p>
       <ReplyList query={`utsendelse=${encodeURIComponent(utsendelseId)}`} showUtsendelse={false} empty={legacy} />
       <DirectReply utsendelseId={utsendelseId} />
     </section>

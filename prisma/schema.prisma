@@ -789,6 +789,8 @@ model InboundReply {
   aiContactEmail    String?   @map("ai_contact_email")
   /// Kontakten som ble lagt til i CRM fra forslaget.
   aiContactId       Int?      @map("ai_contact_id")
+  /// Claude: et vennlig svar uten spørsmål, der en kort takk passer.
+  aiThanks          Boolean?  @map("ai_thanks")
   /// Spart til neste sesong («Julebord 2027»): lista kontakten ble lagt i.
   savedListId       Int?      @map("saved_list_id")
   savedAt           DateTime? @map("saved_at")

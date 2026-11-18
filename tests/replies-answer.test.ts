@@ -68,6 +68,14 @@ describe('sendReply', () => {
     expect(prisma.inboundReply.update).not.toHaveBeenCalled();
   });
 
+  it('forbindelsen brøt etter at e-posten gikk: regnes som sendt, aldri på nytt', async () => {
+    sendMailAs.mockRejectedValueOnce(Object.assign(new Error('socket closed'), { mayHaveBeenDelivered: true, messageId: '<kanskje@bjerke.no>' }));
+    expect(await sendReply(7, 'Takk!', 'hilde.apneseth@bjerke.no')).toEqual({ sendId: 900 });
+    expect(prisma.messageSend.delete).not.toHaveBeenCalled();
+    expect(prisma.messageSend.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 900 }, data: expect.objectContaining({ status: 'sent', messageId: 'kanskje@bjerke.no' }) }));
+    expect(prisma.inboundReply.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ status: 'answered', answerSendId: 900 }) }));
+  });
+
   it('sendt, men databasen svikter etterpå: ingen ny sending, og ingen feil til brukeren', async () => {
     prisma.messageSend.update.mockRejectedValueOnce(new Error('db'));
     expect(await sendReply(7, 'Hei', 'h')).toEqual({ sendId: 900 });
