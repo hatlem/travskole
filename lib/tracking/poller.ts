@@ -71,7 +71,7 @@ function cursorSettingKey(mailbox: string): string {
   return `graph_cursor_${mailbox}`;
 }
 
-async function getGraphAccessToken(): Promise<string | null> {
+export async function getGraphAccessToken(): Promise<string | null> {
   const tenantId = process.env.GRAPH_TENANT_ID as string;
   const clientId = process.env.GRAPH_CLIENT_ID as string;
   const clientSecret = process.env.GRAPH_CLIENT_SECRET as string;
@@ -100,7 +100,7 @@ async function getGraphAccessToken(): Promise<string | null> {
   }
 }
 
-interface GraphMessage {
+export interface GraphMessage {
   id?: string;
   receivedDateTime?: string;
   subject?: string;
@@ -126,13 +126,13 @@ function replyDetails(message: GraphMessage, msg: InboundMessageLike) {
 }
 
 /** Sendt fra postboksen selv (svar skrevet i Outlook), ikke mottatt. */
-const isFromMailbox = (message: GraphMessage, mailbox: string) =>
+export const isFromMailbox = (message: GraphMessage, mailbox: string) =>
   (message.from?.emailAddress?.address ?? '').trim().toLowerCase() === mailbox.trim().toLowerCase();
 
-const domainOf = (email: string) => email.trim().toLowerCase().split('@')[1] ?? '';
+export const domainOf = (email: string) => email.trim().toLowerCase().split('@')[1] ?? '';
 
 /** Fra en ansatt (samme domene som postboksen), f.eks. et svar som havnet i hilde@ og er videresendt. Aldri et kundesvar. */
-const isFromStaff = (message: GraphMessage, mailbox: string) => {
+export const isFromStaff = (message: GraphMessage, mailbox: string) => {
   const from = message.from?.emailAddress?.address ?? '';
   return from.includes('@') && domainOf(from) === domainOf(mailbox);
 };
@@ -247,7 +247,7 @@ export function parseDsnFields(bodyText: string): { dsnStatus?: string; failedRe
   };
 }
 
-async function toInboundMessageLike(
+export async function toInboundMessageLike(
   message: GraphMessage,
   mailbox: string,
   token: string,
