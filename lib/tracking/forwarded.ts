@@ -159,6 +159,23 @@ async function handleForwardedBounce(input: ForwardInput): Promise<number> {
   return found;
 }
 
+/**
+ * Svarte kunden fra en annen adresse enn den vi sendte til (kollega, alias), står vår opprinnelige e-post
+ * vanligvis sitert nederst med «Til: kunden». Finnes nøyaktig én slik adresse som har fått utsendelsen, er det den.
+ */
+export async function quotedRecipientSend(text: string, forwardedBy: string): Promise<{ messageId: string | null } | null> {
+  const staffDomain = forwardedBy.toLowerCase().split('@')[1] ?? '';
+  const emails = [...new Set((text.match(EMAILS) ?? []).map((e) => e.toLowerCase()))]
+    .filter((e) => !e.endsWith(`@${staffDomain}`) && !BOUNCE_SENDER.test(e))
+    .slice(0, 20);
+  const hits: { messageId: string | null }[] = [];
+  for (const email of emails) {
+    const send = await latestCampaignSend(email);
+    if (send?.messageId) hits.push(send);
+  }
+  return hits.length === 1 ? hits[0] : null;
+}
+
 export async function handleForwardedReply(input: ForwardInput): Promise<'reply' | 'bounce' | 'left' | 'unmatched' | 'ignore'> {
   const forwarded = parseForwarded(input.text);
   const innerSubject = forwarded?.subject ?? '';
@@ -169,7 +186,7 @@ export async function handleForwardedReply(input: ForwardInput): Promise<'reply'
   }
   if (!forwarded || forwarded.fromEmail === input.forwardedBy.toLowerCase()) return 'ignore';
 
-  const send = await latestCampaignSend(forwarded.fromEmail);
+  const send = (await latestCampaignSend(forwarded.fromEmail)) ?? (await quotedRecipientSend(input.text, input.forwardedBy));
   const details = {
     subject: forwarded.subject ?? outerSubject,
     fromEmail: forwarded.fromEmail,

@@ -96,6 +96,34 @@ describe('handleForwardedReply', () => {
     }));
   });
 
+  it('svarte fra en annen adresse: finner kunden via «Til:» i vår siterte e-post', async () => {
+    const text = `Fra: Per Kollega <per@firma.no>
+Sendt: tirsdag 17. november 2026 12:35
+Til: Hilde Apneseth <hilde.apneseth@bjerke.no>
+Emne: SV: Julebord som ikke ligner på fjorårets?
+
+Kari har sluttet hos oss, vi har allerede bestilt.
+
+Fra: Hilde Apneseth <hilde.apneseth@bjerke.no>
+Sendt: tirsdag 17. november 2026 11:40
+Til: Kari Nordmann <kari@firma.no>
+Emne: Julebord som ikke ligner på fjorårets?`;
+    prisma.messageSend.findMany.mockImplementation((async ({ where }: { where: { toEmail: { equals: string } } }) =>
+      (where.toEmail.equals === 'kari@firma.no' ? [{ messageId: '<sent-kari@bjerke.no>', enrollmentId: 4 }] : [])) as never);
+    expect(await handleForwardedReply({ ...input, text })).toBe('reply');
+    expect(recordReply).toHaveBeenCalledWith('<sent-kari@bjerke.no>', expect.objectContaining({ fromEmail: 'per@firma.no' }));
+    prisma.messageSend.findMany.mockImplementation(async () => []);
+  });
+
+  it('flere mulige mottakere i teksten: gjetter ikke', async () => {
+    const text = `Fra: Per <per@firma.no>\nTil: Hilde <hilde.apneseth@bjerke.no>\nEmne: SV: Julebord som ikke ligner på fjorårets?\n\nKontakt kari@firma.no eller ola@firma.no.`;
+    prisma.messageSend.findMany.mockImplementation((async ({ where }: { where: { toEmail: { equals: string } } }) =>
+      (where.toEmail.equals === 'per@firma.no' ? [] : [{ messageId: `<${where.toEmail.equals}>`, enrollmentId: 4 }])) as never);
+    expect(await handleForwardedReply({ ...input, text })).not.toBe('reply');
+    expect(recordReply).not.toHaveBeenCalled();
+    prisma.messageSend.findMany.mockImplementation(async () => []);
+  });
+
   it('ukjent avsender på en utsendelse: oppgave så det ikke blir borte', async () => {
     prisma.messageSend.findFirst.mockResolvedValueOnce({ id: 9 });
     expect(await handleForwardedReply(input)).toBe('unmatched');
