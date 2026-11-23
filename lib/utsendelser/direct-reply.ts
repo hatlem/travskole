@@ -7,6 +7,7 @@ import { emitEvent } from '@/lib/events/bus';
 import logger from '@/lib/logger';
 import { UtsendelseError } from './actions';
 import type { Utsendelse } from './config';
+import { stopColleaguesAfterReply } from './colleagues';
 import { excludeRecipient } from './recipients';
 
 /** pagar = får flere e-poster; de andre får ikke flere. */
@@ -93,6 +94,7 @@ export async function markRepliedDirectly(utsendelse: Utsendelse, contactId: num
 
   // Stopp først (under sendelåsen), så ingen ny e-post rekker å gå ut før vi ser hvilken som er den siste.
   const result = await excludeRecipient(utsendelse, contactId, by);
+  await stopColleaguesAfterReply(enrollments[0].flowId, contactId);
 
   const latest = await prisma.messageSend.findFirst({
     where: { contactId, status: 'sent', enrollmentId: { in: enrollments.map((e) => e.id) } },

@@ -8,6 +8,7 @@ import { emitEvent } from '@/lib/events/bus';
 import { normalizeEmail } from '@/lib/crm/normalize';
 import { createReplyTask } from '@/lib/crm/reply-task';
 import { storeInboundReply } from '@/lib/replies/store';
+import { stopColleaguesAfterReply } from '@/lib/utsendelser/colleagues';
 import { parseNodeConfig, type FlowNodeType, type GraphEdge, type GraphNode } from '@/lib/flows/graph';
 import { flowBranchesOnReply, latestTrackedSendQuery, replyConditionPending } from '@/lib/flows/reply-branch';
 
@@ -150,6 +151,9 @@ export async function recordReply(matchedMessageId: string, inbound: InboundDeta
       data: { status: 'exited', finishedAt: new Date() },
     });
   }
+
+  // Bedriften har svart: kollegene får ikke resten av utsendelsen.
+  if (firstReply > 0 && enrollment?.flow.isMarketing) await stopColleaguesAfterReply(enrollment.flowId, send.contactId);
 }
 
 async function loadFlowGraph(flowId: number): Promise<{ nodes: GraphNode[]; edges: GraphEdge[] }> {
