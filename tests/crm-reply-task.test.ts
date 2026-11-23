@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { prisma, settings, emitEvent } = vi.hoisted(() => ({
+const { prisma, settings, emitEvent, stopColleaguesAfterReply } = vi.hoisted(() => ({
+  stopColleaguesAfterReply: vi.fn(async () => {}),
   prisma: {
     contact: { findUnique: vi.fn() },
     flowEnrollment: { findUnique: vi.fn(), update: vi.fn() },
@@ -17,6 +18,7 @@ const { prisma, settings, emitEvent } = vi.hoisted(() => ({
 
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/events/bus', () => ({ emitEvent }));
+vi.mock('@/lib/utsendelser/colleagues', () => ({ stopColleaguesAfterReply }));
 vi.mock('@/lib/logger', () => ({ default: { error: vi.fn() } }));
 vi.mock('@/lib/settings', async () => {
   const shared = await vi.importActual<typeof import('@/lib/settings-shared')>('@/lib/settings-shared');
@@ -247,6 +249,25 @@ describe('recordReply → flow exit', () => {
     expect(prisma.flowEnrollment.update).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 5 }, data: expect.objectContaining({ status: 'exited' }) }),
     );
+  });
+
+  it('første svar i en markedsføringsflyt stopper kollegene; gjentatte svar gjør det ikke på nytt', async () => {
+    mockEnrollment({ isMarketing: true, currentNodeId: 3 });
+    prisma.flowNode.findMany.mockResolvedValue(NO_REPLY_FLOW_NODES);
+    prisma.messageSend.updateMany.mockResolvedValueOnce({ count: 1 });
+    await recordReply('<abc@bjerke.no>', {});
+    expect(stopColleaguesAfterReply).toHaveBeenCalledWith(2, expect.any(Number));
+    stopColleaguesAfterReply.mockClear();
+    await recordReply('<abc@bjerke.no>', {});
+    expect(stopColleaguesAfterReply).not.toHaveBeenCalled();
+  });
+
+  it('kurs-flyter stopper ikke kollegene', async () => {
+    mockEnrollment({ isMarketing: false, currentNodeId: 3 });
+    prisma.flowNode.findMany.mockResolvedValue(NO_REPLY_FLOW_NODES);
+    prisma.messageSend.updateMany.mockResolvedValue({ count: 1 });
+    await recordReply('<abc@bjerke.no>', {});
+    expect(stopColleaguesAfterReply).not.toHaveBeenCalled();
   });
 
   it('lets a transactional (course) flow continue after a reply, and still creates the reply task', async () => {

@@ -1,7 +1,7 @@
 /** «Har noen svart deg direkte?»: søk blant dem som har fått e-post, og stopp resten. */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const { prisma, emitEvent, excludeRecipient } = vi.hoisted(() => ({
+const { prisma, emitEvent, excludeRecipient, stopColleaguesAfterReply } = vi.hoisted(() => ({
   prisma: {
     flowEnrollment: { findMany: vi.fn() },
     messageSend: { findMany: vi.fn(), findFirst: vi.fn(), updateMany: vi.fn() },
@@ -9,10 +9,12 @@ const { prisma, emitEvent, excludeRecipient } = vi.hoisted(() => ({
   },
   emitEvent: vi.fn(async () => true),
   excludeRecipient: vi.fn(async () => ({ stopped: 1 })),
+  stopColleaguesAfterReply: vi.fn(async () => {}),
 }));
 vi.mock('@/lib/prisma', () => ({ prisma }));
 vi.mock('@/lib/events/bus', () => ({ emitEvent }));
 vi.mock('@/lib/utsendelser/recipients', () => ({ excludeRecipient }));
+vi.mock('@/lib/utsendelser/colleagues', () => ({ stopColleaguesAfterReply }));
 
 import { directReplyState, markRepliedDirectly, searchSentRecipients } from '@/lib/utsendelser/direct-reply';
 import type { Utsendelse } from '@/lib/utsendelser/config';
@@ -74,6 +76,7 @@ describe('markRepliedDirectly', () => {
 
     expect(await markRepliedDirectly(U, 5, 'hilde@bjerke.no')).toEqual({ stopped: 1 });
     expect(excludeRecipient).toHaveBeenCalledWith(U, 5, 'hilde@bjerke.no');
+    expect(stopColleaguesAfterReply).toHaveBeenCalledWith(22, 5);
     expect(prisma.messageSend.updateMany).toHaveBeenCalledWith({ where: { id: 77, repliedAt: null }, data: { repliedAt: expect.any(Date) } });
     expect(emitEvent).toHaveBeenCalledWith(expect.objectContaining({ type: 'email.replied', contactId: 5, dedupeKey: 'reply:77', meta: expect.objectContaining({ flowId: 22 }) }));
   });
