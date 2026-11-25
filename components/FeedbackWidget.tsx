@@ -24,8 +24,11 @@ export function FeedbackWidget({
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!dialog) return;
-    if (open && !dialog.open) dialog.showModal();
-    else if (!open && dialog.open) dialog.close();
+    if (open && !dialog.open) {
+      dialog.showModal();
+      // showModal fokuserer første knapp (Lukk); brukeren skal kunne begynne å skrive med en gang.
+      dialog.querySelector('textarea')?.focus();
+    } else if (!open && dialog.open) dialog.close();
   }, [open]);
 
   const openDialog = () => {
