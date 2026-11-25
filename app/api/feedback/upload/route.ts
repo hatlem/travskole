@@ -8,6 +8,11 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5MB
 
 const GETPLATFORM_URL = process.env.GETPLATFORM_URL || "https://control.getplatform.co";
 
+/** GetPlatform svarer i dag med en data-URI; bare relative stier skal få origin foran. */
+function resolveUploadUrl(url: string): string {
+  return /^(https?:|data:)/.test(url) ? url : `${GETPLATFORM_URL}${url}`;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // SECURITY: anonym proxy — begrens misbruk med rate limit + type/størrelse
@@ -46,7 +51,7 @@ export async function POST(req: NextRequest) {
     }
 
     const data = await response.json();
-    return NextResponse.json({ url: `${GETPLATFORM_URL}${data.url}` });
+    return NextResponse.json({ url: resolveUploadUrl(String(data.url ?? "")) });
   } catch (error) {
     logger.error("Upload error", error instanceof Error ? error : undefined);
     return NextResponse.json({ error: "Bildet ble ikke lastet opp. Prøv igjen." }, { status: 500 });

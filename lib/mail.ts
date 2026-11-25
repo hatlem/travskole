@@ -69,9 +69,15 @@ function getTransporter() {
   return config ? nodemailer.createTransport(config) : null;
 }
 
-async function sendMail(to: string, subject: string, html: string) {
+async function sendMail(
+  to: string,
+  subject: string,
+  html: string,
+  opts: { replyTo?: string; requireTransport?: boolean } = {},
+) {
   const transporter = getTransporter();
   if (!transporter) {
+    if (opts.requireTransport) throw new Error('SMTP er ikke satt opp');
     logger.warn('SMTP not configured — skipping email', { to, subject });
     return;
   }
@@ -92,7 +98,7 @@ async function sendMail(to: string, subject: string, html: string) {
   await transporter.sendMail({
     from,
     // Replies should reach the school, regardless of sender address
-    replyTo: adminEmail,
+    replyTo: opts.replyTo ?? adminEmail,
     to,
     subject,
     html: fullHtml,
@@ -465,5 +471,43 @@ export async function sendPaymentReceiptEmail(data: PaymentReceiptEmail) {
 
 export async function sendAdminEmail(to: string, subject: string, htmlBody: string) {
   await sendMail(to, subject, htmlBody);
+}
+
+export interface FeedbackEmail {
+  to: string;
+  message: string;
+  pageUrl?: string;
+  screenshots: string[];
+  reporterEmail?: string;
+  reporterName?: string;
+  reason: string;
+}
+
+/** Reserve når GetPlatform avviser en tilbakemelding. Kaster hvis e-posten ikke kan sendes, så ingenting forsvinner i stillhet. */
+export async function sendFeedbackFallbackEmail(data: FeedbackEmail) {
+  const siteName = await getSiteName();
+  const reporter = [data.reporterName, data.reporterEmail].filter(Boolean).join(', ') || 'Ikke innlogget';
+  const row = (label: string, value: string) =>
+    `<tr><td style="padding:4px 12px 4px 0;color:#666;vertical-align:top">${label}:</td><td>${value}</td></tr>`;
+  const link = (url: string) => `<a href="${escapeHtml(url)}">${escapeHtml(url)}</a>`;
+  // Innebygde bilder (data-URI) er for store for e-postteksten; vis bare at de finnes.
+  const linked = data.screenshots.filter((s) => s.startsWith('https://'));
+  const inlineCount = data.screenshots.length - linked.length;
+  const images = [...linked.map(link), ...(inlineCount ? [`${inlineCount} bilde(r) var lagt ved, men kom ikke med i e-posten`] : [])];
+  await sendMail(
+    data.to,
+    `Tilbakemelding fra ${siteName}`,
+    `<div style="font-family:sans-serif;max-width:600px">
+      <h2>Ny tilbakemelding</h2>
+      <p style="white-space:pre-wrap;border-left:3px solid #ddd;padding-left:12px">${escapeHtml(data.message)}</p>
+      <table style="border-collapse:collapse;margin:16px 0">
+        ${row('Fra', escapeHtml(reporter))}
+        ${data.pageUrl ? row('Side', link(data.pageUrl)) : ''}
+        ${images.length ? row('Bilder', images.join('<br>')) : ''}
+      </table>
+      <p style="color:#666;font-size:13px">Sendt på e-post fordi GetPlatform ikke tok imot den (${escapeHtml(data.reason)}).</p>
+    </div>`,
+    { replyTo: data.reporterEmail, requireTransport: true },
+  );
 }
 

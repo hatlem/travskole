@@ -1,63 +1,97 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "@/lib/auth";
+import { sendFeedbackFallbackEmail } from "@/lib/mail";
+import { checkRateLimit, feedbackLimiter } from "@/lib/rate-limiter";
+import { getClientIpBucket } from "@/lib/client-ip";
 import logger from "@/lib/logger";
 
 // Direct Railway origin by default: Cloudflare strips the X-API-Key header on
 // control.getplatform.co, which would silently 401 every forwarded submission.
-const GETPLATFORM_URL =
-  process.env.GETPLATFORM_URL || "https://get-platform-production.up.railway.app";
-const GETPLATFORM_API_KEY = process.env.GETPLATFORM_API_KEY;
+const DEFAULT_GETPLATFORM_URL = "https://get-platform-production.up.railway.app";
+const DEFAULT_FALLBACK_EMAIL = "andreas@admirate.no";
+const MAX_MESSAGE_LENGTH = 5000;
+const MAX_SCREENSHOTS = 5;
+// Opplastingen gir en data-URI (GetPlatform lagrer bildet inline); 5 MB bilde ≈ 7 MB base64.
+const MAX_SCREENSHOT_LENGTH = 7_500_000;
+
+function isScreenshotUrl(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_SCREENSHOT_LENGTH &&
+    (value.startsWith("https://") || value.startsWith("data:image/"))
+  );
+}
+
+/** Leverer til GetPlatform. Returnerer årsaken hvis det ikke gikk, ellers null. */
+async function forwardToGetPlatform(payload: Record<string, unknown>): Promise<string | null> {
+  const apiKey = process.env.GETPLATFORM_API_KEY;
+  if (!apiKey) return "GETPLATFORM_API_KEY mangler";
+  try {
+    const response = await fetch(`${process.env.GETPLATFORM_URL || DEFAULT_GETPLATFORM_URL}/api/feedback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (response.ok) return null;
+    return `HTTP ${response.status}: ${(await response.text()).slice(0, 200)}`;
+  } catch (error) {
+    return error instanceof Error ? error.message : "ukjent feil";
+  }
+}
 
 export async function POST(req: NextRequest) {
+  const rl = await checkRateLimit(feedbackLimiter, `feedback:${getClientIpBucket(req.headers)}`);
+  if (!rl.allowed) {
+    return NextResponse.json({ error: rl.error ?? "For mange forsøk. Prøv igjen senere." }, { status: 429 });
+  }
+
+  let body: { message?: unknown; screenshots?: unknown; pageUrl?: unknown };
   try {
-    const session = await getServerSession();
-    const { message, screenshots, pageUrl: bodyPageUrl } = await req.json();
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Ugyldig forespørsel." }, { status: 400 });
+  }
 
-    if (!message?.trim()) {
-      return NextResponse.json({ error: "Skriv en tilbakemelding først." }, { status: 400 });
-    }
+  const message = typeof body.message === "string" ? body.message.trim().slice(0, MAX_MESSAGE_LENGTH) : "";
+  if (!message) {
+    return NextResponse.json({ error: "Skriv en tilbakemelding først." }, { status: 400 });
+  }
+  const screenshots = Array.isArray(body.screenshots)
+    ? body.screenshots.filter(isScreenshotUrl).slice(0, MAX_SCREENSHOTS)
+    : [];
+  const pageUrl =
+    (typeof body.pageUrl === "string" && body.pageUrl.trim()) || req.headers.get("referer") || undefined;
 
-    const pageUrl = bodyPageUrl || req.headers.get("referer") || undefined;
+  const session = await getServerSession();
+  const user = session?.user;
 
-    // Never accept feedback we can't actually deliver: without a key the
-    // submission would be dropped while the widget shows success (silent
-    // failure). Fail loudly instead so the misconfiguration is visible.
-    if (!GETPLATFORM_API_KEY) {
-      logger.error(
-        "Feedback not delivered: GETPLATFORM_API_KEY is not configured on this deployment"
-      );
-      return NextResponse.json(
-        { error: "Tilbakemeldinger er ikke satt opp ennå." },
-        { status: 503 }
-      );
-    }
+  const failure = await forwardToGetPlatform({
+    message,
+    platform: "ponniskolen",
+    pageUrl,
+    userEmail: user?.email || undefined,
+    userId: user?.id || undefined,
+    userName: user?.name || undefined,
+    screenshots,
+  });
+  if (!failure) return NextResponse.json({ success: true });
 
-    const response = await fetch(`${GETPLATFORM_URL}/api/feedback`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-API-Key": GETPLATFORM_API_KEY,
-      },
-      body: JSON.stringify({
-        message: message.trim(),
-        platform: "ponniskolen",
-        pageUrl,
-        userEmail: session?.user?.email || undefined,
-        userId: session?.user?.id || undefined,
-        userName: session?.user?.name || undefined,
-        screenshots: Array.isArray(screenshots) ? screenshots : [],
-      }),
+  // Feil oppsett hos oss skal aldri koste brukeren tilbakemeldingen: logg høyt og send den på e-post.
+  logger.error("Feedback not delivered to GetPlatform, falling back to email", { reason: failure });
+  try {
+    await sendFeedbackFallbackEmail({
+      to: process.env.FEEDBACK_FALLBACK_EMAIL || DEFAULT_FALLBACK_EMAIL,
+      message,
+      pageUrl,
+      screenshots,
+      reporterEmail: user?.email || undefined,
+      reporterName: user?.name || undefined,
+      reason: failure,
     });
-
-    if (!response.ok) {
-      logger.error("Tilbakemeldingen ble ikke sendt. Prøv igjen.", { responseText: await response.text() });
-      return NextResponse.json({ error: "Tilbakemeldingen ble ikke sendt. Prøv igjen." }, { status: 500 });
-    }
-
-    const data = await response.json();
-    return NextResponse.json({ success: true, id: data.id });
+    return NextResponse.json({ success: true });
   } catch (error) {
-    logger.error("Feedback error", error instanceof Error ? error : undefined);
+    logger.error("Feedback fallback email failed", error instanceof Error ? error : undefined);
     return NextResponse.json({ error: "Tilbakemeldingen ble ikke sendt. Prøv igjen." }, { status: 500 });
   }
 }

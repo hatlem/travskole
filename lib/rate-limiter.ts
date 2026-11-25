@@ -60,6 +60,9 @@ export const trackLimiter = new RateLimiterMemory({
 });
 
 /** Nøkkel for per-IP+e-post-limitere (e-posten normaliseres). */
+/** Tilbakemeldinger kan falle tilbake til e-post, så endepunktet må ikke kunne brukes til å spamme innboksen. */
+export const feedbackLimiter = new RateLimiterMemory({ points: 10, duration: HOUR });
+
 export function ipEmailKey(ip: string, email: string): string {
   return `${ip}:${email.trim().toLowerCase()}`;
 }
