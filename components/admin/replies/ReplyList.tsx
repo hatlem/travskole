@@ -9,6 +9,7 @@ import { useToast } from '@/components/admin/Toast';
 import type { ReplyItem } from '@/lib/replies/list';
 import type { NextYearSummary } from '@/lib/replies/neste-aar';
 import { MAX_THANKS_TEXT, greetingName, renderThanks, type ThanksMode } from '@/lib/replies/thanks-text';
+import { MAX_STANDARD_REPLIES, MAX_STANDARD_TEXT, standardReplyLabel } from '@/lib/replies/standard-text';
 
 const when = (iso: string) =>
   new Date(iso).toLocaleString('nb-NO', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Oslo' });
@@ -16,7 +17,7 @@ const when = (iso: string) =>
 const day = (iso: string) => new Date(iso).toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Oslo' });
 
 interface ThanksInfo { mode: ThanksMode; text: string; venter: number; aiEnabled: boolean }
-interface RepliesData { replies: ReplyItem[]; nesteAar: NextYearSummary; takk: ThanksInfo }
+interface RepliesData { replies: ReplyItem[]; nesteAar: NextYearSummary; takk: ThanksInfo; standard: string[] }
 
 async function fetchReplies(query: string): Promise<RepliesData> {
   const res = await fetch(`/api/admin/svar?status=all${query ? `&${query}` : ''}`, { cache: 'no-store' });
@@ -71,18 +72,21 @@ export function ReplyList({ query = '', showContact = true, showUtsendelse = tru
 
   if (failed && !replies) return <p className="text-sm text-red-700">Fikk ikke hentet svarene. Last siden på nytt.</p>;
   if (!replies) return <p className="text-sm text-gray-500">Henter svar …</p>;
-  if (replies.length === 0) return <>{showThanks && <ThanksPanel info={data!.takk} onChanged={changed} />}{empty}</>;
+  if (replies.length === 0) {
+    return <>{showThanks && <><ThanksPanel info={data!.takk} onChanged={changed} /><StandardRepliesPanel texts={data!.standard} onChanged={changed} /></>}{empty}</>;
+  }
 
   const nesteAar = data!.nesteAar;
   const takk = data!.takk;
   const open = replies.filter((r) => r.status === 'open');
   const handled = replies.filter((r) => r.status !== 'open');
   const card = (r: ReplyItem) => (
-    <ReplyCard key={r.id} reply={r} nextYearName={nesteAar.navn} thanks={takk} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />
+    <ReplyCard key={r.id} reply={r} nextYearName={nesteAar.navn} thanks={takk} standard={data!.standard} showContact={showContact} showUtsendelse={showUtsendelse} onChanged={changed} />
   );
   return (
     <div className="space-y-6">
       {showThanks && <ThanksPanel info={takk} onChanged={changed} />}
+      {showThanks && <StandardRepliesPanel texts={data!.standard} onChanged={changed} />}
       {showNextYear && <NextYearPanel summary={nesteAar} />}
       {open.length > 0 && (
         <div>
@@ -226,6 +230,67 @@ function ThanksPanel({ info, onChanged }: { info: ThanksInfo; onChanged: () => v
   );
 }
 
+/** Standardsvar: tekster Hilde velger med ett klikk på hvert svar. Hun lager og endrer lista selv. */
+function StandardRepliesPanel({ texts, onChanged }: { texts: string[]; onChanged: () => void }) {
+  const { toast } = useToast();
+  const baseId = useId();
+  const [items, setItems] = useState<string[]>(texts);
+  const [saving, setSaving] = useState(false);
+  const clean = items.map((t) => t.trim()).filter(Boolean);
+  const dirty = clean.length !== texts.length || clean.some((t, i) => t !== texts[i]);
+
+  async function save() {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/admin/svar/standard', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ texts: clean }) });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error'); return; }
+      setItems(data.texts);
+      toast('Standardsvarene er lagret.', 'success');
+      onChanged();
+    } catch {
+      toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <details className="rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm">
+      <summary className="cursor-pointer font-semibold text-gray-900">
+        Standardsvar
+        <span className="ml-2 font-normal text-gray-600">{texts.length === 1 ? '1 svar' : `${texts.length} svar`} du velger med ett klikk</span>
+      </summary>
+      <p className="mt-2 text-gray-600">
+        Trykker du på et standardsvar under et svar, står teksten klar til å sendes. Du kan endre den før du sender.
+        {' {fornavn}'} byttes ut med fornavnet til den som svarte.
+      </p>
+      <ol className="mt-3 space-y-3">
+        {items.map((text, i) => (
+          <li key={i}>
+            <label htmlFor={`${baseId}-${i}`} className="font-medium text-gray-900">Standardsvar {i + 1}</label>
+            <textarea
+              id={`${baseId}-${i}`}
+              value={text}
+              rows={3}
+              maxLength={MAX_STANDARD_TEXT}
+              onChange={(e) => setItems((prev) => prev.map((t, j) => (j === i ? e.target.value : t)))}
+              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-bjerke-blue focus:ring-2 focus:ring-bjerke-blue/20"
+            />
+            <Button variant="link" onClick={() => setItems((prev) => prev.filter((_, j) => j !== i))}>Fjern</Button>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        {items.length < MAX_STANDARD_REPLIES && (
+          <Button size="sm" variant="secondary" onClick={() => setItems((prev) => [...prev, 'Hei {fornavn}!\n\n'])}>Legg til standardsvar</Button>
+        )}
+        <Button size="sm" loading={saving} disabled={!dirty} onClick={() => void save()}>Lagre</Button>
+      </div>
+    </details>
+  );
+}
+
 /** Hvem som er spart til neste år, og når Hilde blir minnet på dem. */
 function NextYearPanel({ summary }: { summary: NextYearSummary }) {
   if (summary.antall === 0) {
@@ -322,19 +387,126 @@ function NewContactBox({ reply: r, onChanged }: { reply: ReplyItem; onChanged: (
   );
 }
 
+/** «Skulle gått til en annen adresse»: sender den samme utsendelsen dit. */
+function ForwardBox({ reply: r, onDone }: { reply: ReplyItem; onDone: () => void }) {
+  const { toast } = useToast();
+  const emailId = useId();
+  const nameId = useId();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState(r.forward?.email ?? '');
+  const [name, setName] = useState('');
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const utsendelse = r.utsendelse?.navn ?? 'utsendelsen';
+  const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+
+  async function send() {
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/svar/${r.id}/send-videre`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), name: name.trim() || null }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error'); return; }
+      toast(`${data.utsendelse} sendes til ${email.trim()}.${data.created ? ' Adressen er lagt til i CRM.' : ''}`, 'success');
+      setOpen(false);
+      onDone();
+    } catch {
+      toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');
+    } finally {
+      setBusy(false);
+      setConfirming(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <Button variant="link" onClick={() => setOpen(true)}>
+        {r.forward?.email ? `Send e-posten til ${r.forward.email}` : 'Skulle gått til en annen adresse?'}
+      </Button>
+    );
+  }
+  const inputCls = 'mt-1 w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm outline-none focus:border-bjerke-blue focus:ring-2 focus:ring-bjerke-blue/20';
+  return (
+    <div className="mt-3 w-full rounded-lg border border-blue-200 bg-blue-50 px-4 py-3">
+      <p className="text-sm text-blue-950">
+        Send {utsendelse} til en annen adresse{r.organization ? ` i ${r.organization}` : ''}. Adressen legges inn i CRM og får de samme e-postene som {r.fromName ?? r.contactName}, med egen avmeldingslenke.
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+        <div>
+          <label htmlFor={emailId} className="text-xs font-medium text-gray-700">E-post</label>
+          <input id={emailId} type="email" className={inputCls} value={email} maxLength={254} placeholder="postmottak@bedrift.no" onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div>
+          <label htmlFor={nameId} className="text-xs font-medium text-gray-700">Navn (valgfritt)</label>
+          <input id={nameId} className={inputCls} value={name} maxLength={120} placeholder={r.organization ?? ''} onChange={(e) => setName(e.target.value)} />
+        </div>
+      </div>
+      <div className="mt-2 flex flex-wrap gap-2">
+        <Button size="sm" disabled={!validEmail || busy} onClick={() => setConfirming(true)}>Send dit</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => setOpen(false)}>Avbryt</Button>
+      </div>
+      <ConfirmModal
+        open={confirming}
+        title={`Send ${utsendelse} til ${email.trim()}?`}
+        message="Adressen får den første e-posten i neste sendevindu, og resten av rekken etterpå. Det kan ikke angres for e-poster som er sendt."
+        confirmLabel="Send"
+        variant="info"
+        loading={busy}
+        onConfirm={() => void send()}
+        onCancel={() => setConfirming(false)}
+      />
+    </div>
+  );
+}
+
 const LONG = 700;
 
-function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse, onChanged }: { reply: ReplyItem; nextYearName: string; thanks: ThanksInfo; showContact: boolean; showUtsendelse: boolean; onChanged: () => void }) {
+function ReplyCard({ reply: r, nextYearName, thanks, standard, showContact, showUtsendelse, onChanged }: { reply: ReplyItem; nextYearName: string; thanks: ThanksInfo; standard: string[]; showContact: boolean; showUtsendelse: boolean; onChanged: () => void }) {
   const { toast } = useToast();
   const textId = useId();
   const [writing, setWriting] = useState(false);
   const [text, setText] = useState('');
+  const [alsoSave, setAlsoSave] = useState(r.ai?.category === 'neste_aar');
   const [busy, setBusy] = useState(false);
+  const saveId = useId();
   const [expanded, setExpanded] = useState(r.bodyText.length <= LONG);
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const firstName = (r.fromName ?? r.contactName).split(/\s+/)[0] || r.fromEmail;
   const canThank = thanks.mode !== 'off' && r.thanksFits;
-  const thanksText = renderThanks(thanks.text, greetingName(r.fromName, r.contactName));
+  const greeting = greetingName(r.fromName, r.contactName);
+  const thanksText = renderThanks(thanks.text, greeting);
+  const canAnswer = !r.answer;
+  const quick = canAnswer ? [...r.suggestions.map((t) => ({ text: t, claude: true })), ...standard.map((t) => ({ text: t, claude: false }))] : [];
+
+  function startWith(template: string) {
+    setText(renderThanks(template, greeting));
+    setWriting(true);
+  }
+
+  async function sendAnswer() {
+    const saveNextYear = alsoSave && !r.saved;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/admin/svar/${r.id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, ...(saveNextYear && { saveNextYear: true }) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) { toast(data.error ?? 'Noe gikk galt. Prøv igjen.', 'error'); return; }
+      if (data.saveFailed) toast(`Svaret er sendt til ${firstName}, men ble ikke spart til ${nextYearName}. Trykk «Spar til ${nextYearName}».`, 'error');
+      else toast(data.saved ? `Svaret er sendt til ${firstName}, og ${firstName} er spart til ${data.saved}.` : `Svaret er sendt til ${firstName}.`, 'success');
+      setWriting(false);
+      onChanged();
+    } catch {
+      toast('Fikk ikke kontakt. Sjekk nettet og prøv igjen.', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (writing) areaRef.current?.focus();
@@ -437,6 +609,26 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
         </p>
       )}
 
+      {!writing && quick.length > 0 && (
+        <div className="mt-3">
+          <p className="text-xs font-medium text-gray-700">Svar med ett klikk</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {quick.map((q, i) => (
+              <button
+                key={i}
+                type="button"
+                disabled={busy}
+                title={renderThanks(q.text, greeting)}
+                onClick={() => startWith(q.text)}
+                className={`rounded-full border px-3 py-1 text-left text-xs hover:bg-gray-50 disabled:opacity-50 ${q.claude ? 'border-violet-200 bg-violet-50 text-violet-900' : 'border-gray-300 bg-white text-gray-800'}`}
+              >
+                {q.claude && <span className="font-semibold">Claude: </span>}{standardReplyLabel(q.text)}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {writing ? (
         <div className="mt-4">
           <label htmlFor={textId} className="block font-medium text-gray-900">Svar til {firstName}</label>
@@ -453,11 +645,17 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
           <p className="mt-1 text-xs text-gray-500">
             Sendes {r.replyFrom ? `fra ${r.replyFrom.name} (${r.replyFrom.email}) ` : ''}til {r.fromEmail}, i samme e-posttråd. Svarer {firstName} igjen, dukker det opp her.
           </p>
+          {!r.saved && (
+            <label htmlFor={saveId} className="mt-2 flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+              <input id={saveId} type="checkbox" checked={alsoSave} onChange={(e) => setAlsoSave(e.target.checked)} />
+              Spar også {firstName} til {nextYearName} (påminnelse i august)
+            </label>
+          )}
           <div className="mt-2 flex flex-wrap gap-2">
             <Button
               loading={busy}
               disabled={!text.trim()}
-              onClick={async () => { if (await call('POST', { text }, `Svaret er sendt til ${firstName}.`)) setWriting(false); }}
+              onClick={() => void sendAnswer()}
             >
               Send svar til {firstName}
             </Button>
@@ -497,6 +695,7 @@ function ReplyCard({ reply: r, nextYearName, thanks, showContact, showUtsendelse
               )}
             </>
           )}
+          {r.forward && <ForwardBox reply={r} onDone={onChanged} />}
         </div>
       )}
     </li>

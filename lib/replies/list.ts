@@ -2,7 +2,8 @@
 import { prisma } from '@/lib/prisma';
 import { getUtsendelser } from '@/lib/utsendelser/config';
 import { tidyReplyText } from './text';
-import { CATEGORY_LABELS, CLAUDE, REPLY_CATEGORIES, type ReplyCategory } from './classify';
+import { CATEGORY_LABELS, CLAUDE, REPLY_CATEGORIES, parseSuggestions, type ReplyCategory } from './classify';
+import { suggestedForwardEmail } from './forward';
 
 export type ReplyStatus = 'open' | 'answered' | 'no_reply';
 
@@ -34,6 +35,10 @@ export interface ReplyItem {
   saved: { navn: string; by: string | null; at: string } | null;
   /** Annen kontaktperson Claude fant i svaret; contactId når den er lagt inn i CRM. */
   newContact: { name: string; email: string | null; contactId: number | null } | null;
+  /** Claude sine svarforslag (tom uten Claude). */
+  suggestions: string[];
+  /** Adressen svaret sier e-posten skulle gått til, hvis den står i teksten. Null = ikke en utsendelse. */
+  forward: { email: string | null } | null;
 }
 
 /** Teksten vi skrev, uten det siterte svaret under (se replyBodyHtml). */
@@ -65,7 +70,7 @@ export async function listReplies(filter: ReplyFilter): Promise<ReplyItem[]> {
     },
     orderBy: filter.status === 'handled' ? { handledAt: 'desc' } : { receivedAt: filter.status === 'open' ? 'asc' : 'desc' },
     take: filter.take ?? 200,
-    include: { contact: { select: { name: true, organization: { select: { name: true } } } } },
+    include: { contact: { select: { name: true, email: true, organization: { select: { name: true } } } } },
   });
   const sendIds = [...new Set(rows.flatMap((r) => [r.repliedToSendId, r.answerSendId]).filter((id): id is number => id != null))];
   const [sends, utsendelser] = await Promise.all([
@@ -112,6 +117,10 @@ export async function listReplies(filter: ReplyFilter): Promise<ReplyItem[]> {
         ? { navn: listName.get(r.savedListId) ?? 'neste år', by: r.savedBy, at: r.savedAt.toISOString() }
         : null,
       newContact: r.aiContactName ? { name: r.aiContactName, email: r.aiContactEmail, contactId: r.aiContactId } : null,
+      suggestions: parseSuggestions(r.aiSuggestions),
+      forward: r.flowId != null && utsendelseByFlow.has(r.flowId)
+        ? { email: suggestedForwardEmail(r.bodyText, [r.fromEmail, r.contact.email ?? '']) }
+        : null,
     };
   });
 }

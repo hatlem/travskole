@@ -21,6 +21,7 @@ interface DealCard {
   value: number | null;
   eventType: string | null;
   eventDate: string | null;
+  comment: string | null;
   status: string;
   contact: { id: number; name: string } | null;
   organization: { id: number; name: string } | null;
@@ -356,6 +357,7 @@ export default function PipelinePage() {
                         {deal.eventDate && <span>{formatDateNo(deal.eventDate)}</span>}
                         {deal.value !== null && <span>{deal.value.toLocaleString('nb-NO')} kr</span>}
                       </div>
+                      {deal.comment && <p className="mt-1 line-clamp-2 whitespace-pre-line text-xs text-gray-600" title={deal.comment}>{deal.comment}</p>}
                       {(deal.organization || deal.contact) && (
                         <p className="text-xs mt-1">
                           {deal.organization && (

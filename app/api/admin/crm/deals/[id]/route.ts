@@ -24,7 +24,7 @@ export async function GET(
     where: { id: dealId },
     select: {
       id: true, title: true, pipelineId: true, stageId: true, ownerId: true,
-      value: true, eventType: true, eventDate: true, status: true, source: true,
+      value: true, eventType: true, eventDate: true, comment: true, status: true, source: true,
       contact: { select: { id: true, name: true, email: true } },
       organization: { select: { id: true, name: true } },
     },
@@ -46,6 +46,7 @@ const patchSchema = z.object({
   value: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
   eventType: z.string().trim().max(50).nullable().optional(),
   eventDate: z.string().datetime().nullable().optional(),
+  comment: z.string().trim().max(2000).nullable().optional(),
 }).refine((v) => v.pipelineId === undefined || v.stageId !== undefined, {
   message: 'Velg et steg i den nye salgstavlen',
 });
@@ -118,6 +119,7 @@ export async function PATCH(
         ...(data.ownerId !== undefined && { ownerId: data.ownerId }),
         ...(data.value !== undefined && { value: data.value }),
         ...(data.eventType !== undefined && { eventType: data.eventType || null }),
+        ...(data.comment !== undefined && { comment: data.comment || null }),
         ...(data.eventDate !== undefined && { eventDate: data.eventDate ? new Date(data.eventDate) : null }),
         ...statusPatch,
       },

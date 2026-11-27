@@ -46,6 +46,7 @@ interface LoadedDeal {
   value: number | null;
   eventType: string | null;
   eventDate: string | null;
+  comment: string | null;
   source: string;
   contact: EntityRef | null;
   organization: EntityRef | null;
@@ -76,6 +77,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
   const [value, setValue] = useState('');
   const [eventType, setEventType] = useState('');
   const [eventDate, setEventDate] = useState('');
+  const [comment, setComment] = useState('');
   const [contact, setContact] = useState<EntityRef | null>(defaults?.contact ?? null);
   const [organization, setOrganization] = useState<EntityRef | null>(defaults?.organization ?? null);
   const [ownerId, setOwnerId] = useState<number | null>(defaults?.ownerId ?? null);
@@ -107,6 +109,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
           setValue(deal.value !== null ? String(deal.value).replace('.', ',') : '');
           setEventType(deal.eventType ?? '');
           setEventDate(isoToDateInput(deal.eventDate));
+          setComment(deal.comment ?? '');
           setContact(deal.contact);
           setOrganization(deal.organization);
           setOwnerId(deal.ownerId);
@@ -154,6 +157,7 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
       value: parsedValue,
       eventType: eventType.trim() || null,
       eventDate: dateInputToIso(eventDate),
+      comment: comment.trim() || null,
       contactId: contact?.id ?? null,
       organizationId: organization?.id ?? null,
     };
@@ -314,6 +318,16 @@ function DealDialogForm({ dealId, defaults, onClose, onSaved, onDeleted }: DealD
           </Field>
           <Field label="Ansvarlig" htmlFor="deal-owner" hint="Den i staben som følger opp avtalen">
             <AssigneeSelect id="deal-owner" value={ownerId} onChange={setOwnerId} className="border border-gray-300 rounded-md px-2 py-1.5 text-sm w-full" />
+          </Field>
+          <Field label="Kommentar" htmlFor="deal-comment" hint="Stikkord, f.eks. antall gjester, ønsker eller hva dere har avtalt">
+            <textarea
+              id="deal-comment"
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
+              maxLength={2000}
+              rows={3}
+              className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full"
+            />
           </Field>
           {original && original.source !== 'manual' && (
             <p className="text-xs text-gray-400">Opprettet automatisk fra {original.source === 'booking' ? 'en forespørsel på nettsiden' : 'en påmelding'}.</p>

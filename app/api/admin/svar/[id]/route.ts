@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/auth';
 import { ReplyError, sendReply, setReplyStatus } from '@/lib/replies/answer';
+import { saveForNextYear } from '@/lib/replies/neste-aar';
+import logger from '@/lib/logger';
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -19,15 +21,24 @@ async function handle(request: NextRequest, { params }: Ctx, run: (id: number, b
   }
 }
 
-const replySchema = z.object({ text: z.string().min(1).max(20_000) });
+const replySchema = z.object({ text: z.string().min(1).max(20_000), saveNextYear: z.boolean().optional() });
 const statusSchema = z.object({ status: z.enum(['answered', 'no_reply', 'open']) });
 
 /** Send svar fra CRM. */
 export function POST(request: NextRequest, ctx: Ctx) {
-  return handle(request, ctx, (id, body, email) => {
+  return handle(request, ctx, async (id, body, email) => {
     const parsed = replySchema.safeParse(body);
     if (!parsed.success) throw new ReplyError('Skriv et svar først.');
-    return sendReply(id, parsed.data.text, email);
+    const sent = await sendReply(id, parsed.data.text, email);
+    if (!parsed.data.saveNextYear) return sent;
+    // Svaret er sendt; feiler lagringen, sier vi fra uten å late som om sendingen feilet.
+    try {
+      const { navn } = await saveForNextYear(id, email, new Date(), { closeOpen: false });
+      return { ...sent, saved: navn };
+    } catch (error) {
+      logger.error('Svar sendt, men kunne ikke spare til neste år', { replyId: id, error: error instanceof Error ? error.message : String(error) });
+      return { ...sent, saved: null, saveFailed: true };
+    }
   });
 }
 

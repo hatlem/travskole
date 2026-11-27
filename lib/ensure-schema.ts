@@ -85,6 +85,8 @@ export const REPLY_SCHEMA_STATEMENTS = [
   'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_contact_email" TEXT',
   'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_contact_id" INTEGER',
   'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_thanks" BOOLEAN',
+  'ALTER TABLE "inbound_replies" ADD COLUMN IF NOT EXISTS "ai_suggestions" TEXT',
+  'ALTER TABLE "deals" ADD COLUMN IF NOT EXISTS "comment" TEXT',
 ];
 
 /** Idempotent DDL ved oppstart (prod-databasen er stengt utenfra). Én feil stopper ikke resten. */
