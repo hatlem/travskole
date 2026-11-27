@@ -25,11 +25,11 @@ vi.mock('@/lib/replies/thanks', async () => {
   };
 });
 
-import { buildClassifyPrompt, classifyPendingReplies, parseClassification } from '@/lib/replies/classify';
+import { buildClassifyPrompt, classifyPendingReplies, parseClassification, parseSuggestions } from '@/lib/replies/classify';
 
 const NOW = new Date('2026-11-17T10:00:00Z');
 const row = (id: number, extra: Record<string, unknown> = {}) => ({ id, subject: 'SV: Julebord', bodyText: 'Hyggelig, men vi har allerede bestilt.', status: 'open', taskId: null, savedListId: null, receivedAt: NOW, ...extra });
-const answer = (kategori: string, sikker = true, extra: Record<string, string | boolean> = {}) =>
+const answer = (kategori: string, sikker = true, extra: Record<string, unknown> = {}) =>
   JSON.stringify({ kategori, sikker, trenger_svar: false, takk_passer: false, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '', ...extra });
 
 beforeEach(() => {
@@ -39,12 +39,31 @@ beforeEach(() => {
 
 describe('parseClassification', () => {
   it('godtar gyldig JSON og avviser alt annet', () => {
-    expect(parseClassification(answer('neste_aar'))).toEqual({ kategori: 'neste_aar', sikker: true, trenger_svar: false, takk_passer: false, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '' });
+    expect(parseClassification(answer('neste_aar'))).toEqual({ kategori: 'neste_aar', sikker: true, trenger_svar: false, takk_passer: false, begrunnelse: 'Har bestilt julebord i år.', ny_kontakt_navn: '', ny_kontakt_epost: '', forslag: [] });
     expect(parseClassification(answer('annet', true, { ny_kontakt_navn: 'Jørgen Ellingsen', ny_kontakt_epost: 'ikke-en-adresse' }))?.ny_kontakt_epost).toBe('');
     expect(parseClassification('```json\n' + answer('nei') + '\n```')?.kategori).toBe('nei');
     expect(parseClassification(JSON.stringify({ kategori: 'kanskje', sikker: true, begrunnelse: '' }))).toBeNull();
     expect(parseClassification('ikke json')).toBeNull();
     expect(parseClassification(null)).toBeNull();
+  });
+});
+
+describe('forslag', () => {
+  it('tar med høyst tre ulike, ikke-tomme forslag', () => {
+    const forslag = ['Hei {fornavn}!\n\nTakk!', '  ', 'Hei {fornavn}!\n\nTakk!', 'B', 'C', 'D', 7];
+    expect(parseClassification(answer('annet', true, { forslag }))?.forslag).toEqual(['Hei {fornavn}!\n\nTakk!', 'B', 'C']);
+  });
+
+  it('ugyldige eller manglende forslag stopper ikke sorteringen', () => {
+    expect(parseClassification(answer('nei', true, { forslag: 'ikke en liste' }))?.forslag).toEqual([]);
+    expect(parseClassification(answer('nei'))?.kategori).toBe('nei');
+  });
+
+  it('parseSuggestions tåler ødelagt JSON', () => {
+    expect(parseSuggestions('["A","B"]')).toEqual(['A', 'B']);
+    expect(parseSuggestions('{"a":1}')).toEqual([]);
+    expect(parseSuggestions('ikke json')).toEqual([]);
+    expect(parseSuggestions(null)).toEqual([]);
   });
 });
 
@@ -68,8 +87,18 @@ describe('classifyPendingReplies', () => {
     const opts = generateText.mock.calls[0][1];
     expect(opts).toMatchObject({ model: 'claude-opus-5-5', effort: 'low' });
     expect(opts.jsonSchema.properties.kategori.enum).toContain('neste_aar');
-    expect(prisma.inboundReply.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { aiCategory: 'neste_aar', aiReason: 'Har bestilt julebord i år.', aiCheckedAt: NOW, aiThanks: false, aiContactName: null, aiContactEmail: null } });
+    expect(prisma.inboundReply.update).toHaveBeenCalledWith({ where: { id: 1 }, data: { aiCategory: 'neste_aar', aiReason: 'Har bestilt julebord i år.', aiCheckedAt: NOW, aiThanks: false, aiContactName: null, aiContactEmail: null, aiSuggestions: null } });
     expect(saveForNextYear).toHaveBeenCalledWith(1, 'Claude', NOW, { closeOpen: true });
+  });
+
+  it('lagrer svarforslagene', async () => {
+    prisma.inboundReply.findMany.mockResolvedValue([row(1)]);
+    generateText.mockResolvedValue(answer('annet', true, { forslag: ['Hei {fornavn}!\n\nTakk!', 'Hei {fornavn}!\n\nVi tar kontakt.'] }));
+    await classifyPendingReplies(NOW);
+    expect(prisma.inboundReply.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ aiSuggestions: JSON.stringify(['Hei {fornavn}!\n\nTakk!', 'Hei {fornavn}!\n\nVi tar kontakt.']) }),
+    }));
+    expect(generateText.mock.calls[0][1].jsonSchema.required).toContain('forslag');
   });
 
   it('lagrer ny kontaktperson fra svaret', async () => {

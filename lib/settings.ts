@@ -89,6 +89,8 @@ export const SETTING_DEFAULTS: Record<string, string> = {
   // Takk-svar på vennlige svar: off | click (ett klikk) | auto (Claude sender selv)
   reply_thanks_mode: 'click',
   reply_thanks_text: 'Hei {fornavn}!\n\nTakk for hyggelig tilbakemelding 😊',
+  // Standardsvar (JSON-liste); tom = standardlista i lib/replies/standard-text.ts
+  reply_standard_texts: '',
   // E-post til den som får en oppgave tildelt av en kollega
   task_notify_assignee: 'true',
   // B2B: send markedsføring til organisasjonskontakter på berettiget interesse
@@ -147,6 +149,7 @@ const SERVER_ONLY_SETTING_PREFIXES = [
   'neste_aar_',
   'reply_task_',
   'reply_thanks_',
+  'reply_standard_',
   'reply_create_task',
   'task_notify_',
   'sender_allowed_domains',

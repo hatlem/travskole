@@ -16,6 +16,7 @@ const createSchema = z.object({
   value: z.number().nonnegative().max(1_000_000_000).nullable().optional(),
   eventType: z.string().trim().max(50).nullable().optional(),
   eventDate: z.string().datetime().nullable().optional(),
+  comment: z.string().trim().max(2000).nullable().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest) {
         value: data.value ?? null,
         eventType: data.eventType || null,
         eventDate: data.eventDate ? new Date(data.eventDate) : null,
+        comment: data.comment || null,
         status: stage.isWon ? 'won' : stage.isLost ? 'lost' : 'open',
         closedAt: stage.isWon || stage.isLost ? new Date() : null,
         source: 'manual',

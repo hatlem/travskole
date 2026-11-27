@@ -402,6 +402,8 @@ model Deal {
   probability      Int? // 0-100
   eventType        String?   @map("event_type") // julebord|firmafest|afterwork|kurs|annet
   eventDate        DateTime? @map("event_date")
+  /// Stikkord fra selgeren (fritekst).
+  comment          String?
   status           String    @default("open") // open|won|lost
   closedAt         DateTime? @map("closed_at")
   source           String    @default("manual") // manual|booking|registration
@@ -791,6 +793,8 @@ model InboundReply {
   aiContactId       Int?      @map("ai_contact_id")
   /// Claude: et vennlig svar uten spørsmål, der en kort takk passer.
   aiThanks          Boolean?  @map("ai_thanks")
+  /// Claude: tre korte svarforslag (JSON-liste med tekster), som Hilde kan velge med ett klikk.
+  aiSuggestions     String?   @map("ai_suggestions")
   /// Spart til neste sesong («Julebord 2027»): lista kontakten ble lagt i.
   savedListId       Int?      @map("saved_list_id")
   savedAt           DateTime? @map("saved_at")

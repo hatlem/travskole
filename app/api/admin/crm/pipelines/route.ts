@@ -25,6 +25,7 @@ export async function GET() {
               title: true,
               value: true,
               eventType: true,
+              comment: true,
               eventDate: true,
               status: true,
               bookingRequestId: true,
