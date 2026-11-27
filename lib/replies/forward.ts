@@ -12,13 +12,20 @@ import { moveRecipient } from '@/lib/utsendelser/recipients';
 import { ReplyError } from './answer';
 
 const EMAIL_IN_TEXT = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/gi;
+/** Våre egne adresser (fra sitert tekst og signaturer) skal aldri foreslås. */
+const OWN_DOMAINS = ['bjerke.no'];
+/** Innebygde bilder i Outlook («image001.png@01DD7686.DFCF») ser ut som adresser. */
+const INLINE_IMAGE = /^image\d*\.(png|jpe?g|gif)@|@[0-9a-f]{8}\.[0-9a-f]{4,8}$/i;
 
-/** Første adresse i svaret som ikke er avsenderens egen (f.eks. «skulle gått til postmottak@…»). */
+/** Første adresse i svaret som ikke er avsenderens egen eller vår (f.eks. «skulle gått til postmottak@…»). */
 export function suggestedForwardEmail(bodyText: string, own: string[]): string | null {
   const skip = new Set(own.map((e) => e.trim().toLowerCase()));
   for (const match of bodyText.match(EMAIL_IN_TEXT) ?? []) {
     const email = normalizeEmail(match.replace(/\.$/, ''));
-    if (email && !skip.has(email)) return email;
+    if (!email || skip.has(email) || INLINE_IMAGE.test(email)) continue;
+    const domain = email.split('@')[1];
+    if (OWN_DOMAINS.some((d) => domain === d || domain.endsWith(`.${d}`))) continue;
+    return email;
   }
   return null;
 }

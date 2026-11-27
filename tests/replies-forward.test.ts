@@ -55,6 +55,9 @@ describe('suggestedForwardEmail', () => {
     const body = 'Nei, denne skulle nok gått til postmottak@reg.oslo.kommune.no.\nHilsen presse@reg.oslo.kommune.no';
     expect(suggestedForwardEmail(body, ['presse@reg.oslo.kommune.no'])).toBe('postmottak@reg.oslo.kommune.no');
     expect(suggestedForwardEmail('Ingen adresse her', [])).toBeNull();
+    expect(suggestedForwardEmail('Fra: Hilde <hilde.apneseth@bjerke.no>\nSendt til registrering@bjerke.no', [])).toBeNull();
+    expect(suggestedForwardEmail('[cid:image001.jpg@01DD769B.DBD] [image001.png@01dd7686.dfcf]', [])).toBeNull();
+    expect(suggestedForwardEmail('Hilsen hilde.apneseth@bjerke.no\nSend til ola@firma.no', [])).toBe('ola@firma.no');
     expect(suggestedForwardEmail('Skriv til PRESSE@reg.oslo.kommune.no', ['presse@reg.oslo.kommune.no'])).toBeNull();
   });
 });
